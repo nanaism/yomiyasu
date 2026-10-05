@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-yomiyasu_diff.py（試作）- 元の文と書き直した文を比べて、足したもの・削ったものの候補を機械的に拾う。
+yomiyasu_diff.py - 元の文と書き直した文を比べ、語句・文末・構造の変化を見直す候補を出す。
 
 標準ライブラリだけで動く。モデルは呼ばない。
 拾うのは「意味が変わりやすい」ものだけに絞る。
@@ -207,7 +207,7 @@ def stance_flags(t: str, stance=None, markdown: bool = False):
     flags = []
     if stance == "勧め":
         if act:
-            flags.append(("勧めの文書に、主語のない「〜します」がある。読み手にしてほしい行動なら勧め・頼みの形にする。仕組みや道具の働き、やり方の手順の説明なら残す", act))
+            flags.append(("勧めの文書に、動作を表す「〜します」がある。書き手の予定や手順・道具の説明か、読み手への依頼かを原文と文脈から確認する", act))
     elif stance == "決まり":
         if rec or ev:
             flags.append(("決まり・手順の文書に、勧めや評価の文末がある。決まりそのものなら決まりの形（〜します）にする。決まりの理由や前提を述べる文なら残す。「〜してください」はそのままでよい", rec + ev))
@@ -219,7 +219,7 @@ def stance_flags(t: str, stance=None, markdown: bool = False):
         if act and ask:
             flags.append(("動作の「〜します」と、勧め・依頼が同じ文章にある。「〜します」が書き手の側の予定・決まった手順なのか、読み手にしてほしい行動なのかを見る", act + ask))
         elif act and ev:
-            flags.append(("動作の「〜します」と、評価（〜が重要です など）が同じ文章にある。決まり・手順の文書なら評価が浮き、勧めの文書なら「〜します」が浮く", act + ev))
+            flags.append(("動作の「〜します」と、評価（〜が重要です など）が同じ文章にある。各文の働きと原文の強さが保たれているか確認する", act + ev))
     # 敬体と常体。文として書かれた単位（。で終わるもの、ダッシュの前）だけを数える。表と、。のない箇条書きは数えない
     full = [r for r in rows if r["where"] != "表" and r["full"]]
     jotai = [r for r in full if register(r["sentence"]) == "常体"]

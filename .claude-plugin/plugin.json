@@ -1,7 +1,7 @@
 {
   "name": "yomiyasu",
-  "description": "AIが生成した不自然な日本語を、人間が読みやすく情報密度の高い自然な文章へ書き直すAgent Skill",
-  "version": "1.0.6",
+  "description": "AIが生成した日本語を、意味と条件を保って読みやすく整えるスキル",
+  "version": "1.0.7",
   "author": {
     "name": "nanaism"
   },

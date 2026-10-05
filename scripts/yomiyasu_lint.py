@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-yomiyasu_lint.py - 日本語文章のAIっぽさ（LLM-Slop）数値化・機械的静的検査スクリプト
+yomiyasu_lint.py - 日本語の表現とMarkdownの書式を、設定されたルールで点検する。
 
-Qiita 7万件の計量調査、統語構造復元論、AI語彙の出現頻度分析に基づく
-決定論的リンター。標準ライブラリのみで動作。
+指摘は見直し候補であり、意味の保持や読みやすさを判定するものではない。
+Python標準ライブラリだけで動作する。
 """
 
 import sys
@@ -30,7 +30,7 @@ EMOJI_PATTERN = re.compile(
     r"|[\u2B50-\u2B55]"
 )
 
-# 2026年最新AIスロップ語彙リスト
+# 文脈を確かめる語の一覧。含まれていることだけでは誤りとしない。
 SLOP_WORDS = [
     # 質感を装う疑似具体語
     "手触り", "肌感", "肌感覚", "体温", "温度感", "熱量", "血の通った", "泥臭い", "泥臭さ",
@@ -38,9 +38,9 @@ SLOP_WORDS = [
     "解像度", "腹落ち", "メンタルモデル", "本質的", "地に足のついた", "等身大",
     # 抽象比喩名詞
     "営み", "装置", "意思決定OS", "土台", "羅針盤", "起爆剤", "触媒",
-    # 必殺技造語（体験の壮大化）
+    # 日常の体験を大げさに表す場合がある語
     "真理", "虚飾", "境地", "美学", "深淵", "冷徹", "禁欲的", "優美", "極致", "宿命",
-    # 2026年急増語（文脈によるが要点検）
+    # 指す役割を確かめる語
     "正本",
 ]
 
@@ -167,7 +167,7 @@ def check_sentence_end_repetitions(sentences: List[Tuple[int, str]]) -> List[Dic
                     "rule": "sentence_end_repetition",
                     "line": curr_line,
                     "severity": "warn",
-                    "message": f"同一文末「{curr_type}」が3回以上連続しています。文末のリズムを調整してください。",
+                    "message": f"同一文末「{curr_type}」が3回以上連続しています。読みにくくなっていないか確認し、自然な説明や文体は保ってください。",
                     "snippet": curr_s
                 })
         else:
@@ -549,7 +549,7 @@ def lint_text(text: str) -> Dict[str, Any]:
                 "rule": "excess_bold",
                 "line": 1,
                 "severity": "warn",
-                "message": f"太字の頻度（1,000字あたり {metrics['bold_per_1000']}個）が高すぎます（推奨: 2.5以下）。重要な要点のみに絞ってください。",
+                "message": f"太字の頻度（1,000字あたり {metrics['bold_per_1000']}個）が設定した目安を超えています（推奨: 2.0以下）。強調の役割を確かめ、不要なものだけ整理してください。",
                 "snippet": f"太字数: {metrics['bold_count']}回 / {metrics['char_count']}文字"
             })
 
@@ -558,7 +558,7 @@ def lint_text(text: str) -> Dict[str, Any]:
                 "rule": "excess_list",
                 "line": 1,
                 "severity": "warn",
-                "message": f"箇条書きの比率（{round(metrics['list_ratio']*100, 1)}%）が高すぎます（推奨: 20%以下）。思考や論理展開は地の文で記述してください。",
+                "message": f"箇条書きの比率（{round(metrics['list_ratio']*100, 1)}%）が設定した目安を超えています（推奨: 15%以下）。項目の役割を確かめ、不要なものだけ整理してください。",
                 "snippet": f"リスト行: {metrics['list_lines']} / 全非空行: {metrics['total_lines']}"
             })
 
@@ -639,7 +639,7 @@ def lint_text(text: str) -> Dict[str, Any]:
                 "rule": "trailing_colon",
                 "line": line_no,
                 "severity": "warn",
-                "message": "文末にコロン（：）が使われています。英語直訳の記法を避け、平文の句点（。）で終えるか前置きを省いてください。",
+                "message": "文末にコロン（：）があります。ラベルと値の対応などに必要か確認し、不要な前置きなら整理してください。",
                 "snippet": line.strip()
             })
 
@@ -720,7 +720,7 @@ def lint_text(text: str) -> Dict[str, Any]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="日本語文章のAIっぽさ数値化リンター")
+    parser = argparse.ArgumentParser(description="日本語の表現とMarkdownの書式を、設定されたルールで点検します。指摘は見直し候補です。")
     parser.add_argument("file", nargs="?", help="検査対象のMarkdownファイルパス（指定なしの場合は標準入力）")
     parser.add_argument("--json", action="store_true", help="JSON形式で出力")
     parser.add_argument("--strict", action="store_true", help="警告が1件でもあれば非ゼロ（終了コード1）で終了")
@@ -754,7 +754,7 @@ def main():
         if result["is_clean"]:
             print("[PASS] 設定された検査ルールによる指摘はありません。")
         else:
-            print(f"[NOTICE] {len(result['findings'])} 件の改善推奨箇所が見つかりました。\n")
+            print(f"[NOTICE] {len(result['findings'])} 件の見直し候補が見つかりました。\n")
             for f in result["findings"]:
                 sev = f"[{f['severity'].upper()}]"
                 print(f"L{f['line']} {sev} {f['message']}")

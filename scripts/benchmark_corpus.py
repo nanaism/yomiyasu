@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-160本のコーパスに対してNaive正規表現とLookaround正規表現（yomiyasu_lint.py）を
-実行し、精度・誤検出率・リライト前後のスコア変化を計測するベンチマークスクリプト
+保存済みコーパスに対し、単純な正規表現とyomiyasu_lint.pyの検出件数・スコアを集計する。
+検出件数の比は精度や誤検出率ではない。実行するとbenchmark_results.jsonを上書きする。
 """
 import os
 import sys
@@ -126,9 +126,9 @@ def benchmark_corpus():
         json.dump(out_data, fp, ensure_ascii=False, indent=2)
 
     print("\n" + "="*70)
-    print(f"コーパス較正ベンチマーク結果 (対象ファイル数: {total_files}本)")
+    print(f"コーパスの検出件数とスコア (対象ファイル数: {total_files}本)")
     print("="*70)
-    print(f"{'グループ':<20} | {'本数':<5} | {'平均点':<6} | {'Naive検出':<10} | {'Lookaround検出':<14} | {'誤検出抑制率':<10}")
+    print(f"{'グループ':<20} | {'本数':<5} | {'平均点':<6} | {'単純一致件数':<10} | {'リンター指摘件数':<14} | {'件数減少率':<10}")
     print("-" * 75)
 
     for gname, s in summary.items():

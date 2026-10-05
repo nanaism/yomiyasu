@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """
-実務8ジャンル × 3バリエーションで
-Raw AI（24本）、Blacklist AI（24本）、Yomiyasu Rewritten（48本）を自動生成するスクリプト
+初期検証用の文章を、実務8ジャンル×3種類の文体で生成するスクリプト。
+実行すると既存コーパスのMarkdownを削除・再生成する。現行SKILLの実走検証には使わない。
+生の出力24本、単語禁止の指示による出力24本、当時の推敲出力48本を生成する。
 """
 import os
 import sys
@@ -119,7 +120,7 @@ def rewrite_single_file(item):
 
 
 def main():
-    # 既存のノイズファイルを一旦クリア（確実に綺麗な本文だけにする）
+    # 生成先の既存Markdownを削除する。保存済みコーパスを使う検証では実行しない。
     for d in [RAW_DIR, BL_DIR, YOMI_DIR]:
         for f in os.listdir(d):
             if f.endswith(".md"):
