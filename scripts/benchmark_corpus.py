@@ -92,9 +92,9 @@ def benchmark_corpus():
                 rule = finding.get("rule", "")
                 if "metaphor_verb" in rule:
                     g_metaphor_verbs += 1
-                elif rule in ["symbol_colon", "symbol_bracket", "symbol_space_around_ascii", "symbol_emoji"]:
+                elif rule in {"trailing_colon", "redundant_bracket", "emoji_prohibited"}:
                     g_symbols += 1
-                elif rule in ["excessive_bold", "excessive_bullet", "contrast_negation"]:
+                elif rule in {"excess_bold", "excess_list", "negative_parallelism"}:
                     g_formatting += 1
 
             results[gname].append({

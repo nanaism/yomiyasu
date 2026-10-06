@@ -3,9 +3,9 @@
   "summary": {
     "human": {
       "file_count": 16,
-      "avg_score": 97.4,
+      "avg_score": 98.7,
       "total_naive_matches": 14,
-      "total_lookaround_findings": 10,
+      "total_lookaround_findings": 6,
       "metaphor_verbs": 0,
       "symbols": 0,
       "formatting": 0
@@ -21,9 +21,9 @@
     },
     "raw_ai": {
       "file_count": 24,
-      "avg_score": 97.6,
+      "avg_score": 98.0,
       "total_naive_matches": 7,
-      "total_lookaround_findings": 12,
+      "total_lookaround_findings": 10,
       "metaphor_verbs": 0,
       "symbols": 0,
       "formatting": 0
@@ -39,9 +39,9 @@
     },
     "yomiyasu_rewritten": {
       "file_count": 48,
-      "avg_score": 97.7,
+      "avg_score": 97.9,
       "total_naive_matches": 2,
-      "total_lookaround_findings": 22,
+      "total_lookaround_findings": 20,
       "metaphor_verbs": 0,
       "symbols": 0,
       "formatting": 0
@@ -52,8 +52,8 @@
       {
         "file": "human_doc_09.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 267
       },
       {
@@ -101,8 +101,8 @@
       {
         "file": "human_doc_16.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 206
       },
       {
@@ -136,15 +136,15 @@
       {
         "file": "human_oga_05.md",
         "naive_matches": 2,
-        "lookaround_findings": 3,
-        "score": 88,
+        "lookaround_findings": 2,
+        "score": 93,
         "char_count": 603
       },
       {
         "file": "human_oga_06.md",
         "naive_matches": 1,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 335
       },
       {
@@ -637,15 +637,15 @@
       {
         "file": "07_code_review_sonnet_default.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 429
       },
       {
         "file": "07_code_review_sonnet_formal.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 465
       },
       {
@@ -737,8 +737,8 @@
       {
         "file": "04_slack_announce_sonnet_casual.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 404
       },
       {
@@ -807,8 +807,8 @@
       {
         "file": "07_code_review_sonnet_default.md",
         "naive_matches": 0,
-        "lookaround_findings": 2,
-        "score": 90,
+        "lookaround_findings": 3,
+        "score": 85,
         "char_count": 422
       },
       {
@@ -858,8 +858,8 @@
       {
         "file": "01_tech_arch_sonnet_default.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 2,
+        "score": 90,
         "char_count": 560
       },
       {
@@ -970,15 +970,15 @@
       {
         "file": "04_slack_announce_sonnet_casual.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 453
       },
       {
         "file": "04_slack_announce_sonnet_casual_bl.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 447
       },
       {
@@ -998,8 +998,8 @@
       {
         "file": "04_slack_announce_sonnet_formal.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 360
       },
       {
@@ -1096,8 +1096,8 @@
       {
         "file": "07_code_review_sonnet_casual.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 2,
+        "score": 90,
         "char_count": 461
       },
       {
@@ -1110,22 +1110,22 @@
       {
         "file": "07_code_review_sonnet_default.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 451
       },
       {
         "file": "07_code_review_sonnet_default_bl.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 2,
+        "score": 90,
         "char_count": 421
       },
       {
         "file": "07_code_review_sonnet_formal.md",
         "naive_matches": 0,
-        "lookaround_findings": 1,
-        "score": 95,
+        "lookaround_findings": 0,
+        "score": 100,
         "char_count": 505
       },
       {
