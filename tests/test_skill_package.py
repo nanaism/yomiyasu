@@ -14,7 +14,7 @@ class SkillPackageTests(unittest.TestCase):
         self.assertEqual(entries, [PACKAGE / "SKILL.md"])
 
     def test_plugin_points_to_skill_parent(self):
-        manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text())
+        manifest = json.loads((ROOT / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))
         skills_directory = ROOT / manifest["skills"]
         self.assertEqual(skills_directory.resolve(), PACKAGE.parent.resolve())
         self.assertTrue((skills_directory / "yomiyasu" / "SKILL.md").is_file())

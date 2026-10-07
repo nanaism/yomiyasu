@@ -55,6 +55,7 @@ class TestSpacingPolicy(unittest.TestCase):
             [sys.executable, "-B", str(SCRIPT), "--json", "--strict"],
             input="この README は設定を説明します。",
             text=True,
+            encoding="utf-8",
             capture_output=True,
             timeout=10,
         )

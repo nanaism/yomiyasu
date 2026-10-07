@@ -119,6 +119,7 @@ another:
             [sys.executable, "-B", str(SCRIPT), "--json", "--strict"],
             input=ISSUE4_DOCUMENT,
             text=True,
+            encoding="utf-8",
             capture_output=True,
             timeout=10,
         )
@@ -140,6 +141,7 @@ another:
                     command,
                     input="本文です。\n確認事項：",
                     text=True,
+                    encoding="utf-8",
                     capture_output=True,
                     timeout=10,
                 )

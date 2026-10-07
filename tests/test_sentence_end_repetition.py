@@ -199,6 +199,7 @@ class TestSentenceEndRepetition(unittest.TestCase):
             input=text,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -215,6 +216,7 @@ class TestSentenceEndRepetition(unittest.TestCase):
             input=text,
             capture_output=True,
             text=True,
+            encoding="utf-8",
             check=False,
         )
         self.assertEqual(result.returncode, 1, result.stderr)

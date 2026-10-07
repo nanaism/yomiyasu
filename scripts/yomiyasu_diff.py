@@ -859,6 +859,7 @@ def report(d: dict) -> str:
 
 
 if __name__ == "__main__":
+    sys.stdout.reconfigure(encoding="utf-8")
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     stance = None
     for a in sys.argv[1:]:
@@ -887,4 +888,4 @@ if __name__ == "__main__":
     o = open(args[0], encoding="utf-8").read()
     r = open(args[1], encoding="utf-8").read()
     d = diff(o, r, stance)
-    print(json.dumps(d, ensure_ascii=False, indent=1) if "--json" in sys.argv else report(d))
+    print(json.dumps(d, ensure_ascii=True, indent=1) if "--json" in sys.argv else report(d))

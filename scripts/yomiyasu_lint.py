@@ -1421,6 +1421,7 @@ def lint_text(text: str) -> Dict[str, Any]:
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="日本語の表現とMarkdownの書式を、設定されたルールで点検します。指摘は見直し候補です。")
     parser.add_argument("file", nargs="?", help="検査対象のMarkdownファイルパス（指定なしの場合は標準入力）")
     parser.add_argument("--json", action="store_true", help="JSON形式で出力")
@@ -1436,12 +1437,17 @@ def main():
             print(f"Error opening file {args.file}: {e}", file=sys.stderr)
             sys.exit(2)
     else:
-        content = sys.stdin.read()
+        sys.stdin.reconfigure(encoding="utf-8")
+        try:
+            content = sys.stdin.read()
+        except UnicodeDecodeError as e:
+            print(f"Error reading stdin: {e}", file=sys.stderr)
+            sys.exit(2)
 
     result = lint_text(content)
 
     if args.json:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
+        print(json.dumps(result, ensure_ascii=True, indent=2))
     else:
         print("=" * 60)
         print(f"AIっぽさ 検査レポート (スコア: {result['score']}/100)")
