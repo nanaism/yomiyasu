@@ -1421,7 +1421,8 @@ def lint_text(text: str) -> Dict[str, Any]:
 
 
 def main():
-    sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     parser = argparse.ArgumentParser(description="日本語の表現とMarkdownの書式を、設定されたルールで点検します。指摘は見直し候補です。")
     parser.add_argument("file", nargs="?", help="検査対象のMarkdownファイルパス（指定なしの場合は標準入力）")
     parser.add_argument("--json", action="store_true", help="JSON形式で出力")
@@ -1437,10 +1438,14 @@ def main():
             print(f"Error opening file {args.file}: {e}", file=sys.stderr)
             sys.exit(2)
     else:
-        sys.stdin.reconfigure(encoding="utf-8")
+        if sys.stdin is None:
+            print("Error reading stdin: standard input is not available", file=sys.stderr)
+            sys.exit(2)
+        if hasattr(sys.stdin, "reconfigure"):
+            sys.stdin.reconfigure(encoding="utf-8")
         try:
             content = sys.stdin.read()
-        except UnicodeDecodeError as e:
+        except (UnicodeDecodeError, OSError) as e:
             print(f"Error reading stdin: {e}", file=sys.stderr)
             sys.exit(2)
 

@@ -858,8 +858,14 @@ def report(d: dict) -> str:
     return "\n".join(lines) if lines else "（候補なし）"
 
 
+def read_text(path):
+    with open(path, encoding="utf-8") as handle:
+        return handle.read()
+
+
 if __name__ == "__main__":
-    sys.stdout.reconfigure(encoding="utf-8")
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
     args = [a for a in sys.argv[1:] if not a.startswith("--")]
     stance = None
     for a in sys.argv[1:]:
@@ -867,7 +873,7 @@ if __name__ == "__main__":
             stance = STANCES.get(a.split("=", 1)[1])
     if "--endings" in sys.argv and args:
         # 1つのファイルの文末だけを見る（マークダウンのコードブロックや表の区切りは飛ばす）
-        t = open(args[0], encoding="utf-8").read()
+        t = read_text(args[0])
         rows, flags = stance_flags(t, stance, markdown=True)
         from collections import Counter
         c = Counter(r["kind"] for r in rows if r["where"] != "表")
@@ -885,7 +891,7 @@ if __name__ == "__main__":
         print("使い方: python3 yomiyasu_diff.py 元の文.txt 書き直した文.txt [--stance=勧め|決まり|説明] [--json]")
         print("　　　  python3 yomiyasu_diff.py --endings ファイル [--stance=勧め|決まり|説明]")
         sys.exit(1)
-    o = open(args[0], encoding="utf-8").read()
-    r = open(args[1], encoding="utf-8").read()
+    o = read_text(args[0])
+    r = read_text(args[1])
     d = diff(o, r, stance)
     print(json.dumps(d, ensure_ascii=True, indent=1) if "--json" in sys.argv else report(d))

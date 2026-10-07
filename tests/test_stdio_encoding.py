@@ -5,13 +5,17 @@ PYTHONIOENCODING で Windows の日本語環境と同じ標準入出力（cp932�
 macOS や Linux でも同じ条件で確かめられる。
 """
 
+import contextlib
+import io
 import json
 import os
 from pathlib import Path
+import runpy
 import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
@@ -90,7 +94,72 @@ class TestStdioEncoding(unittest.TestCase):
         self.assert_ascii_json(run_cp932([DIFF, before, after, "--json"]))
         report = run_cp932([DIFF, before, after])
         self.assertEqual(report.returncode, 0, report.stderr.decode("utf-8", "replace"))
-        report.stdout.decode("utf-8")
+        self.assertIn("再起動", report.stdout.decode("utf-8"))
+
+    def test_diff_report_with_emoji_without_crashing(self):
+        # 文末が変わった文はレポートにそのまま出るので、cp932 で表せない文字を含めて確かめる。
+        before = self.write("before.md", "設定を更新します。\n")
+        after = self.write("after.md", "設定を🚀更新しました。\n")
+        report = run_cp932([DIFF, before, after])
+        self.assertEqual(report.returncode, 0, report.stderr.decode("utf-8", "replace"))
+        self.assertIn("🚀", report.stdout.decode("utf-8"))
+
+
+_KEEP = object()
+
+
+def run_in_process(script, args, stdin=_KEEP, stdout=_KEEP):
+    """標準入出力を TextIOWrapper 以外（StringIO や None）に差し替えて、スクリプトを __main__ として実行する。"""
+    patches = [mock.patch.object(sys, "argv", [str(script)] + [str(a) for a in args])]
+    if stdin is not _KEEP:
+        patches.append(mock.patch.object(sys, "stdin", stdin))
+    # Never let the script reconfigure the test runner's own stdout.
+    patches.append(mock.patch.object(sys, "stdout", io.StringIO() if stdout is _KEEP else stdout))
+    with contextlib.ExitStack() as stack:
+        for patch in patches:
+            stack.enter_context(patch)
+        try:
+            runpy.run_path(str(script), run_name="__main__")
+        except SystemExit as stop:
+            return stop.code or 0
+    return 0
+
+
+class TestStreamsWithoutReconfigure(unittest.TestCase):
+    """IDLE や pythonw、プロセス内での実行のように、reconfigure() を持たない標準入出力でも動く。"""
+
+    def setUp(self):
+        folder = tempfile.TemporaryDirectory(prefix="yomiyasu-stdio-")
+        self.addCleanup(folder.cleanup)
+        self.path = Path(folder.name) / "sample.md"
+        self.path.write_text(SAMPLE, encoding="utf-8")
+
+    def test_lint_writes_json_to_string_stdout(self):
+        out = io.StringIO()
+        self.assertEqual(run_in_process(LINT, [self.path, "--json"], stdout=out), 0)
+        self.assertEqual(len(json.loads(out.getvalue())["findings"]), 2)
+
+    def test_lint_reads_string_stdin(self):
+        out = io.StringIO()
+        self.assertEqual(run_in_process(LINT, ["--json"], stdin=io.StringIO(SAMPLE), stdout=out), 0)
+        self.assertEqual(json.loads(out.getvalue())["metrics"]["char_count"], 35)
+
+    def test_lint_runs_without_stdout(self):
+        self.assertEqual(run_in_process(LINT, [self.path], stdout=None), 0)
+
+    def test_lint_rejects_missing_stdin_with_exit_code_2(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = run_in_process(LINT, ["--json"], stdin=None, stdout=io.StringIO())
+        self.assertEqual(code, 2)
+        self.assertIn("Error reading stdin", stderr.getvalue())
+
+    def test_diff_writes_json_to_string_stdout(self):
+        after = self.path.with_name("after.md")
+        after.write_text("本記事では、設計の本質に迫りました。\n", encoding="utf-8")
+        out = io.StringIO()
+        self.assertEqual(run_in_process(DIFF, [self.path, after, "--json"], stdout=out), 0)
+        self.assertIsInstance(json.loads(out.getvalue()), dict)
 
 
 if __name__ == "__main__":

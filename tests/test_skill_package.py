@@ -35,6 +35,25 @@ class SkillPackageTests(unittest.TestCase):
             with self.subTest(resource=relative):
                 self.assertTrue((PACKAGE / relative).is_file())
 
+    def test_root_copies_match_distributed_skill(self):
+        # Tests import the root copies, so a drift would leave the distributed files untested.
+        for name in ("yomiyasu_lint.py", "yomiyasu_diff.py", "markdown_visibility.py"):
+            with self.subTest(script=name):
+                self.assertEqual((ROOT / "scripts" / name).read_bytes(), (PACKAGE / "scripts" / name).read_bytes())
+        root_references = ROOT / "references"
+        package_references = PACKAGE / "references"
+
+        def documents(base):
+            # Skip dotfiles such as the .DS_Store that Finder leaves behind (ignored by git).
+            return sorted(path.relative_to(base) for path in base.rglob("*")
+                          if path.is_file() and not any(part.startswith(".") for part in path.relative_to(base).parts))
+
+        relatives = documents(package_references)
+        self.assertEqual(documents(root_references), relatives)
+        for relative in relatives:
+            with self.subTest(reference=str(relative)):
+                self.assertEqual((root_references / relative).read_bytes(), (package_references / relative).read_bytes())
+
 
 if __name__ == "__main__":
     unittest.main()
