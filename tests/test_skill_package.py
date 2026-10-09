@@ -35,6 +35,11 @@ class SkillPackageTests(unittest.TestCase):
             with self.subTest(resource=relative):
                 self.assertTrue((PACKAGE / relative).is_file())
 
+    def test_distributed_scripts_are_only_the_skill_tools(self):
+        # Corpus and setup scripts stay at the repository root and out of the release ZIP.
+        names = sorted(path.name for path in (PACKAGE / "scripts").glob("*.py"))
+        self.assertEqual(names, ["markdown_visibility.py", "yomiyasu_diff.py", "yomiyasu_lint.py"])
+
     def test_root_copies_match_distributed_skill(self):
         # Tests import the root copies, so a drift would leave the distributed files untested.
         for name in ("yomiyasu_lint.py", "yomiyasu_diff.py", "markdown_visibility.py"):

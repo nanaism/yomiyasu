@@ -59,7 +59,7 @@ class TestStdioEncoding(unittest.TestCase):
         from_stdin = self.assert_ascii_json(run_cp932([LINT, "--json"], SAMPLE.encode("utf-8")))
         self.assertEqual(from_stdin, from_file)
         self.assertEqual(from_stdin["metrics"]["char_count"], 35)
-        self.assertEqual(len(from_stdin["findings"]), 2)
+        self.assertEqual(len(from_stdin["findings"]), 3)
 
     def test_lint_strict_exit_code_from_utf8_stdin(self):
         process = run_cp932([LINT, "--strict"], SAMPLE.encode("utf-8"))
@@ -137,7 +137,7 @@ class TestStreamsWithoutReconfigure(unittest.TestCase):
     def test_lint_writes_json_to_string_stdout(self):
         out = io.StringIO()
         self.assertEqual(run_in_process(LINT, [self.path, "--json"], stdout=out), 0)
-        self.assertEqual(len(json.loads(out.getvalue())["findings"]), 2)
+        self.assertEqual(len(json.loads(out.getvalue())["findings"]), 3)
 
     def test_lint_reads_string_stdin(self):
         out = io.StringIO()

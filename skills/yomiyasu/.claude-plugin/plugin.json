@@ -1,7 +1,7 @@
 {
   "name": "yomiyasu",
   "description": "AIが生成した日本語を、意味と条件を保って読みやすく整えるスキル",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "skills": "./",
   "author": {
     "name": "nanaism"

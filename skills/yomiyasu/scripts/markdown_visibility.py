@@ -21,12 +21,15 @@ _AUTOLINK = re.compile(r'<(?:[A-Za-z][A-Za-z0-9+.-]{1,31}:[^<>\x00-\x20]*|'
                        r'(?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?'
                        r'(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*>)')
 _CONTAINER_MARKER = re.compile(r'(?:[-+*]|\d{1,9}[.)])(?:[ \t]+|$)')
+_CONTAINER_MARKER_DEFAULT = _CONTAINER_MARKER
 _BARE_URL = re.compile(r'(?:https?://|www\.)[^\s<>]+')
 _REFERENCE_LABEL = re.compile(r'^ {0,3}\[((?:\\.|[^\[\]\\]){1,999})\]:[ \t]*')
 _BLANK_TITLE_LINE = re.compile(r'(?:\r\n|\r|\n)[ \t]*(?:\r\n|\r|\n)')
 _SETEXT = re.compile(r'^ {0,3}(?:=+|-+)[ \t]*$')
 _THEMATIC = re.compile(r'^ {0,3}(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$')
 _INLINE_EVENTS = re.compile(r'[\\`<\[\]hw]')
+_FENCE_OPEN = re.compile(r'^ {0,3}(`{3,}|~{3,})(.*)$')
+_ATX_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]+|$)')
 
 
 def unicode_whitespace(ch):
@@ -218,12 +221,16 @@ def inline_protected_spans(text):
                     continue
         # GFM bare URLs are data for prose inspection, not emphasis instructions.
         if text.startswith(('http://', 'https://', 'www.'), pos):
+            www = text.startswith('www.', pos)
+            # Reject an impossible www start before scanning its entire suffix.
+            if www and pos and not (unicode_whitespace(text[pos - 1]) or text[pos - 1] in '*_~('):
+                pos += 1
+                continue
             match = _BARE_URL.match(text, pos)
             if match:
                 end = match.end()
                 # New www recognition is restricted to published GFM boundaries
                 # and a valid ASCII domain. Adjacent-Japanese policy is not widened.
-                www = text.startswith('www.', pos)
                 domain = re.split(r'[/?:#]', match.group(0), maxsplit=1)[0]
                 segments = domain.split('.')
                 valid_www = (len(segments) >= 2
@@ -255,6 +262,13 @@ def _columns(text):
 
 
 def _containers(raw, allow_list=True):
+    # Default containers can start only with an ASCII space, a quote marker,
+    # a list marker, or a Unicode digit. isdigit() is a conservative superset
+    # of regex \d; unusual custom marker patterns keep the original path.
+    if (type(raw) is str and raw and raw[0] not in ' >'
+            and (not allow_list or (_CONTAINER_MARKER is _CONTAINER_MARKER_DEFAULT
+                                   and raw[0] not in '-+*' and not raw[0].isdigit()))):
+        return 0, 0, False
     pos = 0
     quotes = 0
     list_item = False
@@ -522,7 +536,7 @@ def analyze_markdown(text, skip_frontmatter=True):
                 if not stripped: html_until = None
             elif re.search(html_until, content, re.I): html_until = None
         if kind is None:
-            marker = re.match(r'^ {0,3}(`{3,}|~{3,})(.*)$', content)
+            marker = _FENCE_OPEN.match(content)
             if marker and not (marker.group(1)[0] == '`' and '`' in marker.group(2)):
                 kind = 'code'
                 fence = (marker.group(1)[0], len(marker.group(1)), depth)
@@ -530,7 +544,7 @@ def analyze_markdown(text, skip_frontmatter=True):
                 kind = 'code'
             elif not stripped:
                 kind = 'blank'
-            elif re.match(r'^ {0,3}#{1,6}(?:[ \t]+|$)', content):
+            elif _ATX_HEADING.match(content):
                 kind = 'heading'
             elif _SETEXT.match(content) and current is not None and current['kind'] in ('paragraph', 'quote', 'list'):
                 current['kind'] = 'heading'
@@ -545,7 +559,9 @@ def analyze_markdown(text, skip_frontmatter=True):
                 if current['lines']:
                     header = current['lines'].pop()
                     header['kind'] = 'table'
-                    if not current['lines']: blocks.remove(current)
+                    if not current['lines']:
+                        # current is the active (last appended) block.
+                        blocks.pop()
                     blocks.append({'kind': 'table', 'lines': [header]})
                     current = None
                 kind = 'table'
@@ -659,6 +675,9 @@ def line_visible_text(analysis, line_no, protected_kinds=None):
     row = analysis['lines'][line_no - 1]
     start = row['start']
     end = start + len(row['raw'])
+    if not analysis['protected_spans']:
+        cached[cache_key] = row['raw']
+        return row['raw']
     if protected_kinds is None:
         masks, ends = analysis['mask_spans'], analysis['mask_ends']
     else:

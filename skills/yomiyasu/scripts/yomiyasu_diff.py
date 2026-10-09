@@ -127,11 +127,17 @@ EVAL_END = r"(?:重要|最重要|大切|大事|不可欠|肝心|肝要|欠かせ
 def bare_end(s: str) -> str:
     """文末の判定に使う形。太字や記号、文末のかっこ書き（「〜」の例など）を外す"""
     t = re.sub(r"\*\*|`", "", s).strip().rstrip("。．.！!？?").strip()
-    prev = None
-    while prev != t:
-        prev = t
-        t = re.sub(r"[（(][^（）()]*[）)]$", "", t).strip()
-    return re.sub(r"[」』）)]+$", "", t)
+    end = len(t)
+    while end and t[end - 1] in "）)":
+        start = end - 2
+        while start >= 0 and t[start] not in "（）()":
+            start -= 1
+        if start < 0 or t[start] not in "（(":
+            break
+        end = start
+        while end and t[end - 1].isspace():
+            end -= 1
+    return t[:end].rstrip("」』）)")
 
 
 def register(s: str) -> str:
