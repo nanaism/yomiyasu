@@ -221,6 +221,19 @@ class TestReleaseReviewCases(unittest.TestCase):
         self.assert_changes("原因は設定ミスだとされる。対策は来週から始める。再発防止の手順も見直す。",
                             "対策は来週から始める。再発防止の手順も見直す。原因は設定ミスだとされる。")
 
+    def test_marks_swapped_between_short_sentences(self):
+        for orig, rewrite, kind in (("費用は安いとされています。品質は高いです。", "費用は安いです。品質は高いとされています。", "伝聞"),
+                                    ("新機能は便利だと思います。導入は来月です。", "新機能は便利です。導入は来月だと思います。", "意見"),
+                                    ("在庫は少ないかもしれません。出荷は明日です。", "在庫は少ないです。出荷は明日かもしれません。", "推量")):
+            with self.subTest(orig=orig):
+                found = changes(orig, rewrite)
+                self.assertEqual([(entry["orig"], kinds([entry], "lost"), kinds([entry], "added")) for entry in found],
+                                 [(orig.split("。")[0] + "。", [kind], []), (orig.split("。")[1] + "。", [], [kind])])
+
+    def test_request_turned_into_description_after_rewording(self):
+        self.assert_changes("ログの保存先は管理画面から変更してください。詳細は担当者に確認してください。",
+                            "管理画面でログの保存先を変える。詳しくは担当者に聞いてください。", lost=["依頼・決まり"])
+
     def test_deleted_sentence_is_not_reported(self):
         self.assert_changes("原因は設定ミスだとされる。対策は来週から始める。", "対策は来週から始める。")
 

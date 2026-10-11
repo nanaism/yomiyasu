@@ -237,7 +237,7 @@ def _type_changes(o: str, r: str, opcodes):
             at = r.find(text)
             if at != -1:
                 moved.append(([text], [(s, e)], at, at + len(text)))
-            elif _marks_in(o_marks, [(s, e)]):
+            else:
                 gone.append((text, s, e))
             continue
         a, b = map_start(s), map_end(e)
@@ -250,21 +250,28 @@ def _type_changes(o: str, r: str, opcodes):
         else:
             groups.append([[text], [(s, e)], a, b])
     if gone:
-        # 新しく書いた文（大半が元と対応しない文）のうち、字面が元の文と半分以上重なるものを、移して書き換えた文とみなす。
-        same = [(j1, j2) for tag, _, _, j1, j2 in opcodes if tag == "equal"]
-        fresh = [(a, b) for a, b in _sentence_spans(r)
-                 if 2 * sum(max(0, min(b, j2) - max(a, j1)) for j1, j2 in same) < b - a]
+        # 比べずに飛ばした元の文（同じ文が書き直した文章にないもの）は、字面が重なる文を書き直した文章から探して比べる。
+        # 重なりは、短いほうの文の2文字の組の半分以上（かつ4組以上）が共通であること。印の言い回しの長さに左右されにくい。
+        # 移したうえで書き換えた文や、印の言い回しが隣の文と結びついて範囲を取られた短い文がこれに当たる。
+        # 見つけた文が、ほかの元の文の範囲の端に入っていれば、その範囲から外す。
+        r_grams = [(a, b, _bigrams(r[a:b].strip())) for a, b in _sentence_spans(r)]
+        taken = []
         for text, s, e in gone:
             grams = _bigrams(text)
             best, score = None, 0.5
-            for a, b in fresh:
-                other = _bigrams(r[a:b].strip())
-                dice = 2 * len(grams & other) / ((len(grams) + len(other)) or 1)
-                if dice >= score:
-                    best, score = (a, b), dice
+            for a, b, other in r_grams:
+                shared = len(grams & other)
+                if shared >= 4 and shared / min(len(grams), len(other)) >= score and (a, b) not in taken:
+                    best, score = (a, b), shared / min(len(grams), len(other))
             if best:
-                fresh.remove(best)
+                taken.append(best)
                 moved.append(([text], [(s, e)], best[0], best[1]))
+        for group in groups:
+            for ta, tb in taken:
+                if group[2] < ta < group[3] <= tb + 1:
+                    group[3] = ta
+                elif ta <= group[2] < tb < group[3]:
+                    group[2] = tb
     out = []
     for texts, spans, a, b in [tuple(g) for g in groups] + moved:
         before = _marks_in(o_marks, spans)
