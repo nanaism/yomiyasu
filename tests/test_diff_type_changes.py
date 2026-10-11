@@ -174,6 +174,57 @@ class TestReviewedCases(unittest.TestCase):
                 self.assert_changes(orig, rewrite, lost=[kind])
 
 
+class TestReleaseReviewCases(unittest.TestCase):
+    """公開前レビュー（v1.1.2）で見つかった、境界の挿入、活用、例えの範囲、移した文。"""
+
+    def assert_changes(self, orig, rewrite, lost=(), added=()):
+        found = changes(orig, rewrite)
+        self.assertEqual(sorted(kinds(found, "lost")), sorted(lost), found)
+        self.assertEqual(sorted(kinds(found, "added")), sorted(added), found)
+
+    def test_marks_added_at_sentence_edges(self):
+        self.assert_changes("修正は済んでいる。", "担当者によると、修正は済んでいる。", added=["伝聞"])
+        self.assert_changes("昨夜の障害は解消した。修正は済んでいる。", "昨夜の障害は解消した。担当者によると、修正は済んでいる。", added=["伝聞"])
+        self.assert_changes("Aは速い", "Aは速いらしい", added=["推量"])
+        self.assert_changes("- 本番では管理者権限で実行する\n- 実行前にバックアップを取る",
+                            "- 本番では管理者権限で実行するべき\n- 実行前にバックアップを取る", added=["依頼・決まり"])
+
+    def test_new_sentence_between_is_not_a_prefix(self):
+        self.assert_changes("障害は解消した。修正は済んでいる。", "障害は解消した。担当者によると原因は設定だ。修正は済んでいる。")
+
+    def test_conjugated_forms_keep_their_kind(self):
+        for orig, rewrite in (("移行の前に、運用チームへ申請する必要があり、申請には一週間かかる。", "移行の前に、運用チームへ申請する必要がある。申請には一週間かかる。"),
+                              ("この方式では遅いと考え、別の方式を試した。", "この方式では遅いと考える。そこで別の方式を試した。"),
+                              ("原因は設定ミスらしい。ただし確証はない。", "原因は設定ミスらしいが、確証はない。"),
+                              ("サーバーが落ちたようだ。再起動した。", "サーバーが落ちたようなので、再起動した。"),
+                              ("明日は雨が降るそうだ。傘を持っていく。", "明日は雨が降るそうなので、傘を持っていく。"),
+                              ("期限までに提出しなければならない。遅れると受理されない。", "期限までに提出しなければならず、遅れると受理されない。"),
+                              ("検証にDBの起動が必要になり、単体テストが難しい。", "検証するにはDBを起動する必要があり、単体テストが難しい。"),
+                              ("追加の統制が必要となる。", "開発者は認可を別途実装しなければならない。")):
+            with self.subTest(orig=orig):
+                self.assert_changes(orig, rewrite)
+
+    def test_simile_forms_and_scope(self):
+        for orig, rewrite in (("彼の机はまるで戦場のようであった。", "彼の机はまるで戦場のようだった。"),
+                              ("まるで夢みたいだった。", "まるで夢のようだった。"),
+                              ("まるで戦場のようで、誰も近づかなかった。", "まるで戦場のようだった。誰も近づかなかった。")):
+            with self.subTest(orig=orig):
+                self.assert_changes(orig, rewrite)
+        self.assert_changes("まるで迷路のようなコードで、どうやら誰も全体を把握していないようだ。",
+                            "まるで迷路のようなコードで、誰も全体を把握していない。", lost=["推量"])
+
+    def test_moved_sentence_that_lost_its_mark(self):
+        self.assert_changes("原因は設定ミスだとされる。対策は来週から始める。再発防止の手順も見直す。",
+                            "対策は来週から始める。再発防止の手順も見直す。原因は設定ミスだ。", lost=["伝聞"])
+
+    def test_moved_sentence_unchanged_is_quiet(self):
+        self.assert_changes("原因は設定ミスだとされる。対策は来週から始める。再発防止の手順も見直す。",
+                            "対策は来週から始める。再発防止の手順も見直す。原因は設定ミスだとされる。")
+
+    def test_deleted_sentence_is_not_reported(self):
+        self.assert_changes("原因は設定ミスだとされる。対策は来週から始める。", "対策は来週から始める。")
+
+
 class TestOutputShape(unittest.TestCase):
     def test_existing_keys_are_kept_and_type_changes_is_added(self):
         result = yomiyasu_diff.diff("資料を共有してください。\n", "資料を共有します。\n")

@@ -63,7 +63,7 @@ _END = r"(?=[。、！!？?よねがけのかし]|です|$)"
 # 印の文字列を先頭に置き、直前の文字の確かめ（後読み）はその後ろに書く。正規表現が当たる見込みのない位置を飛ばせるので速い。
 _TYPE_PATTERNS = (
     ("伝聞", r"そう(?:(?<=[るうくすつぬぶむぐ]そう)|(?<=だそう)|(?<=ったそう)|(?<=んだそう)|(?<=ないそう))"
-           r"(?:だ|です|でした|だった|で(?=、))(?=[。、！!よね]|$)"
+           r"(?:(?:だ|です|でした|だった|で(?=、))(?=[。、！!よね]|$)|な(?=の(?:で|に|だ|です)))"
            r"|とされ(?<!落とされ)(?<!必要とされ)(?:る|ている|ています|ており|た|ます|ました|てきた)"
            r"|という(?=[。！!]|$)|といいます(?<=[るうくすつぬぶむぐただ]といいます)(?=[。！!]|$)|とのこと(?<!あとのこと)(?<!後とのこと)"
            r"|によ(?<!場合によ)(?:ると|れば)|と(?:言|い)われ(?:る|ている|ています|ており|た|ます|ました|てきた)"
@@ -72,15 +72,15 @@ _TYPE_PATTERNS = (
            # 名詞のあとの「らしい」は、文の終わりにあるときだけ推量と数える（「春らしい陽気」「素晴らしい」は除く）。
            + r"|らし(?<!素晴らし)(?<!すばらし)(?<!めずらし)(?<!わざとらし)(?<!可愛らし)(?<!かわいらし)(?<!憎らし)(?<!馬鹿らし)"
              r"(?<!ばからし)(?<!男らし)(?<!女らし)(?<!子供らし)(?<!子どもらし)(?<!いやらし)(?<!汚らし)(?<!春らし)(?<!夏らし)(?<!秋らし)"
-             r"(?<!冬らし)(?<!彼らし)(?:い|かった)(?=[。！!]|です|でした|$)"
+             r"(?<!冬らし)(?<!彼らし)(?:い|かった)(?=[。！!]|が|けど|けれど|です|でした|$)"
            + r"|よう(?<!次のよう)(?<!以下のよう)(?<!下記のよう)(?<!上記のよう)(?<!左記のよう)(?<!このよう)(?<!そのよう)"
-             r"(?:だ|です|でした|だった|である|であった|で(?=、))" + _END
-           + r"|みたい(?:だ|です|でした|だった)(?=[。！!よね]|$)"
+             r"(?:(?:だ|です|でした|だった|である|であった|で(?=、))" + _END + r"|な(?=の(?:で|に|だ|です)))"
+           + r"|みたい(?:(?:だ|です|でした|だった)(?=[。！!よね]|$)|な(?=の(?:で|に|だ|です)))"
            r"|かも(?:しれ|知れ)(?:ない|ません|ず)|可能性があ(?:る|ります|った|りました)"
            r"|だろう(?<!でだろう)(?!か)|であろう|でしょう(?!か)|ではない(?:でしょう|だろう)か|はず(?:だ|です|で|でした|だった)"
            r"|と(?:見|み)られ(?:る|ている|ています|ており|た|ます)|と(?:思|おも)われ(?:る|ます|た)|と考えられ(?:る|ます|た)"),
-    ("意見", r"と(?:(?:私|僕|筆者|我々|われわれ|当社|弊社|私たち)は)?(?:思|おも)(?:う|い(?:ます|ました)|った|って(?:いる|います|いた|いました|おり))"
-           r"|と(?:(?:私|僕|筆者|我々|われわれ|当社|弊社|私たち)は)?(?:考え|感じ)(?:る(?!と)|ます|ました|た|て(?:いる|います|いた|いました|おり))"
+    ("意見", r"と(?:(?:私|僕|筆者|我々|われわれ|当社|弊社|私たち)は)?(?:思|おも)(?:う|い(?:ます|ました|(?=、))|った|って(?:いる|います|いた|いました|おり))"
+           r"|と(?:(?:私|僕|筆者|我々|われわれ|当社|弊社|私たち)は)?(?:考え|感じ)(?:る(?!と)|ます|ました|た|て(?:いる|います|いた|いました|おり)|(?=、))"
            r"|ように(?:思|感じ)(?:う|います|いました|られ)"),
     ("例え", r"まるで|あたかも|さながら|(?:ごと|如)(?<!前述のごと)(?<!上記のごと)(?<!周知のごと)(?<!以下のごと)(?<!次のごと)"
            r"(?<!前述の如)(?<!上記の如)(?<!周知の如)(?<!以下の如)(?<!次の如)[くき]"),
@@ -88,9 +88,9 @@ _TYPE_PATTERNS = (
                  r"|お願い(?<!よろしくお願い)(?<!宜しくお願い)(?:します|いたします|致します|申し上げます|できますか|できますでしょうか)"
                  r"|て(?:いただけ|もらえ)(?:ますか|ませんか)|てほしい|てもらいたい|ていただきたい"
                  r"|べき(?<!しかるべき)(?<!然るべき)(?<!驚くべき)(?<!恐るべき)(?<!来るべき)(?<!特筆すべき)(?<!注目すべき)(?!乗)"
-                 r"|なければ(?:ならない|なりません|いけない|いけません)|なくては(?:ならない|なりません|いけない|いけません)"
-                 r"|ないといけ(?:ない|ません)|(?:て|で)は(?:いけ|なら)(?:ない|ません)|ねばならない"
-                 r"|必要があ(?:る|ります)|必要(?:です|だ)(?=[。！!]|$)"),
+                 r"|なければ(?:ならない|なりません|ならず|いけない|いけません)|なくては(?:ならない|なりません|ならず|いけない|いけません)"
+                 r"|ないといけ(?:ない|ません)|(?:て|で)は(?:いけ|なら)(?:ない|ません)|ねばなら(?:ない|ず)"
+                 r"|必要があ(?:る|ります|り(?=、))|必要(?:です|だ)(?=[。！!]|$)|必要[にと]な(?:る|ります|り(?=、)|った|りました)"),
 )
 TYPE_MARKERS = OrderedDict((kind, re.compile(pattern, re.M)) for kind, pattern in _TYPE_PATTERNS)
 # 種類ごとに、印の正規表現が当たるために必ず含まれる文字列。どれも含まない文章では、その種類の正規表現を当てない。
@@ -100,10 +100,14 @@ _TYPE_LITERALS = {
     "意見": ("と思", "とおも", "と考え", "と感じ", "は思", "はおも", "は考え", "は感じ", "ように思", "ように感じ"),
     "例え": ("まるで", "あたかも", "さながら", "ごと", "如"),
     "依頼・決まり": ("ください", "下さい", "お願い", "いただけ", "もらえ", "ほしい", "もらいた", "いただきた", "べき", "なければ",
-                 "なくては", "ないといけ", "はいけ", "はなら", "ねばならない", "必要"),
+                 "なくては", "ないといけ", "はいけ", "はなら", "ねばなら", "必要"),
 }
-# 「まるで〜のようだ」のように例えの語がある文では、「よう」「みたい」を推量ではなく例えの印として数える。
-_SIMILE_YOU = re.compile(r"よう(?:だ|な|に|です|でした|だった|である)|みたい(?:だ|な|に|です|でした)")
+# 「まるで〜のようだ」の「よう」「みたい」は、推量ではなく例えの印として数える。
+# 対にするのは、同じ文の中で「まるで」「あたかも」「さながら」のあとに最初に出てくる1つだけ。
+_SIMILE_HEADS = ("まるで", "あたかも", "さながら")
+_SIMILE_LIKE = re.compile(r"(?:よう|みたい)(?:であった|である|だった|でした|です|だ|な|に|で)?")
+_STOPS = "。！？!?\n"
+_STOP = re.compile("[" + _STOPS + "]")
 _SENTENCE_PIECE = re.compile(r"[^。！？!?\n]+[。！？!?]*")
 
 
@@ -111,14 +115,22 @@ def _mark_positions(text: str):
     """文章全体に印の正規表現を1回ずつ当て、(開始位置, 種類, 印) を位置の順に返す。"""
     found = [(m.start(), kind, m.group(0)) for kind, pattern in TYPE_MARKERS.items()
              if any(literal in text for literal in _TYPE_LITERALS[kind]) for m in pattern.finditer(text)]
-    if "よう" in text or "みたい" in text:
-        found += [(m.start(), "_よう", m.group(0)) for m in _SIMILE_YOU.finditer(text)]
+    heads = [(start, hit) for start, kind, hit in found if kind == "例え" and hit in _SIMILE_HEADS]
+    if heads:
+        found = {start: (start, kind, hit) for start, kind, hit in found}
+        for start, hit in heads:
+            stop = _STOP.search(text, start)
+            like = _SIMILE_LIKE.search(text, start + len(hit), stop.start() if stop else len(text))
+            if like:
+                # 推量として拾った「ようだ」なら、その印のまま例えに移す。
+                found[like.start()] = (like.start(), "例え", found.get(like.start(), (0, "", like.group(0)))[2])
+        found = list(found.values())
     found.sort(key=lambda item: item[0])
     return found
 
 
 def _marks_in(positions, spans):
-    """範囲（開始, 終了）に入る印を {種類: [印, ...]} にまとめる。例えの語がある範囲では「よう」「みたい」を例えに数える。"""
+    """範囲（開始, 終了）に入る印を {種類: [印, ...]} にまとめる。"""
     keys = [item[0] for item in positions]
     marks = OrderedDict()
     for start, end in spans:
@@ -126,12 +138,6 @@ def _marks_in(positions, spans):
             hits = marks.setdefault(kind, [])
             if hit not in hits:
                 hits.append(hit)
-    similes = marks.pop("_よう", [])
-    if "例え" in marks:
-        marks["例え"] += [hit for hit in similes if hit not in marks["例え"]]
-        guesses = [hit for hit in marks.pop("推量", ()) if not _SIMILE_YOU.fullmatch(hit)]
-        if guesses:
-            marks["推量"] = guesses
     return OrderedDict((kind, marks[kind]) for kind in TYPE_MARKERS if kind in marks)
 
 
@@ -155,22 +161,62 @@ def _sentence_spans(t: str):
     return spans
 
 
+def _slide_to_sentence_edges(opcodes, o: str, r: str):
+    """文字単位の対応では、足した文や消した文が句点1文字ぶん前にずれて「。足した文」の形になることがある。
+    前後の一致と同じ文字の分だけずらせるときは、句点や改行の直後から始まる位置にずらす。"""
+    ops = [list(op) for op in opcodes]
+    for k in range(1, len(ops) - 1):
+        tag, prev, nxt = ops[k][0], ops[k - 1], ops[k + 1]
+        if tag not in ("insert", "delete") or prev[0] != "equal" or nxt[0] != "equal":
+            continue
+        text, a, b, room = (r, ops[k][3], ops[k][4], nxt[4] - nxt[3]) if tag == "insert" else (o, ops[k][1], ops[k][2], nxt[2] - nxt[1])
+        if a == 0 or text[a - 1] in _STOPS:
+            continue
+        shift = 0
+        while shift < min(b - a, room - 1) and text[a + shift] == text[b + shift]:
+            shift += 1
+            if text[a + shift - 1] in _STOPS:
+                prev[2] += shift
+                prev[4] += shift
+                ops[k][1:] = [ops[k][1] + shift, ops[k][2] + shift, ops[k][3] + shift, ops[k][4] + shift]
+                nxt[1] += shift
+                nxt[3] += shift
+                break
+    return [tuple(op) for op in ops]
+
+
+def _bigrams(text: str):
+    return {text[i:i + 2] for i in range(len(text) - 1)}
+
+
 def _type_changes(o: str, r: str, opcodes):
     """元の各文が、文字単位の対応で書き直した文章のどの範囲に当たるかをたどり、範囲ごとに印を比べる。
     文を分けても、つないでも、範囲の中で比べるので、移っただけの印は変化として出ない。
-    範囲が重なる元の文はまとめて比べる。丸ごと消えた文は比べず、丸ごと移した文は同じ文を探して比べる。"""
+    範囲が重なる元の文はまとめて比べる。丸ごと消えた文は比べない。丸ごと移した文は同じ文を探し、
+    移したうえで書き換えた文は、新しく書いた文の中から字面の近い文を探して比べる。"""
     if not opcodes:
         return []
+    opcodes = _slide_to_sentence_edges(opcodes, o, r)
     starts = [op[1] for op in opcodes]
 
+    def bare(op):
+        """句点も改行も含まない挿入。文の頭や、句点のない文の末尾に足した語句として、その文に含める。"""
+        return op[0] == "insert" and not any(ch in _STOPS for ch in r[op[3]:op[4]])
+
     def map_start(i):
-        tag, i1, i2, j1, j2 = opcodes[max(0, bisect_right(starts, i) - 1)]
+        k = max(0, bisect_right(starts, i) - 1)
+        tag, i1, i2, j1, j2 = opcodes[k]
+        if i1 == i and k and opcodes[k - 1][1] == i and bare(opcodes[k - 1]):
+            return opcodes[k - 1][3]
         if tag == "equal":
             return j1 + min(i - i1, j2 - j1)
         return j2 if tag == "insert" else j1
 
     def map_end(e):
-        tag, i1, i2, j1, j2 = opcodes[max(0, bisect_left(starts, e) - 1)]
+        k = bisect_left(starts, e)
+        if k < len(opcodes) and opcodes[k][1] == e and o[e - 1] not in _STOPS and bare(opcodes[k]):
+            return opcodes[k][4]
+        tag, i1, i2, j1, j2 = opcodes[max(0, k - 1)]
         return j1 + min(e - i1, j2 - j1) if tag == "equal" else j2
 
     def kept(i, j):
@@ -184,13 +230,15 @@ def _type_changes(o: str, r: str, opcodes):
     o_marks, r_marks = _mark_positions(o), _mark_positions(r)
     if not o_marks and not r_marks:
         return []
-    groups, moved = [], []
+    groups, moved, gone = [], [], []
     for s, e in _sentence_spans(o):
         text = o[s:e].strip()
         if not kept(s, e):
             at = r.find(text)
             if at != -1:
                 moved.append(([text], [(s, e)], at, at + len(text)))
+            elif _marks_in(o_marks, [(s, e)]):
+                gone.append((text, s, e))
             continue
         a, b = map_start(s), map_end(e)
         if b <= a or not r[a:b].strip("。！？!?、 \n"):
@@ -201,6 +249,22 @@ def _type_changes(o: str, r: str, opcodes):
             groups[-1][3] = max(groups[-1][3], b)
         else:
             groups.append([[text], [(s, e)], a, b])
+    if gone:
+        # 新しく書いた文（大半が元と対応しない文）のうち、字面が元の文と半分以上重なるものを、移して書き換えた文とみなす。
+        same = [(j1, j2) for tag, _, _, j1, j2 in opcodes if tag == "equal"]
+        fresh = [(a, b) for a, b in _sentence_spans(r)
+                 if 2 * sum(max(0, min(b, j2) - max(a, j1)) for j1, j2 in same) < b - a]
+        for text, s, e in gone:
+            grams = _bigrams(text)
+            best, score = None, 0.5
+            for a, b in fresh:
+                other = _bigrams(r[a:b].strip())
+                dice = 2 * len(grams & other) / ((len(grams) + len(other)) or 1)
+                if dice >= score:
+                    best, score = (a, b), dice
+            if best:
+                fresh.remove(best)
+                moved.append(([text], [(s, e)], best[0], best[1]))
     out = []
     for texts, spans, a, b in [tuple(g) for g in groups] + moved:
         before = _marks_in(o_marks, spans)
