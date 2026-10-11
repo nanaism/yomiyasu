@@ -17,7 +17,7 @@ import sys
 import json
 import difflib
 import unicodedata
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 try:
     if __package__:
         from .markdown_visibility import analyze_markdown, inline_protected_spans, unicode_whitespace
@@ -56,76 +56,162 @@ MARKERS = {
     "つなぎ": r"まず|また(?!は)|そして|さらに|次に|最後に|ただし|しかし|つまり|そのため|ので(?!す)|によって|ことで|ことにより",
 }
 
-# 文の種類を示す印。推敲の前後で対応する文どうしを比べ、印が消えた・増えたものを候補にする。
-# 「降りそうだ」（様子）、「使えるように」（目的）、「という名前」のような、種類と関係のない用法は拾わない。
+# 文の種類を示す印。推敲の前後で対応する範囲を比べ、印が消えた・増えたものを候補にする。
+# 種類と関係のない用法（様子の「降りそうだ」、目的の「使えるように」、「という名前」、「素晴らしい」、
+# 受身の「見落とされた」、問いの「〜でしょうか」、評価の「驚くべき」など）は拾わない。
 _END = r"(?=[。、！!？?よねがけのかし]|です|$)"
-TYPE_MARKERS = OrderedDict([
-    ("伝聞", re.compile(r"(?<=[るうくすつぬぶむぐいただ])そう(?:だ|です|でした|だった)" + _END
-                      + r"|とされ(?:る|ている|ています|ており|た|ます|ました)|という(?=[。！!]|$)|とのこと|によ(?:ると|れば)")),
-    ("推量", re.compile(r"らしい" + _END + r"|よう(?:だ|です|でした|だった)" + _END
-                      + r"|かもしれ(?:ない|ません|ず)|だろう|でしょう|はず(?:だ|です|で|でした|だった)")),
-    ("意見", re.compile(r"と(?:思|おも)(?:う|い(?:ます|ました)|った|われ|って(?:いる|います|いた|いました|おり))"
-                      r"|と(?:考え|感じ)(?:る|ます|ました|た|られ|て(?:いる|います|いた|いました|おり))")),
-    ("例え", re.compile(r"まるで|あたかも|さながら|ごとく|ごとき|如く|如き|みたい(?:だ|な|に|です|でした)")),
-    # 「連絡をください」「ご対応ください」「確認をお願いします」も依頼として数える。結びの挨拶「よろしくお願いします」は数えない。
-    ("依頼・決まり", re.compile(r"(?:て|で)ください|をください|(?:ご|お)[一-龥ぁ-んァ-ヴー]{1,8}ください|(?<!よろしく)お願い(?:します|いたします|できますか|できますでしょうか)"
-                             r"|(?<!しかる)べき(?!乗)|なければ(?:ならない|なりません)|なくては(?:ならない|なりません)"
-                             r"|ねばならない|必要があ(?:る|ります)")),
-])
-# 「まるで〜のようだ」のように例えの語がある文では、「よう」を推量ではなく例えの印として数える。
-_SIMILE_YOU = re.compile(r"よう(?:だ|な|に|です|でした|だった)")
+# 印の文字列を先頭に置き、直前の文字の確かめ（後読み）はその後ろに書く。正規表現が当たる見込みのない位置を飛ばせるので速い。
+_TYPE_PATTERNS = (
+    ("伝聞", r"そう(?:(?<=[るうくすつぬぶむぐ]そう)|(?<=だそう)|(?<=ったそう)|(?<=んだそう)|(?<=ないそう))"
+           r"(?:だ|です|でした|だった|で(?=、))(?=[。、！!よね]|$)"
+           r"|とされ(?<!落とされ)(?<!必要とされ)(?:る|ている|ています|ており|た|ます|ました|てきた)"
+           r"|という(?=[。！!]|$)|といいます(?<=[るうくすつぬぶむぐただ]といいます)(?=[。！!]|$)|とのこと(?<!あとのこと)(?<!後とのこと)"
+           r"|によ(?<!場合によ)(?:ると|れば)|と(?:言|い)われ(?:る|ている|ています|ており|た|ます|ました|てきた)"
+           r"|と聞(?<!かと聞)(?:いた|いて(?:いる|います|おり)|きました)"),
+    ("推量", r"らし(?<=[るうくすつぬぶむぐいた]らし)(?:い|かった|く(?=、))" + _END
+           # 名詞のあとの「らしい」は、文の終わりにあるときだけ推量と数える（「春らしい陽気」「素晴らしい」は除く）。
+           + r"|らし(?<!素晴らし)(?<!すばらし)(?<!めずらし)(?<!わざとらし)(?<!可愛らし)(?<!かわいらし)(?<!憎らし)(?<!馬鹿らし)"
+             r"(?<!ばからし)(?<!男らし)(?<!女らし)(?<!子供らし)(?<!子どもらし)(?<!いやらし)(?<!汚らし)(?<!春らし)(?<!夏らし)(?<!秋らし)"
+             r"(?<!冬らし)(?<!彼らし)(?:い|かった)(?=[。！!]|です|でした|$)"
+           + r"|よう(?<!次のよう)(?<!以下のよう)(?<!下記のよう)(?<!上記のよう)(?<!左記のよう)(?<!このよう)(?<!そのよう)"
+             r"(?:だ|です|でした|だった|である|であった|で(?=、))" + _END
+           + r"|みたい(?:だ|です|でした|だった)(?=[。！!よね]|$)"
+           r"|かも(?:しれ|知れ)(?:ない|ません|ず)|可能性があ(?:る|ります|った|りました)"
+           r"|だろう(?<!でだろう)(?!か)|であろう|でしょう(?!か)|ではない(?:でしょう|だろう)か|はず(?:だ|です|で|でした|だった)"
+           r"|と(?:見|み)られ(?:る|ている|ています|ており|た|ます)|と(?:思|おも)われ(?:る|ます|た)|と考えられ(?:る|ます|た)"),
+    ("意見", r"と(?:(?:私|僕|筆者|我々|われわれ|当社|弊社|私たち)は)?(?:思|おも)(?:う|い(?:ます|ました)|った|って(?:いる|います|いた|いました|おり))"
+           r"|と(?:(?:私|僕|筆者|我々|われわれ|当社|弊社|私たち)は)?(?:考え|感じ)(?:る(?!と)|ます|ました|た|て(?:いる|います|いた|いました|おり))"
+           r"|ように(?:思|感じ)(?:う|います|いました|られ)"),
+    ("例え", r"まるで|あたかも|さながら|(?:ごと|如)(?<!前述のごと)(?<!上記のごと)(?<!周知のごと)(?<!以下のごと)(?<!次のごと)"
+           r"(?<!前述の如)(?<!上記の如)(?<!周知の如)(?<!以下の如)(?<!次の如)[くき]"),
+    ("依頼・決まり", r"(?:て|で)(?:ください|下さい)|を(?:ください|下さい)|(?:ご|お)[一-龥ぁ-んァ-ヴー]{1,8}(?:ください|下さい)"
+                 r"|お願い(?<!よろしくお願い)(?<!宜しくお願い)(?:します|いたします|致します|申し上げます|できますか|できますでしょうか)"
+                 r"|て(?:いただけ|もらえ)(?:ますか|ませんか)|てほしい|てもらいたい|ていただきたい"
+                 r"|べき(?<!しかるべき)(?<!然るべき)(?<!驚くべき)(?<!恐るべき)(?<!来るべき)(?<!特筆すべき)(?<!注目すべき)(?!乗)"
+                 r"|なければ(?:ならない|なりません|いけない|いけません)|なくては(?:ならない|なりません|いけない|いけません)"
+                 r"|ないといけ(?:ない|ません)|(?:て|で)は(?:いけ|なら)(?:ない|ません)|ねばならない"
+                 r"|必要があ(?:る|ります)|必要(?:です|だ)(?=[。！!]|$)"),
+)
+TYPE_MARKERS = OrderedDict((kind, re.compile(pattern, re.M)) for kind, pattern in _TYPE_PATTERNS)
+# 種類ごとに、印の正規表現が当たるために必ず含まれる文字列。どれも含まない文章では、その種類の正規表現を当てない。
+_TYPE_LITERALS = {
+    "伝聞": ("そう", "とされ", "という", "といいます", "とのこと", "によると", "によれば", "われ", "と聞"),
+    "推量": ("らし", "よう", "みたい", "かも", "可能性", "だろう", "であろう", "でしょう", "はず", "られ", "われ"),
+    "意見": ("と思", "とおも", "と考え", "と感じ", "は思", "はおも", "は考え", "は感じ", "ように思", "ように感じ"),
+    "例え": ("まるで", "あたかも", "さながら", "ごと", "如"),
+    "依頼・決まり": ("ください", "下さい", "お願い", "いただけ", "もらえ", "ほしい", "もらいた", "いただきた", "べき", "なければ",
+                 "なくては", "ないといけ", "はいけ", "はなら", "ねばならない", "必要"),
+}
+# 「まるで〜のようだ」のように例えの語がある文では、「よう」「みたい」を推量ではなく例えの印として数える。
+_SIMILE_YOU = re.compile(r"よう(?:だ|な|に|です|でした|だった|である)|みたい(?:だ|な|に|です|でした)")
+_SENTENCE_PIECE = re.compile(r"[^。！？!?\n]+[。！？!?]*")
 
 
-def type_marks(sentence: str):
-    """1文に含まれる文の種類の印。{種類: [印の文字列, ...]}"""
+def _mark_positions(text: str):
+    """文章全体に印の正規表現を1回ずつ当て、(開始位置, 種類, 印) を位置の順に返す。"""
+    found = [(m.start(), kind, m.group(0)) for kind, pattern in TYPE_MARKERS.items()
+             if any(literal in text for literal in _TYPE_LITERALS[kind]) for m in pattern.finditer(text)]
+    if "よう" in text or "みたい" in text:
+        found += [(m.start(), "_よう", m.group(0)) for m in _SIMILE_YOU.finditer(text)]
+    found.sort(key=lambda item: item[0])
+    return found
+
+
+def _marks_in(positions, spans):
+    """範囲（開始, 終了）に入る印を {種類: [印, ...]} にまとめる。例えの語がある範囲では「よう」「みたい」を例えに数える。"""
+    keys = [item[0] for item in positions]
     marks = OrderedDict()
-    for kind, pattern in TYPE_MARKERS.items():
-        hits = [m.group(0) for m in pattern.finditer(sentence)]
-        if hits:
-            marks[kind] = hits
+    for start, end in spans:
+        for _, kind, hit in positions[bisect_left(keys, start):bisect_left(keys, end)]:
+            hits = marks.setdefault(kind, [])
+            if hit not in hits:
+                hits.append(hit)
+    similes = marks.pop("_よう", [])
     if "例え" in marks:
-        marks["例え"] += [m.group(0) for m in _SIMILE_YOU.finditer(sentence)]
+        marks["例え"] += [hit for hit in similes if hit not in marks["例え"]]
         guesses = [hit for hit in marks.pop("推量", ()) if not _SIMILE_YOU.fullmatch(hit)]
         if guesses:
             marks["推量"] = guesses
-    return marks
+    return OrderedDict((kind, marks[kind]) for kind in TYPE_MARKERS if kind in marks)
 
 
-def _type_changes_from_pairs(ou, ru, pairs):
-    """対応する文の組で、文の種類の印の有無を比べる。1文を2文に分けた場合は、分けた文をまとめて比べる。"""
-    position = {}
-    for index, unit in enumerate(ou):
-        position.setdefault(id(unit), index)
-    matched = [(ri, position[id(best)]) for ri, _, best in pairs if best is not None]
-    used = {oi for _, oi in matched}
-    groups = OrderedDict()
-    for ri, unit, best in pairs:
-        if best is not None:
-            groups.setdefault(id(best), (best, []))[1].append(unit)
-    # 対応が取れた組の間に、元の文と書き直した文が1つずつだけ残っていれば、その2つを組にする（大きく書き換えた1文など）。
-    pending = {ri: unit for ri, unit, best in pairs if best is None}
-    bounds = [(-1, -1)] + sorted(matched) + [(len(ru), len(ou))]
-    for (r0, o0), (r1, o1) in zip(bounds, bounds[1:]):
-        if o0 >= o1:
+def type_marks(sentence: str):
+    """文や範囲に含まれる文の種類の印。{種類: [印の文字列, ...]}（同じ印は1回だけ）"""
+    return _marks_in(_mark_positions(sentence), [(0, len(sentence))])
+
+
+def _sentence_spans(t: str):
+    """正規化した文章を文に分け、(開始, 終了) を返す。コードブロックと表の行は飛ばす。"""
+    spans, offset, in_code = [], 0, False
+    for line in t.split("\n"):
+        head = line.strip()
+        if head.startswith("```"):
+            in_code = not in_code
+        elif not in_code and head and not head.startswith("|"):
+            for m in _SENTENCE_PIECE.finditer(line):
+                if m.group(0).strip():
+                    spans.append((offset + m.start(), offset + m.end()))
+        offset += len(line) + 1
+    return spans
+
+
+def _type_changes(o: str, r: str, opcodes):
+    """元の各文が、文字単位の対応で書き直した文章のどの範囲に当たるかをたどり、範囲ごとに印を比べる。
+    文を分けても、つないでも、範囲の中で比べるので、移っただけの印は変化として出ない。
+    範囲が重なる元の文はまとめて比べる。丸ごと消えた文は比べず、丸ごと移した文は同じ文を探して比べる。"""
+    if not opcodes:
+        return []
+    starts = [op[1] for op in opcodes]
+
+    def map_start(i):
+        tag, i1, i2, j1, j2 = opcodes[max(0, bisect_right(starts, i) - 1)]
+        if tag == "equal":
+            return j1 + min(i - i1, j2 - j1)
+        return j2 if tag == "insert" else j1
+
+    def map_end(e):
+        tag, i1, i2, j1, j2 = opcodes[max(0, bisect_left(starts, e) - 1)]
+        return j1 + min(e - i1, j2 - j1) if tag == "equal" else j2
+
+    def kept(i, j):
+        k = max(0, bisect_right(starts, i) - 1)
+        while k < len(opcodes) and opcodes[k][1] < j:
+            if opcodes[k][0] in ("equal", "replace") and opcodes[k][2] > i:
+                return True
+            k += 1
+        return False
+
+    o_marks, r_marks = _mark_positions(o), _mark_positions(r)
+    if not o_marks and not r_marks:
+        return []
+    groups, moved = [], []
+    for s, e in _sentence_spans(o):
+        text = o[s:e].strip()
+        if not kept(s, e):
+            at = r.find(text)
+            if at != -1:
+                moved.append(([text], [(s, e)], at, at + len(text)))
             continue
-        rewrites = [ri for ri in range(r0 + 1, r1) if ri in pending]
-        originals = [oi for oi in range(o0 + 1, o1) if oi not in used]
-        if len(rewrites) == 1 and len(originals) == 1 and r1 - r0 == 2:
-            best = ou[originals[0]]
-            groups.setdefault(id(best), (best, []))[1].append(pending[rewrites[0]])
-    ordered = sorted(groups.values(), key=lambda group: position[id(group[0])])
+        a, b = map_start(s), map_end(e)
+        if b <= a or not r[a:b].strip("。！？!?、 \n"):
+            continue
+        if groups and a < groups[-1][3]:
+            groups[-1][0].append(text)
+            groups[-1][1].append((s, e))
+            groups[-1][3] = max(groups[-1][3], b)
+        else:
+            groups.append([[text], [(s, e)], a, b])
     out = []
-    for orig, rewrites in ordered:
-        before = type_marks(orig["sentence"])
-        after = OrderedDict()
-        for unit in rewrites:
-            for kind, hits in type_marks(unit["sentence"]).items():
-                after.setdefault(kind, []).extend(hits)
+    for texts, spans, a, b in [tuple(g) for g in groups] + moved:
+        before = _marks_in(o_marks, spans)
+        after = _marks_in(r_marks, [(a, b)])
         lost = [{"kind": kind, "hits": hits} for kind, hits in before.items() if kind not in after]
         added = [{"kind": kind, "hits": hits} for kind, hits in after.items() if kind not in before]
         if lost or added:
-            out.append({"orig": orig["sentence"], "rewrite": "".join(unit["sentence"] for unit in rewrites),
-                        "lost": lost, "added": added})
+            left = max(r.rfind(ch, 0, a) for ch in "。！？!?\n") + 1
+            right = b if b and r[b - 1] in "。！？!?" else min([i for i in (r.find(ch, b) for ch in "。！？!?\n") if i != -1] + [len(r)])
+            right = right + 1 if right < len(r) and r[right] in "。！？!?" else right
+            out.append({"orig": "".join(texts), "rewrite": r[left:right].strip(), "lost": lost, "added": added})
     return out
 
 
@@ -366,9 +452,8 @@ def ending_changes(o: str, r: str):
     return _ending_changes_from_units(ending_units(o), ending_units(r))
 
 
-def _ending_changes_from_units(ou, ru, pairs=None):
-    """Reuse already parsed rows within diff; keep standalone parsing unchanged.
-    pairs にリストを渡すと、書き直した各文と対応する元の文（なければ None）を (位置, 文, 元の文) で足す。"""
+def _ending_changes_from_units(ou, ru):
+    """Reuse already parsed rows within diff; keep standalone parsing unchanged."""
     # 同じ文の最初の出現を保つ。同点では元の文の順番が優先される。
     originals = OrderedDict()
     for y in ou:
@@ -376,7 +461,7 @@ def _ending_changes_from_units(ou, ru, pairs=None):
     postings = None
     matches = {}
     changes = []
-    for ri, x in enumerate(ru):
+    for x in ru:
         sentence = x["sentence"]
         if sentence not in matches:
             best, score = None, 0.0
@@ -409,8 +494,6 @@ def _ending_changes_from_units(ou, ru, pairs=None):
                         best, score = y, sc
             matches[sentence] = best, score
         best, score = matches[sentence]
-        if pairs is not None:
-            pairs.append((ri, x, best if best and score >= 0.45 else None))
         if best and score >= 0.45 and best["kind"] != x["kind"]:
             changes.append({"orig": best["sentence"], "orig_kind": best["kind"] + ("・箇条書き" if best["where"] == "箇条書き" else ""),
                             "rewrite": x["sentence"], "rewrite_kind": x["kind"]})
@@ -854,11 +937,11 @@ def diff(orig_raw: str, rw_raw: str, stance=None) -> dict:
            "bold": bold_problems(rw_raw)}
     rw_units, flags = stance_flags(rw_raw, stance)
     orig_units, orig_flags = stance_flags(orig_raw, stance)
-    pairs = []
-    out["endings"] = {"stance": stance, "changes": _ending_changes_from_units(orig_units, rw_units, pairs),
+    out["endings"] = {"stance": stance, "changes": _ending_changes_from_units(orig_units, rw_units),
                       "flags": [{"note": n, "sentences": [x["sentence"] for x in rows]} for n, rows in flags],
                       "orig_flags": [{"note": n, "sentences": [x["sentence"] for x in rows]} for n, rows in orig_flags]}
-    out["type_changes"] = _type_changes_from_pairs(orig_units, rw_units, pairs)
+    opcodes = _ExactSequenceMatcher(None, o, r, autojunk=False).get_opcodes() if o != r else []
+    out["type_changes"] = _type_changes(o, r, opcodes)
 
     # 1. 種類ごとの数の増減
     for name, pat in MARKERS.items():
@@ -886,8 +969,7 @@ def diff(orig_raw: str, rw_raw: str, stance=None) -> dict:
 
     # 4. 足した部分（文字単位の差分）。種類か新しい語に当たるものだけ残す
     if o != r:
-        sm = _ExactSequenceMatcher(None, o, r, autojunk=False)
-        for tag, i1, i2, j1, j2 in sm.get_opcodes():
+        for tag, i1, i2, j1, j2 in opcodes:
             if tag in ("insert", "replace"):
                 seg = r[j1:j2]
                 kinds = [n for n, p in MARKERS.items() if re.search(p, r[max(0, j1 - 3):j2 + 3])]

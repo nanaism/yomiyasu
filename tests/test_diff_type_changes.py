@@ -102,6 +102,78 @@ class TestUnrelatedUses(unittest.TestCase):
                 self.assertEqual(changes(orig, rewrite), [])
 
 
+class TestReviewedCases(unittest.TestCase):
+    """公開前の反証で見つかった誤検知と取りこぼし（v1.1.2）。"""
+
+    def assert_changes(self, orig, rewrite, lost=(), added=()):
+        found = changes(orig, rewrite)
+        self.assertEqual(sorted(kinds(found, "lost")), sorted(lost), found)
+        self.assertEqual(sorted(kinds(found, "added")), sorted(added), found)
+
+    def test_joined_and_split_sentences_keep_their_marks(self):
+        for orig, rewrite in (
+                ("昨夜の障害の原因は、設定ファイルに残っていた古い接続先の記述だった。担当者によると、修正済みだという。",
+                 "昨夜の障害の原因は、設定ファイルに残っていた古い接続先の記述で、担当者によると修正済みだという。"),
+                ("新しい検索機能は来月の定例リリースで全ユーザーに公開する予定です。詳細は担当者に確認してください。",
+                 "新しい検索機能は来月の定例リリースで全ユーザーに公開する予定なので、詳細は担当者に確認してください。"),
+                ("新しい版では起動処理を見直して読み込みの待ち時間を減らしたので、起動は速くなったそうだ。",
+                 "新しい版では起動処理を見直して、読み込みの待ち時間を減らした。起動は速くなったそうだ。"),
+                ("旧版は遅いと思うが、新しい版ではキャッシュを入れたので応答が大きく改善した。",
+                 "旧版は遅いと思う。新しい版ではキャッシュを入れたので、応答が大きく改善した。"),
+                ("担当者によると原因は一つ——設定ファイルの記述ミスだ。", "担当者によると、原因は設定ファイルの記述ミスだ。"),
+                ("新しい版は**起動が速いらしい**。", "新しい版は起動が速いらしい。")):
+            with self.subTest(orig=orig):
+                self.assert_changes(orig, rewrite)
+
+    def test_marks_lost_inside_joined_or_similar_sentences(self):
+        self.assert_changes("この方式は遅いと思う。ほかの方式も試したい。Bは安定している。",
+                            "この方式は遅いので、ほかの方式も試したい。Bは安定していると思う。", lost=["意見"], added=["意見"])
+        self.assert_changes("ノード1は応答していないかもしれない。ノード2は応答していない。ログは残っている。",
+                            "ノード1は応答していない。ノード2は応答していない。ログは残っているだろう。", lost=["推量"], added=["推量"])
+        self.assert_changes("1号機は停止したとされる。2号機は停止した。", "1号機は停止した。2号機も停止した。", lost=["伝聞"])
+        self.assert_changes("担当者によると、復旧は明日になる。\n\n詳細は以下のとおり。\n\n担当者によると、復旧は明日になる。",
+                            "担当者によると、復旧は明日になる。\n\n詳細は以下のとおり。\n\n復旧は明日になる。", lost=["伝聞"])
+        self.assert_changes("まるで戦場のような机——片付けが必要だ。", "散らかった机——片付けが必要だ。", lost=["例え"])
+        self.assert_changes("まるで迷路――それが当時のコードベースだった。", "当時のコードベースは迷路だった。", lost=["例え"])
+
+    def test_unrelated_words_are_not_marks(self):
+        for orig, rewrite in (("今回の改善は本当に素晴らしい。", "今回の改善は見事だ。"),
+                              ("春らしい陽気が続いた。", "暖かい日が続いた。"),
+                              ("いかにも彼らしい判断だった。", "彼が選びそうな判断だった。"),
+                              ("この作業量なら、金曜には間に合いそうです。", "この作業量なら、金曜には間に合う見込みです。"),
+                              ("この進め方で問題ないでしょうか。", "この進め方で問題ありませんか。"),
+                              ("レビューでこの不具合は見落とされた。", "レビュー担当者がこの不具合を見落とした。"),
+                              ("移行後、応答時間は驚くべき速さで改善した。", "移行後、応答時間は予想を大きく超える速さで改善した。"),
+                              ("1日100件と考えると、1か月で約3000件になる。", "1日100件なら、1か月で約3000件になる。"),
+                              ("場合によると、再起動が要る。", "再起動が要ることもある。"),
+                              ("「どこに置いた？」と聞かれる回数が減った。", "「どこに置いた？」と聞く回数が減った。"),
+                              ("二つ目は、判断をADRに残すこと。", "二つ目は、判断をADRに記録すること。"),
+                              ("どうしたのかと聞いた。", "どうしたのかと尋ねた。")):
+            with self.subTest(orig=orig):
+                self.assert_changes(orig, rewrite)
+
+    def test_same_kind_in_other_words(self):
+        for orig, rewrite in (("どうやらサーバーが落ちたみたいだ。", "どうやらサーバーが落ちたようだ。"),
+                              ("先方の担当者は来週から休暇に入るという。", "先方の担当者は来週から休暇に入るといいます。"),
+                              ("設定を反映するには、サーバーを再起動する必要があります。", "設定を反映するには、サーバーの再起動が必要です。"),
+                              ("迷惑メールに振り分けられた可能性があります。", "迷惑メールに振り分けられたのかもしれません。"),
+                              ("以上、よろしくお願い致します。", "以上です。")):
+            with self.subTest(orig=orig):
+                self.assert_changes(orig, rewrite)
+
+    def test_more_forms_are_marks(self):
+        for orig, rewrite, kind in (("この手法は高速だと言われている。", "この手法は高速だ。", "伝聞"),
+                                    ("売上は前年より減ると見られる。", "売上は前年より減る。", "推量"),
+                                    ("この方式が最適だと私は考える。", "この方式が最適だ。", "意見"),
+                                    ("作業前に必ず保存しなければいけません。", "作業前に保存します。", "依頼・決まり"),
+                                    ("資料を金曜までに共有して下さい。", "資料を金曜までに共有します。", "依頼・決まり"),
+                                    ("原因は設定ミスらしかった。", "原因は設定ミスだった。", "推量"),
+                                    ("来月から料金が上がると聞いています。", "来月から料金が上がります。", "伝聞"),
+                                    ("本番では管理者権限で実行してはいけません。", "本番では管理者権限で実行します。", "依頼・決まり")):
+            with self.subTest(orig=orig):
+                self.assert_changes(orig, rewrite, lost=[kind])
+
+
 class TestOutputShape(unittest.TestCase):
     def test_existing_keys_are_kept_and_type_changes_is_added(self):
         result = yomiyasu_diff.diff("資料を共有してください。\n", "資料を共有します。\n")
