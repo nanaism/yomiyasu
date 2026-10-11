@@ -114,6 +114,17 @@ another:
         findings = yomiyasu_lint.lint_text(text)["findings"]
         self.assertEqual([f for f in findings if f["rule"] == "trailing_colon"], [])
 
+    def test_container_fence_closers_are_not_reported(self):
+        cases = (
+            ":::details 詳細\n本文です。\n:::",
+            ":::message\n本文です。\n:::",
+            "::::details 外側\n:::message\n本文です。\n:::\n::::",
+        )
+        for text in cases:
+            with self.subTest(text=text):
+                findings = yomiyasu_lint.lint_text(text)["findings"]
+                self.assertEqual([f for f in findings if f["rule"] == "trailing_colon"], [])
+
     def test_cli_strict_accepts_the_issue4_document(self):
         process = subprocess.run(
             [sys.executable, "-B", str(SCRIPT), "--json", "--strict"],

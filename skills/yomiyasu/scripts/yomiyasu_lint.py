@@ -1830,7 +1830,7 @@ def lint_text(text: str) -> Dict[str, Any]:
         # A real final prose colon must not be manufactured by removing a value.
         # Keep the tested legacy URI-prefix exemption, separately from GFM's
         # punctuation trimming. Only real code spans are removed for this test.
-        if re.search(r"[：:]$", stripped):
+        if re.search(r"[：:]$", stripped) and not re.fullmatch(r":{3,}", stripped):
             uri_prefix_text = line_visible_text(analysis, line_no, frozenset(("inline_code",))).strip()
             last = len(line.rstrip()) - 1
             if (not uri_prefix_text.startswith("http")
