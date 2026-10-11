@@ -65,15 +65,17 @@ _TYPE_PATTERNS = (
     ("伝聞", r"そう(?:(?<=[るうくすつぬぶむぐ]そう)|(?<=だそう)|(?<=ったそう)|(?<=んだそう)|(?<=ないそう))"
            r"(?:(?:だ|です|でした|だった|で(?=、))(?=[。、！!よね]|$)|な(?=の(?:で|に|だ|です)))"
            r"|とされ(?<!落とされ)(?<!必要とされ)(?:る|ている|ています|ており|た|ます|ました|てきた)"
-           r"|という(?=[。！!]|$)|といいます(?<=[るうくすつぬぶむぐただ]といいます)(?=[。！!]|$)|とのこと(?<!あとのこと)(?<!後とのこと)"
+           r"|という(?=[。！!]|が、|$)|といいます(?<=[るうくすつぬぶむぐただ]といいます)(?=[。！!]|$)|とのこと(?<!あとのこと)(?<!後とのこと)"
            r"|によ(?<!場合によ)(?:ると|れば)|と(?:言|い)われ(?:る|ている|ています|ており|た|ます|ました|てきた)"
            r"|と聞(?<!かと聞)(?:いた|いて(?:いる|います|おり)|きました)"),
     ("推量", r"らし(?<=[るうくすつぬぶむぐいた]らし)(?:い|かった|く(?=、))" + _END
            # 名詞のあとの「らしい」は、文の終わりにあるときだけ推量と数える（「春らしい陽気」「素晴らしい」は除く）。
            + r"|らし(?<!素晴らし)(?<!すばらし)(?<!めずらし)(?<!わざとらし)(?<!可愛らし)(?<!かわいらし)(?<!憎らし)(?<!馬鹿らし)"
              r"(?<!ばからし)(?<!男らし)(?<!女らし)(?<!子供らし)(?<!子どもらし)(?<!いやらし)(?<!汚らし)(?<!春らし)(?<!夏らし)(?<!秋らし)"
-             r"(?<!冬らし)(?<!彼らし)(?<!人間らし)(?<!自分らし)(?<!大人らし)(?<!プロらし)(?<!学生らし)"
-             r"(?:い|かった)(?=[。！!]|が[、，]|けど|けれど|です|でした|$)"
+             r"(?<!冬らし)(?<!彼らし)"
+             # 「人間らしいが」「自分らしいけど」のような典型の言い方は、文末でないときだけ除く（「犯人は学生らしい。」は推量）。
+             r"(?:い(?=[。！!]|です|でした|$|(?<!人間らしい)(?<!自分らしい)(?<!大人らしい)(?<!プロらしい)(?<!学生らしい)(?:が(?!ん)|けど|けれど))"
+             r"|かった(?=[。！!]|です|でした|$|が(?!ん)|けど|けれど))"
            + r"|よう(?<!次のよう)(?<!以下のよう)(?<!下記のよう)(?<!上記のよう)(?<!左記のよう)(?<!このよう)(?<!そのよう)(?<!あのよう)(?<!どのよう)"
              r"(?:(?:だ|です|でした|だった|である|であった|で(?=、))" + _END + r"|な(?=の(?:で|に|だ|です)))"
            + r"|みたい(?:(?:だ|です|でした|だった)(?=[。！!よね]|$)|な(?=の(?:で|に|だ|です)))"
@@ -81,7 +83,9 @@ _TYPE_PATTERNS = (
            r"|だろう(?<!でだろう)(?!か)|であろう|でしょう(?!か)|ではない(?:でしょう|だろう)か|はず(?:だ|です|で|でした|だった)"
            r"|と(?:見|み)られ(?:る|ている|ています|ており|た|ます)|と(?:思|おも)われ(?:る|ます|た)|と考えられ(?:る|ます|た)"),
     ("意見", r"と(?:(?:私|僕|筆者|我々|われわれ|当社|弊社|私たち)は)?(?:思|おも)(?:う|い(?:ます|ました|(?=、))|った|って(?:いる|います|いた|いました|おり))"
-           r"|と(?<![0-9０-９]と)(?<![0-9０-９][件人円個回倍割%％]と)(?:(?:私|僕|筆者|我々|われわれ|当社|弊社|私たち)は)?(?:考え|感じ)(?:る(?!と)|ます|ました|た|て(?:いる|います|いた|いました|おり)|(?=、))"
+           r"|と(?:(?:私|僕|筆者|我々|われわれ|当社|弊社|私たち)は)?(?:考え|感じ)(?:る(?!と)|ます|ました|た|て(?:いる|います|いた|いました|おり)"
+           # 「1日100件と考え、」のような数の見積もりの仮定は、連用の形のときだけ除く。
+           r"|(?<![0-9０-９][件人円個回倍割%％]と考え)(?<![0-9０-９][件人円個回倍割%％]と感じ)(?=、))"
            r"|ように(?:思|感じ)(?:う|います|いました|られ)"),
     ("例え", r"まるで|あたかも|さながら|(?:ごと|如)(?<!前述のごと)(?<!上記のごと)(?<!周知のごと)(?<!以下のごと)(?<!次のごと)"
            r"(?<!前述の如)(?<!上記の如)(?<!周知の如)(?<!以下の如)(?<!次の如)[くき]"),
@@ -92,11 +96,9 @@ _TYPE_PATTERNS = (
                  r"|なければ(?:ならない|なりません|ならず|いけない|いけません)|なくては(?:ならない|なりません|ならず|いけない|いけません)"
                  r"|ないといけ(?:ない|ません)|(?:て|で)は(?:いけ|なら)(?:ない|ません)|ねばなら(?:ない|ず)"
                  r"|必要(?<!不必要)(?:があ(?:る|ります|り(?=、))|(?:です|だ)(?=[。！!]|$)"
-                 r"|[にと]な(?:る(?!まで)|ります|り(?=、)|った(?!ら)|りました))"),
+                 r"|[にと]な(?:る(?!まで)|ります|り(?=、)|った(?!ら(?!し))|りました))"),
 )
 TYPE_MARKERS = OrderedDict((kind, re.compile(pattern, re.M)) for kind, pattern in _TYPE_PATTERNS)
-# 印の文字列の長さの上限の目安。範囲の頭にまたがる印を探すときに、これだけ前から見る。
-_LONGEST_MARK = 24
 # 種類ごとに、印の正規表現が当たるために必ず含まれる文字列。どれも含まない文章では、その種類の正規表現を当てない。
 _TYPE_LITERALS = {
     "伝聞": ("そう", "とされ", "という", "といいます", "とのこと", "によると", "によれば", "われ", "と聞"),
@@ -112,7 +114,9 @@ _SIMILE_HEADS = ("まるで", "あたかも", "さながら")
 _SIMILE_LIKE = re.compile(r"(?:よう|みたい)(?:であった|である|だった|でした|です|だ|な|に|で)?")
 _STOPS = "。！？!?\n"
 _STOP = re.compile("[" + _STOPS + "]")
-_SENTENCE_PIECE = re.compile(r"[^。！？!?\n]+[。！？!?]*")
+# 文の中身の文字数を数えるときに除く文字（句読点・かっこ・空白）
+_NOT_BODY = set("。、，！？!?「」『』（）() \n\u3000")
+_SENTENCE_PIECE = re.compile(r"[^。！？!?\n]+[。！？!?]*[」』）)]*")
 
 
 def _mark_positions(text: str):
@@ -139,13 +143,11 @@ def _mark_positions(text: str):
 
 
 def _marks_in(positions, spans):
-    """範囲（開始, 終了）に掛かる印を {種類: [印, ...]} にまとめる。範囲の境目が印の途中にあるときは、両側の範囲に数える。"""
+    """範囲（開始, 終了）の中から始まる印を {種類: [印, ...]} にまとめる。"""
     keys = [item[0] for item in positions]
     marks = OrderedDict()
     for start, end in spans:
-        for at, kind, hit in positions[bisect_left(keys, start - _LONGEST_MARK):bisect_left(keys, end)]:
-            if at + len(hit) <= start:
-                continue
+        for _, kind, hit in positions[bisect_left(keys, start):bisect_left(keys, end)]:
             hits = marks.setdefault(kind, [])
             if hit not in hits:
                 hits.append(hit)
@@ -218,7 +220,7 @@ def _type_changes(o: str, r: str, opcodes):
     """元の各文が、文字単位の対応で書き直した文章のどの範囲に当たるかをたどり、範囲ごとに印を比べる。
     文を分けても、つないでも、範囲の中で比べるので、移っただけの印は変化として出ない。
     範囲が重なる元の文はまとめて比べる。丸ごと消えた文は比べない。丸ごと移した文は同じ文を探し、
-    移したうえで書き換えた文は、新しく書いた文の中から字面の近い文を探して比べる。"""
+    移したうえで書き換えた文は、字面の近い文を書き直した文章から探して比べる。"""
     if not opcodes:
         return []
     opcodes = _slide_to_sentence_edges(opcodes, o, r)
@@ -244,23 +246,31 @@ def _type_changes(o: str, r: str, opcodes):
         tag, i1, i2, j1, j2 = opcodes[max(0, k - 1)]
         return j1 + min(e - i1, j2 - j1) if tag == "equal" else j2
 
-    def kept(i, j):
-        k = max(0, bisect_right(starts, i) - 1)
+    def aligned(i, j):
+        """元の [i, j) のうち、書き直した文章と対応する文字の数。句読点・かっこ・空白は数えない。
+        置き換えの部分は、置き換え先が短いほど少なく数える（消した文を含む長い部分が、短い語句に置き換わった場合など）。"""
+        k, count = max(0, bisect_right(starts, i) - 1), 0
         while k < len(opcodes) and opcodes[k][1] < j:
-            if opcodes[k][0] in ("equal", "replace") and opcodes[k][2] > i:
-                return True
+            tag, i1, i2, j1, j2 = opcodes[k]
+            if tag in ("equal", "replace"):
+                chars = sum(ch not in _NOT_BODY for ch in o[max(i, i1):min(j, i2)])
+                count += chars if tag == "equal" else chars * min(1.0, (j2 - j1) / (i2 - i1))
             k += 1
-        return False
+        return count
 
     o_marks, r_marks = _mark_positions(o), _mark_positions(r)
     if not o_marks and not r_marks:
         return []
-    groups, moved, gone = [], [], []
+    groups, moved, gone, found = [], [], [], []
     for s, e in _sentence_spans(o):
         text = o[s:e].strip()
-        if not kept(s, e):
+        body = sum(ch not in _NOT_BODY for ch in text)
+        # 対応する文字が少なすぎる文は、残った文とみなさない。消した文の文末の数文字が、隣の文に足した印の中の文字と
+        # 一致しただけの場合などで、その文を比べると、隣の文の印の変化をこの文の変化として出してしまう。
+        if aligned(s, e) < min(body, max(3, -(-body // 4))):
             at = r.find(text)
             if at != -1:
+                found.append((at, at + len(text)))
                 moved.append(([text], [(s, e)], at, at + len(text)))
             else:
                 gone.append((text, s, e))
@@ -274,51 +284,20 @@ def _type_changes(o: str, r: str, opcodes):
             groups[-1][3] = max(groups[-1][3], b)
         else:
             groups.append([[text], [(s, e)], a, b])
+    # 丸ごと移した文の位置に重なる範囲は、文字の対応がその文に引きずられたもの。移した文の部分を除き、残りの長いほうで比べる。
+    for fa, fb in found:
+        for g in groups:
+            if g[2] < fb and fa < g[3]:
+                left, right = r[g[2]:max(g[2], fa)], r[min(g[3], fb):g[3]]
+                if len(left.strip("。！？!?、 \n")) >= len(right.strip("。！？!?、 \n")):
+                    g[3] = max(g[2], fa)
+                else:
+                    g[2] = min(g[3], fb)
+    groups = [g for g in groups if r[g[2]:g[3]].strip("。！？!?、 \n")]
+    r_spans = _sentence_spans(r)
     if gone:
-        # 比べずに飛ばした元の文（同じ文が書き直した文章にないもの）は、字面が重なる文を書き直した文章から探して比べる。
-        # 探す先は、元の文がそのまま残った文を除き、どの元の文の範囲にも入っていない文（移したうえで書き換えた文）か、
-        # 2文以上にまたがる範囲の端にある文（印の言い回しが隣の文と結びついて範囲を取られた短い文）に限る。
-        # 消しただけの文を、残したほかの文と組にしないため。
-        # 重なりは、短いほうの文の2文字の組の半分以上（かつ4組以上）が共通であること。印の言い回しの長さに左右されにくい。
-        # 見つけた文が、ほかの元の文の範囲の端に入っていれば、その範囲から外す。
-        r_spans = _sentence_spans(r)
-        r_starts, r_ends = [a for a, _ in r_spans], [b for _, b in r_spans]
-        covered, edges = [False] * len(r_spans), set()
-        for ra, rb in [(g[2], g[3]) for g in groups] + [(m[2], m[3]) for m in moved]:
-            i0, i1 = bisect_right(r_ends, ra), bisect_left(r_starts, rb)
-            covered[i0:i1] = [True] * max(0, i1 - i0)
-            if i1 - i0 >= 2:
-                edges.update((i0, i1 - 1))
-        same = [(j1, j2) for tag, _, _, j1, j2 in opcodes if tag == "equal"]
-        same_starts = [j1 for j1, _ in same]
-
-        def unchanged(a, b):
-            k, kept_chars = max(0, bisect_right(same_starts, a) - 1), 0
-            while k < len(same) and same[k][0] < b:
-                kept_chars += max(0, min(b, same[k][1]) - max(a, same[k][0]))
-                k += 1
-            return kept_chars >= len(r[a:b].strip())
-
-        r_grams = [(a, b, _bigrams(r[a:b].strip())) for idx, (a, b) in enumerate(r_spans)
-                   if (not covered[idx] or idx in edges) and not unchanged(a, b)]
-        taken = []
-        for text, s, e in gone:
-            grams = _bigrams(text)
-            best, score = None, (0.5, 0)
-            for a, b, other in r_grams:
-                shared = len(grams & other)
-                rank = (shared / (min(len(grams), len(other)) or 1), 2 * shared / ((len(grams) + len(other)) or 1))
-                if shared >= 4 and rank >= score and (a, b) not in taken:
-                    best, score = (a, b), rank
-            if best:
-                taken.append(best)
-                moved.append(([text], [(s, e)], best[0], best[1]))
-        for group in groups:
-            for ta, tb in taken:
-                if group[2] < ta < group[3] <= tb + 1:
-                    group[3] = ta
-                elif ta <= group[2] < tb < group[3]:
-                    group[2] = tb
+        groups = _pair_gone_sentences(o, r, opcodes, groups, moved, gone, r_spans)
+    _widen_to_sentences(groups, moved, r_spans)
     out = []
     for texts, spans, a, b in [tuple(g) for g in groups] + moved:
         before = _marks_in(o_marks, spans)
@@ -331,6 +310,86 @@ def _type_changes(o: str, r: str, opcodes):
             right = right + 1 if right < len(r) and r[right] in "。！？!?" else right
             out.append({"orig": "".join(texts), "rewrite": r[left:right].strip(), "lost": lost, "added": added})
     return out
+
+
+def _pair_gone_sentences(o, r, opcodes, groups, moved, gone, r_spans):
+    """比べずに飛ばした元の文（同じ文が書き直した文章にないもの）を、字面が重なる書き直した文と組にする。
+
+    組にできるのは、次をすべて満たすときだけ。消しただけの文を、残したほかの文と組にしないため。
+    - 書き直した文が、元の文をそのまま残した文ではない。
+    - 短いほうの文の2文字の組の半分以上（かつ4組以上）が共通している。
+    - 共通する組のうち4組以上が、その書き直した文に範囲が掛かっている元の文では説明できない。
+    組は字面の近い順（Dice係数）に、どちらの文も1回だけ使って決める。
+    書き直した文が1つの元の文の範囲だけでできていて、その元の文よりも消えた文のほうが字面が近いときは、その範囲は比べない。
+    書き直した文が2文以上にまたがる範囲の端にあるときは、その範囲から外す。"""
+    same = [(j1, j2) for tag, _, _, j1, j2 in opcodes if tag == "equal"]
+    same_starts = [j1 for j1, _ in same]
+
+    def unchanged(a, b):
+        k, kept_chars = max(0, bisect_right(same_starts, a) - 1), 0
+        while k < len(same) and same[k][0] < b:
+            kept_chars += max(0, min(b, same[k][1]) - max(a, same[k][0]))
+            k += 1
+        return kept_chars >= len(r[a:b].strip())
+
+    def dice(x, y):
+        return 2 * len(x & y) / ((len(x) + len(y)) or 1)
+
+    r_grams = [_bigrams(r[a:b].strip()) for a, b in r_spans]
+    owners = [[g for g in groups if g[2] < b and a < g[3]] for a, b in r_spans]
+    owner_grams = [set().union(*[_bigrams("".join(g[0])) for g in gs]) if gs else set() for gs in owners]
+    candidates = []
+    for gi, (text, _, _) in enumerate(gone):
+        grams = _bigrams(text)
+        for idx, (a, b) in enumerate(r_spans):
+            shared = grams & r_grams[idx]
+            if len(shared) < 4 or len(shared) < 0.5 * min(len(grams), len(r_grams[idx])):
+                continue
+            if len(shared - owner_grams[idx]) < 4 or unchanged(a, b):
+                continue
+            candidates.append((dice(grams, r_grams[idx]), gi, idx))
+    candidates.sort(key=lambda c: (-c[0], c[1], c[2]))
+    used_gone, used_r, drop = set(), set(), set()
+    for score, gi, idx in candidates:
+        if gi in used_gone or idx in used_r:
+            continue
+        used_gone.add(gi)
+        used_r.add(idx)
+        text, s, e = gone[gi]
+        a, b = r_spans[idx]
+        moved.append(([text], [(s, e)], a, b))
+        for g in owners[idx]:
+            if a <= g[2] and g[3] <= b + 1:
+                if dice(_bigrams("".join(g[0])), r_grams[idx]) < score:
+                    drop.add(id(g))
+            elif g[2] < a < g[3] <= b + 1:
+                g[3] = a
+            elif a <= g[2] < b < g[3]:
+                g[2] = b
+    return [g for g in groups if id(g) not in drop]
+
+
+def _widen_to_sentences(groups, moved, r_spans):
+    """範囲を、それが入っている書き直した文の端まで広げる。ほかの元の文の範囲に掛かるところには広げない。
+    消した文の文末の数文字に引きずられて、隣の文に足した印が範囲の外に出るのを防ぐ。"""
+    if not groups:
+        return
+    r_starts, r_ends = [a for a, _ in r_spans], [b for _, b in r_spans]
+    claimed = sorted([(g[2], g[3]) for g in groups] + [(m[2], m[3]) for m in moved])
+    for g in groups:
+        a, b = g[2], g[3]
+        i = bisect_right(r_starts, a) - 1
+        j = bisect_left(r_ends, b)
+        left = r_starts[i] if 0 <= i < len(r_spans) and r_ends[i] > a else a
+        right = r_ends[j] if j < len(r_spans) and r_starts[j] < b else b
+        for ca, cb in claimed:
+            if (ca, cb) == (a, b):
+                continue
+            if cb <= a:
+                left = max(left, cb)
+            elif ca >= b:
+                right = min(right, ca)
+        g[2], g[3] = min(a, left), max(b, right)
 
 
 CONTENT = re.compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_.+#/-]+")

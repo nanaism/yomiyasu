@@ -284,6 +284,59 @@ class TestPrepublishReviewCases(unittest.TestCase):
         self.assert_changes("再起動が必要になる。", "再起動する。", lost=["依頼・決まり"])
 
 
+class TestRecheckCases(unittest.TestCase):
+    """公開直前の再点検（v1.1.2）で見つかった、隣の文の印の取り違え、閉じかっこ、移してつないだ文、組にする順番、印の除外の行き過ぎ。"""
+
+    def assert_changes(self, orig, rewrite, lost=(), added=()):
+        found = changes(orig, rewrite)
+        self.assertEqual(sorted(kinds(found, "lost")), sorted(lost), found)
+        self.assertEqual(sorted(kinds(found, "added")), sorted(added), found)
+
+    def test_deleted_neighbor_does_not_take_the_new_mark(self):
+        self.assert_changes("障害の原因は設定ミスだとされる。古い手順は今後使わない。", "障害の原因は設定ミスかもしれない。",
+                            lost=["伝聞"], added=["推量"])
+        self.assert_changes("障害の原因は設定ミスかもしれない。復旧の手順は来週まとめる。", "障害の原因は設定ミスだとされる。",
+                            lost=["推量"], added=["伝聞"])
+        self.assert_changes("障害の原因は設定ミスだとされる。古いログは消した。対策は来週から始める。",
+                            "障害の原因は設定ミスだという。対策は来週から始める。")
+        self.assert_changes("ログの保存先は30日になるかもしれない。新しい版は来週変わる。",
+                            "新しい版は来週変わる。ログの保存先は30日になるとされる。", lost=["推量"], added=["伝聞"])
+
+    def test_moved_sentence_next_to_a_closing_bracket(self):
+        self.assert_changes("原因は設定ミスだとされる。（詳細は後述する。）", "（詳細は後述する。）原因は設定ミスだ。", lost=["伝聞"])
+        self.assert_changes("原因は設定ミスだとされる。担当者は「明日直す。」", "担当者は「明日直す。」原因は設定ミスだ。", lost=["伝聞"])
+
+    def test_moved_and_joined_sentence_that_lost_its_mark(self):
+        self.assert_changes("原因は設定ミスだとされる。対策は来週から始める。", "対策は来週から始め、原因は設定ミスだ。", lost=["伝聞"])
+        self.assert_changes("出荷は明日らしい。新しい版は起動が速い。", "新しい版は起動が速いが、出荷は明日だ。", lost=["推量"])
+
+    def test_pairing_prefers_the_closest_sentence(self):
+        self.assert_changes("新しい版は来月公開する。新しい版は速くなる。新しい版は設定の移行が必要になる。詳しい手順は別の資料にまとめた。",
+                            "新しい版は設定を移せば使える。新しい版は来月公開する。詳しい手順は別の資料にまとめた。", lost=["依頼・決まり"])
+        self.assert_changes("検索機能は来月公開する。検索画面の表示は変わるかもしれない。検索結果の並び順は変わると思う。",
+                            "検索機能は来月公開する。検索結果の並び順は変わるかもしれない。", lost=["意見"], added=["推量"])
+        self.assert_changes("新しい版は来月の定例リリースで公開する。料金は据え置くらしい。旧版のサポートは年内で終了する予定です。移行は管理画面から行えると思う。",
+                            "料金は据え置くらしい。新しい版は来月の定例リリースで公開する。移行は管理画面から行えるはずだ。旧版のサポートは年内で終了する予定です。",
+                            lost=["意見"], added=["推量"])
+        self.assert_changes("画面はまるで別のアプリのように動く。操作の手順は前の版から何も変わっていないので、利用者向けの説明会は開かない。画面はまるで迷路のように思う。",
+                            "操作の手順は前の版から何も変わっていないので、利用者向けの説明会は開かない。画面はまるで別のアプリのように動く。")
+
+    def test_marks_kept_after_narrowing_the_exclusions(self):
+        for orig, rewrite, kind in (("原因は設定ミスらしいが確証はない。", "原因は設定ミスだが確証はない。", "推量"),
+                                    ("犯人は学生らしい。", "犯人は学生だ。", "推量"),
+                                    ("投稿したのはプロらしい。", "投稿したのはプロだ。", "推量"),
+                                    ("最適なのは案2と考える。", "最適なのは案2だ。", "意見"),
+                                    ("来場者は500人と考えています。", "来場者は500人です。", "意見"),
+                                    ("再起動が必要になったらしい。", "再起動したらしい。", "依頼・決まり"),
+                                    ("再起動が必要になったらしい。", "再起動が必要になった。", "推量")):
+            with self.subTest(orig=orig, rewrite=rewrite):
+                self.assert_changes(orig, rewrite, lost=[kind])
+
+    def test_joined_with_tou_ga(self):
+        self.assert_changes("DLQの件数が閾値を超えると、システムはSlackへ通知するという。コンシューマ側で冪等性を確保する。",
+                            "DLQの件数が閾値を超えると、システムはSlackへ通知するというが、コンシューマ側で冪等性を確保する。")
+
+
 class TestOutputShape(unittest.TestCase):
     def test_existing_keys_are_kept_and_type_changes_is_added(self):
         result = yomiyasu_diff.diff("資料を共有してください。\n", "資料を共有します。\n")
