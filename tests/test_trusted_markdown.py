@@ -80,7 +80,9 @@ class TrustedMarkdownTests(unittest.TestCase):
 
     def test_table_setext_and_literal_pipe_have_distinct_boundaries(self):
         self.assertEqual(self.rules('| 項目 | 注記 |\n| --- | --- |\n| 手触り | 終端： |'), [])
-        self.assertEqual(self.rules('手触りです。\n-'), [])
+        # setext の見出しは語彙だけを見る（v1.1.2）。段落なら文頭の前置きの型も当たる。
+        self.assertEqual(self.rules('結論から言うと、手触りです。\n-'), ['slop_vocabulary'])
+        self.assertIn('meta_filler', self.rules('結論から言うと、手触りです。\n'))
         self.assertEqual(self.rules('| 手触り：'), ['trailing_colon', 'slop_vocabulary'])
         self.assertIn('slop_vocabulary', self.rules('| 手触り | 項目 | 注記 |\n| --- | --- |'))
 

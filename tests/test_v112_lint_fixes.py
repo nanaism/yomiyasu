@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v1.1.2: 書き間違えたパターン、「溶かす」の活用、必須文字列の表の整合。"""
+"""v1.1.2: 書き間違えたパターン、「溶かす」の活用、見出しの語彙検査、必須文字列の表の整合。"""
 
 from pathlib import Path
 import sys
@@ -44,6 +44,20 @@ class TestMeltingTimeConjugations(unittest.TestCase):
     def test_literal_melting_stays_clean(self):
         for number in range(21, 29):
             path = ROOT / "tests" / "corpus" / "edge_cases" / f"edge_tokasu_{number}.md"
+            with self.subTest(path=path.name):
+                self.assertEqual(yomiyasu_lint.lint_text(path.read_text(encoding="utf-8"))["score"], 100)
+
+
+class TestHeadingVocabulary(unittest.TestCase):
+    def test_headings_get_vocabulary_and_metaphor_checks(self):
+        self.assertIn("metaphor_verb", rules("# 地味に効く設定\n"))
+        self.assertEqual(rules("## 正本と台帳の扱い\n").count("slop_vocabulary"), 2)
+
+    def test_heading_does_not_get_sentence_patterns(self):
+        self.assertNotIn("meta_filler", rules("## 結論から言うと\n"))
+
+    def test_edge_case_headings_stay_clean(self):
+        for path in sorted((ROOT / "tests" / "corpus" / "edge_cases").glob("*.md")):
             with self.subTest(path=path.name):
                 self.assertEqual(yomiyasu_lint.lint_text(path.read_text(encoding="utf-8"))["score"], 100)
 
