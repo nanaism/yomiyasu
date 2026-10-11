@@ -56,6 +56,79 @@ MARKERS = {
     "つなぎ": r"まず|また(?!は)|そして|さらに|次に|最後に|ただし|しかし|つまり|そのため|ので(?!す)|によって|ことで|ことにより",
 }
 
+# 文の種類を示す印。推敲の前後で対応する文どうしを比べ、印が消えた・増えたものを候補にする。
+# 「降りそうだ」（様子）、「使えるように」（目的）、「という名前」のような、種類と関係のない用法は拾わない。
+_END = r"(?=[。、！!？?よねがけのかし]|です|$)"
+TYPE_MARKERS = OrderedDict([
+    ("伝聞", re.compile(r"(?<=[るうくすつぬぶむぐいただ])そう(?:だ|です|でした|だった)" + _END
+                      + r"|とされ(?:る|ている|ています|ており|た|ます|ました)|という(?=[。！!]|$)|とのこと|によ(?:ると|れば)")),
+    ("推量", re.compile(r"らしい" + _END + r"|よう(?:だ|です|でした|だった)" + _END
+                      + r"|かもしれ(?:ない|ません|ず)|だろう|でしょう|はず(?:だ|です|で|でした|だった)")),
+    ("意見", re.compile(r"と(?:思|おも)(?:う|い(?:ます|ました)|った|われ|って(?:いる|います|いた|いました|おり))"
+                      r"|と(?:考え|感じ)(?:る|ます|ました|た|られ|て(?:いる|います|いた|いました|おり))")),
+    ("例え", re.compile(r"まるで|あたかも|さながら|ごとく|ごとき|如く|如き|みたい(?:だ|な|に|です|でした)")),
+    # 「連絡をください」「ご対応ください」「確認をお願いします」も依頼として数える。結びの挨拶「よろしくお願いします」は数えない。
+    ("依頼・決まり", re.compile(r"(?:て|で)ください|をください|(?:ご|お)[一-龥ぁ-んァ-ヴー]{1,8}ください|(?<!よろしく)お願い(?:します|いたします|できますか|できますでしょうか)"
+                             r"|(?<!しかる)べき(?!乗)|なければ(?:ならない|なりません)|なくては(?:ならない|なりません)"
+                             r"|ねばならない|必要があ(?:る|ります)")),
+])
+# 「まるで〜のようだ」のように例えの語がある文では、「よう」を推量ではなく例えの印として数える。
+_SIMILE_YOU = re.compile(r"よう(?:だ|な|に|です|でした|だった)")
+
+
+def type_marks(sentence: str):
+    """1文に含まれる文の種類の印。{種類: [印の文字列, ...]}"""
+    marks = OrderedDict()
+    for kind, pattern in TYPE_MARKERS.items():
+        hits = [m.group(0) for m in pattern.finditer(sentence)]
+        if hits:
+            marks[kind] = hits
+    if "例え" in marks:
+        marks["例え"] += [m.group(0) for m in _SIMILE_YOU.finditer(sentence)]
+        guesses = [hit for hit in marks.pop("推量", ()) if not _SIMILE_YOU.fullmatch(hit)]
+        if guesses:
+            marks["推量"] = guesses
+    return marks
+
+
+def _type_changes_from_pairs(ou, ru, pairs):
+    """対応する文の組で、文の種類の印の有無を比べる。1文を2文に分けた場合は、分けた文をまとめて比べる。"""
+    position = {}
+    for index, unit in enumerate(ou):
+        position.setdefault(id(unit), index)
+    matched = [(ri, position[id(best)]) for ri, _, best in pairs if best is not None]
+    used = {oi for _, oi in matched}
+    groups = OrderedDict()
+    for ri, unit, best in pairs:
+        if best is not None:
+            groups.setdefault(id(best), (best, []))[1].append(unit)
+    # 対応が取れた組の間に、元の文と書き直した文が1つずつだけ残っていれば、その2つを組にする（大きく書き換えた1文など）。
+    pending = {ri: unit for ri, unit, best in pairs if best is None}
+    bounds = [(-1, -1)] + sorted(matched) + [(len(ru), len(ou))]
+    for (r0, o0), (r1, o1) in zip(bounds, bounds[1:]):
+        if o0 >= o1:
+            continue
+        rewrites = [ri for ri in range(r0 + 1, r1) if ri in pending]
+        originals = [oi for oi in range(o0 + 1, o1) if oi not in used]
+        if len(rewrites) == 1 and len(originals) == 1 and r1 - r0 == 2:
+            best = ou[originals[0]]
+            groups.setdefault(id(best), (best, []))[1].append(pending[rewrites[0]])
+    ordered = sorted(groups.values(), key=lambda group: position[id(group[0])])
+    out = []
+    for orig, rewrites in ordered:
+        before = type_marks(orig["sentence"])
+        after = OrderedDict()
+        for unit in rewrites:
+            for kind, hits in type_marks(unit["sentence"]).items():
+                after.setdefault(kind, []).extend(hits)
+        lost = [{"kind": kind, "hits": hits} for kind, hits in before.items() if kind not in after]
+        added = [{"kind": kind, "hits": hits} for kind, hits in after.items() if kind not in before]
+        if lost or added:
+            out.append({"orig": orig["sentence"], "rewrite": "".join(unit["sentence"] for unit in rewrites),
+                        "lost": lost, "added": added})
+    return out
+
+
 CONTENT = re.compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_.+#/-]+")
 
 
@@ -293,8 +366,9 @@ def ending_changes(o: str, r: str):
     return _ending_changes_from_units(ending_units(o), ending_units(r))
 
 
-def _ending_changes_from_units(ou, ru):
-    """Reuse already parsed rows within diff; keep standalone parsing unchanged."""
+def _ending_changes_from_units(ou, ru, pairs=None):
+    """Reuse already parsed rows within diff; keep standalone parsing unchanged.
+    pairs にリストを渡すと、書き直した各文と対応する元の文（なければ None）を (位置, 文, 元の文) で足す。"""
     # 同じ文の最初の出現を保つ。同点では元の文の順番が優先される。
     originals = OrderedDict()
     for y in ou:
@@ -302,7 +376,7 @@ def _ending_changes_from_units(ou, ru):
     postings = None
     matches = {}
     changes = []
-    for x in ru:
+    for ri, x in enumerate(ru):
         sentence = x["sentence"]
         if sentence not in matches:
             best, score = None, 0.0
@@ -335,6 +409,8 @@ def _ending_changes_from_units(ou, ru):
                         best, score = y, sc
             matches[sentence] = best, score
         best, score = matches[sentence]
+        if pairs is not None:
+            pairs.append((ri, x, best if best and score >= 0.45 else None))
         if best and score >= 0.45 and best["kind"] != x["kind"]:
             changes.append({"orig": best["sentence"], "orig_kind": best["kind"] + ("・箇条書き" if best["where"] == "箇条書き" else ""),
                             "rewrite": x["sentence"], "rewrite_kind": x["kind"]})
@@ -778,9 +854,11 @@ def diff(orig_raw: str, rw_raw: str, stance=None) -> dict:
            "bold": bold_problems(rw_raw)}
     rw_units, flags = stance_flags(rw_raw, stance)
     orig_units, orig_flags = stance_flags(orig_raw, stance)
-    out["endings"] = {"stance": stance, "changes": _ending_changes_from_units(orig_units, rw_units),
+    pairs = []
+    out["endings"] = {"stance": stance, "changes": _ending_changes_from_units(orig_units, rw_units, pairs),
                       "flags": [{"note": n, "sentences": [x["sentence"] for x in rows]} for n, rows in flags],
                       "orig_flags": [{"note": n, "sentences": [x["sentence"] for x in rows]} for n, rows in orig_flags]}
+    out["type_changes"] = _type_changes_from_pairs(orig_units, rw_units, pairs)
 
     # 1. 種類ごとの数の増減
     for name, pat in MARKERS.items():
@@ -851,6 +929,14 @@ def report(d: dict) -> str:
         for c in e["changes"]:
             sent = c["rewrite"] if len(c["rewrite"]) <= 44 else c["rewrite"][:44] + "…"
             lines.append(f"- {c['orig_kind']} → {c['rewrite_kind']}: {sent}")
+    if d.get("type_changes"):
+        lines.append("■ 文の種類の印が変わった文（伝聞・推量・意見・例え・依頼が、元の文と同じか見る）")
+        for c in d["type_changes"]:
+            lines.append(f"- 元: {c['orig'] if len(c['orig']) <= 60 else c['orig'][:60] + '…'}")
+            lines.append(f"  後: {c['rewrite'] if len(c['rewrite']) <= 60 else c['rewrite'][:60] + '…'}")
+            for label, side in (("消えた印", "lost"), ("増えた印", "added")):
+                if c[side]:
+                    lines.append(f"  {label}: " + "、".join(f"{m['kind']}（{'、'.join(m['hits'])}）" for m in c[side]))
     if e.get("flags"):
         head = f"■ 文末の立場（{e['stance']}の文書として見た）" if e.get("stance") else "■ 文末の立場が混ざっている候補（立場を決めてから見る）"
         lines.append(head)
