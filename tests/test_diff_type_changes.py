@@ -337,6 +337,42 @@ class TestRecheckCases(unittest.TestCase):
                             "DLQの件数が閾値を超えると、システムはSlackへ通知するというが、コンシューマ側で冪等性を確保する。")
 
 
+class TestFinalCheckCases(unittest.TestCase):
+    """公開前の最終確認（v1.1.2）で見つかった、見出しや箇条書きを消した書き換え、短く書き直した文、敬体の似た文、引用のあとの短い部分、折り返した文。"""
+
+    def assert_changes(self, orig, rewrite, lost=(), added=()):
+        found = changes(orig, rewrite)
+        self.assertEqual(sorted(kinds(found, "lost")), sorted(lost), found)
+        self.assertEqual(sorted(kinds(found, "added")), sorted(added), found)
+
+    def test_deleting_a_heading_or_list_item_is_quiet(self):
+        for orig, rewrite in (
+                ("## 原因\n\nタイムアウトが増えたのは、接続プールの設定が原因だという。\n\n## 対応\n\n上限を40に上げる。",
+                 "タイムアウトが増えたのは、接続プールの設定が原因だという。上限を40に上げる。"),
+                ("## 背景\n\n- 問い合わせが増えた\n- 回答に時間がかかる\n\n担当者によると、回答に時間がかかるらしい。",
+                 "## 背景\n\n- 問い合わせが増えた\n\n担当者によると、回答に時間がかかるらしい。"),
+                ("**結論**\n\n移行は年内に終わるという結論だと思う。", "移行は年内に終わるという結論だと思う。"),
+                ("- 来週変わる\n- 速い\n\n管理画面の表示は来週変わるかもしれない。", "- 速い\n\n管理画面の表示は来週変わるかもしれない。")):
+            with self.subTest(orig=orig):
+                self.assert_changes(orig, rewrite)
+
+    def test_shortened_sentence_that_lost_its_mark(self):
+        self.assert_changes("重い集計クエリが接続を長く占有し、待機中のリクエストが30秒のタイムアウトに達して504を返したらしい。障害は解消した。",
+                            "重い集計クエリで504を返した。障害は解消した。", lost=["推量"])
+
+    def test_similar_polite_sentences(self):
+        self.assert_changes("旧版のサポートは年内で終わります。検索画面の設定を見直しました。新版のサポートも年内で終わるでしょう。",
+                            "検索画面の設定を見直しました。新版のサポートも年内で終わります。", lost=["推量"])
+
+    def test_short_part_after_a_quote(self):
+        self.assert_changes("設定は見直した。テストも増やした。「旧版は年内で止める。」と答えたらしい。",
+                            "「旧版は年内で止める。」と答えた。設定は見直した。テストも増やした。", lost=["推量"])
+
+    def test_wrapped_sentence_moved_onto_one_line(self):
+        self.assert_changes("障害は解消した。\n自分は何も知らないということを認め、\nこう聞くようにしたと思う。",
+                            "自分は何も知らないということを認め、こう聞くようにしたと思う。\n障害は解消した。")
+
+
 class TestOutputShape(unittest.TestCase):
     def test_existing_keys_are_kept_and_type_changes_is_added(self):
         result = yomiyasu_diff.diff("資料を共有してください。\n", "資料を共有します。\n")

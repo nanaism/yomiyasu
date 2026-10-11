@@ -261,17 +261,35 @@ def _type_changes(o: str, r: str, opcodes):
     o_marks, r_marks = _mark_positions(o), _mark_positions(r)
     if not o_marks and not r_marks:
         return []
+    r_spans = _sentence_spans(r)
+    r_starts = [a for a, _ in r_spans]
+
+    def owns_sentence(i, j):
+        """元の [i, j) が対応する範囲が、それが入っている書き直した文の中身の6割以上を占めるか。"""
+        a, b = map_start(i), map_end(j)
+        k = bisect_right(r_starts, a) - 1
+        if b <= a or k < 0 or r_spans[k][1] <= a:
+            return False
+        ra, rb = r_spans[k]
+        whole = sum(ch not in _NOT_BODY for ch in r[ra:rb])
+        part = sum(ch not in _NOT_BODY for ch in r[max(a, ra):min(b, rb)])
+        return whole > 0 and part * 5 >= whole * 3
+    # 丸ごと移した文は、書き直した文章の中で1文として見つかるものに限る（見出しなどの短い文が、別の文の一部に当たるのを除く）。
+    whole = {}
+    for a, b in r_spans:
+        whole.setdefault(r[a:b].strip(), (a, b))
     groups, moved, gone, found = [], [], [], []
     for s, e in _sentence_spans(o):
         text = o[s:e].strip()
         body = sum(ch not in _NOT_BODY for ch in text)
         # 対応する文字が少なすぎる文は、残った文とみなさない。消した文の文末の数文字が、隣の文に足した印の中の文字と
         # 一致しただけの場合などで、その文を比べると、隣の文の印の変化をこの文の変化として出してしまう。
-        if aligned(s, e) < min(body, max(3, -(-body // 4))):
-            at = r.find(text)
-            if at != -1:
-                found.append((at, at + len(text)))
-                moved.append(([text], [(s, e)], at, at + len(text)))
+        # ただし、対応する範囲が書き直した文の大半を占めるときは、短く書き直した文として残った文とみなす。
+        if aligned(s, e) < min(body, max(3, -(-body // 4))) and not owns_sentence(s, e):
+            if text in whole:
+                a, b = whole.pop(text)
+                found.append((a, b))
+                moved.append(([text], [(s, e)], a, b))
             else:
                 gone.append((text, s, e))
             continue
@@ -294,7 +312,6 @@ def _type_changes(o: str, r: str, opcodes):
                 else:
                     g[2] = min(g[3], fb)
     groups = [g for g in groups if r[g[2]:g[3]].strip("。！？!?、 \n")]
-    r_spans = _sentence_spans(r)
     if gone:
         groups = _pair_gone_sentences(o, r, opcodes, groups, moved, gone, r_spans)
     _widen_to_sentences(groups, moved, r_spans)
@@ -315,52 +332,56 @@ def _type_changes(o: str, r: str, opcodes):
 def _pair_gone_sentences(o, r, opcodes, groups, moved, gone, r_spans):
     """比べずに飛ばした元の文（同じ文が書き直した文章にないもの）を、字面が重なる書き直した文と組にする。
 
-    組にできるのは、次をすべて満たすときだけ。消しただけの文を、残したほかの文と組にしないため。
-    - 書き直した文が、元の文をそのまま残した文ではない。
-    - 短いほうの文の2文字の組の半分以上（かつ4組以上）が共通している。
-    - 共通する組のうち4組以上が、その書き直した文に範囲が掛かっている元の文では説明できない。
+    組にできるのは、次をどちらも満たすときだけ。消しただけの文を、残したほかの文と組にしないため。
+    - 短いほうの文の2文字の組の半分以上（かつ4組以上。短いほうの組が6つ以下なら3組以上）が共通している。
+    - 共通する組のうち同じ数以上が、その書き直した文に範囲が掛かっている元の文（そのまま残った文、丸ごと移した文）では説明できない。
     組は字面の近い順（Dice係数）に、どちらの文も1回だけ使って決める。
-    書き直した文が1つの元の文の範囲だけでできていて、その元の文よりも消えた文のほうが字面が近いときは、その範囲は比べない。
+    書き直した文が1つの元の文の範囲だけでできていて、その元の文の字面が遠い（Dice係数0.6未満で、消えた文より遠い）ときは、その範囲は比べない。
     書き直した文が2文以上にまたがる範囲の端にあるときは、その範囲から外す。"""
-    same = [(j1, j2) for tag, _, _, j1, j2 in opcodes if tag == "equal"]
-    same_starts = [j1 for j1, _ in same]
-
-    def unchanged(a, b):
-        k, kept_chars = max(0, bisect_right(same_starts, a) - 1), 0
-        while k < len(same) and same[k][0] < b:
-            kept_chars += max(0, min(b, same[k][1]) - max(a, same[k][0]))
-            k += 1
-        return kept_chars >= len(r[a:b].strip())
-
     def dice(x, y):
         return 2 * len(x & y) / ((len(x) + len(y)) or 1)
 
     r_grams = [_bigrams(r[a:b].strip()) for a, b in r_spans]
     owners = [[g for g in groups if g[2] < b and a < g[3]] for a, b in r_spans]
-    owner_grams = [set().union(*[_bigrams("".join(g[0])) for g in gs]) if gs else set() for gs in owners]
+    owner_grams = [set().union(*[_bigrams("".join(g[0])) for g in gs + [m for m in moved if m[2] < b and a < m[3]]])
+                   for gs, (a, b) in zip(owners, r_spans)]
     candidates = []
     for gi, (text, _, _) in enumerate(gone):
         grams = _bigrams(text)
         for idx, (a, b) in enumerate(r_spans):
             shared = grams & r_grams[idx]
-            if len(shared) < 4 or len(shared) < 0.5 * min(len(grams), len(r_grams[idx])):
+            least = 3 if min(len(grams), len(r_grams[idx])) <= 6 else 4
+            if len(shared) < least or len(shared) < 0.5 * min(len(grams), len(r_grams[idx])):
                 continue
-            if len(shared - owner_grams[idx]) < 4 or unchanged(a, b):
+            if len(shared - owner_grams[idx]) < least:
                 continue
             candidates.append((dice(grams, r_grams[idx]), gi, idx))
     candidates.sort(key=lambda c: (-c[0], c[1], c[2]))
-    used_gone, used_r, drop = set(), set(), set()
+    used_gone, used_r, drop = set(), {}, set()
     for score, gi, idx in candidates:
-        if gi in used_gone or idx in used_r:
+        if gi in used_gone:
+            continue
+        text, s, e = gone[gi]
+        if idx in used_r:
+            # 改行で折り返した文の前半と後半が同じ文の相手になるときは、まとめて比べる。前半は句点で終わっていない。
+            entry = used_r[idx]
+            first, last = entry[1][0], entry[1][-1]
+            after = o[last[1]:s].strip() == "" and o[last[0]:last[1]].rstrip()[-1:] not in "。！？!?"
+            before = o[e:first[0]].strip() == "" and text[-1:] not in "。！？!?"
+            if not (after or before):
+                continue
+            used_gone.add(gi)
+            entry[1].append((s, e))
+            entry[1].sort()
+            entry[0][:] = [o[x:y].strip() for x, y in entry[1]]
             continue
         used_gone.add(gi)
-        used_r.add(idx)
-        text, s, e = gone[gi]
         a, b = r_spans[idx]
         moved.append(([text], [(s, e)], a, b))
+        used_r[idx] = moved[-1]
         for g in owners[idx]:
             if a <= g[2] and g[3] <= b + 1:
-                if dice(_bigrams("".join(g[0])), r_grams[idx]) < score:
+                if dice(_bigrams("".join(g[0])), r_grams[idx]) < min(score, 0.6):
                     drop.add(id(g))
             elif g[2] < a < g[3] <= b + 1:
                 g[3] = a
