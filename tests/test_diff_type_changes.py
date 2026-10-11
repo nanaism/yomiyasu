@@ -238,6 +238,52 @@ class TestReleaseReviewCases(unittest.TestCase):
         self.assert_changes("原因は設定ミスだとされる。対策は来週から始める。", "対策は来週から始める。")
 
 
+class TestPrepublishReviewCases(unittest.TestCase):
+    """公開直前の点検（v1.1.2）で見つかった、文を消しただけの書き換え、例えと意見の重なり、印でない用法。"""
+
+    def assert_changes(self, orig, rewrite, lost=(), added=()):
+        found = changes(orig, rewrite)
+        self.assertEqual(sorted(kinds(found, "lost")), sorted(lost), found)
+        self.assertEqual(sorted(kinds(found, "added")), sorted(added), found)
+
+    def test_deleting_a_sentence_does_not_pair_it_with_a_kept_one(self):
+        for orig, rewrite in (
+                ("新しいキャッシュは応答を速くする。運用の手間も減る。まとめると、新しいキャッシュは導入する価値があるでしょう。",
+                 "新しいキャッシュは応答を速くする。運用の手間も減る。"),
+                ("この機能は速い。この機能は安定しているかもしれない。", "この機能は速い。"),
+                ("Aの設定は管理画面から変更する。Bの設定は管理画面から変更してください。", "Bの設定は管理画面から変更してください。"),
+                ("ログの保存先は管理画面から変更できます。ログの保存先は管理画面から変更してください。", "ログの保存先は管理画面から変更してください。"),
+                ("サーバーの設定を見直してください。サーバーの設定は来週見直す。", "サーバーの設定は来週見直す。"),
+                ("ログの保存期間は30日とされる。ログの保存期間は30日だ。設定は共有フォルダにある。", "ログの保存期間は30日だ。設定は共有フォルダにある。"),
+                ("新しい版では起動処理を見直したので、起動が速くなったそうだ。まとめると、新しい版では起動が速くなった。",
+                 "新しい版では起動処理を見直したので、起動が速くなったそうだ。"),
+                ("新しい版は起動が速いが、古い版は起動が遅いとされる。要するに、古い版は起動が遅い。", "新しい版は起動が速い。古い版は起動が遅いとされる。"),
+                ("検索機能は来月公開されるそうだ。\n\n## まとめ\n\n検索機能は来月公開される。", "検索機能は来月公開されるそうだ。"),
+                ("この機能は便利だと思います。つまり、この機能は便利です。", "この機能は便利だと思います。"),
+                ("ログの保存先は来週変わる。新しいキャッシュは来週変わると思う。新しいキャッシュは速い。", "ログの保存先は来週変わる。新しいキャッシュは速い。"),
+                ("ログの保存先は来週変わる。この機能は来週変わるとされる。この機能は来週変わると思う。", "ログの保存先は来週変わる。この機能は来週変わると思う。")):
+            with self.subTest(orig=orig):
+                self.assert_changes(orig, rewrite)
+
+    def test_simile_keeps_an_opinion_mark_at_the_same_place(self):
+        self.assert_changes("まるで昨日のことのように思います。", "まるで昨日のことのようです。", lost=["意見"])
+        self.assert_changes("彼はまるで別人のように感じられる。", "彼はまるで別人のようだ。", lost=["意見"])
+        self.assert_changes("まるで時間が止まったように感じられた。", "時間が止まったように感じられた。", lost=["例え"])
+        self.assert_changes("街はまるで別世界のように思います。", "街は別世界のように思います。", lost=["例え"])
+
+    def test_uses_that_are_not_marks(self):
+        for orig, rewrite in (("画像は必要になるまで読み込まない。", "画像は表示する直前に読み込む。"),
+                              ("認証が必要になったら、設定を追加する。", "認証を使うときは、設定を追加する。"),
+                              ("古い設定は不必要になった。", "古い設定は使わなくなった。"),
+                              ("あの人らしいがんばりだった。", "あの人ならではのがんばりだった。"),
+                              ("このロボットの動きは人間らしいが、反応は遅い。", "このロボットの動きは人間に近いが、反応は遅い。"),
+                              ("どのようなのですか。", "どんなものですか。"),
+                              ("1日100件と考え、1か月で約3000件と見積もった。", "1日100件として、1か月で約3000件と見積もった。")):
+            with self.subTest(orig=orig):
+                self.assert_changes(orig, rewrite)
+        self.assert_changes("再起動が必要になる。", "再起動する。", lost=["依頼・決まり"])
+
+
 class TestOutputShape(unittest.TestCase):
     def test_existing_keys_are_kept_and_type_changes_is_added(self):
         result = yomiyasu_diff.diff("資料を共有してください。\n", "資料を共有します。\n")
