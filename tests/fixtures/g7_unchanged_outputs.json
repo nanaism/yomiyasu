@@ -3,6 +3,7 @@
  "generated_by": "v200-development/step2b/g7/make_unchanged_fixture.py",
  "source_commit": "45a5885（scripts に未コミットの変更あり: step2b の check の固め）",
  "source_sha256": {"yomiyasu_lint.py": "636970d026504a4229d612b9ed1abebfcc1e41b12d6ea8998c1b5d048540dd11", "yomiyasu_diff.py": "f69d7e199455f2831af5ddae90bab45d0757e322a41a17990528ae00e2a88c78", "yomiyasu_check.py": "072dea9657111bcbd1799e3bc7a02cd710d26e15d0b74f900f650f531bc0151b", "markdown_visibility.py": "c0e89e684694d9602d8ff0da5ee0ecfad23f7390fa61c326cc201870613df691"},
+ "tool_version": "2.0.0",
  "python": "3.14.5",
  "lint": {
   "blacklist_ai/01_tech_arch_sonnet_casual.md": {"plain": "10fa74b964043101", "strict": "10fa74b964043101", "fail_error": "10fa74b964043101", "json": "4910502275352094", "stdin": "10fa74b964043101", "diff_endings": "7d8c6ac62ce6e691"},

@@ -175,9 +175,23 @@ def corpus_pairs():
     return pairs
 
 
+def _fixture_tool_version():
+    """fixture を作ったときの版（GOALS の D-3 で版の文字列を 2.0.0-beta に変えたので、比べるときに読み替える）。"""
+    path = FIXTURES / "g7_unchanged_outputs.json"
+    try:
+        return json.loads(path.read_text(encoding="utf-8")).get("tool_version")
+    except (OSError, ValueError):
+        return None
+
+
 def _digest(*parts):
-    data = "\x00".join(str(part) for part in parts).encode("utf-8")
-    return hashlib.sha256(data).hexdigest()[:16]
+    """出力をつないだものの SHA-256 の先頭16字。今の版の文字列は、fixture を作ったときの版に読み替えてから数える
+    （版の文字列を変えただけで、G7 の不変の条件の試験が落ちないように。出力のほかの字はそのまま比べる）。"""
+    data = "\x00".join(str(part) for part in parts)
+    current, recorded = yomiyasu_lint.__version__, _fixture_tool_version()
+    if recorded and current != recorded:
+        data = data.replace(current, recorded)
+    return hashlib.sha256(data.encode("utf-8")).hexdigest()[:16]
 
 
 _RUN_ID = re.compile(r"\d{8}T\d{6}Z-[0-9a-f]{8}")
@@ -906,10 +920,10 @@ class OptionTest(DocTypeCase):
 
     def test_d8_versions_do_not_change(self):
         """D8: --version と形式の版は変えない（9.7）。"""
-        self.assertEqual(call(yomiyasu_lint.main, ["--version"])[1], "yomiyasu_lint.py 2.0.0 (JSON format 2)\n")
-        self.assertEqual(call(yomiyasu_diff.main, ["--version"])[1], "yomiyasu_diff.py 2.0.0 (JSON format 2)\n")
+        self.assertEqual(call(yomiyasu_lint.main, ["--version"])[1], "yomiyasu_lint.py 2.0.0-beta (JSON format 2)\n")
+        self.assertEqual(call(yomiyasu_diff.main, ["--version"])[1], "yomiyasu_diff.py 2.0.0-beta (JSON format 2)\n")
         self.assertEqual(call(yomiyasu_check.main, ["--version"])[1],
-                         "yomiyasu_check.py 2.0.0 (record format 1, result format 1, materials format 1)\n")
+                         "yomiyasu_check.py 2.0.0-beta (record format 1, result format 1, materials format 1)\n")
 
 
 # ---- E. 速さ ----

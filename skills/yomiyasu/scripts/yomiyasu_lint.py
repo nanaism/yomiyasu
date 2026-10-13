@@ -5,7 +5,7 @@ yomiyasu_lint.py - 日本語の表現とMarkdownの書式を、設定された�
 指摘は見直し候補であり、意味の保持や読みやすさを判定するものではない。
 Python標準ライブラリだけで動作する。
 """
-__version__ = "2.0.0"
+__version__ = "2.0.0-beta"
 
 import os
 import sys
