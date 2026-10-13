@@ -31,8 +31,9 @@ import yomiyasu_diff  # noqa: E402
 
 NINE_KEYS = ["markers", "new_words", "lost_words", "structure", "spans", "logic", "bold", "endings", "type_changes"]
 # 10.6 B1: --fail-on=meaning-risk が数える件数（fail_on_meaning_risk_count）を meaning_risk_count のすぐ後ろに足す
+# G7（DESIGN-reader-doctype.md 9.4、10.1）: not_judged の次に context を足す（キーを足すだけで、形式2のまま）
 TOP_KEYS = (["format", "format_version", "tool_version", "status", "changed", "candidate_count", "meaning_risk_count",
-             "fail_on_meaning_risk_count", "not_judged", "meaning_risks"] + NINE_KEYS + ["full_diff"])
+             "fail_on_meaning_risk_count", "not_judged", "context", "meaning_risks"] + NINE_KEYS + ["full_diff"])
 FIRST_LINE = "差分の検査を実行しました。"
 DISCLAIMER = ("全文差分は変わった箇所を示すだけで、意味が同じだという証明ではありません。"
               "この検査では、意味の保持と読者にとっての分かりやすさは判定していません。")

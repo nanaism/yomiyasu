@@ -146,7 +146,7 @@ class TestStdioEncoding(unittest.TestCase):
         report = run_cp932([CHECK, "verify", "--final", "-"], final, env=self.check_env())
         self.assertEqual(report.returncode, 0, report.stderr.decode("utf-8", "replace"))
         self.assertEqual(report.stderr, b"")
-        self.assertIn("完了報告にこの出力の2行目を写してください。", report.stdout.decode("utf-8"))
+        self.assertIn("完了報告を付けるときは、この出力の2行目を写してください。", report.stdout.decode("utf-8"))
 
     def test_check_rejects_non_utf8_stdin_with_exit_code_2(self):
         body = CHECK_STDIN.replace("🚀", "").encode("cp932")

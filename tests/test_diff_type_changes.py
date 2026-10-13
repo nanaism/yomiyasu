@@ -377,9 +377,10 @@ class TestOutputShape(unittest.TestCase):
     def test_existing_keys_are_kept_and_type_changes_is_added(self):
         result = yomiyasu_diff.diff("資料を共有してください。\n", "資料を共有します。\n")
         # v2.0.0 の形式2（DESIGN-interfaces.md 2.8）。v1.1.2 の9キーは名前と間の順を保ち、前後に新しいキーが付く
+        # G7（DESIGN-reader-doctype.md 9.4）: not_judged の次に context
         self.assertEqual(list(result), ["format", "format_version", "tool_version", "status", "changed",
                                         "candidate_count", "meaning_risk_count", "fail_on_meaning_risk_count",
-                                        "not_judged", "meaning_risks",
+                                        "not_judged", "context", "meaning_risks",
                                         "markers", "new_words", "lost_words", "structure", "spans", "logic", "bold",
                                         "endings", "type_changes", "full_diff"])
         self.assertEqual(set(result["type_changes"][0]), {"orig", "rewrite", "lost", "added"})

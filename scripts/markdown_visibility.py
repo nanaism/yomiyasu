@@ -744,3 +744,62 @@ def decode_source(data):
     else:
         eol = "lf" if "\n" in text else "none"
     return text, {"bom": bom, "eol": eol}
+
+
+# ---- 文書の種類と読者（G7。DESIGN-reader-doctype.md 9.1、9.2）----
+# lint、diff、check の3本が同じ値と名前を使うので、ここに1つだけ置く（ほかは import する）。
+# 公開の名前として読むだけにし、書き換えて使う使い方は約束しない。
+
+# (値, 名前, あわせて読む domains のファイル)。順は種類の表のとおり（formal は 2026-10-13 19時の追記で足した）
+DOC_TYPES = (
+    ("pr", "PR説明", ("business.md",)),
+    ("article", "技術記事", ("tech.md",)),
+    ("incident", "障害報告", ("business.md",)),
+    ("proposal", "提案書", ("business.md",)),
+    ("minutes", "議事録", ("business.md",)),
+    ("manual", "マニュアル", ("tech.md", "business.md")),
+    ("slides", "スライド", ("tech.md", "business.md")),
+    ("essay", "エッセイ・小説", ("essay.md",)),
+    ("formal", "公用文、規程、契約書、仕様書", ("business.md", "tech.md")),
+)
+# (値, 名前)
+READER_LEVELS = (
+    ("expert", "同じ分野の専門家"),
+    ("informed", "分野は違うが技術に詳しい人"),
+    ("general", "専門知識のない人"),
+)
+
+
+def _normalize_choice(option, value, rows):
+    """NFKC にし、前後の空白を外し、英字を小文字にして、使える値なら返す。None はそのまま返す。
+    使えない値（空の文字列を含む）は、標準エラーにそのまま書ける1行の文の ValueError にする。"""
+    if value is None:
+        return None
+    normalized = unicodedata.normalize("NFKC", str(value)).strip().lower()
+    for row in rows:
+        if row[0] == normalized:
+            return normalized
+    # 空や空白だけの値は、目に見えないので「（空）」と書く（--stance、--fail-on と同じ）
+    shown = value if str(value).strip() else "（空）"
+    # 値の一覧の閉じ括弧と「です」の間に空白を入れない（DESIGN-reader-doctype.md 9.1 の文どおり。反証レビュー spec 6）
+    raise ValueError("{} に使えない値です: {}。使えるのは {}です。".format(
+        option, shown, "、".join("{}（{}）".format(row[0], row[1]) for row in rows)))
+
+
+def normalize_doc_type(value):
+    """--doc-type の値を正規化する（SLIDES、前後の空白、全角も slides）。None はそのまま。使えない値は ValueError。"""
+    return _normalize_choice("--doc-type", value, DOC_TYPES)
+
+
+def normalize_reader(value):
+    """--reader の値を正規化する。None はそのまま。使えない値は ValueError。"""
+    return _normalize_choice("--reader", value, READER_LEVELS)
+
+
+def context_label(doc_type, reader):
+    """lint と diff の人が読む出力の1行の頭（「文書の種類: スライド（slides）、読者: 指定なし。」）。"""
+    doc_type, reader = normalize_doc_type(doc_type), normalize_reader(reader)
+    kinds, readers = dict(row[:2] for row in DOC_TYPES), dict(READER_LEVELS)
+    return "文書の種類: {}、読者: {}。".format(
+        "{}（{}）".format(kinds[doc_type], doc_type) if doc_type else "指定なし",
+        "{}（{}）".format(readers[reader], reader) if reader else "指定なし")

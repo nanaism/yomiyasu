@@ -62,8 +62,10 @@ class TestSpacingPolicy(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stderr, "")
         payload = json.loads(result.stdout)
+        # G7（DESIGN-reader-doctype.md 9.3）: context を足した
         self.assertEqual(set(payload), {"format", "format_version", "tool_version", "candidate_count", "counts",
-                                        "no_rule_findings", "rule_penalty_score", "not_judged", "metrics", "findings"})
+                                        "no_rule_findings", "rule_penalty_score", "not_judged", "context", "metrics",
+                                        "findings"})
         self.assertEqual(payload["findings"], [])
         self.assertTrue(payload["no_rule_findings"])
         self.assertEqual(payload["rule_penalty_score"], 100)

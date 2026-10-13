@@ -71,9 +71,10 @@ EXAMPLE2_STRICT_TAIL = [
 ]
 
 # 1.3 のキーと順
+# G7（DESIGN-reader-doctype.md 9.3、10.1）: not_judged の次に context を足す（キーを足すだけで、形式2のまま）
 JSON_KEYS = [
     "format", "format_version", "tool_version", "candidate_count", "counts",
-    "no_rule_findings", "rule_penalty_score", "not_judged", "metrics", "findings",
+    "no_rule_findings", "rule_penalty_score", "not_judged", "context", "metrics", "findings",
 ]
 NOT_JUDGED = ["meaning_preservation", "reader_comprehension"]
 FINDING_KEYS = {"rule", "line", "severity", "message", "snippet"}

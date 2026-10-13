@@ -24,13 +24,16 @@ import difflib
 import traceback
 import unicodedata
 from bisect import bisect_left, bisect_right
-_VISIBILITY_NAMES = ("analyze_markdown", "inline_protected_spans", "unicode_whitespace", "decode_source")
+_VISIBILITY_NAMES = ("analyze_markdown", "inline_protected_spans", "unicode_whitespace", "decode_source",
+                     "normalize_doc_type", "normalize_reader", "context_label")
 try:
     try:
         if __package__:
             from .markdown_visibility import analyze_markdown, inline_protected_spans, unicode_whitespace, decode_source
+            from .markdown_visibility import normalize_doc_type, normalize_reader, context_label
         else:
             from markdown_visibility import analyze_markdown, inline_protected_spans, unicode_whitespace, decode_source
+            from markdown_visibility import normalize_doc_type, normalize_reader, context_label
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
@@ -69,6 +72,9 @@ try:
         inline_protected_spans = _visibility_module.inline_protected_spans
         unicode_whitespace = _visibility_module.unicode_whitespace
         decode_source = _visibility_module.decode_source
+        normalize_doc_type = _visibility_module.normalize_doc_type
+        normalize_reader = _visibility_module.normalize_reader
+        context_label = _visibility_module.context_label
 except ImportError as _import_error:
     # スクリプトとして動かしたときは、main() が内部エラー（終了コード3）として出す。
     # 終了コード1は --fail-on の条件に当たったときだけに使う。
@@ -2715,11 +2721,14 @@ def ground(final, materials, original=None):
 
 # ---- diff() ----
 
-def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None) -> dict:
+def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_type=None, reader=None) -> dict:
     """元の文と書き直した文を比べる（DESIGN-interfaces.md 2.8 の形式2）。
 
     渡された文字列をそのまま使う（BOM を外したり、改行をそろえたりしない。CLI と check は読むときに decode_source で
-    そろえ、違いを encoding_notes で渡す）。stance は STANCES の値（勧め、決まり、説明）か None。"""
+    そろえ、違いを encoding_notes で渡す）。stance は STANCES の値（勧め、決まり、説明）か None。
+    doc_type（文書の種類）と reader（読者）は context に入れるだけで、判定は変えない（G7。DESIGN-reader-doctype.md 9.4）。
+    値は中で正規化し、使えない値は ValueError。"""
+    context = {"doc_type": normalize_doc_type(doc_type), "reader": normalize_reader(reader)}
     rules = _rule_candidates(orig_raw, rw_raw, stance)
     full, sides = _build_full_diff(orig_raw, rw_raw, encoding_notes)
     risks = _meaning_risks(sides, full, rules["type_changes"])
@@ -2732,7 +2741,7 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None) -> dic
     out = {"format": "yomiyasu-diff", "format_version": DIFF_FORMAT_VERSION, "tool_version": __version__,
            "status": status, "changed": status != "no_change", "candidate_count": count,
            "meaning_risk_count": len(risks), "fail_on_meaning_risk_count": fail_on_count(risks),
-           "not_judged": ["meaning_equivalence", "reader_comprehension"], "meaning_risks": risks}
+           "not_judged": ["meaning_equivalence", "reader_comprehension"], "context": context, "meaning_risks": risks}
     out.update(rules)
     out["full_diff"] = full
     return out
@@ -2760,6 +2769,8 @@ def _rule_count(d, rewritten_only):
 _REPORT_FIRST_LINE = "差分の検査を実行しました。"
 _REPORT_DISCLAIMER = ("全文差分は変わった箇所を示すだけで、意味が同じだという証明ではありません。"
                       "この検査では、意味の保持と読者にとっての分かりやすさは判定していません。")
+# 種類か読者を指定したときに、断りの行のすぐあとに足す1行の後半（G7。DESIGN-reader-doctype.md 9.4）
+_REPORT_CONTEXT_TAIL = "差分と意味が変わる恐れは、種類と読者によらず同じ規則で出しています。"
 
 
 def _status_line(d):
@@ -3064,7 +3075,11 @@ def report(d: dict) -> str:
     status = _status_line(d)
     parts = report_parts(d)
     body = [part for part in (parts["risks"], parts["rules"], parts["full_diff"]) if part]
-    return "\n".join([_REPORT_FIRST_LINE, status, _REPORT_DISCLAIMER]) + "\n\n" + "\n\n".join(body) + "\n\n" + status
+    head = [_REPORT_FIRST_LINE, status, _REPORT_DISCLAIMER]
+    context = d.get("context") or {}
+    if context.get("doc_type") is not None or context.get("reader") is not None:
+        head.append(context_label(context.get("doc_type"), context.get("reader")) + _REPORT_CONTEXT_TAIL)
+    return "\n".join(head) + "\n\n" + "\n\n".join(body) + "\n\n" + status
 
 
 def read_text(path):
@@ -3077,9 +3092,9 @@ def read_text(path):
 _EXIT_CODES = """終了コード:
   0  比べ終わり、--fail-on の条件に当たらなかった（候補の有無によらない）。--endings の正常終了、-h と --version も0
   1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類の恐れが1件以上）
-  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance や --fail-on の値、ファイルの数の誤り）
+  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
-_USAGE = ("yomiyasu_diff.py [--stance 立場] [--json] [--fail-on meaning-risk] 元の文 書き直した文\n"
+_USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk] 元の文 書き直した文\n"
           "       yomiyasu_diff.py --endings ファイル [--stance 立場]\n"
           "       yomiyasu_diff.py --version")
 _FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の変化が"
@@ -3144,6 +3159,11 @@ def _build_parser():
                          help="結果をJSON（形式2）で出します。日本語は \\uXXXX の形で出します。")
     options.add_argument("--fail-on", action="append", dest="fail_on", metavar="meaning-risk",
                          help=_FAIL_ON_HELP + "何度でも、カンマ区切りでも指定できます。")
+    options.add_argument("--doc-type", metavar="種類",
+                         help="文書の種類（値は yomiyasu_lint.py と同じ）。表示と JSON に残すだけで、差分、意味が変わる恐れ、"
+                              "見直し候補、--fail-on は変わりません（意味の検査はどの種類でも同じに行います）。")
+    options.add_argument("--reader", metavar="読者",
+                         help="想定する読者の知識（値は yomiyasu_lint.py と同じ）。表示と JSON に残すだけで、判定は変わりません。")
     options.add_argument("--endings", action="store_true",
                          help="1つのファイルの文末の種類と、立場の混ざりだけを見ます（--json と --fail-on は使えません）。")
     options.add_argument("--version", action="store_true", help="版を表示して終わります。")
@@ -3258,6 +3278,9 @@ def _run(argv):
             parser.error("--endings は --json に対応していません")
         if args.fail_on:
             parser.error("--endings は --fail-on に対応していません")
+        if args.doc_type is not None or args.reader is not None:
+            # 無視せずに使い方の誤りにする（--json、--fail-on と同じ。DESIGN-reader-doctype.md 9.1）
+            parser.error("--endings は --doc-type と --reader に対応していません")
         if len(files) != 1:
             parser.error("--endings のときは、ファイルを1つだけ渡してください（渡されたのは{}つ）".format(len(files)))
     elif len(files) != 2:
@@ -3276,6 +3299,12 @@ def _run(argv):
             shown = args.stance if args.stance.strip() else "（空）"
             _error("--stance に使えない値です: {}。使えるのは {} です。".format(shown, "、".join(STANCES)))
             return 2
+    try:
+        # 種類と読者の値（G7。9.1）。使えない値と空の文字列は、入力を読む前に2で断る
+        doc_type, reader = normalize_doc_type(args.doc_type), normalize_reader(args.reader)
+    except ValueError as error:
+        _error(str(error))
+        return 2
     texts, infos = [], []
     for path in files:
         text, info, problem = _read_input(path)
@@ -3289,7 +3318,8 @@ def _run(argv):
         print(_endings_report(texts[0], stance))
         code = 0
     else:
-        result = diff(texts[0], texts[1], stance, encoding_notes=_encoding_notes(infos[0], infos[1]))
+        result = diff(texts[0], texts[1], stance, encoding_notes=_encoding_notes(infos[0], infos[1]),
+                      doc_type=doc_type, reader=reader)
         counted = result["fail_on_meaning_risk_count"]
         hit = fail_on and counted > 0
         if args.json:

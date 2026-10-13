@@ -19,13 +19,16 @@ from itertools import chain, compress
 from operator import is_
 from typing import List, Dict, Any, Tuple
 _VISIBILITY_NAMES = ("analyze_markdown", "line_visible_text", "range_overlaps_protected",
-                     "inline_protected_spans", "unicode_whitespace", "decode_source")
+                     "inline_protected_spans", "unicode_whitespace", "decode_source",
+                     "DOC_TYPES", "READER_LEVELS", "normalize_doc_type", "normalize_reader", "context_label")
 try:
     try:
         if __package__:
             from .markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
+            from .markdown_visibility import DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader, context_label
         else:
             from markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
+            from markdown_visibility import DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader, context_label
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
@@ -66,6 +69,11 @@ try:
         inline_protected_spans = _visibility_module.inline_protected_spans
         unicode_whitespace = _visibility_module.unicode_whitespace
         decode_source = _visibility_module.decode_source
+        DOC_TYPES = _visibility_module.DOC_TYPES
+        READER_LEVELS = _visibility_module.READER_LEVELS
+        normalize_doc_type = _visibility_module.normalize_doc_type
+        normalize_reader = _visibility_module.normalize_reader
+        context_label = _visibility_module.context_label
 except ImportError as _import_error:
     # スクリプトとして動かしたときは、main() が内部エラー（終了コード3）として出す。
     # 終了コード1は --strict と --fail-on の条件に当たったときだけに使う。
@@ -80,6 +88,24 @@ else:
 # --json の出力の形の版。キーを足すだけなら上げない。キーの意味や型を変えたときに上げる。
 # v1.1.2 までの形（score、is_clean、metrics、findings）を1とみなす。
 LINT_FORMAT_VERSION = 2
+
+# 文書の種類ごとに外す規則（G7。DESIGN-reader-doctype.md 5.3、9.2 と、2026-10-13 19時の追記の formal）。
+# その種類で普通な書き方を候補にしてしまう規則のうち、根拠のある組だけ。規則ID の順に並べる。検出はそのまま行い、
+# 件数と点数を数える前に候補から除く（種類を付けた候補は、付けない候補からこの規則を除いたものと同じになる）。
+# 公開の名前として読むだけにし、書き換えて使う使い方は約束しない。
+DOC_TYPE_SKIP_RULES = {
+    "pr": ("excess_list",),
+    "article": (),
+    "incident": ("excess_list",),
+    "proposal": (),
+    "minutes": ("bold_label_list", "excess_list", "sentence_end_repetition"),
+    "manual": ("excess_list",),
+    "slides": ("bold_label_list", "count_declaration", "excess_list", "short_summary_heading"),
+    "essay": (),
+    "formal": (),
+}
+# 種類を限って当てる規則（規則ID から、当てる種類のタプルへ）。種類を指定しないときと、ほかの種類では除く。今は空
+DOC_TYPE_ONLY_RULES = {}
 
 
 # Emoji facts are pinned to Unicode 18.0, not broad Unicode block membership.
@@ -1734,8 +1760,12 @@ def _extra_negation_line_numbers(analysis):
     return hit_lines
 
 
-def lint_text(text: str) -> Dict[str, Any]:
-    """文章全体を総合検査する"""
+def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
+    """文章全体を総合検査する。
+
+    doc_type（文書の種類）を渡すと、DOC_TYPE_SKIP_RULES のその種類の規則の候補を除き、除いた件数を context に入れる。
+    reader（読者）は context に入れるだけで、候補は変えない。値は中で正規化し、使えない値は ValueError。"""
+    doc_type, reader = normalize_doc_type(doc_type), normalize_reader(reader)
     findings = []
     analysis = analyze_markdown(text)
     extra_negation_lines = _extra_negation_line_numbers(analysis)
@@ -2040,6 +2070,19 @@ def lint_text(text: str) -> Dict[str, Any]:
             "snippet": f"行: {', '.join(str(n) for n in bold_label_lines[:5])}"
         })
 
+    # 文書の種類で外す規則（G7。DESIGN-reader-doctype.md 9.3）。検出が終わったあと、件数と点数を数える前に、前から順に
+    # 除いて規則ごとに数える。残った候補の順は変えない。種類を指定しないときは、種類を限って当てる規則だけを除く（今は空）
+    skipped = dict((rule, 0) for rule in DOC_TYPE_SKIP_RULES[doc_type]) if doc_type is not None else {}
+    if skipped or DOC_TYPE_ONLY_RULES:
+        kept = []
+        for finding in findings:
+            rule = finding["rule"]
+            if rule in skipped:
+                skipped[rule] += 1
+            elif rule not in DOC_TYPE_ONLY_RULES or doc_type in DOC_TYPE_ONLY_RULES[rule]:
+                kept.append(finding)
+        findings = kept
+
     # 規則に当たった件数から計算した目安。文章の品質の点数ではない。error と warn は5、info は2を引く。
     penalty = sum(5 if f["severity"] in ("warn", "error") else 2 for f in findings)
     rule_penalty_score = max(0, 100 - penalty)
@@ -2057,6 +2100,7 @@ def lint_text(text: str) -> Dict[str, Any]:
         "no_rule_findings": len(findings) == 0,
         "rule_penalty_score": rule_penalty_score,
         "not_judged": ["meaning_preservation", "reader_comprehension"],
+        "context": {"doc_type": doc_type, "reader": reader, "skipped_by_doc_type": skipped},
         "metrics": metrics,
         "findings": findings
     }
@@ -2091,9 +2135,32 @@ def render_findings(result: Dict[str, Any]) -> str:
     return "\n\n".join(blocks)
 
 
+def _context_line(result):
+    """種類か読者を指定したときの4行目（G7。DESIGN-reader-doctype.md 9.3）。指定しないときは None。"""
+    context = result.get("context") or {}
+    doc_type, reader = context.get("doc_type"), context.get("reader")
+    if doc_type is None and reader is None:
+        return None
+    line = context_label(doc_type, reader)
+    if doc_type is not None:
+        skipped = context.get("skipped_by_doc_type") or {}
+        if skipped:
+            line += "種類に合わせて外した候補 {}件（{}）。".format(
+                sum(skipped.values()), "、".join("{} {}件".format(rule, count) for rule, count in skipped.items()))
+        else:
+            line += "この種類で外す規則はありません。"
+    if reader is not None:
+        line += "読者では候補を変えていません。"
+    return line
+
+
 def render_report(result: Dict[str, Any]) -> str:
-    """通常の出力の全体（1〜3行目と、候補があれば内訳と候補の並び）を返す。末尾に改行は付けない。"""
+    """通常の出力の全体（1〜3行目、種類か読者を指定したときの4行目、候補があれば内訳と候補の並び）を返す。
+    末尾に改行は付けない。"""
     header = "\n".join(_REPORT_HEADER).format(count=result["candidate_count"])
+    line = _context_line(result)
+    if line is not None:
+        header += "\n" + line
     body = render_findings(result)
     return header + "\n\n" + body if body else header
 
@@ -2113,8 +2180,21 @@ _MEANING_RISK_MESSAGE = (
 _EXIT_CODES = """終了コード:
   0  検査を最後まで実行し、--strict と --fail-on の条件に当たらなかった（候補の有無によらない）。-h と --version も0
   1  --strict か --fail-on の条件に当たった
-  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --fail-on の値）
+  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --fail-on、--doc-type、--reader の値）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
+
+
+def _doc_type_table():
+    """ヘルプの終了コードの表の前に置く、種類ごとに外す規則の一覧（DOC_TYPE_SKIP_RULES から作る。9.6）。"""
+    lines = ["文書の種類ごとに外す規則（--doc-type）:"]
+    for value, rules in DOC_TYPE_SKIP_RULES.items():
+        lines.append("  {:<10}{}".format(value, "、".join(rules) if rules else "なし"))
+    lines.append("外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。")
+    return "\n".join(lines)
+
+
+def _choices(rows):
+    return "、".join("{}（{}）".format(row[0], row[1]) for row in rows)
 
 
 class _ConditionAction(argparse.Action):
@@ -2162,7 +2242,7 @@ def _build_parser():
         prog="yomiyasu_lint.py",
         description=("日本語の表現とMarkdownの書式を、決まった規則で点検します。結果は見直し候補です。"
                      "候補の数や点数は、文章の品質、意味の保持、読者にとっての分かりやすさの合否ではありません。"),
-        epilog=_EXIT_CODES,
+        epilog=_doc_type_table() + "\n\n" + _EXIT_CODES,
         formatter_class=_HelpFormatter,
         add_help=False,
         # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる（DESIGN-interfaces.md 10.7）
@@ -2185,6 +2265,12 @@ def _build_parser():
                               "何度でも、カンマ区切りでも指定できます。点数は条件に使えません。"
                               "meaning-risk は2つの文章を比べないと判定できないので、"
                               "yomiyasu_diff.py か yomiyasu_check.py に付けてください。")
+    options.add_argument("--doc-type", metavar="種類",
+                         help="文書の種類。指定すると、その種類で普通な書き方を候補にする規則（下の一覧）の候補を外し、"
+                              "外した件数を出します。外した候補の中身は、指定せずに実行すると見られます。"
+                              "省くと、すべての規則を当てます（今までどおり）。値: " + _choices(DOC_TYPES) + "。")
+    options.add_argument("--reader", metavar="読者",
+                         help="想定する読者の知識。表示と JSON に残すだけで、候補は変えません。値: " + _choices(READER_LEVELS) + "。")
     options.add_argument("--version", action="store_true", help="版を表示して終わります。")
     parser.set_defaults(conditions=[])
     return parser
@@ -2279,12 +2365,18 @@ def _run(argv):
     if problem:
         _error(problem)
         return 2
+    try:
+        # 種類と読者の値（G7。9.1）。使えない値と空の文字列は、入力を読む前に2で断る
+        doc_type, reader = normalize_doc_type(args.doc_type), normalize_reader(args.reader)
+    except ValueError as error:
+        _error(str(error))
+        return 2
     content, problem = _read_input(args.file)
     if problem:
         _error(problem)
         return 2
 
-    result = lint_text(content)
+    result = lint_text(content, doc_type=doc_type, reader=reader)
 
     hit = []
     for name in conditions:

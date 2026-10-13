@@ -137,8 +137,10 @@ another:
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         self.assertEqual(process.stderr, "")
         result = json.loads(process.stdout)
+        # G7（DESIGN-reader-doctype.md 9.3）: context を足した
         self.assertEqual(set(result), {"format", "format_version", "tool_version", "candidate_count", "counts",
-                                       "no_rule_findings", "rule_penalty_score", "not_judged", "metrics", "findings"})
+                                       "no_rule_findings", "rule_penalty_score", "not_judged", "context", "metrics",
+                                       "findings"})
         self.assertEqual(result["findings"], [])
         self.assertTrue(result["no_rule_findings"])
         self.assertEqual(result["rule_penalty_score"], 100)
@@ -160,9 +162,10 @@ another:
                 self.assertEqual(process.returncode, expected_exit, process.stdout + process.stderr)
                 self.assertEqual(process.stderr, "")
                 result = json.loads(process.stdout)
+                # G7（DESIGN-reader-doctype.md 9.3）: context を足した
                 self.assertEqual(set(result), {"format", "format_version", "tool_version", "candidate_count", "counts",
-                                               "no_rule_findings", "rule_penalty_score", "not_judged", "metrics",
-                                               "findings"})
+                                               "no_rule_findings", "rule_penalty_score", "not_judged", "context",
+                                               "metrics", "findings"})
                 self.assertFalse(result["no_rule_findings"])
                 self.assertEqual(result["rule_penalty_score"], 95)
                 self.assertEqual(len(result["findings"]), 1)
