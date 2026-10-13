@@ -7,6 +7,7 @@ v1.1.2 の diff() は meaning_risks を返さないので、この試験はす�
 """
 
 from pathlib import Path
+from unittest import mock
 import os
 import sys
 import unittest
@@ -83,6 +84,14 @@ class TestNumbers(RiskCase):
         ("割引は10%です。", "割引は20%です。"),
         ("公開日は2026年10月12日です。", "公開日は2026年10月21日です。"),
         ("返事の期限は3日です。", "返事の期限は3週間です。"),
+        # 反証レビュー F1: 一覧にない英字の単位が続く値（単位なしの数として比べる）
+        ("タイムアウトは30sです。", "タイムアウトは60sです。"),
+        ("メモリは8GiBです。", "メモリは16GiBです。"),
+        # 反証レビュー F2・risk 1: 「，」「．」の直後の値
+        ("候補日は3日，5日，7日です。", "候補日は3日，50日，7日です。"),
+        ("参加者は，30人だった．", "参加者は，50人だった．"),
+        # 反証レビュー F4: 空白なしで日本語が続く URL のあとの値
+        ("手順はhttps://example.com/guideにあり、保存期間は3日です。", "手順はhttps://example.com/guideにあり、保存期間は30日です。"),
     )
     NOT_NUMBER = (
         ("価格は1,000円です。", "価格は1000円です。"),
@@ -94,6 +103,10 @@ class TestNumbers(RiskCase):
         ("保存期間は3日です。", "保存期間は3日です。見直しは3日ごとに行います。"),
         ("1. 設定を開く。\n2. 値を変える。", "設定を開き、値を変える。"),
         ("設定を一度確認する。", "設定を確認する。"),
+        # 反証レビュー F3: 太字を外す・足すだけの直し（数と単位の間の ** は読み飛ばす）
+        ("保存期間は**3**日です。", "保存期間は3日です。"),
+        ("保存期間は3日です。", "保存期間は**3**日です。"),
+        ("割引は**30**%です。", "割引は30%です。"),
     )
 
     def test_changed_values_are_number(self):
@@ -139,12 +152,82 @@ class TestNumbers(RiskCase):
         self.assertEqual(risk["detail"][side], [value])
         lines = [line for line in self.report(result) if line.startswith("- " + label + "（") and line.endswith("）: " + value)]
         self.assertEqual(len(lines), 1, self.report(result))
+        # 10.4 S7: 片側だけの値は、その側の行番号（lost は元、added は後）
+        where = "元1行目" if subkind == "lost" else "後1行目"
+        self.assertEqual(lines[0], "- {}（{}）: {}".format(label, where, value))
+
+    def test_lost_and_added_use_the_line_of_their_own_side(self):
+        """10.4 S7: 行番号が前後で違うとき、消えた数値は元の行番号、元にない数値は後の行番号だけを書く。"""
+        result = yomiyasu_diff.diff("# 予定\n\n会議は来週です。参加者は8名です。\n", "# 予定\n会議は来週です。\n")
+        lost = [risk for risk in result["meaning_risks"] if (risk["kind"], risk["subkind"]) == ("number", "lost")]
+        self.assertEqual(len(lost), 1, result["meaning_risks"])
+        self.assertEqual(lost[0]["old_line"], 3)
+        self.assertIn("- 消えた数値（元3行目）: 8名", self.report(result))
+        result = yomiyasu_diff.diff("# 予定\n会議は来週です。\n", "# 予定\n\n会議は来週です。参加者は8名です。\n")
+        added = [risk for risk in result["meaning_risks"] if (risk["kind"], risk["subkind"]) == ("number", "added")]
+        self.assertEqual(len(added), 1, result["meaning_risks"])
+        self.assertEqual(added[0]["new_line"], 3)
+        self.assertIn("- 元にない数値（後3行目）: 8名", self.report(result))
+
+    def test_values_only_in_one_document_are_taken_as_a_set(self):
+        """10.4 S4: 文書全体で後にだけある値は集合で取る。同じ新しい値を2回書いても、候補は1つで、値は1回だけ。"""
+        result = self.result("会議は来週です。", "会議は来週です。参加者は8名です。定員も8名です。")
+        added = [risk for risk in result["meaning_risks"] if (risk["kind"], risk["subkind"]) == ("number", "added")]
+        self.assertEqual(len(added), 1, result["meaning_risks"])
+        self.assertEqual(added[0]["detail"]["added"], ["8名"])
 
     def test_value_lost_in_a_paired_sentence(self):
         self.assert_paired_number("設定を3回確認します。", "設定を確認します。", "lost", "removed", "3回", "消えた数値")
 
     def test_value_added_in_a_paired_sentence(self):
         self.assert_paired_number("設定を確認します。", "設定を3回確認します。", "added", "added", "3回", "元にない数値")
+
+    def test_order_of_values_at_clause_heads(self):
+        """反証レビュー risk 3: 節の頭にある数値を入れ替えた文は number/order（2.5.2「多重集合は同じで並びが違う」）。
+        数値の直前の2字が同じ「節の頭」でも、数値のあとの語（読点か句点まで）で結び付きを見る。"""
+        self.need_v2_diff()
+        for before, after in (("10時から設計レビュー、14時からテストを行う。", "14時から設計レビュー、10時からテストを行う。"),
+                              ("3日後にAを、5日後にBを出す。", "5日後にAを、3日後にBを出す。"),
+                              ("2025年にAを、2026年にBを出す。", "2026年にAを、2025年にBを出す。")):
+            with self.subTest(before=before):
+                self.assertIn(("number", "order"), self.kinds(self.risks(before, after)))
+
+    def test_order_of_values_in_table_cells(self):
+        """反証レビュー E5: 表の行で2つのセルの値を入れ替えると number/order（表の行は何列目かで結び付きを見る）。"""
+        before = "| 項目 | 本番 | 検証 |\n|---|---|---|\n| 保存期間 | 30日 | 3日 |\n"
+        after = "| 項目 | 本番 | 検証 |\n|---|---|---|\n| 保存期間 | 3日 | 30日 |\n"
+        result = yomiyasu_diff.diff(before, after)
+        self.assertIn(("number", "order"), self.kinds(result["meaning_risks"]))
+        self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_values_on_unchanged_lines_are_not_number(self):
+        """反証レビュー E4: 変わっていない行をコードの囲みに入れただけ（または囲みを外しただけ）では、その行の値を
+        「消えた数値」「元にない数値」にしない（2.5 の前書き「対象は全文差分で変わった塊の中だけ」）。コードの変化は protected で出す。"""
+        plain = "設定の例を示します。\nretry = 3\n"
+        fenced = "設定の例を示します。\n\n```\nretry = 3\n```\n"
+        for before, after in ((plain, fenced), (fenced, plain)):
+            with self.subTest(before=before):
+                result = yomiyasu_diff.diff(before, after)
+                self.assertNotIn("number", [kind for kind, _ in self.kinds(result["meaning_risks"])], result["meaning_risks"])
+                self.assertIn(("protected", "code"), self.kinds(result["meaning_risks"]))
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+
+    def test_url_followed_by_japanese_is_not_a_url_change(self):
+        """反証レビュー F4: URL を変えずに、URL のあとに空白なしで続く本文の値だけを変えたときは、URL の変化を出さない。"""
+        result = self.result("手順はhttps://example.com/guideにあり、保存期間は3日です。",
+                             "手順はhttps://example.com/guideにあり、保存期間は30日です。")
+        self.assertEqual(self.kinds(result["meaning_risks"]), [("number", "replaced")])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+        result = self.result("手順はhttps://example.com/aにある。", "手順はhttps://example.com/bにある。")
+        self.assertEqual(self.kinds(result["meaning_risks"]), [("protected", "url")])
+
+    def test_clause_swap_keeps_the_word_number_links(self):
+        """節を入れ替えただけで、語と数値の結び付きが同じなら number/order にしない（ext_harness の節の入れ替えで誤検知だった）。"""
+        self.need_v2_diff()
+        for before, after in (("応答は504を返したが、上限は20接続だった。", "上限は20接続だったが、応答は504を返した。"),
+                              ("Aは3日、Bは5日です。", "Bは5日、Aは3日です。")):
+            with self.subTest(before=before):
+                self.assertNotIn(("number", "order"), self.kinds(self.risks(before, after)))
 
     def test_notation_only_and_values_found_elsewhere_are_not_number(self):
         self.need_v2_diff()
@@ -166,6 +249,10 @@ class TestNegation(RiskCase):
         ("この手順は確認済みです。", "この手順は未確認です。"),
         ("この機能は対応済みです。", "この機能は未対応です。"),
         ("この設定は有効です。", "この設定は無効です。"),
+        # 反証レビュー F9・risk 2: 1つの文の中で2つの否定を入れ替えた形（文全体の印の数は同じ）
+        ("保存せず、送信する。", "保存し、送信しない。"),
+        ("Aは対応しているが、Bは対応していない。", "Aは対応していないが、Bは対応している。"),
+        ("Windowsでは使えるが、macOSでは使えない。", "Windowsでは使えないが、macOSでは使える。"),
     )
     NOT_FOUND = (
         ("失敗ではなく、学びだ。", "学びだ。"),
@@ -176,6 +263,13 @@ class TestNegation(RiskCase):
         ("在庫が少ない。", "在庫が足りない。"),
         ("まず、設定を開いて値を変える。", "設定を開いて、まず値を変える。"),
         ("列の幅を固定して崩れを防ぐ。", "列の幅を固定してずれないようにする。"),
+        # コーパス48組で誤検知だった形（step2-diff/measure.md）。印の数が同じ言い換え、文字の対応で1字だけ同じとされた箇所、
+        # 印の手前に読点を足しただけの変更
+        ("障害対応の間は調査が止まった。", "障害が起きている間は調査が進まなかった。"),
+        ("処理不能なデータが後続を妨げる。", "処理できないデータが後続を止める。"),
+        ("認証を同期呼び出しから非同期キューでの実行に変えた。", "認証を同期呼び出しから、非同期キューでの実行に変えた。"),
+        ("本流のキューを詰まらせない。", "本流のキューが詰まらないようにします。"),
+        ("再投入しても二重反映は起きない。", "再投入しても二重に反映されることはない。"),
     )
 
     def test_negation_found(self):
@@ -190,12 +284,58 @@ class TestNegation(RiskCase):
             with self.subTest(before=before, after=after):
                 self.assertNotIn("negation", [kind for kind, _ in self.kinds(self.risks(before, after))])
 
-    def test_suru_to_shinai_is_in_the_full_diff(self):
-        """する → しない は句点の前の規則を入れたかで期待値が変わる（2.5.3）。ここでは全文差分に出ることだけを見る。
-        negation の有無は実装で規則を測ってから決める（questions-diff.md）。"""
+    def test_detail_and_report_line_widen_to_word_edges(self):
+        """10.2 D7: detail は変わった箇所を語の切れ目まで広げたもの（左へ平仮名4字まで、続く漢字・片仮名の並び全部。
+        右へ平仮名3字まで。句読点と空白で止める）。レポートの行も同じ形。"""
+        result = self.result("データを保存します。", "データを保存しません。")
+        [risk] = [risk for risk in result["meaning_risks"] if risk["kind"] == "negation"]
+        self.assertEqual(risk["detail"], {"old": "保存します", "new": "保存しません"})
+        self.assertEqual((risk["old"], risk["new"]), ("データを保存します。", "データを保存しません。"))
+        self.assertEqual((risk["old_line"], risk["new_line"]), (1, 1))
+        self.assertIsNone(risk["subkind"])
+        report = self.report(result)
+        index = report.index("- 否定の有無が変わった（1行目）: 保存します → 保存しません")
+        self.assertEqual(report[index + 1:index + 3], ["  元: データを保存します。", "  後: データを保存しません。"])
+
+    def test_suru_to_shinai_is_found_by_the_end_rule(self):
+        """10.2 D1: 句点の前の規則を入れると決めた（コーパス48組で、規則ありの negation 2件が、LIMIT=2 だけの1件の2倍を
+        超えない。step2-diff/measure.md）。「する → しない」は negation として出る。全文差分にも出る。"""
         result = self.result("設定を変更する。", "設定を変更しない。")
         self.assertNotEqual(result["status"], "no_change")
         self.assertIn("設定を変更しない。", self.changed_lines(result))
+        [risk] = [risk for risk in result["meaning_risks"] if risk["kind"] == "negation"]
+        self.assertEqual(risk["detail"], {"old": "変更する", "new": "変更しない"})
+        self.assertIn("- 否定の有無が変わった（1行目）: 変更する → 変更しない", self.report(result))
+
+    def test_end_rule_also_applies_to_items_without_a_period(self):
+        """句点のない箇条書きの項目でも、文の終わりの直前5字の中の変化なら数える。"""
+        result = yomiyasu_diff.diff("- ログを保存する\n", "- ログを保存しない\n")
+        self.assertIn("negation", [kind for kind, _ in self.kinds(result["meaning_risks"])])
+
+    def test_negation_after_an_inserted_block_in_a_full_rewrite(self):
+        """反証レビュー E1: 全面書き換えの途中に、空行のない9行の箇条書きを足しても、そのあとの段落が1つの塊にまとまらず、
+        段落ごとの hunk になる。後ろの段落の否定（確かめます → 確かめません）が出る。数値（節の番号）は変えていないので出ない。"""
+        words = ("開く", "選ぶ", "直す", "保存する", "閉じる", "送る", "待つ", "確かめる", "終える")
+        old_paragraphs = ["第{}節では、設定ファイルを開いて値を確認します。".format(i) for i in range(1, 21)]
+        new_paragraphs = ["第{}節では、設定ファイルを開き、値を確かめます。".format(i) for i in range(1, 21)]
+        old_paragraphs[4] = "手順は、" + "、".join(words) + "、の順です。"
+        new_paragraphs[4] = "\n".join("- " + word for word in words)
+        new_paragraphs[14] = "第15節では、設定ファイルを開き、値を確かめません。"
+        result = yomiyasu_diff.diff("\n\n".join(old_paragraphs) + "\n", "\n\n".join(new_paragraphs) + "\n")
+        self.assertEqual(len(result["full_diff"]["hunks"]), 20)
+        negations = [risk for risk in result["meaning_risks"] if risk["kind"] == "negation"]
+        self.assertEqual([(risk["old"], risk["new"]) for risk in negations],
+                         [("第15節では、設定ファイルを開いて値を確認します。", "第15節では、設定ファイルを開き、値を確かめません。")])
+        self.assertNotIn("number", [kind for kind, _ in self.kinds(result["meaning_risks"])])
+
+    def test_detail_widens_kanji_words_without_the_particle(self):
+        """10.2 D7 の広げ方で、変わった箇所の頭が漢字なら左の助詞は取らず、続く漢字の並びと平仮名3字までを取る。"""
+        for before, after, detail in (("この設定は有効です。", "この設定は無効です。", {"old": "有効です", "new": "無効です"}),
+                                      ("この手順は確認済みです。", "この手順は未確認です。", {"old": "確認済みです", "new": "未確認です"}),
+                                      ("明日は会場へ行く。", "明日は会場へ行かない。", {"old": "行く", "new": "行かない"})):
+            with self.subTest(before=before):
+                [risk] = [risk for risk in self.risks(before, after) if risk["kind"] == "negation"]
+                self.assertEqual(risk["detail"], detail)
 
 
 class TestSwap(RiskCase):
@@ -229,6 +369,13 @@ class TestSwap(RiskCase):
         result = self.result("田中さんが佐藤さんを推薦した。", "佐藤さんが田中さんを推薦した。")
         [risk] = [risk for risk in result["meaning_risks"] if risk["kind"] == "swap"]
         self.assertEqual({pair["word"] for pair in risk["detail"]["pairs"]}, {"田中", "佐藤"})
+        result = self.result("田中様が佐藤様を推薦した。", "佐藤様が田中様を推薦した。")
+        [risk] = [risk for risk in result["meaning_risks"] if risk["kind"] == "swap"]
+        self.assertEqual({pair["word"] for pair in risk["detail"]["pairs"]}, {"田中", "佐藤"})
+        # 2字の語の「様」（仕様、同様）は敬称として外さない
+        result = self.result("仕様が設計を決める。", "設計が仕様を決める。")
+        [risk] = [risk for risk in result["meaning_risks"] if risk["kind"] == "swap"]
+        self.assertEqual({pair["word"] for pair in risk["detail"]["pairs"]}, {"仕様", "設計"})
 
     def test_swap_not_found(self):
         self.need_v2_diff()
@@ -241,8 +388,13 @@ class TestSentenceType(RiskCase):
     """2.5.5 問い（sentence_type/question）と 2.5.6 文の種類の印（sentence_type/marks）。"""
 
     def test_question_to_statement(self):
-        """設計の表から入力を変えた: 「来週公開しますか」は句読点がなく 2.5.5 の問いの定義（？、?、か。、か？）に入らないので、
-        「来週公開しますか。」にした（questions-diff.md 5）。"""
+        """設計の表から入力を2つ変えた。
+        - 「来週公開しますか」は句読点がなく 2.5.5 の問いの定義（？、?、か。、か？）に入らないので、
+          「来週公開しますか。」にした（questions-diff.md 5、10.2 D5）。
+        - 6.4 の「動くでしょうか。→ 動きます。」は、2.5.1 の組の条件（ratio 0.45以上）に届かず組にならない
+          （共通の字が「動」「。」だけの短い文）。組にならない文は問いの判定をしないので、主語を足した
+          「この設定で動くでしょうか。→ この設定で動きます。」にした。短い文が組にならない取りこぼしは
+          step2-diff/questions.md 33（反証レビュー F8）で主担当が決める。"""
         self.need_v2_diff()
         for before, after in (("この設定で動くでしょうか。", "この設定で動きます。"), ("来週公開しますか。", "来週公開します。")):
             with self.subTest(before=before):
@@ -289,6 +441,160 @@ class TestProtected(RiskCase):
                 found = [subkind for kind, subkind in self.kinds(self.risks(before, after)) if kind == "protected"]
                 self.assertTrue(set(found) & subkinds, "protected の %s が出る: %s" % (sorted(subkinds), found))
 
+    # 10.2 D6 の対応（protected_spans の種類 → subkind）。(元, 後, subkind, detail の block, レポートの行)
+    EXACT = (
+        ("強制するには `--force` を付ける。\n", "強制するには `--forced` を付ける。\n",
+         "inline_code", "inline_code", "- インラインのコードが変わった（1行目）"),
+        ("[手順書](https://example.com/guide-a) を読む。\n", "[手順書](https://example.com/guide-b) を読む。\n",
+         "link", "link_destination", "- リンク先が変わった（1行目）"),
+        ("詳しくは https://example.com/a を見る。\n", "詳しくは https://example.com/b を見る。\n",
+         "url", "bare_url", "- URLが変わった（1行目）"),
+        ("<https://example.com/a> を見る。\n", "<https://example.com/b> を見る。\n",
+         "url", "autolink", "- URLが変わった（1行目）"),
+        ("手順です。\n\n```sh\nretry --count 3\n```\n", "手順です。\n\n```sh\nretry --count 5\n```\n",
+         "code", "code", "- コードが変わった（4行目）"),
+        ("手順です。\n\n    retry --count 3\n", "手順です。\n\n    retry --count 5\n",
+         "code", "code", "- コードが変わった（3行目）"),
+        ("---\ntitle: 手順A\n---\n本文です。\n", "---\ntitle: 手順B\n---\n本文です。\n",
+         "frontmatter", "frontmatter", "- 先頭の設定が変わった（2行目）"),
+        ("<div>注意を読む</div>\n\n本文です。\n", "<div>注意を守る</div>\n\n本文です。\n",
+         "html", "html_block", "- HTMLが変わった（1行目）"),
+        ("本文<span class=\"a\">です</span>。\n", "本文<span class=\"b\">です</span>。\n",
+         "html", "html_token", "- HTMLが変わった（1行目）"),
+        ("> 締め切りは金曜です。\n", "> 締め切りは月曜です。\n", "quote", "quote", "- 引用が変わった（1行目）"),
+    )
+
+    def test_each_subkind_detail_and_report_line(self):
+        """10.2 D6: inline_code → inline_code、囲みと字下げのコード → code、autolink と bare_url → url、
+        link_destination → link、frontmatter → frontmatter、html_block と html_token → html、引用のブロック → quote。
+        detail は {"block": 当たった protected_spans の種類（引用は quote）}。レポートの行のあとに元と後の行を出す。"""
+        self.need_v2_diff()
+        for before, after, subkind, block, line in self.EXACT:
+            with self.subTest(before=before):
+                result = yomiyasu_diff.diff(before, after)
+                protected = [risk for risk in result["meaning_risks"] if risk["kind"] == "protected"]
+                self.assertEqual([risk["subkind"] for risk in protected], [subkind], result["meaning_risks"])
+                self.assertEqual(protected[0]["detail"], {"block": block})
+                self.assertIsNone(protected[0]["basis"])
+                report = self.report(result)
+                self.assertIn(line, report)
+                index = report.index(line)
+                self.assertTrue(report[index + 1].startswith("  元: ") and report[index + 2].startswith("  後: "), report)
+
+    def test_whitespace_only_change_in_code_is_protected(self):
+        """2.5.7: 空白だけの変更でも出す（コードでは意味がある）。"""
+        result = yomiyasu_diff.diff("手順です。\n\n```py\nif x:\n    run()\n```\n", "手順です。\n\n```py\nif x:\n  run()\n```\n")
+        self.assertIs(result["full_diff"]["hunks"][0]["whitespace_only"], True)
+        self.assertEqual(self.kinds(result["meaning_risks"]), [("protected", "code")])
+
+    def test_inserted_and_deleted_lines_use_the_line_kind(self):
+        """2.5.7: 追加と削除の塊は行の種類で決める（コードの行を足す → code、引用の行を消す → quote）。"""
+        added = yomiyasu_diff.diff("手順です。\n\n```sh\nstart\n```\n", "手順です。\n\n```sh\nstart\nstop\n```\n")
+        self.assertEqual(added["full_diff"]["hunks"][0]["tag"], "insert")
+        self.assertEqual(self.kinds(added["meaning_risks"]), [("protected", "code")])
+        self.assertIn("- コードが変わった（後5行目）", self.report(added))
+        removed = yomiyasu_diff.diff("本文です。\n\n> 引用の一文目。\n> 引用の二文目。\n", "本文です。\n\n> 引用の一文目。\n")
+        self.assertEqual(removed["full_diff"]["hunks"][0]["tag"], "delete")
+        self.assertEqual(self.kinds(removed["meaning_risks"]), [("protected", "quote")])
+        self.assertIn("- 引用が変わった（元4行目）", self.report(removed))
+
+    def test_lazy_continuation_of_a_quote_is_quote(self):
+        """反証レビュー F10: 「>」のない行が引用の続き（遅延継続）と読まれるとき、その行の変更も protected/quote にする
+        （全文差分の種類も「引用」と出す）。消したときも同じ。"""
+        before = "> 締め切りは金曜です。\n担当は田中です。\n"
+        result = yomiyasu_diff.diff(before, "> 締め切りは金曜です。\n担当は佐藤です。\n")
+        self.assertIn(("protected", "quote"), self.kinds(result["meaning_risks"]))
+        self.assertIn("- 引用が変わった（2行目）", self.report(result))
+        removed = yomiyasu_diff.diff(before, "> 締め切りは金曜です。\n")
+        self.assertIn(("protected", "quote"), self.kinds(removed["meaning_risks"]))
+
+    def test_reference_definitions_and_image_paths_are_links(self):
+        """反証レビュー risk 5: リンクの定義の URL と画像のパスの変更は protected/link（10.2 D6「リンク先の URL の変更は link」）。
+        どちらも数値の取り出しでは伏せるので、数値には出さない。画像の代わりの文の変更は link にしない。"""
+        cases = (
+            ("詳しくは[手引き][g]を読む。\n\n[g]: https://example.com/2024/guide\n",
+             "詳しくは[手引き][g]を読む。\n\n[g]: https://example.com/2025/guide\n", "reference_definition", 3),
+            ("![構成図](img/2024/arch.png)\n", "![構成図](img/2025/arch.png)\n", "image", 1),
+            ("![図](img/a.png)\n", "![図](img/b.png)\n", "image", 1),
+        )
+        for before, after, block, line in cases:
+            with self.subTest(before=before):
+                result = yomiyasu_diff.diff(before, after)
+                self.assertEqual(self.kinds(result["meaning_risks"]), [("protected", "link")])
+                self.assertEqual(result["meaning_risks"][0]["detail"], {"block": block})
+                self.assertIn("- リンク先が変わった（{}行目）".format(line), self.report(result))
+        result = yomiyasu_diff.diff("![構成図](img/arch.png)\n", "![全体の構成図](img/arch.png)\n")
+        self.assertNotIn("protected", [kind for kind, _ in self.kinds(result["meaning_risks"])])
+
+    def test_budget_omitted_replace_hunk_still_shows_inline_changes(self):
+        """反証レビュー E8: 予算で文字の対応を省いた置き換えの hunk でも、インラインのコードとリンク先の変化は protected に出る。
+        変えていない種類（この hunk では引用やコードの囲みはない）は出さない。"""
+        base = ("これは記録の文です。" * 100)[:999]
+        olds = ["## 節%d\n%s壱" % (n, base) for n in range(100)]
+        news = ["## 節%d\n%s弐" % (n, base) for n in range(100)]
+        last_old = "`--force` を付けて実行します。[手順](https://example.com/a) を見ます。"
+        last_new = "`--forced` を付けて実行します。[手順](https://example.com/b) を見ます。"
+        before = "\n".join(olds + ["## 後", last_old]) + "\n"
+        after = "\n".join(news + ["## 後", last_new]) + "\n"
+        full = yomiyasu_diff.full_diff(before, after)
+        self.assertEqual(full["hunks"][-1]["segments_omitted"], "budget")
+        risks = yomiyasu_diff.meaning_risks(before, after, full=full)
+        last = [risk for risk in risks if risk["kind"] == "protected" and risk["new_line"] == 202]
+        self.assertEqual(sorted(risk["subkind"] for risk in last), ["inline_code", "link"])
+
+    def test_text_outside_protected_spans_is_not_protected(self):
+        """変えない箇所の外だけを変えたときは protected を出さない（インラインのコードの直後、リンクの文字、ふつうの段落）。"""
+        cases = (
+            ("強制するには `--force` を付ける。\n", "強制するには `--force` を付けてください。\n"),
+            ("[手順書](https://example.com/guide) を読む。\n", "[手引き](https://example.com/guide) を読む。\n"),
+            ("手順です。\n\n```sh\nretry\n```\n", "手順を書きます。\n\n```sh\nretry\n```\n"),
+        )
+        for before, after in cases:
+            with self.subTest(before=before):
+                kinds = [kind for kind, _ in self.kinds(yomiyasu_diff.diff(before, after)["meaning_risks"])]
+                self.assertNotIn("protected", kinds)
+
+
+class TestMeaningRisksFunction(RiskCase):
+    """2.10 の meaning_risks(orig, rw, full=None, type_changes=None)（10.4 S5）。"""
+
+    BEFORE, AFTER = "原因は設定ミスかもしれない。\n", "原因は設定ミスだ。\n"
+
+    def function(self):
+        function = getattr(yomiyasu_diff, "meaning_risks", None)
+        self.assertTrue(callable(function), "v2.0.0 の yomiyasu_diff は meaning_risks() を公開する（2.10）")
+        return function
+
+    def test_type_changes_none_and_empty_mean_no_marks(self):
+        """10.4 S5: type_changes が None でも [] でも文の種類の印を含めない。関数の中で9キーの分析を作らない。"""
+        meaning_risks = self.function()
+        with mock.patch.object(yomiyasu_diff, "_type_changes", side_effect=AssertionError("9キーの分析を作った")):
+            for value in (None, []):
+                with self.subTest(type_changes=value):
+                    risks = meaning_risks(self.BEFORE, self.AFTER, type_changes=value)
+                    self.assertNotIn(("sentence_type", "marks"), self.kinds(risks))
+            self.assertEqual(meaning_risks(self.BEFORE, self.AFTER), [])
+
+    def test_type_changes_given_become_marks(self):
+        """10.4 S5: diff() は自分で求めた type_changes を渡す。渡せば項目ごとに sentence_type/marks になる（2.5.6）。"""
+        meaning_risks = self.function()
+        changes = yomiyasu_diff.diff(self.BEFORE, self.AFTER)["type_changes"]
+        risks = meaning_risks(self.BEFORE, self.AFTER, type_changes=changes)
+        self.assertEqual(self.kinds(risks), [("sentence_type", "marks")])
+        self.assertEqual(risks[0]["detail"], {"lost": changes[0]["lost"], "added": changes[0]["added"]})
+        self.assertEqual((risks[0]["old"], risks[0]["new"]), (changes[0]["orig"], changes[0]["rewrite"]))
+        self.assertEqual(risks, yomiyasu_diff.diff(self.BEFORE, self.AFTER)["meaning_risks"])
+
+    def test_full_argument_is_reused(self):
+        """full を渡せば全文差分を作り直さず、渡さなければ自分で作る。どちらも同じ結果。"""
+        meaning_risks = self.function()
+        before, after = "強制するには `--force` を付ける。\n", "強制するには `--forced` を付ける。\n"
+        full = yomiyasu_diff.full_diff(before, after)
+        with mock.patch.object(yomiyasu_diff, "full_diff", side_effect=AssertionError("全文差分を作り直した")):
+            reused = meaning_risks(before, after, full=full)
+        self.assertEqual(reused, meaning_risks(before, after))
+        self.assertEqual(self.kinds(reused), [("protected", "inline_code")])
+
 
 class TestFixedLimits(RiskCase):
     """拾えない例と、意味が変わる恐れに入れない変化を、限界として固定する（6.4、8.1の8）。"""
@@ -320,6 +626,16 @@ class TestFixedLimits(RiskCase):
         result = self.result("管理者を除き、全員が使える。", "全員が使える。")
         self.assertEqual(result["meaning_risks"], [])
         self.assertIn("管理者を除き、全員が使える。", self.changed_lines(result))
+        # 10.2 D4: lost_words に「管理者」が出て has_candidates になるのは正しい
+        self.assertIn("管理者", result["lost_words"])
+        self.assertEqual(result["status"], "has_candidates")
+
+    def test_values_swapped_between_words_in_the_same_order_are_not_found(self):
+        """数値の並びは同じで語のほうを入れ替えた形（Aは3日、Bは5日 → Bは3日、Aは5日）は number/order にも swap にも
+        ならない（助詞が同じ「は」なので入れ替えに当たらない）。全文差分にだけ出る。限界として固定する。"""
+        result = self.result("Aは3日、Bは5日です。", "Bは3日、Aは5日です。")
+        self.assertEqual(result["meaning_risks"], [])
+        self.assertIn("Bは3日、Aは5日です。", self.changed_lines(result))
 
     def test_added_feeling_is_in_the_full_diff(self):
         result = self.result("設定を変更した。", "設定を変更して、ほっとした。")
@@ -333,8 +649,23 @@ class TestFixedLimits(RiskCase):
 
 
 class TestCorpusWatch(RiskCase):
-    """6.4 誤検知の見張りの下ごしらえ: コーパス48組で、要素の形と kind・subkind の値が 2.8 のとおり。
-    kind ごとの件数の上限は、実装したときに測って CHECKPOINT.md に書いてから足す（questions-diff.md）。"""
+    """6.4 誤検知の見張り: コーパス48組で、要素の形と kind・subkind の値が 2.8 のとおり。
+    10.2 D2: kind・subkind ごとの件数が、実装したときに測った値（step2-diff/measure.md）を超えない。
+    コーパスの書き換えは yomiyasu の正しい推敲なので、ここに出るものは確かめれば済む候補で、増えれば誤検知が増えたことになる。"""
+
+    # 2026-10-13 に測った値（句点の前の規則あり）。number/order、swap、sentence_type/question、protected は0件
+    MEASURED = {"negation": 2, "number/added": 4, "number/lost": 1, "number/replaced": 1, "sentence_type/marks": 5}
+
+    def test_corpus_48_pairs_kind_counts_do_not_exceed_the_measured_values(self):
+        self.need_v2_diff()
+        counts = {}
+        for before, after, name in corpus_pairs():
+            for risk in yomiyasu_diff.diff(before, after)["meaning_risks"]:
+                key = risk["kind"] + ("/" + risk["subkind"] if risk["subkind"] else "")
+                counts[key] = counts.get(key, 0) + 1
+        for key in sorted(set(counts) | set(self.MEASURED)):
+            with self.subTest(kind=key):
+                self.assertLessEqual(counts.get(key, 0), self.MEASURED.get(key, 0), counts)
 
     def test_corpus_48_pairs_risk_shape(self):
         pairs = corpus_pairs()
