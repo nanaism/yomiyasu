@@ -89,7 +89,7 @@ else:
 # v1.1.2 までの形（score、is_clean、metrics、findings）を1とみなす。
 LINT_FORMAT_VERSION = 2
 
-# 文書の種類ごとに外す規則（G7。DESIGN-reader-doctype.md 5.3、9.2 と、2026-10-13 19時の追記の formal）。
+# 文書の種類ごとに外す規則（G7。DESIGN-reader-doctype.md 5.3、9.2 と、2026-10-13 19時の追記の formal、21時半の追記の promo）。
 # その種類で普通な書き方を候補にしてしまう規則のうち、根拠のある組だけ。規則ID の順に並べる。検出はそのまま行い、
 # 件数と点数を数える前に候補から除く（種類を付けた候補は、付けない候補からこの規則を除いたものと同じになる）。
 # 公開の名前として読むだけにし、書き換えて使う使い方は約束しない。
@@ -103,6 +103,10 @@ DOC_TYPE_SKIP_RULES = {
     "slides": ("bold_label_list", "count_declaration", "excess_list", "short_summary_heading"),
     "essay": (),
     "formal": (),
+    # 紹介記事・宣伝文では書き手の絵文字を残す（GOALS の D-5。diff の勢いの検査は絵文字が減ると候補にするので、lint の
+    # 絵文字の候補と食い違わせない。diff の詰めで測って決めた。v200-development/step-c-detectors/measure.md）。
+    # 評価の語を短く重ねる型（「安い。うまい。早い。」。fragment_run）も勢いとして残す（大賀さんの判断、2026-10-14 朝）
+    "promo": ("emoji_prohibited", "fragment_run"),
 }
 # 種類を限って当てる規則（規則ID から、当てる種類のタプルへ）。種類を指定しないときと、ほかの種類では除く。今は空
 DOC_TYPE_ONLY_RULES = {}

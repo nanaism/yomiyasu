@@ -98,6 +98,13 @@ RESULT_FORMAT_VERSION = 1   # run と verify の --json
 _HERE = os.path.dirname(os.path.realpath(__file__))
 # 記録の tools に入れる4本（名前を決めたファイルだけを数える。__pycache__ は数えない）
 _TOOL_NAMES = ("yomiyasu_check.py", "yomiyasu_lint.py", "yomiyasu_diff.py", "markdown_visibility.py")
+# 記録の tools に足す一覧のファイル（diff が scripts の隣の ../references/lists/<名前>.txt から読む。名前は yomiyasu_diff.py の
+# BUILTIN_LISTS と同じ）。ファイルがあるときだけ "references/lists/<名前>.txt" のキーで SHA-256 を入れ、verify で比べて、
+# 変わっていれば tool_changed にする（diff の詰めの直し。review-spec.md の F5、review-regress.md の R9）
+_LIST_NAMES = ("nominalization", "intensifiers", "feelings")
+_LIST_KEYS = tuple("references/lists/{}.txt".format(name) for name in _LIST_NAMES)
+# ファイルがないとみなす誤り（yomiyasu_diff.py の _LIST_ABSENT と同じ）
+_LIST_ABSENT = (FileNotFoundError, NotADirectoryError)
 # 外から渡す実行IDの形（3.7）。状態フォルダの外を指せないようにする
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _ATTEMPT_FILE = re.compile(r"^attempt-([0-9]+)\.json$")
@@ -189,6 +196,14 @@ _MARKERS = OrderedDict(((b"<<<yomiyasu:original>>>", "source"), (b"<<<yomiyasu:m
                         (b"<<<yomiyasu:final>>>", "final")))
 _STDIN_FORM = ("<<<yomiyasu:original>>>\n（書き直す前の原文）\n<<<yomiyasu:final>>>\n（最終稿）\n"
                "新規作成では <<<yomiyasu:original>>> の代わりに、資料ごとに <<<yomiyasu:material>>> の行と資料を書きます。")
+# 区切りの行の書き損じ（「<<<yomiyasu:」で始まるが、上の3つと一字一句同じでない行。前後の空白と大文字も書き損じに数える）。
+# 区切りと認めずに前の部分へ黙ってつなぐと、資料が原文に入る（v200-development/g15/design-tools.md 2.2 の P2）ので、2で止める
+_MARKER_HEAD = "<<<yomiyasu:"
+_MARKER_SHOWN = 60              # 案内に写す行の字数の上限
+_BAD_MARKER_KEY = "決まった区切りの行と一字一句同じではありません"
+_BAD_MARKER = "{}行目の「{}」が、" + _BAD_MARKER_KEY + "。区切りの行には出典などを書き足せません"
+_BAD_MARKER_TAIL = ("本文に <<<yomiyasu: で始まる行があるときは、ファイルに保存して --source（新規作成では --material）と"
+                    " --final で渡してください。")
 
 
 # ---- 小さな道具 ----
@@ -587,7 +602,9 @@ def _attempt_numbers(run_dir):
 
 
 def _tool_versions():
-    """記録の tools（4本の版の文字列と SHA-256）。スクリプトは読み込まず、バイト列から読む。"""
+    """記録の tools（4本の版の文字列と SHA-256）。スクリプトは読み込まず、バイト列から読む。
+    references/lists/ の一覧のファイルがあれば、"references/lists/<名前>.txt" のキーで {"version": null, "sha256"} を足す
+    （開けないときは sha256 も null。ないときはキーを作らない）。"""
     tools = OrderedDict()
     for name in _TOOL_NAMES:
         try:
@@ -598,7 +615,21 @@ def _tool_versions():
             continue
         match = _TOOL_VERSION.search(data.decode("utf-8", "replace"))
         tools[name] = {"version": match.group(1) if match else None, "sha256": _sha256(data)}
+    for name, key in zip(_LIST_NAMES, _LIST_KEYS):
+        try:
+            with open(os.path.join(_HERE, os.pardir, "references", "lists", name + ".txt"), "rb") as handle:
+                tools[key] = {"version": None, "sha256": _sha256(handle.read())}
+        except _LIST_ABSENT:
+            continue
+        except OSError:
+            tools[key] = {"version": None, "sha256": None}
     return tools
+
+
+def _list_sha256(tools, key):
+    """tools の一覧のファイルの SHA-256（キーがなければ "absent"。開けなかったときは None）。"""
+    entry = tools.get(key)
+    return entry.get("sha256") if isinstance(entry, dict) else "absent"
 
 
 def _skill_version(data):
@@ -791,13 +822,20 @@ def _split_stdin(data):
     parts = []
     current = None
     position = 0
+    number = 0
     while position < len(data):
         end = data.find(b"\n", position)
         following = len(data) if end < 0 else end + 1
+        number += 1
         bare = data[position:following].rstrip(b"\n")
         if bare.endswith(b"\r"):
             bare = bare[:-1]
         role = _MARKERS.get(bare)
+        if role is None and b"<<<" in bare:
+            text = bare.decode("utf-8", "replace")
+            if text.strip().lower().startswith(_MARKER_HEAD):
+                shown = text if len(text) <= _MARKER_SHOWN else text[:_MARKER_SHOWN] + "…"
+                return None, _BAD_MARKER.format(number, shown)
         if role is not None:
             if current is not None:
                 parts.append(current)
@@ -830,8 +868,11 @@ def _read_inputs(args):
             return None, problem
         pieces, problem = _split_stdin(data)
         if problem:
-            return None, "--stdin の本文の区切りが正しくありません（{}）。行全体が区切りになるように、次の形で渡してください。\n{}".format(
+            message = "--stdin の本文の区切りが正しくありません（{}）。行全体が区切りになるように、次の形で渡してください。\n{}".format(
                 problem, _STDIN_FORM)
+            if _BAD_MARKER_KEY in problem:
+                message += "\n" + _BAD_MARKER_TAIL
+            return None, message
         source, materials, final = None, [], None
         for role, piece in pieces:
             index = len(materials) + 1 if role == "material" else 0
@@ -1150,7 +1191,8 @@ def _with_basis(diff_module, risks, materials_result):
         return [dict(risk) for risk in risks]
     classes = {}
     for item in materials_result.get("items", []):
-        if item.get("kind") == "number":
+        # 資料にあって最終稿にない数値（not_in_final。diff の詰めで足した参考の項目）は、最終稿の値の分類ではないので使わない
+        if item.get("kind") == "number" and item.get("classification") != "not_in_final":
             classes[(item.get("value"), item.get("unit"))] = item.get("classification")
     out = []
     for risk in risks:
@@ -1191,16 +1233,11 @@ def _materials_lines(diff_module, ctx):
     if dropped:
         lines.append("- 資料にあった確度の語が最終稿にない: " + "、".join(dropped))
     if not rewrite:
-        # 資料にあって最終稿にない数値は「参考」の1行（要約で省くのは正しいことが多いので候補にしない）
-        in_final = set((item.get("value"), item.get("unit")) for item in items if item.get("kind") == "number")
-        reference = OrderedDict()
-        for material in ctx.materials:
-            for number in diff_module.extract_numbers(material.text):
-                key = (number["value"], number["unit"])
-                if key not in in_final and key not in reference:
-                    reference[key] = number["text"]
+        # 資料にあって最終稿にない数値は「参考」の1行（要約で省くのは正しいことが多いので候補にしない）。照合の items の
+        # not_in_final から作る（diff の詰め、step2-diff/questions.md 38。記録の照合の JSON だけから作り直せる）
+        reference = [item["text"] for item in items if item.get("classification") == "not_in_final"]
         if reference:
-            lines.append("- 参考: 資料にあって最終稿にない数値: " + "、".join(reference.values()))
+            lines.append("- 参考: 資料にあって最終稿にない数値: " + "、".join(reference))
     lines.append("- " + _MATERIALS_DISCLAIMER)
     return lines
 
@@ -1398,6 +1435,15 @@ def _run_checks(ctx, snapshots, stance, timeout):
                 ("meaning_risk_count", parsed["meaning_risk_count"]),
                 ("fail_on_meaning_risk_count", parsed["fail_on_meaning_risk_count"]),
                 ("hunk_count", len(parsed["full_diff"].get("hunks") or []))))
+            # diff の詰め: 文体の硬化の検査と勢いの検査の件数と level（完了報告の確認の記録に写す値のもと）。
+            # candidate_count は参考（level が info の候補）を含む数なので、見直し候補（level が review）の数も残す。記録だけを
+            # 読む使い方でも、見直し候補と参考が混ざった結果（「候補2件、参考1件」）が分かるようにする（review2-spec.md の T4）
+            for key in ("stiffness", "tone"):
+                section = parsed.get(key)
+                if isinstance(section, dict):
+                    entry["summary"][key + "_candidate_count"] = section.get("candidate_count")
+                    entry["summary"][key + "_level"] = section.get("level")
+                    entry["summary"][key + "_review_count"] = _review_count(section)
     if ctx.materials_result is not None:
         result = ctx.materials_result
         classes = [item.get("classification") for item in result.get("items", [])]
@@ -1411,6 +1457,15 @@ def _run_checks(ctx, snapshots, stance, timeout):
     if ctx.materials_result is not None:
         ctx.risks.extend(ctx.materials_result.get("meaning_risks") or [])
     return lint_module, diff_module
+
+
+def _review_count(section):
+    """diff の硬化の検査か勢いの検査の結果（section）の、見直し候補（level が review の候補）の数。候補の並びがなければ None
+    （review2-spec.md の T4。記録の summary と verify の照らしで使う）。"""
+    candidates = section.get("candidates") if isinstance(section, dict) else None
+    if not isinstance(candidates, list):
+        return None
+    return sum(1 for candidate in candidates if isinstance(candidate, dict) and candidate.get("level") == "review")
 
 
 def _fail_on_hits(ctx, diff_module):
@@ -1504,6 +1559,13 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
             line = ("検査を実行しました（1回目）。下の候補を原文と資料に照らして確かめてください。直すのは1回までです。"
                     "直したら同じコマンドをもう一度実行し、直さないなら" + finalize)
             following = "review"
+        elif _detector_reviews(ctx):
+            # 文体の硬化と勢いの見直し候補（level review）は1行目の「候補あり／なし」（10.3 B7）に数えないが、「候補はない」だけ
+            # だと節を見落とす（diff の詰めの直し。review-spec.md の F1）。参考（info）だけなら添えない
+            line = ("検査を実行しました（1回目）。規則に当たる候補はありませんが、文体の硬化と勢いの見直し候補が{}件あります。"
+                    "その節を原文と照らし、全文差分で意図しない変更がないかを確かめ、直すなら1回まで、直さないなら".format(
+                        _detector_reviews(ctx)) + finalize)
+            following = "review"
         else:
             line = ("検査を実行しました（1回目）。規則に当たる候補はありません。全文差分で意図しない変更がないかを確かめ、"
                     "直すなら1回まで、直さないなら" + finalize)
@@ -1535,15 +1597,32 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
     return status, line, following, token
 
 
-def _unsupported_count(result):
-    """3.5 の3行目の q（資料にない数値・名前の数）。照合の items のうち、数値と名前で not_in_sources のもの。
-    推敲の資料にない数値は diff の候補の basis "none" で出し、照合の meaning_risks に入れない（3.3）ので、
-    meaning_risk_count ではなく items から数える（spec F3）。新規作成では meaning_risk_count と同じ数になる。"""
-    return sum(1 for item in result.get("items", [])
-               if item.get("kind") in ("number", "name") and item.get("classification") == "not_in_sources")
+def _unsupported_count(result, diff_risks=None, diff_module=None):
+    """3.5 の3行目の q（資料にない数値・名前の数）。出力に示した候補と同じ条件で数える（1行目の候補あり・なし（10.3 B7）と
+    食い違わないため。review1-spec.md の S3、review1-regress.md の Q4）。
+    - 名前と、新規作成の数値: 照合の意味が変わる恐れ（unsupported）の数。照合の items の not_in_sources の名前と、数量を
+      主張しない「一つ」だけの値（R4）を除いた数値の数と同じ。新規作成では照合の meaning_risk_count と同じ数になる。
+    - 推敲の数値（原文があるとき、資料を原文とみなしたとき）: 資料にない数値は diff の数値の候補の basis "none" で出し、照合の
+      meaning_risks に入れない（3.3）ので、照合の items の not_in_sources の数値のうち、basis "none" の diff の数値の候補に出た
+      値の数（spec F3）。diff_risks は check が basis を入れた diff の候補（diff が最後まで動かなかったときは None で、そのときは
+      items の not_in_sources の数値をすべて数える）。"""
+    risks = result.get("meaning_risks") or []
+    if result.get("mode") != "rewrite":
+        return sum(1 for risk in risks if risk.get("kind") == "unsupported" and risk.get("subkind") in ("number", "name"))
+    names = sum(1 for risk in risks if risk.get("kind") == "unsupported" and risk.get("subkind") == "name")
+    numbers = [item for item in result.get("items", [])
+               if item.get("kind") == "number" and item.get("classification") == "not_in_sources"]
+    if diff_risks is None or diff_module is None:
+        return names + len(numbers)
+    shown = set()
+    for risk in diff_risks:
+        if risk.get("kind") == "number" and risk.get("basis") == "none":
+            for text in (risk.get("detail") or {}).get("added") or []:
+                shown.update((number["value"], number["unit"]) for number in diff_module.extract_numbers(text))
+    return names + sum(1 for item in numbers if (item.get("value"), item.get("unit")) in shown)
 
 
-def _summary_line(ctx):
+def _summary_line(ctx, diff_module=None):
     """3行目（実行した検査の要約。完了報告の「実行した検査」に対応する）。最後まで動かなかった検査は並べない
     （1行目で「実行しなかった検査」に書くよう案内する。agent 4）。1つもなければ「なし」（5.2）。途中で最終稿が変わったときは、
     今の最終稿に対して実行した検査はない（questions.md の42の3）。"""
@@ -1568,8 +1647,48 @@ def _summary_line(ctx):
             result.get("meaning_risk_count", 0)))
     if "materials" in ctx.required and "materials" not in failed:
         where = "資料{}件".format(len(ctx.materials)) if ctx.mode == "rewrite" else "資料{}件→最終稿".format(len(ctx.materials))
-        parts.append("資料との照合（{}）資料にない数値・名前{}件".format(where, _unsupported_count(ctx.materials_result)))
+        diff_done = "diff" in ctx.required and "diff" not in failed and ctx.diff_risks is not None
+        parts.append("資料との照合（{}）資料にない数値・名前{}件".format(
+            where, _unsupported_count(ctx.materials_result, ctx.diff_risks if diff_done else None, diff_module)))
     return "実行した検査: " + ("、".join(parts) if parts else "なし")
+
+
+def _detector_value(ctx, diff_module, key):
+    """硬化の検査（stiffness）と勢いの検査（tone）の結果の値（「候補なし」「候補{n}件」「参考{n}件」）。diff が最後まで
+    動かなかったとき（新規作成で diff を実行しない、diff が止まった、途中で最終稿が変わった）は None。"""
+    if ctx.final_changed or ctx.diff_result is None or "diff" not in ctx.required:
+        return None
+    if ctx.entries.get("diff", {}).get("status") != "ran":
+        return None
+    summary = getattr(diff_module, "detector_summary", None)
+    return summary(ctx.diff_result, key) if summary is not None else None
+
+
+def _detector_reviews(ctx):
+    """文体の硬化と勢いの見直し候補（level review）の数。diff が最後まで動かなかったときは0（_detector_value と同じ条件）。
+    数え方は yomiyasu_diff.py の detector_review_count と同じ（diff を読み込まずに数える）。"""
+    if ctx.final_changed or ctx.diff_result is None or "diff" not in ctx.required:
+        return 0
+    if ctx.entries.get("diff", {}).get("status") != "ran":
+        return 0
+    count = 0
+    for key in ("stiffness", "tone"):
+        section = ctx.diff_result.get(key)
+        if isinstance(section, dict) and isinstance(section.get("candidates"), list):
+            count += sum(1 for candidate in section["candidates"]
+                         if isinstance(candidate, dict) and candidate.get("level") == "review")
+    return count
+
+
+def _detector_lines(ctx, diff_module):
+    """run の5行目のあとに足す2行（diff の詰め。追加文書 2.4、勢いの文書 3.3「完了報告に『硬化の検査：候補なし』または
+    候補の件数を書く」）。完了報告の確認の記録の「硬化の検査」「勢いの検査」にそのまま写せる形。diff を実行しなかったときは出さない。"""
+    lines = []
+    for key, label in (("stiffness", "硬化の検査"), ("tone", "勢いの検査")):
+        value = _detector_value(ctx, diff_module, key)
+        if value is not None:
+            lines.append("{}: {}".format(label, value))
+    return lines
 
 
 def _sections(ctx, lint_module, diff_module):
@@ -1582,6 +1701,10 @@ def _sections(ctx, lint_module, diff_module):
     if parts is not None and parts["rules"]:
         rules = parts["rules"]
         sections.append(rules.replace("■ 規則の見直し候補（", "■ 差分の見直し候補（diff、", 1))
+    # diff の詰め: 文体の硬化の検査と勢いの検査の節（候補があるときだけ）
+    for key in ("stiffness", "tone"):
+        if parts is not None and parts.get(key):
+            sections.append(parts[key])
     if ctx.lint_result is not None and ctx.lint_result.get("candidate_count"):
         sections.append("■ 表現・書式の見直し候補（lint、最終稿、{}件）\n".format(ctx.lint_result["candidate_count"])
                         + ctx.lint_findings)
@@ -1986,6 +2109,8 @@ def _run(args, parser):
             ("record_path", record_path), ("fail_on_hit", bool(ctx.fail_on_hits)),
             ("meaning_risk_count", len(ctx.risks) if complete else None),
             ("fail_on_meaning_risk_count", diff_module.fail_on_count(ctx.risks) if complete else None),
+            ("stiffness_check", _detector_value(ctx, diff_module, "stiffness")),
+            ("tone_check", _detector_value(ctx, diff_module, "tone")),
             ("lint", ctx.lint_result), ("diff", diff_result), ("materials", ctx.materials_result)))
         print(json.dumps(result, ensure_ascii=True, indent=1))
     else:
@@ -1996,7 +2121,8 @@ def _run(args, parser):
         sections = _sections(ctx, lint_module, diff_module)
         # 記録を書かないときの4行目は「この結果は」（記録がないため。questions.md の59）
         disclaimer = _DISCLAIMER if recording else _UNRECORDED_DISCLAIMER
-        text = "\n".join([line, token, _summary_line(ctx), disclaimer, record_line]) + "\n\n"
+        text = "\n".join([line, token, _summary_line(ctx, diff_module), disclaimer, record_line]
+                         + _detector_lines(ctx, diff_module)) + "\n\n"
         if sections:
             text += "\n\n".join(sections) + "\n\n"
         print(text + line + "\n" + token)
@@ -2027,6 +2153,24 @@ _VERIFY_LINES = {
     "tool_changed": "記録のあとで検査スクリプトが変わりました。yomiyasu_check.py run をもう一度実行してください。",
     "not_reproducible": "記録のレポートを今のスクリプトで作り直せません。yomiyasu_check.py run をもう一度実行してください。",
 }
+# 一覧のファイルが変わったときの tool_changed の1行目（diff の詰めの直し。スクリプトは変えていないのに「スクリプト」と言うと、
+# 原因を探しにくい。review-regress.md の R9）。{} は変わった一覧のパスを「、」でつないだもの
+_LIST_CHANGED_LINE = "記録のあとで、検査に使う語の一覧（{}）が変わりました。yomiyasu_check.py run をもう一度実行してください。"
+_SCRIPT_AND_LIST_CHANGED_LINE = ("記録のあとで、検査スクリプトと、検査に使う語の一覧（{}）が変わりました。"
+                                 "yomiyasu_check.py run をもう一度実行してください。")
+
+
+def _tool_changed_line(problems):
+    """tool_changed の1行目。変わったのがスクリプトだけなら 3.9 の表の文、一覧も変わっていれば一覧の名前を書く。"""
+    changed = [detail for code, detail in problems if code == "tool_changed"]
+    lists = [key for key in _LIST_KEYS if key in changed]
+    if not lists:
+        return _VERIFY_LINES["tool_changed"]
+    if len(lists) == len(changed):
+        return _LIST_CHANGED_LINE.format("、".join(lists))
+    return _SCRIPT_AND_LIST_CHANGED_LINE.format("、".join(lists))
+
+
 # --replay の作り直しが時間切れのとき（状態は incomplete。3.9 の10）。記録が欠けたわけではないので、別の文にする
 _REPLAY_TIMEOUT_LINE = ("記録のレポートを作り直す途中で時間切れになりました（{}）。--timeout を長くして verify --replay を"
                         "もう一度実行してください。")
@@ -2465,9 +2609,12 @@ def _record_shape(record):
     need(isinstance(skill, dict) and type(skill.get("found")) is bool
          and all(key in skill and text_or_null(skill[key]) for key in ("dir", "skill_md_sha256", "version")), "skill")
     tools = record.get("tools")
+    # 一覧のファイルのキー（diff の詰めの直し）は、あるときだけ形を確かめる（このキーを足す前の記録にはない）
     need(isinstance(tools, dict) and all(
         isinstance(tools.get(name), dict) and text_or_null(tools[name].get("version"))
-        and text_or_null(tools[name].get("sha256")) for name in _TOOL_NAMES), "tools")
+        and text_or_null(tools[name].get("sha256")) for name in _TOOL_NAMES) and all(
+        isinstance(tools[key], dict) and tools[key].get("version") is None and text_or_null(tools[key].get("sha256"))
+        for key in _LIST_KEYS if key in tools), "tools")
     python = record.get("python")
     # unicode_version は、このキーを足す前の記録にはないので、あるときだけ型を確かめる（反証レビュー compat 4）
     need(isinstance(python, dict) and is_text(python.get("version")) and is_text(python.get("implementation"))
@@ -2705,6 +2852,17 @@ def _summary_problems(state, record, required):
             hunks = (full.get("hunks") or []) if isinstance(full, dict) else None
             for key in ("status", "candidate_count", "meaning_risk_count", "fail_on_meaning_risk_count"):
                 compare("diff." + key, summary.get(key), value.get(key))
+            # 硬化の検査と勢いの検査（diff の詰めで足した。このキーを足す前の記録にはないので、あるときだけ照らす）。
+            # 見直し候補の数（review_count）は、2回目の反証の直し（review2-spec.md の T4）で足した
+            for key in ("stiffness", "tone"):
+                section = value.get(key) if isinstance(value.get(key), dict) else {}
+                for field in ("candidate_count", "level"):
+                    name = "{}_{}".format(key, field)
+                    if name in summary:
+                        compare("diff." + name, summary.get(name), section.get(field))
+                name = key + "_review_count"
+                if name in summary:
+                    compare("diff." + name, summary.get(name), _review_count(section))
             compare("diff.hunk_count", summary.get("hunk_count"), len(hunks) if isinstance(hunks, list) else None)
             found = value.get("meaning_risks")
             risks += len(found) if isinstance(found, list) else 0
@@ -2994,10 +3152,14 @@ def _verify_record(state, found, final, source, since, replay, timeout):
                 ok = False
             if not ok:
                 fail("invalid_record", "report", "{} がないか、ハッシュが記録と合いません".format(expected))
-    # 9. スクリプトと SKILL.md
+    # 9. スクリプトと一覧のファイルと SKILL.md。一覧は、記録のときにあったか、今あるか、中身が同じかを比べる（diff の詰めの直し。
+    # 一覧は diff の結果を変える入力なので、変われば tool_changed。review-spec.md の F5、review-regress.md の R9）
     for name in _TOOL_NAMES:
         if current_tools[name]["sha256"] != record["tools"][name]["sha256"]:
             fail("tool_changed", "tool_changed", name)
+    for key in _LIST_KEYS:
+        if _list_sha256(current_tools, key) != _list_sha256(record["tools"], key):
+            fail("tool_changed", "tool_changed", key)
     if _skill_info()["skill_md_sha256"] != record["skill"]["skill_md_sha256"]:
         fail(None, "skill_changed", "SKILL.md のハッシュが記録と違います")
     # questions.md の48の1: 同じ実行に、あとで別の本文を検査した回があれば知らせる（状態は変えない）
@@ -3154,6 +3316,8 @@ def _verify(args, parser):
         line = _AMBIGUOUS_MATERIALS_LINE
     elif status == "ambiguous" and ambiguity == "place":
         line = _AMBIGUOUS_PLACE_LINE
+    elif status == "tool_changed":
+        line = _tool_changed_line(problems)
     else:
         line = _VERIFY_LINES[status]
         if status == "final_changed" and "only_line_endings_differ" in codes:
@@ -3229,6 +3393,7 @@ _VERIFY_USAGE = ("yomiyasu_check.py verify --final 最終稿|- [--run-id ID] [--
 _FAIL_ON_HELP = ("指定した条件に当たれば、記録を残したうえで終了コード1で終わります。何度でも、カンマ区切りでも指定できます。"
                  "meaning-risk: 意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の"
                  "変化と、資料にない数値。コード・URL・引用など変えない箇所の変化と、資料にない名前は数えません。"
+                 "否定対比の主張の逆転と、元にない気持ちの語も数えません。"
                  "warn: lint の warn か error の候補。error: lint の error の候補。"
                  "条件に当たらなくても、意味が同じだという証明にはなりません。")
 
@@ -3287,14 +3452,22 @@ def _build_parser():
                         help="提供された資料のファイル。何度でも指定できます。最終稿の数値、名前、語、確度の語を資料と照らします。")
     inputs.add_argument("--stdin", action="store_true",
                         help="ファイルを作らない対話のため、原文（か資料）と最終稿を標準入力から読みます。"
-                             "行全体が <<<yomiyasu:original>>>、<<<yomiyasu:material>>>、<<<yomiyasu:final>>> の行で区切ります。")
+                             "行全体が <<<yomiyasu:original>>>、<<<yomiyasu:material>>>、<<<yomiyasu:final>>> の行で区切ります。"
+                             "区切りの行は一字一句このとおりに書きます（<<<yomiyasu: で始まるほかの行があれば、終了コード2で止めます）。")
     options = run.add_argument_group("オプション")
     options.add_argument("-h", "--help", action="help", help="このヘルプを表示して終わります。")
     options.add_argument("--stance", metavar="立場",
                          help="文書の立場（diff と同じ）。勧め（読み手に勧める）、決まり（手順）、説明（報告、体験）のどれか。")
     options.add_argument("--doc-type", metavar="種類",
                          help="文書の種類。lint と diff に渡し、記録と状態の行に残します。lint は、その種類で普通な書き方を"
-                              "候補にする規則を外します（yomiyasu_lint.py -h の一覧）。差分と資料との照合の判定は変わりません。")
+                              "候補にする規則を外します（yomiyasu_lint.py -h の一覧）。差分（意味が変わる恐れと規則の見直し候補）と"
+                              "資料との照合の判定は変わりません。"
+                              # yomiyasu_diff.py の _detector_level_help() と同じ文（diff を読み込まずにヘルプを出すため、ここに書く。
+                              # tests/test_v200_check_infra.py が一致を見張る。review-spec.md の F7、review1-spec.md の S2 と S5）
+                              "文体の硬化の検査は incident と formal のとき、勢いの検査は pr、article、incident、manual、formal "
+                              "のとき、候補を参考として出します。promo 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として"
+                              "出し、promo と minutes 以外では見出しの候補も参考として出します。promo では、番号つき項目の行と"
+                              "太字だけの行も勢いの検査の見出しに数えます。")
     options.add_argument("--reader", metavar="読者",
                          help="想定する読者の知識。lint と diff に渡し、記録と状態の行に残します。判定は変わりません。")
     options.add_argument("--fail-on", action="append", dest="fail_on", metavar="meaning-risk|warn|error",

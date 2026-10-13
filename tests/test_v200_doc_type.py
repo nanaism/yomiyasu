@@ -2,18 +2,27 @@
 """v2.0.0（G7）: lint、diff、check run の文書の種類（--doc-type）と読者（--reader）。
 
 期待値は DESIGN-reader-doctype.md の9章（道具のオプション）と 10.1 の表（A〜E）、末尾の追記（2026-10-13 19時。種類に
-formal を足して9つにする。lint で外す規則はなし）から取った。文はすべてこのファイルで作った合成の文。コーパスは読むだけ。
+formal を足して9つにする。lint で外す規則はなし）と、diff の詰めで足した promo（10個目。lint で emoji_prohibited を外す。
+2026-10-14 朝の大賀さんの判断で fragment_run も外す）から取った。文はすべてこのファイルで作った合成の文。コーパスは読むだけ。
 
-- 指定しないときの出力が G7 の前と1字も違わないこと（9章の不変の条件、10.1 の A）は、G7 を入れる前の作業ツリー
-  （45a5885 に step2b の check の固めを入れたもの）で作った tests/fixtures/g7_unchanged_outputs.json と照らす。
+- 指定しないときの出力（9章の不変の条件、10.1 の A）は、tests/fixtures/g7_unchanged_outputs.json と照らす。
   lint、diff、check の人が読む出力、終了コード、標準エラー、check の状態の行（と、context を除いた JSON）を、コーパスの
-  全ファイルと全組で比べる。lint、diff、check の出力をわざと変えたときは、fixture の generated_by の道具で作り直し、
-  作り直した理由を報告に書く（条件をゆるめて通さない）。
+  全ファイルと全組で比べる。fixture の行は出どころが違う（fixture の generated_by、source_commit、source_sha256 の
+  lint、diff、check）。
+  - lint の行は G7 を入れる前の作業ツリー（45a5885 に step2b の check の固めを入れたもの）の出力で、作り直していない。
+    指定しないときの lint の出力が G7 の前と1字も違わないことを見る。
+  - diff と check の行は、diff の詰め（文体の硬化、勢い、否定対比の逆転、気持ちの語の検査と、意味が変わる恐れの判定の詰め）
+    とその直し（step-c-fix）のあとの出力で作り直したもので、G7 の前の出力とは違う。そのあとの変更で出力が変わらないことを見る。
+    G7 の前からの変化（足した節とキー、判定が変わった組、--fail-on の終了コードが変わった組と理由）は fixture の updates に書いた。
+  lint、diff、check の出力をわざと変えたときは、fixture の generated_by の道具で diff と check の行を作り直し（lint の行は
+  作り直さず、1字も違わないことを確かめる）、作り直した理由と、終了コードが変わった組を updates と報告に書く（条件をゆるめて
+  通さない）。
 - SkillFilesTest（10.1 の C3、C4 と C5 の SKILL.md の部分）は、SKILL.md と references を入れる段までは失敗する。
 """
 
 from pathlib import Path
 from unittest import mock
+import copy
 import contextlib
 import hashlib
 import inspect
@@ -43,13 +52,15 @@ import yomiyasu_check  # noqa: E402
 
 # ---- 9.1 と追記: 値、名前、外す規則 ----
 
-DOC_TYPE_VALUES = ("pr", "article", "incident", "proposal", "minutes", "manual", "slides", "essay", "formal")
+# diff の詰め（GOALS の D-5、勢いの文書2章）: promo（紹介記事・宣伝文）を足して10にした
+DOC_TYPE_VALUES = ("pr", "article", "incident", "proposal", "minutes", "manual", "slides", "essay", "formal", "promo")
 DOC_TYPE_NAMES = {"pr": "PR説明", "article": "技術記事", "incident": "障害報告", "proposal": "提案書", "minutes": "議事録",
                   "manual": "マニュアル", "slides": "スライド", "essay": "エッセイ・小説",
-                  "formal": "公用文、規程、契約書、仕様書"}
+                  "formal": "公用文、規程、契約書、仕様書", "promo": "紹介記事・宣伝文"}
 DOC_TYPE_DOMAINS = {"pr": ("business.md",), "article": ("tech.md",), "incident": ("business.md",),
                     "proposal": ("business.md",), "minutes": ("business.md",), "manual": ("tech.md", "business.md"),
-                    "slides": ("tech.md", "business.md"), "essay": ("essay.md",), "formal": ("business.md", "tech.md")}
+                    "slides": ("tech.md", "business.md"), "essay": ("essay.md",), "formal": ("business.md", "tech.md"),
+                    "promo": ("essay.md", "business.md")}
 READER_VALUES = ("expert", "informed", "general")
 READER_NAMES = {"expert": "同じ分野の専門家", "informed": "分野は違うが技術に詳しい人", "general": "専門知識のない人"}
 SKIP_RULES = {
@@ -62,8 +73,14 @@ SKIP_RULES = {
     "slides": ("bold_label_list", "count_declaration", "excess_list", "short_summary_heading"),
     "essay": (),
     "formal": (),
+    # D-5: promo では書き手の絵文字を残す（勢いの検査は絵文字が減ると候補にするので、lint の絵文字の候補と食い違わせない）。
+    # diff の詰めで測って決めた（v200-development/step-c-detectors/measure.md）。fragment_run（「安い。うまい。早い。」の型）も
+    # 外す（大賀さんの判断、2026-10-14 朝。紹介記事・宣伝文では評価の語を短く重ねる型も勢いとして残す）
+    "promo": ("emoji_prohibited", "fragment_run"),
 }
-# 5.3「外さない規則と理由」。どの種類でも外さない
+# 5.3「外さない規則と理由」。どの種類でも外さない。ただし fragment_run は promo だけ外す（大賀さんの判断、2026-10-14 朝。
+# 5.3 の理由はスライドの話で、紹介記事・宣伝文では評価の語を短く重ねる型を勢いとして残すと決めた）
+NEVER_SKIPPED_EXCEPT = {"fragment_run": ("promo",)}
 NEVER_SKIPPED = ("bold_not_rendered", "fragment_run", "meta_intro", "metaphor_verb", "trailing_colon", "excess_bold",
                  "dash_list_ending", "dash_insertion", "dash_decoration")
 
@@ -75,7 +92,7 @@ READER_ERROR = "--reader に使えない値です: {}。使えるのは " + READ
 # 9.1: diff で --endings と一緒に付けたとき（--endings と --json の組と同じ形の使い方の誤り）
 ENDINGS_ERROR = "yomiyasu_diff.py: error: --endings は --doc-type と --reader に対応していません"
 
-# 9.6 ヘルプの文（formal を足した値の並び）
+# 9.6 ヘルプの文（formal と promo を足した値の並び）
 LINT_DOC_TYPE_HELP = ("文書の種類。指定すると、その種類で普通な書き方を候補にする規則（下の一覧）の候補を外し、外した件数を出します。"
                       "外した候補の中身は、指定せずに実行すると見られます。省くと、すべての規則を当てます（今までどおり）。"
                       "値: " + DOC_TYPE_CHOICES + "。")
@@ -91,13 +108,26 @@ LINT_HELP_LIST = "\n".join([
     "  slides    bold_label_list、count_declaration、excess_list、short_summary_heading",
     "  essay     なし",
     "  formal    なし",
+    "  promo     emoji_prohibited、fragment_run",
     "外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。",
 ])
-DIFF_DOC_TYPE_HELP = ("文書の種類（値は yomiyasu_lint.py と同じ）。表示と JSON に残すだけで、差分、意味が変わる恐れ、見直し候補、"
-                      "--fail-on は変わりません（意味の検査はどの種類でも同じに行います）。")
+# diff の詰め: 文体の硬化の検査と勢いの検査は、種類で参考（info）にするかが決まるので、その文を足した。diff の詰めの直し
+# （step-c-fix）で、硬化の参考に incident を足し、promo 以外の種類で勢いの絵文字と見出しを参考にした文を足した
+# 1回目の反証の直し（step-c-fix/fix-round1.md。review1-spec.md の S2 と S5）: 変わらないものを「規則の見直し候補」に絞り、
+# minutes の見出しと promo の見出しの数え方を書いた
+_DETECTOR_HELP = ("文体の硬化の検査は incident と formal のとき、勢いの検査は pr、article、incident、manual、formal のとき、"
+                  "候補を参考として出します。promo 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として出し、"
+                  "promo と minutes 以外では見出しの候補も参考として出します。promo では、番号つき項目の行と太字だけの行も"
+                  "勢いの検査の見出しに数えます。")
+# 2回目の反証の直し（step-c-fix/fix-round2.md。review2-spec.md の T3）: 種類で硬化と勢いの level と promo の見出しの数え方が
+# 変わるので、冒頭の「残すだけで」を「残し、」にした
+DIFF_DOC_TYPE_HELP = ("文書の種類（値は yomiyasu_lint.py と同じ）。表示と JSON に残し、差分、意味が変わる恐れ、規則の見直し候補、"
+                      "--fail-on は変わりません（意味の検査はどの種類でも同じに行います）。" + _DETECTOR_HELP)
 DIFF_READER_HELP = "想定する読者の知識（値は yomiyasu_lint.py と同じ）。表示と JSON に残すだけで、判定は変わりません。"
+# diff の詰めの直し（step-c-fix/check-infra-speed.md。review-spec.md の F7）: diff と同じ、硬化と勢いを参考にする種類の文を足した
 CHECK_DOC_TYPE_HELP = ("文書の種類。lint と diff に渡し、記録と状態の行に残します。lint は、その種類で普通な書き方を候補にする規則を"
-                       "外します（yomiyasu_lint.py -h の一覧）。差分と資料との照合の判定は変わりません。")
+                       "外します（yomiyasu_lint.py -h の一覧）。差分（意味が変わる恐れと規則の見直し候補）と資料との照合の判定は"
+                       "変わりません。" + _DETECTOR_HELP)
 CHECK_READER_HELP = "想定する読者の知識。lint と diff に渡し、記録と状態の行に残します。判定は変わりません。"
 
 # 9.3 と 9.4 の1行
@@ -120,7 +150,11 @@ BOLD_LABEL_ONLY = "- **日時**: 10月1日\n- **場所**: 本社3階\n- **担当
 COUNT_DECLARATION_ONLY = "ポイントは3つです。順に説明します。\n"
 SUMMARY_HEADING_ONLY = "# 報告\n\n作業は終わりました。\n\n## まとめ\n\n作業は予定どおり終わりました。\n"
 BOLD_ERROR_ONLY = "これは**「重要」**です。\n"
+EMOJI_ONLY = "新作のケーキが並びました\U0001F370\n"
+FRAGMENT_RUN_ONLY = "安い。うまい。早い。\n"
 RULE_SAMPLES = {
+    "emoji_prohibited": EMOJI_ONLY,
+    "fragment_run": FRAGMENT_RUN_ONLY,
     "excess_list": EXCESS_LIST_ONLY,
     "sentence_end_repetition": SENTENCE_END_ONLY,
     "bold_label_list": BOLD_LABEL_ONLY,
@@ -339,7 +373,9 @@ class DocTypeCase(unittest.TestCase):
 # ---- A. 指定しないときは変わらない ----
 
 class UnchangedOutputTest(unittest.TestCase):
-    """9章の不変の条件: 指定しないときの lint、diff、check の人が読む出力、終了コード、状態の行が G7 の前と1字も違わない。"""
+    """9章の不変の条件: 指定しないときの lint、diff、check の人が読む出力、終了コード、状態の行が fixture と1字も違わない。
+    lint は G7 の前の出力と、diff と check は diff の詰めとその直しのあとの出力と照らす（このファイルの冒頭の説明と、
+    fixture の description、updates）。"""
 
     @classmethod
     def setUpClass(cls):
@@ -350,7 +386,7 @@ class UnchangedOutputTest(unittest.TestCase):
         self.assertEqual(sorted(current), sorted(expected), "{} の対象が fixture と違う".format(name))
         changed = ["{} {}".format(key, variant) for key in sorted(expected) for variant in sorted(expected[key])
                    if current[key].get(variant) != expected[key][variant]]
-        self.assertEqual(changed, [], "{} の出力が G7 の前と違う".format(name))
+        self.assertEqual(changed, [], "{} の出力が fixture と違う（行の出どころは fixture の source_commit）".format(name))
 
     def test_fixture_covers_the_whole_corpus(self):
         self.assertEqual(len(corpus_files()), 163)
@@ -359,12 +395,15 @@ class UnchangedOutputTest(unittest.TestCase):
         self.assertEqual(sorted(self.fixture["diff"]), sorted(a + "|" + b for a, b in corpus_pairs()))
 
     def test_lint_outputs_match_before_g7(self):
+        """lint の行は G7 の前（45a5885 の作業ツリー）の出力のまま。"""
         self.compare("lint", unchanged_lint())
 
     def test_diff_outputs_match_before_g7(self):
+        """名前は G7 の前と照らしていたときのまま。diff の行は diff の詰めとその直しのあとの出力（fixture の source_commit）。"""
         self.compare("diff", unchanged_diff())
 
     def test_check_outputs_match_before_g7(self):
+        """名前は G7 の前と照らしていたときのまま。check の行は diff の詰めとその直しのあとの出力（fixture の source_commit）。"""
         self.compare("check", unchanged_check())
 
 
@@ -426,7 +465,7 @@ class DefaultsTest(DocTypeCase):
 
 class LintSkipTest(DocTypeCase):
     def test_b1_findings_with_a_type_are_the_plain_findings_minus_the_table(self):
-        """B1: コーパスの全ファイルと9つの種類で、種類つきの候補は、種類なしの候補から表の規則を除いたもの（順も同じ）。"""
+        """B1: コーパスの全ファイルと10の種類で、種類つきの候補は、種類なしの候補から表の規則を除いたもの（順も同じ）。"""
         for relative in corpus_files():
             text = (CORPUS / relative).read_text(encoding="utf-8")
             plain = yomiyasu_lint.lint_text(text)["findings"]
@@ -481,7 +520,7 @@ class LintSkipTest(DocTypeCase):
             self.assertEqual("終了コード1:" in out, code == 1, value)
 
     def test_b5_bold_not_rendered_is_never_skipped(self):
-        """B5: bold_not_rendered だけに当たる文書の --fail-on=error は、9つの種類すべてで1。"""
+        """B5: bold_not_rendered だけに当たる文書の --fail-on=error は、10の種類すべてで1。"""
         path = self.write("bold.md", BOLD_ERROR_ONLY)
         for value in DOC_TYPE_VALUES:
             code, out, _ = self.lint("--fail-on=error", "--doc-type", value, path)
@@ -582,7 +621,7 @@ class LintSkipTest(DocTypeCase):
 
 class TableTest(unittest.TestCase):
     def test_c1_tables(self):
-        """C1: DOC_TYPE_SKIP_RULES のキーは DOC_TYPES の9つと同じで順も同じ。READER_LEVELS は3つ。"""
+        """C1: DOC_TYPE_SKIP_RULES のキーは DOC_TYPES の10と同じで順も同じ。READER_LEVELS は3つ。"""
         self.assertEqual(tuple(row[0] for row in markdown_visibility.DOC_TYPES), DOC_TYPE_VALUES)
         self.assertEqual(dict((row[0], row[1]) for row in markdown_visibility.DOC_TYPES), DOC_TYPE_NAMES)
         self.assertEqual(dict((row[0], tuple(row[2])) for row in markdown_visibility.DOC_TYPES), DOC_TYPE_DOMAINS)
@@ -594,9 +633,11 @@ class TableTest(unittest.TestCase):
             self.assertEqual(list(rules), sorted(set(rules)), value)
 
     def test_c2_rules_that_are_never_skipped(self):
-        """C2: bold_not_rendered（error）と、5.3 で外さないとした規則は、どの種類の表にもない。"""
+        """C2: bold_not_rendered（error）と、5.3 で外さないとした規則は、どの種類の表にもない（fragment_run の promo を除く）。"""
         for value, rules in yomiyasu_lint.DOC_TYPE_SKIP_RULES.items():
             for rule in NEVER_SKIPPED:
+                if value in NEVER_SKIPPED_EXCEPT.get(rule, ()):
+                    continue
                 self.assertNotIn(rule, rules, value)
 
     def test_c6_lint_help_lists_the_table(self):
@@ -727,18 +768,55 @@ class OptionTest(DocTypeCase):
             self.assertTrue(err.startswith("使い方: yomiyasu_diff.py"), err)
 
     def test_d4_diff_judgement_does_not_change(self):
-        """D4: 指示書2.2の3組と推敲の48組で、種類と読者を付けても、context 以外の JSON と --fail-on の終了コードは同じ。"""
+        """D4: 指示書2.2の3組と推敲の48組で、種類と読者を付けても、context 以外の JSON と --fail-on の終了コードは同じ。
+        diff の詰めで足した文体の硬化の検査（stiffness）と勢いの検査（tone）だけは、種類で level（見直し候補 review か
+        参考 info）が変わる（追加文書 2.4、勢いの文書 3.3）。候補と値は同じなので、level を除いて比べ、level は表のとおりか見る。
+        diff の詰めの直し（step-c-fix/stiffness-tone-lint.md）で、硬化の参考に incident を足し、promo 以外の種類では勢いの
+        絵文字と見出しを参考にした（候補ごとの level）。promo では、番号つき項目の行と太字だけの行も勢いの見出しの字数に数える
+        （review-spec.md の F2）ので、promo だけは見出しの字数と見出しの候補を除いて比べ、違いがそこだけであることを見る。"""
         pairs = list(PAIRS_22) + [((CORPUS / a).read_text(encoding="utf-8"), (CORPUS / b).read_text(encoding="utf-8"))
                                   for a, b in corpus_pairs()[:48]]
         options = ({"doc_type": "slides", "reader": "general"}, {"doc_type": "essay", "reader": "expert"},
-                   {"doc_type": "pr", "reader": "informed"}, {"doc_type": "formal", "reader": None})
+                   {"doc_type": "pr", "reader": "informed"}, {"doc_type": "formal", "reader": None},
+                   {"doc_type": "incident", "reader": None}, {"doc_type": "promo", "reader": None})
+        reference = {"stiffness": ("incident", "formal"), "tone": ("pr", "article", "incident", "manual", "formal")}
+
+        def expected_level(key, doc_type, subkind):
+            if doc_type in reference[key]:
+                return "info"
+            if key == "tone" and doc_type not in (None, "promo") and subkind in ("emoji", "heading"):
+                return "info"
+            return "review"
+
+        def without_level(result, promo=False):
+            for key in ("stiffness", "tone"):
+                section = dict(result[key])
+                section.pop("level")
+                section["candidates"] = [dict((k, v) for k, v in item.items() if k != "level")
+                                         for item in section["candidates"]
+                                         if not (promo and key == "tone" and item["subkind"] == "heading")]
+                if promo and key == "tone":
+                    section["candidate_count"] = len(section["candidates"])
+                    section["counts"] = dict((side, dict((k, v) for k, v in counts.items() if k != "heading_chars"))
+                                             for side, counts in section["counts"].items())
+                result[key] = section
+            return result
         for old, new in pairs:
             plain = yomiyasu_diff.diff(old, new)
             plain.pop("context")
             for given in options:
                 result = yomiyasu_diff.diff(old, new, **given)
                 self.assertEqual(result.pop("context"), given)
-                self.assertEqual(result, plain, given)
+                for key in reference:
+                    for item in result[key]["candidates"]:
+                        self.assertEqual(item["level"], expected_level(key, given["doc_type"], item["subkind"]), (key, given))
+                    levels = set(item["level"] for item in result[key]["candidates"])
+                    if levels:
+                        self.assertEqual(result[key]["level"], "review" if "review" in levels else "info", (key, given))
+                    else:
+                        self.assertEqual(result[key]["level"], expected_level(key, given["doc_type"], None), (key, given))
+                promo = given["doc_type"] == "promo"
+                self.assertEqual(without_level(result, promo), without_level(copy.deepcopy(plain), promo), given)
         for number, (old, new) in enumerate(PAIRS_22):
             a = self.write("a{}.md".format(number), old)
             b = self.write("b{}.md".format(number), new)
@@ -952,7 +1030,7 @@ class SpeedTest(unittest.TestCase):
 
 class SkillFilesTest(unittest.TestCase):
     def test_c3_doc_type_files(self):
-        """C3: 9つの references/doc-types/<値>.md がルートと skills/yomiyasu にあり、4行目が表と同じ。3行目の domains がある。"""
+        """C3: 10の references/doc-types/<値>.md がルートと skills/yomiyasu にあり、4行目が表と同じ。3行目の domains がある。"""
         for base in (ROOT / "references", PACKAGE / "references"):
             for value in DOC_TYPE_VALUES:
                 path = base / "doc-types" / (value + ".md")
@@ -986,7 +1064,7 @@ class SkillFilesTest(unittest.TestCase):
             self.assertEqual(rows, SKIP_RULES, str(path))
 
     def test_c5_skill_md(self):
-        """C5: SKILL.md の種類の表に9つの値がちょうど1回ずつあり、3つの読者の値、「ここに説明が必要です」、--doc-type、
+        """C5: SKILL.md の種類の表に10の値がちょうど1回ずつあり、3つの読者の値、「ここに説明が必要です」、--doc-type、
         --reader がある（--doc-type と --reader が check run の --help にあることは TableTest.test_help_texts）。"""
         text = (PACKAGE / "SKILL.md").read_text(encoding="utf-8")
         found = re.findall(r"^\|\s*([a-z]+)（", text, re.M)

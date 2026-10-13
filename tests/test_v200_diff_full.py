@@ -32,8 +32,11 @@ import yomiyasu_diff  # noqa: E402
 NINE_KEYS = ["markers", "new_words", "lost_words", "structure", "spans", "logic", "bold", "endings", "type_changes"]
 # 10.6 B1: --fail-on=meaning-risk が数える件数（fail_on_meaning_risk_count）を meaning_risk_count のすぐ後ろに足す
 # G7（DESIGN-reader-doctype.md 9.4、10.1）: not_judged の次に context を足す（キーを足すだけで、形式2のまま）
+# diff の詰め（追加文書 2.4、勢いの文書 3.3）: 文体の硬化の検査（stiffness）と勢いの検査（tone）を full_diff のあとに足す
+# diff の詰めの直し（step-c-fix/check-infra-speed.md。review-spec.md の F5）: 気持ちの語の一覧の出どころ（feeling）を最後に足す
 TOP_KEYS = (["format", "format_version", "tool_version", "status", "changed", "candidate_count", "meaning_risk_count",
-             "fail_on_meaning_risk_count", "not_judged", "context", "meaning_risks"] + NINE_KEYS + ["full_diff"])
+             "fail_on_meaning_risk_count", "not_judged", "context", "meaning_risks"] + NINE_KEYS
+            + ["full_diff", "stiffness", "tone", "feeling"])
 FIRST_LINE = "差分の検査を実行しました。"
 DISCLAIMER = ("全文差分は変わった箇所を示すだけで、意味が同じだという証明ではありません。"
               "この検査では、意味の保持と読者にとっての分かりやすさは判定していません。")
@@ -655,20 +658,23 @@ class TestPresentation(DiffCase):
         self.assertEqual(self.report(self.diff2(C_OLD, C_NEW)), EXAMPLE_C)
 
     def test_report_parts_make_the_report(self):
-        """2.10: report() は report_parts() の3つの節（risks、rules、full_diff）を並べたもの。ない節は空の文字列。
-        check は節ごとに使い、照合の unsupported も同じ形の行にする（3.5 の例3）。"""
+        """2.10: report() は report_parts() の節（risks、rules、full_diff）を並べたもの。ない節は空の文字列。
+        check は節ごとに使い、照合の unsupported も同じ形の行にする（3.5 の例3）。
+        diff の詰めで、文体の硬化の検査と勢いの検査の節（stiffness、tone）を rules と full_diff の間に足した（候補がなければ空）。"""
         report_parts = self.need_function("report_parts")
         result = self.diff2(C_OLD, C_NEW)
         parts = report_parts(result)
-        self.assertEqual(sorted(parts), ["full_diff", "risks", "rules"])
+        self.assertEqual(sorted(parts), ["full_diff", "risks", "rules", "stiffness", "tone"])
         status = self.report(result).split("\n")[1]
-        body = [part for part in (parts["risks"], parts["rules"], parts["full_diff"]) if part]
+        body = [part for part in (parts["risks"], parts["rules"], parts["stiffness"], parts["tone"], parts["full_diff"])
+                if part]
         self.assertEqual(self.report(result), "\n".join([FIRST_LINE, status, DISCLAIMER]) + "\n\n" + "\n\n".join(body)
                          + "\n\n" + status)
         self.assertTrue(parts["rules"].startswith("■ 規則の見直し候補（"), parts["rules"])
         self.assertTrue(parts["full_diff"].startswith("■ 全文差分（変更 2か所。省略していません）"), parts["full_diff"])
         same = report_parts(self.diff2(A_OLD, A_OLD))
-        self.assertEqual(same, {"risks": "", "rules": "", "full_diff": "■ 全文差分: 変わった箇所はありません。"})
+        self.assertEqual(same, {"risks": "", "rules": "", "stiffness": "", "tone": "",
+                                "full_diff": "■ 全文差分: 変わった箇所はありません。"})
         unsupported = {"kind": "unsupported", "subkind": "number", "old_line": None, "new_line": 4, "old": None,
                        "new": "再試行は最大3回です。", "detail": {"text": "3回", "value": "3", "unit": "回"}, "basis": None}
         name = dict(unsupported, subkind="name", new_line=2, new="移行先はMySQLです。", detail={"text": "MySQL"})
@@ -935,10 +941,13 @@ class TestBudget(DiffCase):
                  "古い値は消さず、変えた理由を横に書く。")
 
     def test_budget_is_applied_and_completeness_is_kept(self):
+        """diff の詰め（step2-diff/questions.md 36 の (a)）で、塊をそのまま文字で対応させる上限を2,000字から500字にした
+        （_BLOCK_ALIGN_LIMIT。500字を超える塊は文の断片に分け、変わった断片だけを対応させる）。前の入力（1,000字の段落120個）は
+        変わった断片だけでは予算に届かなくなったので、500字以下の段落を250個にした（予算の仕組みと完全さを見る狙いは同じ）。"""
         full_diff = self.need_function("full_diff")
         old_blocks, new_blocks, middle = [], [], 0
-        for n in range(120):
-            parts = sentences_of(1000, n, self.SENTENCES)
+        for n in range(250):
+            parts = sentences_of(440, n, self.SENTENCES)
             old_paragraph = "".join(parts)
             new_paragraph = "".join([replace_once(parts[0], "確かめる", "確かめた")] + parts[1:-1]
                                     + [parts[-1][:-1] + "ことにした。"])
@@ -948,8 +957,9 @@ class TestBudget(DiffCase):
         orig, rewrite = "\n".join(old_blocks) + "\n", "\n".join(new_blocks) + "\n"
         self.assertGreater(len(orig) + len(rewrite), 200000)
         self.assertGreater(middle, 200000, "前と後ろの同じ部分を外して数えても予算を超える")
+        self.assertLessEqual(max(len(block.split("\n")[1]) for block in old_blocks + new_blocks), 500)
         full = full_diff(orig, rewrite)
-        self.assertEqual(len(full["hunks"]), 120)
+        self.assertEqual(len(full["hunks"]), 250)
         omitted = [hunk for hunk in full["hunks"] if hunk["segments_omitted"] == "budget"]
         self.assertTrue(omitted, "予算を超えた hunk は segments_omitted が budget")
         for hunk in omitted:
@@ -959,24 +969,26 @@ class TestBudget(DiffCase):
 
     def test_budget_counts_joined_hunk_text_of_both_sides(self):
         """10.4 S6: 予算は「文字の対応にかける文字列（行をつないだもの）の長さの、両側の合計」で数え、200,000字まで（ちょうどは含む）。
-        1行が1,000字の段落の1字を変えた hunk（1つ2,000字）を101個並べると、100個目まではちょうど200,000字で対応を取り、
-        101個目は予算を超えるので segments が null、segments_omitted が budget になる。予算を超えた hunk のあとも完全さは保つ。"""
+        1行が500字の段落の1字を変えた hunk（1つ1,000字）を201個並べると、200個目まではちょうど200,000字で対応を取り、
+        201個目は予算を超えるので segments が null、segments_omitted が budget になる。予算を超えた hunk のあとも完全さは保つ。
+        diff の詰め（questions.md 36 の (a)）で、塊をそのまま文字で対応させる上限を500字にしたので、前の入力（1,000字の行を
+        101個）から、500字の行を201個に変えた（数え方を見る狙いは同じ）。"""
         full_diff = self.need_function("full_diff")
         old_blocks, new_blocks = [], []
-        for n in range(101):
-            line = "".join(sentences_of(1000, n, self.SENTENCES))[:1000]
+        for n in range(201):
+            line = "".join(sentences_of(500, n, self.SENTENCES))[:500]
             middle = line.index("番目") - 1
             changed = line[:middle] + ("壱" if line[middle] != "壱" else "弐") + line[middle + 1:]
-            self.assertEqual((len(line), len(changed)), (1000, 1000))
+            self.assertEqual((len(line), len(changed)), (500, 500))
             old_blocks.append("## 節%d\n%s" % (n, line))
             new_blocks.append("## 節%d\n%s" % (n, changed))
         orig, rewrite = "\n".join(old_blocks) + "\n", "\n".join(new_blocks) + "\n"
         full = full_diff(orig, rewrite)
-        self.assertEqual(len(full["hunks"]), 101)
-        for hunk in full["hunks"][:100]:
+        self.assertEqual(len(full["hunks"]), 201)
+        for hunk in full["hunks"][:200]:
             self.assertIsNotNone(hunk["segments"], hunk["index"])
             self.assertIsNone(hunk["segments_omitted"])
-        last = full["hunks"][100]
+        last = full["hunks"][200]
         self.assertIsNone(last["segments"])
         self.assertEqual(last["segments_omitted"], "budget")
         self.assert_complete(orig, rewrite, full)
@@ -1264,9 +1276,11 @@ class TestPerformanceEdges(DiffCase):
 DIFF_HELP_DESCRIPTION = ("元の文と書き直した文を比べ、変わった箇所をすべて出し、意味が変わる恐れと規則の見直し候補を挙げます。"
                          "全文差分は意味が同じだという証明ではありません。意味が同じかどうかは判定しません。")
 # 10.6 B1: 数える種類を書く。変えない箇所（コード、URL、引用など）は数えない
+# diff の詰めの直し（step-c-fix/check-infra-speed.md。review-spec.md の F6）: 否定対比の主張の逆転と気持ちの語も数えないことを足した
 DIFF_HELP_FAIL_ON = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の変化が"
                      "1件でもあれば、終了コード1で終わります。コード・URL・引用など変えない箇所の変化は、意味が変わる恐れとして出しますが、"
-                     "この条件には数えません。候補は確かめる場所で、意味が変わったという判定ではありません。"
+                     "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。"
+                     "候補は確かめる場所で、意味が変わったという判定ではありません。"
                      "条件に当たらなくても、意味が同じだという証明にはなりません。")
 UNKNOWN_FAIL_ON = "--fail-on に使えない値です: {}。diff で使えるのは meaning-risk です。"
 UNKNOWN_STANCE = "--stance に使えない値です: {}。使えるのは 勧め、読み手に勧める、決まり、手順、説明、報告、体験 です。"

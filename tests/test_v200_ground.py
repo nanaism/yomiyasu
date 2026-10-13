@@ -25,7 +25,8 @@ TOP_KEYS = ["format", "format_version", "tool_version", "mode", "sources", "item
 ITEM_KEYS = {"kind", "text", "value", "unit", "final_lines", "classification"}
 RISK_KEYS = {"kind", "subkind", "old_line", "new_line", "old", "new", "detail", "basis"}
 NOT_JUDGED = ["claims", "conditions", "assignees", "meaning_equivalence"]
-CLASSIFICATIONS = {"in_original", "from_materials", "not_in_sources", "dropped_certainty"}
+# diff の詰め（step2-diff/questions.md 38）: 資料にあって最終稿にない数値を not_in_final として items の最後に入れる
+CLASSIFICATIONS = {"in_original", "from_materials", "not_in_sources", "dropped_certainty", "not_in_final"}
 
 
 class GroundCase(unittest.TestCase):
@@ -101,7 +102,8 @@ class TestExtractNumbers(GroundCase):
             ("最大三回まで試す。", [("3", "回")]),
             ("後二週間で終わる。", [("2", "週間")]),
             ("第三回の会議です。", [("3", "回")]),
-            ("三つの案がある。", []),
+            # diff の詰め（questions.md 40）で助数詞に「つ」「か所」「種類」「章」「節」「項」「月」を足した（前は []）
+            ("三つの案がある。", [("3", "つ")]),
             ("統一回線を使う。", []),
         )
         for text, expected in cases:
@@ -132,12 +134,12 @@ class TestExtractNumbers(GroundCase):
 
     def test_names_and_lists_are_not_numbers(self):
         """英字に続く数（v2、IPv6、1.2.3 の途中）と、番号つき箇条書きの番号は取らない。
-        英字が続く数（3D、5G）は、2.5.2 の取り出し方のとおり単位なしの数として取る（反証レビュー F1。名前とみなして
-        落とすと、30s や 8GiB のような単位つきの値の変化を見逃す）。
+        英字が続く数（3D、5G）は、数として取る（反証レビュー F1。名前とみなして落とすと、30s や 8GiB のような単位つきの値の
+        変化を見逃す）。diff の詰め（questions.md 51）で、続く英字（5字まで）を単位として取るようにした（前は単位なし）。
         3桁区切りでないカンマは数の区切り（単位は最後の数に付く）。月の数え方の表記の違いは単位をそろえる。"""
         cases = (
             ("v2 と IPv6 を使う。", []),
-            ("3D と 5G を使う。", [("3", ""), ("5", "")]),
+            ("3D と 5G を使う。", [("3", "D"), ("5", "G")]),
             ("版は v1.2 です。", []),
             ("1. 設定を開く。\n2. 値を3回変える。\n", [("3", "回")]),
             ("手順1,2,3日を見る。", [("1", ""), ("2", ""), ("3", "日")]),
@@ -151,12 +153,14 @@ class TestExtractNumbers(GroundCase):
                 self.assertEqual(self.values(text), expected)
 
     def test_numbers_followed_by_letters(self):
-        """反証レビュー F1: 一覧にない英字の単位が続く数は、単位なしの数として取る（2.5.2）。一覧の単位（ms、GB）は付ける。"""
+        """反証レビュー F1: 一覧にない英字の単位が続く数も取る（2.5.2）。一覧の単位（ms、GB）は付ける。
+        diff の詰め（step2-diff/questions.md 51）で、続く英字の並び（5字まで）を単位として取るようにした（前は単位なしで、
+        30s → 30min のような単位だけの変化を拾えなかった）。コーパスとハーネスで前後の件数を測った（step-c-detectors/measure.md）。"""
         cases = (
-            ("タイムアウトは30sです。", [("30", "")]),
-            ("メモリは8GiBです。", [("8", "")]),
-            ("回線は100Mbpsです。", [("100", "")]),
-            ("同時接続は10kまでです。", [("10", "")]),
+            ("タイムアウトは30sです。", [("30", "s")]),
+            ("メモリは8GiBです。", [("8", "GiB")]),
+            ("回線は100Mbpsです。", [("100", "Mbps")]),
+            ("同時接続は10kまでです。", [("10", "k")]),
             ("応答は100msで、容量は16GBです。", [("100", "ms"), ("16", "GB")]),
         )
         for text, expected in cases:
@@ -170,7 +174,8 @@ class TestExtractNumbers(GroundCase):
             ("候補日は3日，5日，7日です。", [("3", "日"), ("5", "日"), ("7", "日")]),
             ("候補日は3日,5日,7日です。", [("3", "日"), ("5", "日"), ("7", "日")]),
             ("参加者は，30人だった．", [("30", "人")]),
-            ("手順は2つ．3日で終える．", [("2", ""), ("3", "日")]),
+            # diff の詰め（questions.md 40）で算用数字の単位に「つ」を足した（前は ("2", "")）
+            ("手順は2つ．3日で終える．", [("2", "つ"), ("3", "日")]),
             ("対象はA,3社だった。", [("3", "社")]),
             ("版は1.2.3です。", [("1.2.3", "")]),
         )
@@ -244,7 +249,13 @@ class TestGroundCompose(GroundCase):
                                                         "自動": "not_in_sources", "最大": "from_materials"})
         self.assertEqual(self.item(result, "certainty", "未確認")["classification"], "dropped_certainty")
         self.assertEqual(self.item(result, "certainty", "未確認")["final_lines"], [])
-        self.assertEqual([item["text"] for item in result["items"] if item["kind"] == "number"], ["3回"])
+        self.assertEqual([item["text"] for item in result["items"]
+                          if item["kind"] == "number" and item["classification"] != "not_in_final"], ["3回"])
+        # diff の詰め（questions.md 38）: 資料にあって最終稿にない数値は、資料で出てくる順に not_in_final として items の最後に入る
+        # （参考。候補には数えない）。check の「参考: 資料にあって最終稿にない数値」の行はこれから作る
+        self.assertEqual([(item["text"], item["final_lines"]) for item in result["items"]
+                          if item["classification"] == "not_in_final"], [("14日", []), ("10件", [])])
+        self.assertEqual(result["items"][-2:], [item for item in result["items"] if item["classification"] == "not_in_final"])
         self.assertEqual(self.item(result, "word", "再試行")["final_lines"], [1, 3, 4])
         self.assertEqual([source["index"] for source in result["sources"]], [1, 2])
         # 見直し候補の数え方（3.5 の照合の節の行。「参考」は数えない）: 意味が変わる恐れ1、資料にない語の行1、確度の語の行1

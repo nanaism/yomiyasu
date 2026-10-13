@@ -26,7 +26,9 @@ SUBKINDS = {
     "sentence_type": {"marks", "question"},
     "protected": {"code", "inline_code", "url", "link", "frontmatter", "html", "quote"},
 }
-KINDS = {"number", "negation", "swap", "sentence_type", "protected"}
+# diff の詰め（10.7、追加文書 1.4）: 否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）を足した。
+# どちらも意味が変わる恐れの節に出すが、--fail-on=meaning-risk には数えない
+KINDS = {"number", "negation", "swap", "sentence_type", "protected", "contrast_reversal", "feeling"}
 
 # 2.8 の meaning_risks の要素の例（入力は 2.7 の例A）
 EXAMPLE_A_RISK = {"kind": "number", "subkind": "replaced", "old_line": 1, "new_line": 1,
@@ -270,6 +272,14 @@ class TestNegation(RiskCase):
         ("認証を同期呼び出しから非同期キューでの実行に変えた。", "認証を同期呼び出しから、非同期キューでの実行に変えた。"),
         ("本流のキューを詰まらせない。", "本流のキューが詰まらないようにします。"),
         ("再投入しても二重反映は起きない。", "再投入しても二重に反映されることはない。"),
+        # diff の詰め（questions.md 34、review-risk 4）: 句点の前の規則が言い換えを否定に出さない
+        ("結果は変わらない。", "結果は同じだ。"),
+        ("値が一致しない。", "値が異なる。"),
+        ("この確認は欠かせない。", "この確認は重要だ。"),
+        ("変更して構いません。", "変更してよいです。"),
+        ("ファイルは残らない。", "ファイルは消える。"),
+        # questions.md 45: 「未来」は否定の「未」にしない
+        ("将来の計画を立てる。", "未来の計画を立てる。"),
     )
 
     def test_negation_found(self):
@@ -314,18 +324,23 @@ class TestNegation(RiskCase):
 
     def test_negation_after_an_inserted_block_in_a_full_rewrite(self):
         """反証レビュー E1: 全面書き換えの途中に、空行のない9行の箇条書きを足しても、そのあとの段落が1つの塊にまとまらず、
-        段落ごとの hunk になる。後ろの段落の否定（確かめます → 確かめません）が出る。数値（節の番号）は変えていないので出ない。"""
+        段落ごとの hunk になる。後ろの段落の否定（確認します → 確認しません）が出る。数値（節の番号）は変えていないので出ない。
+
+        diff の詰め（step2-diff/questions.md 34）で入力を1つ変えた。句点の前の規則を「印でない字の違いが平仮名だけ（漢字・
+        片仮名は両側で同じ）」に絞ったので、前の入力「値を確認します → 値を確かめません」（語幹ごと書き換えた否定）は、
+        2.5.3 の残る限界どおり negation に出なくなった（前は出ていた。step-c-detectors/measure.md に前後を記録）。
+        この試験の狙いは行の対応なので、15節の後を「値を確認しません」にした。"""
         words = ("開く", "選ぶ", "直す", "保存する", "閉じる", "送る", "待つ", "確かめる", "終える")
         old_paragraphs = ["第{}節では、設定ファイルを開いて値を確認します。".format(i) for i in range(1, 21)]
         new_paragraphs = ["第{}節では、設定ファイルを開き、値を確かめます。".format(i) for i in range(1, 21)]
         old_paragraphs[4] = "手順は、" + "、".join(words) + "、の順です。"
         new_paragraphs[4] = "\n".join("- " + word for word in words)
-        new_paragraphs[14] = "第15節では、設定ファイルを開き、値を確かめません。"
+        new_paragraphs[14] = "第15節では、設定ファイルを開き、値を確認しません。"
         result = yomiyasu_diff.diff("\n\n".join(old_paragraphs) + "\n", "\n\n".join(new_paragraphs) + "\n")
         self.assertEqual(len(result["full_diff"]["hunks"]), 20)
         negations = [risk for risk in result["meaning_risks"] if risk["kind"] == "negation"]
         self.assertEqual([(risk["old"], risk["new"]) for risk in negations],
-                         [("第15節では、設定ファイルを開いて値を確認します。", "第15節では、設定ファイルを開き、値を確かめません。")])
+                         [("第15節では、設定ファイルを開いて値を確認します。", "第15節では、設定ファイルを開き、値を確認しません。")])
         self.assertNotIn("number", [kind for kind, _ in self.kinds(result["meaning_risks"])])
 
     def test_detail_widens_kanji_words_without_the_particle(self):
@@ -388,15 +403,14 @@ class TestSentenceType(RiskCase):
     """2.5.5 問い（sentence_type/question）と 2.5.6 文の種類の印（sentence_type/marks）。"""
 
     def test_question_to_statement(self):
-        """設計の表から入力を2つ変えた。
+        """設計の表から入力を1つ変えた。
         - 「来週公開しますか」は句読点がなく 2.5.5 の問いの定義（？、?、か。、か？）に入らないので、
           「来週公開しますか。」にした（questions-diff.md 5、10.2 D5）。
-        - 6.4 の「動くでしょうか。→ 動きます。」は、2.5.1 の組の条件（ratio 0.45以上）に届かず組にならない
-          （共通の字が「動」「。」だけの短い文）。組にならない文は問いの判定をしないので、主語を足した
-          「この設定で動くでしょうか。→ この設定で動きます。」にした。短い文が組にならない取りこぼしは
-          step2-diff/questions.md 33（反証レビュー F8）で主担当が決める。"""
+        - 6.4 の「動くでしょうか。→ 動きます。」は、diff の詰め（questions.md 33）で、1行対1行の置き換えで両側が1文ずつなら
+          似かたによらず組にするようにしたので、6.4 の入力のまま試す（前は主語を足した形に変えていた）。"""
         self.need_v2_diff()
-        for before, after in (("この設定で動くでしょうか。", "この設定で動きます。"), ("来週公開しますか。", "来週公開します。")):
+        for before, after in (("動くでしょうか。", "動きます。"), ("この設定で動くでしょうか。", "この設定で動きます。"),
+                              ("来週公開しますか。", "来週公開します。")):
             with self.subTest(before=before):
                 result = self.result(before, after)
                 [risk] = [risk for risk in result["meaning_risks"] if (risk["kind"], risk["subkind"]) == ("sentence_type", "question")]
@@ -528,10 +542,12 @@ class TestProtected(RiskCase):
 
     def test_budget_omitted_replace_hunk_still_shows_inline_changes(self):
         """反証レビュー E8: 予算で文字の対応を省いた置き換えの hunk でも、インラインのコードとリンク先の変化は protected に出る。
-        変えていない種類（この hunk では引用やコードの囲みはない）は出さない。"""
-        base = ("これは記録の文です。" * 100)[:999]
-        olds = ["## 節%d\n%s壱" % (n, base) for n in range(100)]
-        news = ["## 節%d\n%s弐" % (n, base) for n in range(100)]
+        変えていない種類（この hunk では引用やコードの囲みはない）は出さない。
+        diff の詰め（questions.md 36 の (a)）で、塊をそのまま文字で対応させる上限を500字にしたので、予算に届くよう、前の入力
+        （1,000字の行を100個）から500字の行を200個に変えた。"""
+        base = ("これは記録の文です。" * 50)[:499]
+        olds = ["## 節%d\n%s壱" % (n, base) for n in range(200)]
+        news = ["## 節%d\n%s弐" % (n, base) for n in range(200)]
         last_old = "`--force` を付けて実行します。[手順](https://example.com/a) を見ます。"
         last_new = "`--forced` を付けて実行します。[手順](https://example.com/b) を見ます。"
         before = "\n".join(olds + ["## 後", last_old]) + "\n"
@@ -539,7 +555,7 @@ class TestProtected(RiskCase):
         full = yomiyasu_diff.full_diff(before, after)
         self.assertEqual(full["hunks"][-1]["segments_omitted"], "budget")
         risks = yomiyasu_diff.meaning_risks(before, after, full=full)
-        last = [risk for risk in risks if risk["kind"] == "protected" and risk["new_line"] == 202]
+        last = [risk for risk in risks if risk["kind"] == "protected" and risk["new_line"] == 402]
         self.assertEqual(sorted(risk["subkind"] for risk in last), ["inline_code", "link"])
 
     def test_text_outside_protected_spans_is_not_protected(self):
@@ -637,10 +653,22 @@ class TestFixedLimits(RiskCase):
         self.assertEqual(result["meaning_risks"], [])
         self.assertIn("Bは3日、Aは5日です。", self.changed_lines(result))
 
+    def test_negation_with_a_rephrased_stem_is_only_in_the_full_diff(self):
+        """diff の詰め（step2-diff/questions.md 34）で、句点の前の規則を「印でない字の違いが平仮名だけ」に絞った。そのため、
+        語幹ごと書き換えた否定（確認します → 確かめません）は negation に出ない（2.5.3 の残る限界。基準 38d6556 では出ていた。
+        step-c-detectors/review-regress.md R6）。全文差分には出る。限界として固定する。"""
+        result = self.result("値を確認します。", "値を確かめません。")
+        self.assertNotIn("negation", [kind for kind, _ in self.kinds(result["meaning_risks"])])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+        self.assertIn("値を確かめません。", self.changed_lines(result))
+
     def test_added_feeling_is_in_the_full_diff(self):
+        """diff の詰め（10.6 B2、10.7）: 元にない気持ちの語は kind feeling の候補にもする（--fail-on には数えない）。
+        全文差分にも今までどおり出る。"""
         result = self.result("設定を変更した。", "設定を変更して、ほっとした。")
         self.assertNotEqual(result["status"], "no_change")
-        self.assertEqual(result["meaning_risks"], [])
+        self.assertEqual(self.kinds(result["meaning_risks"]), [("feeling", None)])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 0)
         self.assertTrue([line for line in self.changed_lines(result) if "ほっとし" in line])
         report = self.report(result)
         start = [index for index, line in enumerate(report) if line.startswith("■ 全文差分")]
@@ -653,8 +681,14 @@ class TestCorpusWatch(RiskCase):
     10.2 D2: kind・subkind ごとの件数が、実装したときに測った値（step2-diff/measure.md）を超えない。
     コーパスの書き換えは yomiyasu の正しい推敲なので、ここに出るものは確かめれば済む候補で、増えれば誤検知が増えたことになる。"""
 
-    # 2026-10-13 に測った値（句点の前の規則あり）。number/order、swap、sentence_type/question、protected は0件
-    MEASURED = {"negation": 2, "number/added": 4, "number/lost": 1, "number/replaced": 1, "sentence_type/marks": 5}
+    # 2026-10-13 に測った値（句点の前の規則あり）。number/order、swap、sentence_type/question、protected は0件。
+    # diff の詰め（step2-diff/questions.md 33〜48、51、step-c-detectors/measure.md）で測り直した。前の値は
+    # negation 2、number/added 4、number/lost 1、number/replaced 1、sentence_type/marks 5（合計13）。今の値は
+    # negation 1（「二重処理を防ぐ → 処理しない」の誤検知が 34 の直しで消えた）、number/added 5（「1」が「1つ」になった1件は同じ文、
+    # 「一つのサービス」を 40 で数えるようになった1件が増えた）、ほかは同じ（合計13）。contrast_reversal と feeling は0件。
+    # diff の詰めの直し（step-c-fix/numbers.md、review-regress.md R4）で、数量を主張しない「一つ」（一つの、一つずつ、もう一つ）を
+    # 単独では数値の候補にしないようにしたので、number/added を 5 から基準の 4 に戻した（合計12）
+    MEASURED = {"negation": 1, "number/added": 4, "number/lost": 1, "number/replaced": 1, "sentence_type/marks": 5}
 
     def test_corpus_48_pairs_kind_counts_do_not_exceed_the_measured_values(self):
         self.need_v2_diff()
