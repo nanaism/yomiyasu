@@ -1070,6 +1070,17 @@ class TestArguments(DiffCase):
         process = run_diff(["--nope", self.before, self.after])
         self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
 
+    def test_abbreviations_are_not_accepted(self):
+        """10.7: argparse の省略形を受けない（allow_abbrev=False。lint、diff、check の3本でそろえる）。"""
+        for args in (["--js"], ["--fail", "meaning-risk"], ["--stan", "説明"], ["--end"]):
+            with self.subTest(args=args):
+                process = run_diff(args + [self.before, self.after])
+                self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
+                self.assertEqual(process.stdout, "")
+                self.assertIn("unrecognized arguments", process.stderr)
+                self.assertEqual(process.stderr.rstrip("\n").split("\n")[-1],
+                                 "引数の誤りです。yomiyasu_diff.py -h で使い方を確かめてください。")
+
     def test_endings_with_json(self):
         process = run_diff(["--endings", self.before, "--json"])
         self.assertEqual(process.returncode, 2, process.stdout + process.stderr)

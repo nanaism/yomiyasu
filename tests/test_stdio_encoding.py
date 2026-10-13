@@ -21,12 +21,15 @@ from unittest import mock
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 LINT = SCRIPTS_DIR / "yomiyasu_lint.py"
 DIFF = SCRIPTS_DIR / "yomiyasu_diff.py"
+CHECK = SCRIPTS_DIR / "yomiyasu_check.py"
 
 SAMPLE = "本記事では、手触りのある設計の本質に迫ります。いかがでしたでしょうか。\n"
+# yomiyasu_check.py run --stdin の区切り（DESIGN-interfaces.md 3.11）。cp932 で表せない文字を含める
+CHECK_STDIN = "<<<yomiyasu:original>>>\n設定を更新します。\n<<<yomiyasu:final>>>\n設定を🚀更新しました。再起動してください。\n"
 
 
-def run_cp932(args, stdin=None):
-    env = dict(os.environ, PYTHONIOENCODING="cp932:surrogateescape")
+def run_cp932(args, stdin=None, env=None):
+    env = dict(os.environ if env is None else env, PYTHONIOENCODING="cp932:surrogateescape")
     env.pop("PYTHONUTF8", None)
     return subprocess.run(
         [sys.executable, "-B"] + [str(a) for a in args],
@@ -104,6 +107,55 @@ class TestStdioEncoding(unittest.TestCase):
         self.assertEqual(report.returncode, 0, report.stderr.decode("utf-8", "replace"))
         self.assertIn("🚀", report.stdout.decode("utf-8"))
 
+    def check_env(self):
+        """check の記録を一時フォルダの中に書く（ホームやリポジトリに書かない）。"""
+        env = dict(os.environ, YOMIYASU_STATE_DIR=str(self.root / ".yomiyasu"))
+        env.pop("YOMIYASU_SESSION", None)
+        return env
+
+    def test_check_report_and_json_with_emoji(self):
+        """v2.0.0: yomiyasu_check.py の通常の出力は UTF-8、--json は ASCII だけ（cp932 の標準出力でも落ちない）。"""
+        before = self.write("before.md", "設定を更新します。\n")
+        after = self.write("after.md", "設定を🚀更新しました。再起動してください。\n")
+        report = run_cp932([CHECK, "run", "--source", before, "--final", after], env=self.check_env())
+        self.assertEqual(report.returncode, 0, report.stderr.decode("utf-8", "replace"))
+        self.assertEqual(report.stderr, b"")
+        text = report.stdout.decode("utf-8")
+        self.assertIn("🚀", text)
+        self.assertIn("yomiyasu-check: executed via=run", text)
+        result = self.assert_ascii_json(run_cp932([CHECK, "run", "--source", before, "--final", after, "--new-run",
+                                                   "--json"], env=self.check_env()))
+        self.assertEqual(result["status"], "executed")
+        self.assertIn("🚀", json.dumps(result["diff"], ensure_ascii=False))
+
+    def test_check_reads_utf8_stdin(self):
+        """run --stdin は標準入力をバイト列で読み、UTF-8 として解く（cp932 の環境でも）。"""
+        result = self.assert_ascii_json(run_cp932([CHECK, "run", "--stdin", "--json"], CHECK_STDIN.encode("utf-8"),
+                                                  env=self.check_env()))
+        self.assertEqual(result["status"], "executed")
+        self.assertEqual(result["mode"], "rewrite")
+
+    def test_check_verify_reads_utf8_stdin(self):
+        """verify --final - も標準入力をバイト列で読み、UTF-8 として解く（cp932 の環境でも）。通常の出力は UTF-8。"""
+        self.assert_ascii_json(run_cp932([CHECK, "run", "--stdin", "--json"], CHECK_STDIN.encode("utf-8"),
+                                         env=self.check_env()))
+        final = "設定を🚀更新しました。再起動してください。\n".encode("utf-8")
+        result = self.assert_ascii_json(run_cp932([CHECK, "verify", "--final", "-", "--json"], final,
+                                                  env=self.check_env()))
+        self.assertEqual((result["status"], result["final"]["via"]), ("executed", "stdin"))
+        report = run_cp932([CHECK, "verify", "--final", "-"], final, env=self.check_env())
+        self.assertEqual(report.returncode, 0, report.stderr.decode("utf-8", "replace"))
+        self.assertEqual(report.stderr, b"")
+        self.assertIn("完了報告にこの出力の2行目を写してください。", report.stdout.decode("utf-8"))
+
+    def test_check_rejects_non_utf8_stdin_with_exit_code_2(self):
+        body = CHECK_STDIN.replace("🚀", "").encode("cp932")
+        process = run_cp932([CHECK, "run", "--stdin", "--json"], body, env=self.check_env())
+        self.assertEqual(process.returncode, 2)
+        self.assertEqual(process.stdout, b"")
+        self.assertIn(b"Error reading stdin", process.stderr)
+        self.assertFalse((self.root / ".yomiyasu").exists())
+
 
 _KEEP = object()
 
@@ -160,6 +212,57 @@ class TestStreamsWithoutReconfigure(unittest.TestCase):
         out = io.StringIO()
         self.assertEqual(run_in_process(DIFF, [self.path, after, "--json"], stdout=out), 0)
         self.assertIsInstance(json.loads(out.getvalue()), dict)
+
+    def run_check_in_process(self, args, **streams):
+        """check をプロセスの中で動かす。記録は一時フォルダの中に書き、check が変える sys.dont_write_bytecode を戻す。"""
+        saved = sys.dont_write_bytecode
+        self.addCleanup(setattr, sys, "dont_write_bytecode", saved)
+        state = self.path.with_name(".yomiyasu")
+        with mock.patch.dict(os.environ, {"YOMIYASU_STATE_DIR": str(state)}):
+            return run_in_process(CHECK, args, **streams)
+
+    def test_check_writes_json_to_string_stdout(self):
+        after = self.path.with_name("after.md")
+        after.write_text("本記事では、設計の本質に迫りました。\n", encoding="utf-8")
+        out = io.StringIO()
+        self.assertEqual(self.run_check_in_process(["run", "--source", self.path, "--final", after, "--json"],
+                                                   stdout=out), 0)
+        self.assertEqual(json.loads(out.getvalue())["status"], "executed")
+
+    def test_check_reads_string_stdin(self):
+        out = io.StringIO()
+        self.assertEqual(self.run_check_in_process(["run", "--stdin", "--json"], stdin=io.StringIO(CHECK_STDIN),
+                                                   stdout=out), 0)
+        result = json.loads(out.getvalue())
+        self.assertEqual((result["status"], result["mode"]), ("executed", "rewrite"))
+
+    def test_check_verify_reads_string_stdin(self):
+        """verify --final - は、標準入力に buffer がない（StringIO）ときも読んだ文字列で照らす。"""
+        self.assertEqual(self.run_check_in_process(["run", "--stdin", "--json"], stdin=io.StringIO(CHECK_STDIN),
+                                                   stdout=io.StringIO()), 0)
+        out = io.StringIO()
+        final = io.StringIO("設定を🚀更新しました。再起動してください。\n")
+        self.assertEqual(self.run_check_in_process(["verify", "--final", "-", "--json"], stdin=final, stdout=out), 0)
+        self.assertEqual(json.loads(out.getvalue())["status"], "executed")
+
+    def test_check_verify_runs_without_stdout(self):
+        after = self.path.with_name("after.md")
+        after.write_text("本記事では、設計の本質に迫りました。\n", encoding="utf-8")
+        self.assertEqual(self.run_check_in_process(["run", "--source", self.path, "--final", after],
+                                                   stdout=io.StringIO()), 0)
+        self.assertEqual(self.run_check_in_process(["verify", "--final", after], stdout=None), 0)
+
+    def test_check_runs_without_stdout(self):
+        after = self.path.with_name("after.md")
+        after.write_text("本記事では、設計の本質に迫りました。\n", encoding="utf-8")
+        self.assertEqual(self.run_check_in_process(["run", "--source", self.path, "--final", after], stdout=None), 0)
+
+    def test_check_rejects_missing_stdin_with_exit_code_2(self):
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr):
+            code = self.run_check_in_process(["run", "--stdin", "--json"], stdin=None, stdout=io.StringIO())
+        self.assertEqual(code, 2)
+        self.assertIn("Error reading stdin", stderr.getvalue())
 
 
 if __name__ == "__main__":

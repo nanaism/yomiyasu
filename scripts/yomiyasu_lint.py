@@ -26,6 +26,12 @@ try:
             from .markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
         else:
             from markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
+    except SyntaxError as error:
+        # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
+        raise ImportError(
+            "{} を読めません（SyntaxError: {}）。yomiyasu_lint.py と同じ版の markdown_visibility.py を置いてください。".format(
+                error.filename or "markdown_visibility.py", error.msg),
+            name=(__package__ + ".markdown_visibility") if __package__ else "markdown_visibility") from error
     except ImportError as error:
         # spec_from_file_location で直接読まれると、このファイルのフォルダが sys.path にないことがある。
         # 別の版の markdown_visibility がすでに読まれていて、要る名前がないこともある。
@@ -39,7 +45,15 @@ try:
         _visibility_spec = importlib.util.spec_from_file_location(
             "_yomiyasu_markdown_visibility", Path(__file__).with_name("markdown_visibility.py"))
         _visibility_module = importlib.util.module_from_spec(_visibility_spec)
-        _visibility_spec.loader.exec_module(_visibility_module)
+        try:
+            _visibility_spec.loader.exec_module(_visibility_module)
+        except (OSError, SyntaxError) as _load_error:
+            # 隣に markdown_visibility.py がない、または壊れている。ImportError にして、スクリプトでは終了コード3にする
+            # （OSError と SyntaxError のままだと外の except で受けられず、トレースバックと終了コード1になる。diff と同じ）。
+            raise ImportError(
+                "{} を読めません（{}: {}）。yomiyasu_lint.py と同じ版の markdown_visibility.py を同じフォルダに置いてください。".format(
+                    _visibility_spec.origin, type(_load_error).__name__, _load_error),
+                name=expected) from _load_error
         _missing = [name for name in _VISIBILITY_NAMES if not hasattr(_visibility_module, name)]
         if _missing:
             raise ImportError(
@@ -2151,6 +2165,8 @@ def _build_parser():
         epilog=_EXIT_CODES,
         formatter_class=_HelpFormatter,
         add_help=False,
+        # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる（DESIGN-interfaces.md 10.7）
+        allow_abbrev=False,
     )
     arguments = parser.add_argument_group("引数")
     arguments.add_argument("file", nargs="?",

@@ -948,6 +948,45 @@ class TestMainDecisions(LintCase):
                 self.assertEqual(process.stdout, "")
                 self.assertEqual(process.stderr.rstrip("\n"), MEANING_RISK_MESSAGE)
 
+    def test_abbreviations_are_not_accepted(self):
+        """10.7: argparse の省略形を受けない（allow_abbrev=False。lint、diff、check の3本でそろえる）。"""
+        for args in (["--js"], ["--stri"], ["--fail", "warn"], ["--vers"]):
+            with self.subTest(args=args):
+                process = run_lint(args, stdin="x\n")
+                self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
+                self.assertEqual(process.stdout, "")
+                self.assertIn("unrecognized arguments", process.stderr)
+                self.assertEqual(process.stderr.rstrip("\n").split("\n")[-1],
+                                 "引数の誤りです。yomiyasu_lint.py -h で使い方を確かめてください。")
+
+    def test_missing_or_broken_markdown_visibility_is_an_internal_error(self):
+        """10.7: 隣に markdown_visibility.py がない、または読めない（構文の誤り）ときも、diff と同じく、スクリプトとしては
+        終了コード3（1は --strict と --fail-on に当たったときだけ）。モジュールとして読むときは ImportError。"""
+        sample = self.write("warn.md", WARN_ONLY)
+        for case, content in (("missing", None), ("syntax-error", "def broken(:\n")):
+            folder = self.root / case
+            folder.mkdir()
+            (folder / "yomiyasu_lint.py").write_bytes(LINT.read_bytes())
+            if content is not None:
+                (folder / "markdown_visibility.py").write_text(content, encoding="utf-8")
+            with self.subTest(case=case, run="script"):
+                process = subprocess.run(
+                    [sys.executable, "-B", str(folder / "yomiyasu_lint.py"), "--fail-on=warn", str(sample)],
+                    stdin=subprocess.DEVNULL, capture_output=True, encoding="utf-8", errors="replace", timeout=30,
+                    cwd=str(self.root), env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+                self.assertEqual(process.returncode, 3, process.stdout + process.stderr)
+                self.assertEqual(process.stdout, "")
+                first_line = process.stderr.split("\n")[0]
+                self.assertTrue(first_line.startswith("yomiyasu_lint.py: 内部エラー: ImportError: "), process.stderr)
+                self.assertIn("markdown_visibility.py", first_line)
+            with self.subTest(case=case, run="module"):
+                process = subprocess.run(
+                    [sys.executable, "-B", "-c", LOAD_LINT_WORKER, str(folder / "yomiyasu_lint.py")],
+                    input=WARN_ONLY, capture_output=True, encoding="utf-8", errors="replace", timeout=30,
+                    cwd=str(self.root), env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+                self.assertEqual(process.returncode, 0, process.stderr)
+                self.assertTrue(process.stdout.startswith("ImportError"), process.stdout)
+
     def test_closed_output_pipe_exits_3_without_traceback(self):
         """読む側が先に閉じたときは、トレースバックを出さずに終了コード3（出力の大きさによらない）。"""
         big = "重要なのは、テストを書くことです。\n" * 20000

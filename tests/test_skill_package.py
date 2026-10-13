@@ -28,6 +28,7 @@ class SkillPackageTests(unittest.TestCase):
             "references/domains/essay.md",
             "scripts/yomiyasu_lint.py",
             "scripts/yomiyasu_diff.py",
+            "scripts/yomiyasu_check.py",
             "scripts/markdown_visibility.py",
             "LICENSE",
             "UNICODE-LICENSE.txt",
@@ -38,11 +39,11 @@ class SkillPackageTests(unittest.TestCase):
     def test_distributed_scripts_are_only_the_skill_tools(self):
         # Corpus and setup scripts stay at the repository root and out of the release ZIP.
         names = sorted(path.name for path in (PACKAGE / "scripts").glob("*.py"))
-        self.assertEqual(names, ["markdown_visibility.py", "yomiyasu_diff.py", "yomiyasu_lint.py"])
+        self.assertEqual(names, ["markdown_visibility.py", "yomiyasu_check.py", "yomiyasu_diff.py", "yomiyasu_lint.py"])
 
     def test_root_copies_match_distributed_skill(self):
         # Tests import the root copies, so a drift would leave the distributed files untested.
-        for name in ("yomiyasu_lint.py", "yomiyasu_diff.py", "markdown_visibility.py"):
+        for name in ("yomiyasu_lint.py", "yomiyasu_diff.py", "yomiyasu_check.py", "markdown_visibility.py"):
             with self.subTest(script=name):
                 self.assertEqual((ROOT / "scripts" / name).read_bytes(), (PACKAGE / "scripts" / name).read_bytes())
         root_references = ROOT / "references"

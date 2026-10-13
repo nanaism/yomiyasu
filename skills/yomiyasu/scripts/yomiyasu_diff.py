@@ -3128,6 +3128,8 @@ def _build_parser():
         epilog=_EXIT_CODES,
         formatter_class=_HelpFormatter,
         add_help=False,
+        # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる（DESIGN-interfaces.md 10.7）
+        allow_abbrev=False,
     )
     arguments = parser.add_argument_group("引数")
     arguments.add_argument("files", nargs="*", metavar="ファイル",
