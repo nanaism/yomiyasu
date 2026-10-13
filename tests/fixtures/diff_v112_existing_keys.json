@@ -1,0 +1,1347 @@
+{
+ "description": "yomiyasu v1.1.2 の diff() が合成20組に返した9キー。v2.0.0 の diff() も、同じ文字列なら同じ中身を返す（DESIGN-interfaces.md 2.2、2.8、6.3）。入力は合成の文で、BOM を含まない。",
+ "generated_by": "v200-development/step1/make_diff_fixture.py",
+ "source_commit": "602a369",
+ "source_sha256": {
+  "yomiyasu_diff.py": "b704e088fd6e1b01c21fb6b97373cc21d441cb14e976f3a47a95c3ba1c73a964",
+  "markdown_visibility.py": "7e6f739114bc28b132aa8e2bcfb51c7de7f441c12a54431c7248b5353a9966bb"
+ },
+ "keys": [
+  "markers",
+  "new_words",
+  "lost_words",
+  "structure",
+  "spans",
+  "logic",
+  "bold",
+  "endings",
+  "type_changes"
+ ],
+ "cases": [
+  {
+   "id": "request_to_invite",
+   "orig": "資料を共有してください。\n",
+   "rewrite": "資料を共有しましょう。\n",
+   "stance": null,
+   "expected": {
+    "markers": [
+     {
+      "kind": "依頼",
+      "orig": 1,
+      "rewrite": 0,
+      "orig_hits": [
+       "てください"
+      ],
+      "rewrite_hits": []
+     },
+     {
+      "kind": "勧誘",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "ましょう"
+      ]
+     }
+    ],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [
+     {
+      "added": "ましょう",
+      "was": "てください",
+      "kinds": [
+       "勧誘"
+      ],
+      "new_words": [],
+      "where": "資料を共有し［ましょう］。"
+     }
+    ],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [
+      {
+       "orig": "資料を共有してください。",
+       "orig_kind": "依頼",
+       "rewrite": "資料を共有しましょう。",
+       "rewrite_kind": "勧め"
+      }
+     ],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": [
+     {
+      "orig": "資料を共有してください。",
+      "rewrite": "資料を共有しましょう。",
+      "lost": [
+       {
+        "kind": "依頼・決まり",
+        "hits": [
+         "てください"
+        ]
+       }
+      ],
+      "added": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "hearsay_to_assertion",
+   "orig": "原因は設定ミスだとされる。\n",
+   "rewrite": "原因は設定ミスだ。\n",
+   "stance": null,
+   "expected": {
+    "markers": [],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": [
+     {
+      "orig": "原因は設定ミスだとされる。",
+      "rewrite": "原因は設定ミスだ。",
+      "lost": [
+       {
+        "kind": "伝聞",
+        "hits": [
+         "とされる"
+        ]
+       }
+      ],
+      "added": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "proper_nouns",
+   "orig": "会議は東京の本社で開きます。\n",
+   "rewrite": "会議は大阪の支社で開きます。\n",
+   "stance": null,
+   "expected": {
+    "markers": [],
+    "new_words": [
+     "大阪",
+     "支社"
+    ],
+    "lost_words": [
+     "本社",
+     "東京"
+    ],
+    "structure": [],
+    "spans": [
+     {
+      "added": "大阪",
+      "was": "東京",
+      "kinds": [],
+      "new_words": [
+       "大阪"
+      ],
+      "where": "会議は［大阪］の支社で開きます。"
+     }
+    ],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "list_to_prose",
+   "orig": "# 準備\n\n- 設定ファイルを開きます。\n- 値を変更してください。\n- 保存期間は3日です。\n",
+   "rewrite": "# 準備\n\n設定ファイルを開き、値を変更しましょう。保存期間は30日です。\n",
+   "stance": null,
+   "expected": {
+    "markers": [
+     {
+      "kind": "依頼",
+      "orig": 1,
+      "rewrite": 0,
+      "orig_hits": [
+       "てください"
+      ],
+      "rewrite_hits": []
+     },
+     {
+      "kind": "勧誘",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "ましょう"
+      ]
+     }
+    ],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [
+     "箇条書きを地の文にした。各項目の文末（指示・説明・評価）が元と同じか見る",
+     "文の数が変わった（4 → 3）"
+    ],
+    "spans": [
+     {
+      "added": "ましょう",
+      "was": "てください",
+      "kinds": [
+       "勧誘"
+      ],
+      "new_words": [],
+      "where": "備\n\n設定ファイルを開き、値を変更し［ましょう］。保存期間は30日です。"
+     }
+    ],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [
+      {
+       "orig": "設定ファイルを開きます。",
+       "orig_kind": "動作（〜します）・箇条書き",
+       "rewrite": "設定ファイルを開き、値を変更しましょう。",
+       "rewrite_kind": "勧め"
+      }
+     ],
+     "flags": [],
+     "orig_flags": [
+      {
+       "note": "動作の「〜します」と、勧め・依頼が同じ文章にある。「〜します」が書き手の側の予定・決まった手順なのか、読み手にしてほしい行動なのかを見る",
+       "sentences": [
+        "設定ファイルを開きます。",
+        "値を変更してください。"
+       ]
+      }
+     ]
+    },
+    "type_changes": [
+     {
+      "orig": "値を変更してください。",
+      "rewrite": "設定ファイルを開き、値を変更しましょう。",
+      "lost": [
+       {
+        "kind": "依頼・決まり",
+        "hits": [
+         "てください"
+        ]
+       }
+      ],
+      "added": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "merge_paragraphs",
+   "orig": "最初に画面を開きます。\n\n次に項目を選びます。\n\n最後に保存します。\n",
+   "rewrite": "最初に画面を開き、項目を選んでから保存します。\n",
+   "stance": null,
+   "expected": {
+    "markers": [
+     {
+      "kind": "つなぎ",
+      "orig": 2,
+      "rewrite": 0,
+      "orig_hits": [
+       "次に",
+       "最後に"
+      ],
+      "rewrite_hits": []
+     }
+    ],
+    "new_words": [],
+    "lost_words": [
+     "最後"
+    ],
+    "structure": [
+     "段落をまとめた（3 → 1）。まとめた段落の話題が1つか見る",
+     "文の数が変わった（3 → 1）"
+    ],
+    "spans": [],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "sentence_count",
+   "orig": "手順は簡単です。\n",
+   "rewrite": "手順は簡単です。三つの操作で終わります。\n",
+   "stance": null,
+   "expected": {
+    "markers": [],
+    "new_words": [
+     "操作"
+    ],
+    "lost_words": [],
+    "structure": [
+     "文の数が変わった（1 → 2）"
+    ],
+    "spans": [
+     {
+      "added": "三つの操作で終わります。",
+      "was": "",
+      "kinds": [],
+      "new_words": [
+       "操作"
+      ],
+      "where": "手順は簡単です。［三つの操作で終わります。］"
+     }
+    ],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "leading_connective",
+   "orig": "結果を記録する。記録は毎週見直す。\n",
+   "rewrite": "結果を記録する。しかし、記録は毎週見直す。\n",
+   "stance": null,
+   "expected": {
+    "markers": [
+     {
+      "kind": "つなぎ",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "しかし"
+      ]
+     }
+    ],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [
+     {
+      "added": "しかし、",
+      "was": "",
+      "kinds": [
+       "つなぎ"
+      ],
+      "new_words": [],
+      "where": "結果を記録する。［しかし、］記録は毎週見直す。"
+     }
+    ],
+    "logic": [
+     {
+      "kind": "文頭のつなぎ",
+      "sentence": "しかし、記録は毎週見直す。"
+     }
+    ],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "bold_not_rendered",
+   "orig": "これは大事な点です。\n",
+   "rewrite": "これは**「大事」**な点です。\n",
+   "stance": null,
+   "expected": {
+    "markers": [],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [
+     {
+      "added": "「",
+      "was": "",
+      "kinds": [
+       "評価"
+      ],
+      "new_words": [],
+      "where": "これは［「］大事」な点です。"
+     },
+     {
+      "added": "」",
+      "was": "",
+      "kinds": [
+       "評価"
+      ],
+      "new_words": [],
+      "where": "これは「大事［」］な点です。"
+     }
+    ],
+    "logic": [
+     {
+      "kind": "文頭の指示語",
+      "sentence": "これは「大事」な点です。"
+     }
+    ],
+    "bold": [
+     {
+      "line": 1,
+      "found": "これは**「大事」**な点です",
+      "suggest": "これは「**大事**」な点です",
+      "how": "かっこの内側だけを太字にする"
+     }
+    ],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "stance_recommend",
+   "orig": "設定を確認します。値が違えば直します。\n",
+   "rewrite": "設定を確認しましょう。値が違えば直してください。\n",
+   "stance": "勧め",
+   "expected": {
+    "markers": [
+     {
+      "kind": "依頼",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "てください"
+      ]
+     },
+     {
+      "kind": "勧誘",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "ましょう"
+      ]
+     }
+    ],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [
+     {
+      "added": "しょう",
+      "was": "す",
+      "kinds": [
+       "勧誘"
+      ],
+      "new_words": [],
+      "where": "設定を確認しま［しょう］。値が違えば直してください。"
+     },
+     {
+      "added": "てください",
+      "was": "ます",
+      "kinds": [
+       "依頼"
+      ],
+      "new_words": [],
+      "where": "設定を確認しましょう。値が違えば直し［てください］。"
+     }
+    ],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": "勧め",
+     "changes": [
+      {
+       "orig": "設定を確認します。",
+       "orig_kind": "動作（〜します）",
+       "rewrite": "設定を確認しましょう。",
+       "rewrite_kind": "勧め"
+      },
+      {
+       "orig": "値が違えば直します。",
+       "orig_kind": "動作（〜します）",
+       "rewrite": "値が違えば直してください。",
+       "rewrite_kind": "依頼"
+      }
+     ],
+     "flags": [],
+     "orig_flags": [
+      {
+       "note": "勧めの文書に、動作を表す「〜します」がある。書き手の予定や手順・道具の説明か、読み手への依頼かを原文と文脈から確認する",
+       "sentences": [
+        "設定を確認します。",
+        "値が違えば直します。"
+       ]
+      }
+     ]
+    },
+    "type_changes": [
+     {
+      "orig": "値が違えば直します。",
+      "rewrite": "値が違えば直してください。",
+      "lost": [],
+      "added": [
+       {
+        "kind": "依頼・決まり",
+        "hits": [
+         "てください"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "stance_rule",
+   "orig": "申請は月曜までに出します。\n",
+   "rewrite": "申請は月曜までに出しましょう。\n",
+   "stance": "決まり",
+   "expected": {
+    "markers": [
+     {
+      "kind": "勧誘",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "ましょう"
+      ]
+     }
+    ],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [
+     {
+      "added": "しょう",
+      "was": "す",
+      "kinds": [
+       "勧誘"
+      ],
+      "new_words": [],
+      "where": "申請は月曜までに出しま［しょう］。"
+     }
+    ],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": "決まり",
+     "changes": [
+      {
+       "orig": "申請は月曜までに出します。",
+       "orig_kind": "動作（〜します）",
+       "rewrite": "申請は月曜までに出しましょう。",
+       "rewrite_kind": "勧め"
+      }
+     ],
+     "flags": [
+      {
+       "note": "決まり・手順の文書に、勧めや評価の文末がある。決まりそのものなら決まりの形（〜します）にする。決まりの理由や前提を述べる文なら残す。「〜してください」はそのままでよい",
+       "sentences": [
+        "申請は月曜までに出しましょう。"
+       ]
+      }
+     ],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "stance_explain",
+   "orig": "この方式は速いと思う。\n",
+   "rewrite": "この方式は速い。\n",
+   "stance": "説明",
+   "expected": {
+    "markers": [
+     {
+      "kind": "推量",
+      "orig": 1,
+      "rewrite": 0,
+      "orig_hits": [
+       "と思う"
+      ],
+      "rewrite_hits": []
+     }
+    ],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [],
+    "logic": [
+     {
+      "kind": "文頭の指示語",
+      "sentence": "この方式は速い。"
+     }
+    ],
+    "bold": [],
+    "endings": {
+     "stance": "説明",
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": [
+     {
+      "orig": "この方式は速いと思う。",
+      "rewrite": "この方式は速い。",
+      "lost": [
+       {
+        "kind": "意見",
+        "hits": [
+         "と思う"
+        ]
+       }
+      ],
+      "added": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "heading_and_code",
+   "orig": "## 手順\n\n次のコマンドで確かめます。\n\n```sh\nretention=3\n```\n",
+   "rewrite": "### 手順\n\n次のコマンドで確かめましょう。\n\n```sh\nretention=30\n```\n",
+   "stance": null,
+   "expected": {
+    "markers": [
+     {
+      "kind": "勧誘",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "ましょう"
+      ]
+     }
+    ],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [
+     {
+      "added": "しょう",
+      "was": "す",
+      "kinds": [
+       "勧誘"
+      ],
+      "new_words": [],
+      "where": "手順\n\n次のコマンドで確かめま［しょう］。\n\n```sh\nretention"
+     }
+    ],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [
+      {
+       "orig": "次のコマンドで確かめます。",
+       "orig_kind": "動作（〜します）",
+       "rewrite": "次のコマンドで確かめましょう。",
+       "rewrite_kind": "勧め"
+      }
+     ],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "similar_paragraphs_reordered",
+   "orig": "最初の週は記録を残してください。結果は会議で共有するべきだ。\n\n次の週は記録を残してください。結果は掲示板で共有するべきだ。\n\n最後の週は記録を残してください。結果は報告書で共有するべきだ。\n\nどの週も記録は残すと思う。\n",
+   "rewrite": "次の週は記録を残しましょう。結果は掲示板で共有する。\n\n最初の週は記録を残してください。結果は会議で共有するべきだ。\n\n最後の週も記録を残す。結果は報告書で共有するべきだとされる。\n\nどの週も記録は残す。\n",
+   "stance": null,
+   "expected": {
+    "markers": [
+     {
+      "kind": "依頼",
+      "orig": 3,
+      "rewrite": 1,
+      "orig_hits": [
+       "てください",
+       "てください",
+       "てください"
+      ],
+      "rewrite_hits": [
+       "てください"
+      ]
+     },
+     {
+      "kind": "勧誘",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "ましょう"
+      ]
+     },
+     {
+      "kind": "義務",
+      "orig": 3,
+      "rewrite": 2,
+      "orig_hits": [
+       "べき",
+       "べき",
+       "べき"
+      ],
+      "rewrite_hits": [
+       "べき",
+       "べき"
+      ]
+     },
+     {
+      "kind": "推量",
+      "orig": 1,
+      "rewrite": 0,
+      "orig_hits": [
+       "と思う"
+      ],
+      "rewrite_hits": []
+     }
+    ],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [
+     {
+      "added": "次の週は記録を残しましょう。結果は掲示板で共有する。\n\n",
+      "was": "",
+      "kinds": [
+       "勧誘"
+      ],
+      "new_words": [],
+      "where": "［次の週は記録を残しましょう。結果は掲示板で共有する。\n\n］最初の週は記録を残してください。結果"
+     },
+     {
+      "added": "とされる",
+      "was": "",
+      "kinds": [
+       "義務"
+      ],
+      "new_words": [],
+      "where": "を残す。結果は報告書で共有するべきだ［とされる］。\n\nどの週も記録は残す。"
+     }
+    ],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [
+      {
+       "orig": "次の週は記録を残してください。",
+       "orig_kind": "依頼",
+       "rewrite": "次の週は記録を残しましょう。",
+       "rewrite_kind": "勧め"
+      },
+      {
+       "orig": "最後の週は記録を残してください。",
+       "orig_kind": "依頼",
+       "rewrite": "最後の週も記録を残す。",
+       "rewrite_kind": "常体"
+      }
+     ],
+     "flags": [
+      {
+       "note": "常体の文の中に、敬体の文がある",
+       "sentences": [
+        "次の週は記録を残しましょう。",
+        "最初の週は記録を残してください。"
+       ]
+      }
+     ],
+     "orig_flags": [
+      {
+       "note": "常体の文の中に、敬体の文がある",
+       "sentences": [
+        "最初の週は記録を残してください。",
+        "次の週は記録を残してください。",
+        "最後の週は記録を残してください。"
+       ]
+      }
+     ]
+    },
+    "type_changes": [
+     {
+      "orig": "次の週は記録を残してください。",
+      "rewrite": "最後の週も記録を残す。",
+      "lost": [
+       {
+        "kind": "依頼・決まり",
+        "hits": [
+         "てください"
+        ]
+       }
+      ],
+      "added": []
+     },
+     {
+      "orig": "結果は報告書で共有するべきだ。",
+      "rewrite": "結果は報告書で共有するべきだとされる。",
+      "lost": [],
+      "added": [
+       {
+        "kind": "伝聞",
+        "hits": [
+         "とされる"
+        ]
+       }
+      ]
+     },
+     {
+      "orig": "どの週も記録は残すと思う。",
+      "rewrite": "どの週も記録は残す。",
+      "lost": [
+       {
+        "kind": "意見",
+        "hits": [
+         "と思う"
+        ]
+       }
+      ],
+      "added": []
+     },
+     {
+      "orig": "結果は掲示板で共有するべきだ。",
+      "rewrite": "結果は掲示板で共有する。",
+      "lost": [
+       {
+        "kind": "依頼・決まり",
+        "hits": [
+         "べき"
+        ]
+       }
+      ],
+      "added": []
+     },
+     {
+      "orig": "最後の週は記録を残してください。",
+      "rewrite": "次の週は記録を残しましょう。",
+      "lost": [
+       {
+        "kind": "依頼・決まり",
+        "hits": [
+         "てください"
+        ]
+       }
+      ],
+      "added": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "quote",
+   "orig": "> 締め切りは金曜です。\n\n引用の言葉を残します。\n",
+   "rewrite": "> 締め切りは月曜です。\n\n引用の言葉はそのまま残します。\n",
+   "stance": null,
+   "expected": {
+    "markers": [],
+    "new_words": [
+     "月曜"
+    ],
+    "lost_words": [
+     "金曜"
+    ],
+    "structure": [],
+    "spans": [],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "same_text_with_bold",
+   "orig": "これは**「重要」**です。\n",
+   "rewrite": "これは**「重要」**です。\n",
+   "stance": null,
+   "expected": {
+    "markers": [],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [],
+    "logic": [
+     {
+      "kind": "文頭の指示語",
+      "sentence": "これは「重要」です。"
+     }
+    ],
+    "bold": [
+     {
+      "line": 1,
+      "found": "これは**「重要」**です。",
+      "suggest": "これは「**重要**」です。",
+      "how": "かっこの内側だけを太字にする"
+     }
+    ],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "number_only",
+   "orig": "保存期間は3日です。\n",
+   "rewrite": "保存期間は30日です。\n",
+   "stance": null,
+   "expected": {
+    "markers": [],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "negation_only",
+   "orig": "ログを送信します。\n",
+   "rewrite": "ログを送信しません。\n",
+   "stance": null,
+   "expected": {
+    "markers": [],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": []
+   }
+  },
+  {
+   "id": "similar_sections_reordered",
+   "orig": "## 月曜\n\n担当者は朝に在庫を数えてください。数は表に書くべきだ。\n\n## 火曜\n\n担当者は朝に在庫を数えてください。数は表に書くべきだ。\n\n## 水曜\n\n担当者は朝に在庫を数えてください。数は表に書くべきだ。\n\n## 木曜\n\n担当者は昼に在庫を数えてください。数は帳簿に書くべきだ。\n",
+   "rewrite": "## 月曜\n\n担当者は朝に在庫を数えましょう。数は表に書く。\n\n## 水曜\n\n担当者は朝に在庫を数えてください。数は表に書くべきだ。\n\n## 火曜\n\n担当者は夕方に倉庫の在庫を数えてください。数は表に書くらしい。\n\n## 木曜\n\n担当者は昼に在庫を数えてください。数は帳簿に書くべきだ。\n",
+   "stance": null,
+   "expected": {
+    "markers": [
+     {
+      "kind": "依頼",
+      "orig": 4,
+      "rewrite": 3,
+      "orig_hits": [
+       "てください",
+       "てください",
+       "てください",
+       "てください"
+      ],
+      "rewrite_hits": [
+       "てください",
+       "てください",
+       "てください"
+      ]
+     },
+     {
+      "kind": "勧誘",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "ましょう"
+      ]
+     },
+     {
+      "kind": "義務",
+      "orig": 4,
+      "rewrite": 2,
+      "orig_hits": [
+       "べき",
+       "べき",
+       "べき",
+       "べき"
+      ],
+      "rewrite_hits": [
+       "べき",
+       "べき"
+      ]
+     },
+     {
+      "kind": "推量",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "らしい"
+      ]
+     }
+    ],
+    "new_words": [
+     "倉庫",
+     "夕方"
+    ],
+    "lost_words": [],
+    "structure": [],
+    "spans": [
+     {
+      "added": "曜\n\n担当者は朝に在庫を数えましょう。数は表に書く。\n\n水",
+      "was": "",
+      "kinds": [
+       "勧誘"
+      ],
+      "new_words": [],
+      "where": "月［曜\n\n担当者は朝に在庫を数えましょう。数は表に書く。\n\n水］曜\n\n担当者は朝に在庫を数えてくださ"
+     },
+     {
+      "added": "夕方",
+      "was": "朝",
+      "kinds": [],
+      "new_words": [
+       "夕方"
+      ],
+      "where": "表に書くべきだ。\n\n火曜\n\n担当者は［夕方］に倉庫の在庫を数えてください。数は表"
+     },
+     {
+      "added": "倉庫の",
+      "was": "",
+      "kinds": [],
+      "new_words": [
+       "倉庫"
+      ],
+      "where": "くべきだ。\n\n火曜\n\n担当者は夕方に［倉庫の］在庫を数えてください。数は表に書くら"
+     },
+     {
+      "added": "らし",
+      "was": "べきだ。\n\n水曜\n\n担当者は朝に在庫を数えてくださ",
+      "kinds": [
+       "推量"
+      ],
+      "new_words": [],
+      "where": "の在庫を数えてください。数は表に書く［らし］い。\n\n木曜\n\n担当者は昼に在庫を数"
+     }
+    ],
+    "logic": [],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [
+      {
+       "orig": "担当者は朝に在庫を数えてください。",
+       "orig_kind": "依頼",
+       "rewrite": "担当者は朝に在庫を数えましょう。",
+       "rewrite_kind": "勧め"
+      }
+     ],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": [
+     {
+      "orig": "数は表に書くべきだ。",
+      "rewrite": "数は表に書くらしい。",
+      "lost": [
+       {
+        "kind": "依頼・決まり",
+        "hits": [
+         "べき"
+        ]
+       }
+      ],
+      "added": [
+       {
+        "kind": "推量",
+        "hits": [
+         "らしい"
+        ]
+       }
+      ]
+     }
+    ]
+   }
+  },
+  {
+   "id": "crlf_both_sides",
+   "orig": "期限は来週です。\r\nそれまでに直してください。\r\n",
+   "rewrite": "期限は来週です。\r\nそれまでに直しましょう。\r\n",
+   "stance": null,
+   "expected": {
+    "markers": [
+     {
+      "kind": "依頼",
+      "orig": 1,
+      "rewrite": 0,
+      "orig_hits": [
+       "てください"
+      ],
+      "rewrite_hits": []
+     },
+     {
+      "kind": "勧誘",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "ましょう"
+      ]
+     }
+    ],
+    "new_words": [],
+    "lost_words": [],
+    "structure": [],
+    "spans": [
+     {
+      "added": "ましょう",
+      "was": "てください",
+      "kinds": [
+       "勧誘"
+      ],
+      "new_words": [],
+      "where": "期限は来週です。\r\nそれまでに直し［ましょう］。"
+     }
+    ],
+    "logic": [
+     {
+      "kind": "文頭の指示語",
+      "sentence": "それまでに直しましょう。"
+     }
+    ],
+    "bold": [],
+    "endings": {
+     "stance": null,
+     "changes": [
+      {
+       "orig": "それまでに直してください。",
+       "orig_kind": "依頼",
+       "rewrite": "それまでに直しましょう。",
+       "rewrite_kind": "勧め"
+      }
+     ],
+     "flags": [],
+     "orig_flags": []
+    },
+    "type_changes": [
+     {
+      "orig": "それまでに直してください。",
+      "rewrite": "それまでに直しましょう。",
+      "lost": [
+       {
+        "kind": "依頼・決まり",
+        "hits": [
+         "てください"
+        ]
+       }
+      ],
+      "added": []
+     }
+    ]
+   }
+  },
+  {
+   "id": "longer_rewrite",
+   "orig": "# 振り返り\n\nこの変更で速くなったと思う。\n原因は古いキャッシュらしい。\nまるで渋滞のような状態だった。\n\n- 計測を続ける。\n- 結果を共有してください。\n",
+   "rewrite": "# 振り返り\n\nこの変更で速くなった。\n原因は古いキャッシュだ。\n処理が詰まっていた。\n\n計測を続け、結果を共有しましょう。\n",
+   "stance": "説明",
+   "expected": {
+    "markers": [
+     {
+      "kind": "依頼",
+      "orig": 1,
+      "rewrite": 0,
+      "orig_hits": [
+       "てください"
+      ],
+      "rewrite_hits": []
+     },
+     {
+      "kind": "勧誘",
+      "orig": 0,
+      "rewrite": 1,
+      "orig_hits": [],
+      "rewrite_hits": [
+       "ましょう"
+      ]
+     },
+     {
+      "kind": "可能",
+      "orig": 1,
+      "rewrite": 0,
+      "orig_hits": [
+       "ける"
+      ],
+      "rewrite_hits": []
+     },
+     {
+      "kind": "推量",
+      "orig": 2,
+      "rewrite": 0,
+      "orig_hits": [
+       "と思う",
+       "らしい"
+      ],
+      "rewrite_hits": []
+     }
+    ],
+    "new_words": [
+     "処理"
+    ],
+    "lost_words": [
+     "渋滞",
+     "状態"
+    ],
+    "structure": [
+     "箇条書きを地の文にした。各項目の文末（指示・説明・評価）が元と同じか見る",
+     "文の数が変わった（6 → 5）"
+    ],
+    "spans": [
+     {
+      "added": "処理が詰",
+      "was": "",
+      "kinds": [],
+      "new_words": [
+       "処理"
+      ],
+      "where": "なった。\n原因は古いキャッシュだ。\n［処理が詰］まっていた。\n\n計測を続け、結果を共"
+     },
+     {
+      "added": "ましょう",
+      "was": "てください",
+      "kinds": [
+       "勧誘"
+      ],
+      "new_words": [],
+      "where": "ていた。\n\n計測を続け、結果を共有し［ましょう］。"
+     }
+    ],
+    "logic": [
+     {
+      "kind": "文頭の指示語",
+      "sentence": "この変更で速くなった。"
+     }
+    ],
+    "bold": [],
+    "endings": {
+     "stance": "説明",
+     "changes": [
+      {
+       "orig": "計測を続ける。",
+       "orig_kind": "常体・箇条書き",
+       "rewrite": "計測を続け、結果を共有しましょう。",
+       "rewrite_kind": "勧め"
+      }
+     ],
+     "flags": [
+      {
+       "note": "常体の文の中に、敬体の文がある",
+       "sentences": [
+        "計測を続け、結果を共有しましょう。"
+       ]
+      }
+     ],
+     "orig_flags": [
+      {
+       "note": "常体の文の中に、敬体の文がある",
+       "sentences": [
+        "結果を共有してください。"
+       ]
+      }
+     ]
+    },
+    "type_changes": [
+     {
+      "orig": "この変更で速くなったと思う。",
+      "rewrite": "この変更で速くなった。",
+      "lost": [
+       {
+        "kind": "意見",
+        "hits": [
+         "と思う"
+        ]
+       }
+      ],
+      "added": []
+     },
+     {
+      "orig": "原因は古いキャッシュらしい。",
+      "rewrite": "原因は古いキャッシュだ。",
+      "lost": [
+       {
+        "kind": "推量",
+        "hits": [
+         "らしい"
+        ]
+       }
+      ],
+      "added": []
+     },
+     {
+      "orig": "まるで渋滞のような状態だった。",
+      "rewrite": "処理が詰まっていた。",
+      "lost": [
+       {
+        "kind": "例え",
+        "hits": [
+         "まるで",
+         "ような"
+        ]
+       }
+      ],
+      "added": []
+     },
+     {
+      "orig": "結果を共有してください。",
+      "rewrite": "計測を続け、結果を共有しましょう。",
+      "lost": [
+       {
+        "kind": "依頼・決まり",
+        "hits": [
+         "てください"
+        ]
+       }
+      ],
+      "added": []
+     }
+    ]
+   }
+  }
+ ]
+}
