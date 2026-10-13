@@ -3,6 +3,7 @@
 Offsets are half-open Python string positions. This is a targeted scanner,
 not a claim to implement every CommonMark or GFM construct.
 """
+__version__ = "2.0.0"
 
 import re
 import unicodedata
@@ -713,3 +714,33 @@ def range_overlaps_protected(analysis, start, end, protected_kinds=None):
         masks, ends = cache[key]
     index = bisect_right(ends, start)
     return index < len(masks) and masks[index][0] < end
+
+
+def decode_source(data):
+    """入力のバイト列を、検査に使う文字列にする。lint、diff、check で同じ読み方にするための関数。
+
+    UTF-8 として厳密に解き（読めなければ UnicodeDecodeError）、先頭の BOM を1つ外し、
+    CRLF と CR を LF にそろえる。戻り値は (文字列, 情報) の組。情報は
+    {"bom": BOM があったか, "eol": 元の改行コード}。eol は "lf"、"crlf"、"cr"、
+    2種類以上が混ざるときは "mixed"、改行がなければ "none"。
+
+    標準入力が StringIO のようにバイト列を読めないときは、read() した文字列を渡してよい。
+    そのときは解く処理を飛ばし、BOM と改行の処理だけをする。
+    """
+    if isinstance(data, str):
+        text = data
+    else:
+        text = bytes(data).decode("utf-8")
+    bom = text.startswith("\ufeff")
+    if bom:
+        text = text[1:]
+    if "\r" in text:
+        crlf = text.count("\r\n")
+        cr = text.count("\r") - crlf
+        lf = text.count("\n") - crlf
+        kinds = [name for name, count in (("lf", lf), ("crlf", crlf), ("cr", cr)) if count]
+        eol = kinds[0] if len(kinds) == 1 else "mixed"
+        text = text.replace("\r\n", "\n").replace("\r", "\n")
+    else:
+        eol = "lf" if "\n" in text else "none"
+    return text, {"bom": bom, "eol": eol}

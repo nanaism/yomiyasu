@@ -206,8 +206,8 @@ class TestSentenceEndRepetition(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         report = json.loads(result.stdout)
         self.assertEqual(report["findings"], [])
-        self.assertEqual(report["score"], 100)
-        self.assertTrue(report["is_clean"])
+        self.assertEqual(report["rule_penalty_score"], 100)
+        self.assertTrue(report["no_rule_findings"])
 
     def test_public_cli_strict_still_rejects_three_in_one_paragraph(self):
         text = "設定を読みます。\n起動します。\n画面を確認します。"
@@ -229,8 +229,8 @@ class TestSentenceEndRepetition(unittest.TestCase):
         self.assertEqual(finding["line"], 3)
         self.assertEqual(finding["snippet"], "画面を確認します。")
         self.assertEqual(set(finding), {"rule", "line", "severity", "message", "snippet"})
-        self.assertEqual(report["score"], 95)
-        self.assertFalse(report["is_clean"])
+        self.assertEqual(report["rule_penalty_score"], 95)
+        self.assertFalse(report["no_rule_findings"])
 
 
 if __name__ == "__main__":

@@ -45,7 +45,7 @@ class TestMeltingTimeConjugations(unittest.TestCase):
         for number in range(21, 29):
             path = ROOT / "tests" / "corpus" / "edge_cases" / f"edge_tokasu_{number}.md"
             with self.subTest(path=path.name):
-                self.assertEqual(yomiyasu_lint.lint_text(path.read_text(encoding="utf-8"))["score"], 100)
+                self.assertEqual(yomiyasu_lint.lint_text(path.read_text(encoding="utf-8"))["candidate_count"], 0)
 
 
 class TestHeadingVocabulary(unittest.TestCase):
@@ -59,7 +59,7 @@ class TestHeadingVocabulary(unittest.TestCase):
     def test_edge_case_headings_stay_clean(self):
         for path in sorted((ROOT / "tests" / "corpus" / "edge_cases").glob("*.md")):
             with self.subTest(path=path.name):
-                self.assertEqual(yomiyasu_lint.lint_text(path.read_text(encoding="utf-8"))["score"], 100)
+                self.assertEqual(yomiyasu_lint.lint_text(path.read_text(encoding="utf-8"))["candidate_count"], 0)
 
 
 class TestLiteralHints(unittest.TestCase):

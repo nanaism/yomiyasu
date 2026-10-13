@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-保存済みコーパスに対し、単純な正規表現とyomiyasu_lint.pyの検出件数・スコアを集計する。
+保存済みコーパスに対し、単純な正規表現とyomiyasu_lint.pyの検出件数・スコア（規則の減点の目安）を集計する。
+スコアは lint の rule_penalty_score で、文章の品質の点数ではない。
 検出件数の比は精度や誤検出率ではない。実行するとbenchmark_results.jsonを上書きする。
 """
 import os
@@ -86,7 +87,7 @@ def benchmark_corpus():
 
             g_naive_matches += naive_count
             g_lookaround_findings += len(res["findings"])
-            g_scores.append(res["score"])
+            g_scores.append(res["rule_penalty_score"])
 
             for finding in res["findings"]:
                 rule = finding.get("rule", "")
@@ -102,7 +103,7 @@ def benchmark_corpus():
                 "file": f,
                 "naive_matches": naive_count,
                 "lookaround_findings": len(res["findings"]),
-                "score": res["score"],
+                "score": res["rule_penalty_score"],
                 "char_count": res.get("metrics", {}).get("char_count", len(content))
             })
 
@@ -127,7 +128,7 @@ def benchmark_corpus():
         json.dump(out_data, fp, ensure_ascii=False, indent=2)
 
     print("\n" + "="*70)
-    print(f"コーパスの検出件数とスコア (対象ファイル数: {total_files}本)")
+    print(f"コーパスの検出件数とスコア（規則の減点の目安） (対象ファイル数: {total_files}本)")
     print("="*70)
     print(f"{'グループ':<20} | {'本数':<5} | {'平均点':<6} | {'単純一致件数':<10} | {'リンター指摘件数':<14} | {'件数減少率':<10}")
     print("-" * 75)
@@ -138,6 +139,7 @@ def benchmark_corpus():
         reduction = f"{(1 - look/naive)*100:.1f}%" if naive > 0 else "N/A"
         print(f"{gname:<20} | {s['file_count']:<5} | {s['avg_score']:<6} | {naive:<10} | {look:<14} | {reduction:<10}")
 
+    print("平均点は規則の減点の目安です。文章の品質の点数ではありません。")
     print("\n" + "="*70)
     print(f"詳細結果を保存しました: {RESULTS_PATH}")
     return out_data

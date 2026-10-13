@@ -5,39 +5,67 @@ yomiyasu_lint.py - 日本語の表現とMarkdownの書式を、設定された�
 指摘は見直し候補であり、意味の保持や読みやすさを判定するものではない。
 Python標準ライブラリだけで動作する。
 """
+__version__ = "2.0.0"
 
+import os
 import sys
 import re
 import argparse
 import json
+import traceback
 import unicodedata
 from bisect import bisect_right
 from itertools import chain, compress
 from operator import is_
 from typing import List, Dict, Any, Tuple
+_VISIBILITY_NAMES = ("analyze_markdown", "line_visible_text", "range_overlaps_protected",
+                     "inline_protected_spans", "unicode_whitespace", "decode_source")
 try:
-    if __package__:
-        from .markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace
-    else:
-        from markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace
-except ModuleNotFoundError as error:
-    # A direct spec_from_file_location loader need not put this file's directory
-    # on sys.path. Resolve this internal resource beside the actual source file.
-    expected = (__package__ + ".markdown_visibility") if __package__ else "markdown_visibility"
-    parent = __package__.split(".")[0] if __package__ else "markdown_visibility"
-    if error.name not in (expected, parent):
+    try:
+        if __package__:
+            from .markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
+        else:
+            from markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
+    except ImportError as error:
+        # spec_from_file_location で直接読まれると、このファイルのフォルダが sys.path にないことがある。
+        # 別の版の markdown_visibility がすでに読まれていて、要る名前がないこともある。
+        # どちらのときも、このファイルの隣にある markdown_visibility.py を読む。
+        expected = (__package__ + ".markdown_visibility") if __package__ else "markdown_visibility"
+        parent = __package__.split(".")[0] if __package__ else "markdown_visibility"
+        if error.name not in (expected, parent):
+            raise
+        import importlib.util
+        from pathlib import Path
+        _visibility_spec = importlib.util.spec_from_file_location(
+            "_yomiyasu_markdown_visibility", Path(__file__).with_name("markdown_visibility.py"))
+        _visibility_module = importlib.util.module_from_spec(_visibility_spec)
+        _visibility_spec.loader.exec_module(_visibility_module)
+        _missing = [name for name in _VISIBILITY_NAMES if not hasattr(_visibility_module, name)]
+        if _missing:
+            raise ImportError(
+                "{} に {} がありません。yomiyasu_lint.py と同じ版の markdown_visibility.py を置いてください。".format(
+                    _visibility_spec.origin, "、".join(_missing)),
+                name=expected)
+        analyze_markdown = _visibility_module.analyze_markdown
+        line_visible_text = _visibility_module.line_visible_text
+        range_overlaps_protected = _visibility_module.range_overlaps_protected
+        inline_protected_spans = _visibility_module.inline_protected_spans
+        unicode_whitespace = _visibility_module.unicode_whitespace
+        decode_source = _visibility_module.decode_source
+except ImportError as _import_error:
+    # スクリプトとして動かしたときは、main() が内部エラー（終了コード3）として出す。
+    # 終了コード1は --strict と --fail-on の条件に当たったときだけに使う。
+    # モジュールとして読むときは、そのまま ImportError を出す。
+    if __name__ != "__main__":
         raise
-    import importlib.util
-    from pathlib import Path
-    _visibility_spec = importlib.util.spec_from_file_location(
-        "_yomiyasu_markdown_visibility", Path(__file__).with_name("markdown_visibility.py"))
-    _visibility_module = importlib.util.module_from_spec(_visibility_spec)
-    _visibility_spec.loader.exec_module(_visibility_module)
-    analyze_markdown = _visibility_module.analyze_markdown
-    line_visible_text = _visibility_module.line_visible_text
-    range_overlaps_protected = _visibility_module.range_overlaps_protected
-    inline_protected_spans = _visibility_module.inline_protected_spans
-    unicode_whitespace = _visibility_module.unicode_whitespace
+    _IMPORT_ERROR = _import_error
+else:
+    _IMPORT_ERROR = None
+
+
+# --json の出力の形の版。キーを足すだけなら上げない。キーの意味や型を変えたときに上げる。
+# v1.1.2 までの形（score、is_clean、metrics、findings）を1とみなす。
+LINT_FORMAT_VERSION = 2
 
 
 # Emoji facts are pinned to Unicode 18.0, not broad Unicode block membership.
@@ -665,7 +693,7 @@ def _mask_route_dashes(text):
 
 # ダッシュで補足や言い換えを挟む形（「今日——正確には昨日——連絡しました。」）
 _DASH_INSERTION = re.compile("[" + DASH_CHARS + "]{1,2}[^" + DASH_CHARS + "。\n]{1,40}[" + DASH_CHARS + "]{1,2}")
-# 小説などで点数が大きく下がらないよう、ダッシュの指摘は1文書あたりこの件数までにする。
+# 小説などで、同じ文書に同じ指摘を出しすぎないよう、ダッシュの指摘は1文書あたりこの件数までにする。
 DASH_FINDING_LIMIT = 3
 
 # 「」『』の中は会話文や記号への言及、リンクの文字列は引用した題名として扱う。
@@ -1998,76 +2026,297 @@ def lint_text(text: str) -> Dict[str, Any]:
             "snippet": f"行: {', '.join(str(n) for n in bold_label_lines[:5])}"
         })
 
-    # スコア計算（100点満点からの減点方式: warn=5点, info=2点）
+    # 規則に当たった件数から計算した目安。文章の品質の点数ではない。error と warn は5、info は2を引く。
     penalty = sum(5 if f["severity"] in ("warn", "error") else 2 for f in findings)
-    score = max(0, 100 - penalty)
+    rule_penalty_score = max(0, 100 - penalty)
+    counts = {"error": 0, "warn": 0, "info": 0}
+    for finding in findings:
+        if finding["severity"] in counts:
+            counts[finding["severity"]] += 1
 
     return {
-        "score": score,
-        "is_clean": len(findings) == 0,
+        "format": "yomiyasu-lint",
+        "format_version": LINT_FORMAT_VERSION,
+        "tool_version": __version__,
+        "candidate_count": len(findings),
+        "counts": counts,
+        "no_rule_findings": len(findings) == 0,
+        "rule_penalty_score": rule_penalty_score,
+        "not_judged": ["meaning_preservation", "reader_comprehension"],
         "metrics": metrics,
         "findings": findings
     }
 
 
-def main():
-    if hasattr(sys.stdout, "reconfigure"):
-        sys.stdout.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description="日本語の表現とMarkdownの書式を、設定されたルールで点検します。指摘は見直し候補です。")
-    parser.add_argument("file", nargs="?", help="検査対象のMarkdownファイルパス（指定なしの場合は標準入力）")
-    parser.add_argument("--json", action="store_true", help="JSON形式で出力")
-    parser.add_argument("--strict", action="store_true", help="警告が1件でもあれば非ゼロ（終了コード1）で終了")
+# ---- 人が読む出力 ----
 
-    args = parser.parse_args()
+_REPORT_HEADER = (
+    "表現・書式の検査を実行しました。",
+    "見直し候補: {count}件",
+    "この検査では、意味の保持と読者にとっての分かりやすさは判定していません。",
+)
 
-    if args.file:
+
+def render_findings(result: Dict[str, Any]) -> str:
+    """内訳の行と候補の並びだけを返す（候補が0件なら空の文字列）。末尾に改行は付けない。
+
+    候補は行番号の順に並べる（同じ行の中は findings の順のまま）。findings の順そのものは変えない。
+    """
+    findings = result["findings"]
+    if not findings:
+        return ""
+    counts = result["counts"]
+    blocks = ["内訳: error {}件、warn {}件、info {}件".format(counts["error"], counts["warn"], counts["info"])]
+    for finding in sorted(findings, key=lambda item: item["line"]):
+        lines = ["L{} [{}] {}: {}".format(finding["line"], finding["severity"].upper(), finding["rule"], finding["message"])]
+        for snippet_line in str(finding["snippet"]).split("\n"):
+            snippet_line = snippet_line.rstrip()
+            if snippet_line:
+                lines.append("  > " + snippet_line)
+        blocks.append("\n".join(lines))
+    return "\n\n".join(blocks)
+
+
+def render_report(result: Dict[str, Any]) -> str:
+    """通常の出力の全体（1〜3行目と、候補があれば内訳と候補の並び）を返す。末尾に改行は付けない。"""
+    header = "\n".join(_REPORT_HEADER).format(count=result["candidate_count"])
+    body = render_findings(result)
+    return header + "\n\n" + body if body else header
+
+
+# ---- CLI ----
+
+# --strict と --fail-on の条件。値は (終了コード1の行に書く文, 当たったかを決める重さ)。
+_FAIL_CONDITIONS = {
+    "strict": ("--strict の条件（warn か error の候補が1件以上）", ("warn", "error")),
+    "warn": ("--fail-on=warn の条件（warn か error の候補が1件以上）", ("warn", "error")),
+    "error": ("--fail-on=error の条件（error の候補が1件以上）", ("error",)),
+}
+_MEANING_RISK_MESSAGE = (
+    "--fail-on=meaning-risk は lint では使えません。lint は1つの文章だけを見るので、意味の変化は判定できません。"
+    "原文と比べる yomiyasu_diff.py か yomiyasu_check.py に付けてください。"
+)
+_EXIT_CODES = """終了コード:
+  0  検査を最後まで実行し、--strict と --fail-on の条件に当たらなかった（候補の有無によらない）。-h と --version も0
+  1  --strict か --fail-on の条件に当たった
+  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --fail-on の値）
+  3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
+
+
+class _ConditionAction(argparse.Action):
+    """--strict と --fail-on を、指定した順に1つの並びに集める。"""
+
+    def __call__(self, parser, namespace, values, option_string=None):
+        conditions = list(getattr(namespace, "conditions", None) or [])
+        conditions.append(("strict", option_string) if self.nargs == 0 else ("fail-on", values))
+        setattr(namespace, "conditions", conditions)
+
+
+class _ArgumentParser(argparse.ArgumentParser):
+    # argparse は、書く先の流れがない（None の）とき、もう一方の流れに書く（使い方が標準出力に、
+    # ヘルプが標準エラーに出る）。3.10 までは標準エラーがないと使い方の誤りで AttributeError になる。
+    # pythonw や 2>&- のときも、書く先がなければ何も書かずに同じ終了コードで終える。
+
+    def error(self, message):
+        stream = sys.stderr
+        if stream is None:
+            self.exit(2)
+        # 使い方の誤りを標準エラーに書く前に、ほかの誤りの文と同じく UTF-8 にする。
+        # argparse の英語の行のあとに、日本語の案内を1行足す（0.4 の誤りの文の形）。
+        _use_utf8(stream, errors="backslashreplace")
+        self.print_usage(stream)
+        stream.write("{}: error: {}\n".format(self.prog, message))
+        stream.write("引数の誤りです。{} -h で使い方を確かめてください。\n".format(self.prog))
+        self.exit(2)
+
+    def print_help(self, file=None):
+        if file is None:
+            file = sys.stdout
+        if file is not None:
+            super().print_help(file)
+
+
+class _HelpFormatter(argparse.RawDescriptionHelpFormatter):
+    def add_usage(self, usage, actions, groups, prefix=None):
+        if prefix is None:
+            prefix = "使い方: "
+        return super().add_usage(usage, actions, groups, prefix)
+
+
+def _build_parser():
+    parser = _ArgumentParser(
+        prog="yomiyasu_lint.py",
+        description=("日本語の表現とMarkdownの書式を、決まった規則で点検します。結果は見直し候補です。"
+                     "候補の数や点数は、文章の品質、意味の保持、読者にとっての分かりやすさの合否ではありません。"),
+        epilog=_EXIT_CODES,
+        formatter_class=_HelpFormatter,
+        add_help=False,
+    )
+    arguments = parser.add_argument_group("引数")
+    arguments.add_argument("file", nargs="?",
+                           help="検査するファイル（UTF-8）。省略するか - を渡すと標準入力を読みます。")
+    options = parser.add_argument_group("オプション")
+    options.add_argument("-h", "--help", action="help", help="このヘルプを表示して終わります。")
+    options.add_argument("--json", action="store_true",
+                         help="結果をJSON（形式2）で出します。日本語は \\uXXXX の形で出します。"
+                              "rule_penalty_score は目安で、合否には使わないでください。")
+    options.add_argument("--strict", action=_ConditionAction, nargs=0, dest="conditions",
+                         help="warn か error の候補が1件でもあれば、終了コード1で終わります。"
+                              "info の候補と点数は使いません（--fail-on=warn と同じです）。")
+    options.add_argument("--fail-on", action=_ConditionAction, dest="conditions", metavar="{warn,error}",
+                         help="指定した中身の候補があれば、終了コード1で終わります。"
+                              "warn: warn か error の候補。error: error の候補（太字が表示されない書き方）。"
+                              "何度でも、カンマ区切りでも指定できます。点数は条件に使えません。"
+                              "meaning-risk は2つの文章を比べないと判定できないので、"
+                              "yomiyasu_diff.py か yomiyasu_check.py に付けてください。")
+    options.add_argument("--version", action="store_true", help="版を表示して終わります。")
+    parser.set_defaults(conditions=[])
+    return parser
+
+
+def _version_line():
+    return "yomiyasu_lint.py {} (JSON format {})".format(__version__, LINT_FORMAT_VERSION)
+
+
+def _use_utf8(stream, **options):
+    if stream is not None and hasattr(stream, "reconfigure"):
+        stream.reconfigure(encoding="utf-8", **options)
+
+
+def _error(message):
+    """標準エラーに1行書く。標準エラーがないとき（pythonw など）は何もしない。"""
+    stream = sys.stderr
+    if stream is None:
+        return
+    try:
+        _use_utf8(stream, errors="backslashreplace")
+        print(message, file=stream)
+    except (OSError, ValueError):
+        # 標準エラーも閉じられているときは、書かずに終える。
+        pass
+
+
+def _conditions(raw):
+    """--strict と --fail-on の並びを、条件の名前の並びにする。使えない値があれば誤りの文を返す。
+
+    meaning-risk は、ほかの値と混ぜても、ほかの誤りより先に断る。
+    """
+    names = []
+    unknown = []
+    for kind, value in raw:
+        if kind == "strict":
+            names.append("strict")
+            continue
+        # 大文字と小文字、「_」と「-」は区別しない（WARN、meaning_risk も受ける）。
+        pieces = [piece.strip().lower().replace("_", "-") for piece in value.split(",") if piece.strip()]
+        if not pieces:
+            # 空、空白だけ、カンマだけの値は、目に見えないので「（空）」と書く。
+            unknown.append("（空）")
+        for piece in pieces:
+            if piece in ("warn", "error"):
+                names.append(piece)
+            elif piece == "meaning-risk":
+                return None, _MEANING_RISK_MESSAGE
+            else:
+                unknown.append(piece)
+    if unknown:
+        return None, "--fail-on に使えない値です: {}。lint で使えるのは warn と error です。".format(unknown[0])
+    return names, None
+
+
+def _read_input(path):
+    """ファイルか標準入力を読み、(文字列, None) か (None, 誤りの文) を返す。"""
+    if path is not None and path != "-":
         try:
-            with open(args.file, "r", encoding="utf-8") as f:
-                content = f.read()
-        except Exception as e:
-            print(f"Error opening file {args.file}: {e}", file=sys.stderr)
-            sys.exit(2)
-    else:
-        if sys.stdin is None:
-            print("Error reading stdin: standard input is not available", file=sys.stderr)
-            sys.exit(2)
-        if hasattr(sys.stdin, "reconfigure"):
-            sys.stdin.reconfigure(encoding="utf-8")
+            with open(path, "rb") as handle:
+                data = handle.read()
+        except (OSError, ValueError) as error:
+            reason = getattr(error, "strerror", None) or error
+            return None, "Error opening file {}: ファイルを開けません（{}）".format(path, reason)
         try:
-            content = sys.stdin.read()
-        except (UnicodeDecodeError, OSError) as e:
-            print(f"Error reading stdin: {e}", file=sys.stderr)
-            sys.exit(2)
+            return decode_source(data)[0], None
+        except UnicodeDecodeError:
+            return None, "Error opening file {}: UTF-8 として読めません".format(path)
+    stream = sys.stdin
+    if stream is None:
+        return None, "Error reading stdin: 標準入力を読めません（標準入力がありません）"
+    try:
+        buffer = getattr(stream, "buffer", None)
+        data = buffer.read() if buffer is not None else stream.read()
+    except UnicodeDecodeError:
+        return None, "Error reading stdin: UTF-8 として読めません"
+    except (OSError, ValueError) as error:
+        reason = getattr(error, "strerror", None) or error
+        return None, "Error reading stdin: 標準入力を読めません（{}）".format(reason)
+    try:
+        return decode_source(data)[0], None
+    except UnicodeDecodeError:
+        return None, "Error reading stdin: UTF-8 として読めません"
+
+
+def _run(argv):
+    args = _build_parser().parse_args(argv)
+    if args.version:
+        print(_version_line())
+        return 0
+    conditions, problem = _conditions(args.conditions)
+    if problem:
+        _error(problem)
+        return 2
+    content, problem = _read_input(args.file)
+    if problem:
+        _error(problem)
+        return 2
 
     result = lint_text(content)
+
+    hit = []
+    for name in conditions:
+        text, severities = _FAIL_CONDITIONS[name]
+        if text not in hit and any(result["counts"][severity] for severity in severities):
+            hit.append(text)
 
     if args.json:
         print(json.dumps(result, ensure_ascii=True, indent=2))
     else:
-        print("=" * 60)
-        print(f"AIっぽさ 検査レポート (スコア: {result['score']}/100)")
-        print("=" * 60)
-        m = result["metrics"]
-        print(f"・文字数: {m['char_count']} | 行数: {m['total_lines']}")
-        print(f"・太字頻度: 1,000字あたり {m['bold_per_1000']} 個 (推奨: 2.0以下 / 警告: 3.0超)")
-        print(f"・箇条書き比率: {round(m['list_ratio']*100, 1)}% (推奨: 15%以下 / 警告: 25%超)")
-        print("-" * 60)
+        print(render_report(result))
+        if hit:
+            print()
+            print("終了コード1: {}に当たりました（error {}件、warn {}件）。".format(
+                "、".join(hit), result["counts"]["error"], result["counts"]["warn"]))
+    # 書き出しの失敗（読む側が先に閉じたなど）を、ここで BrokenPipeError として受けられるようにする。
+    if sys.stdout is not None:
+        sys.stdout.flush()
+    return 1 if hit else 0
 
-        if result["is_clean"]:
-            print("[PASS] 設定された検査ルールによる指摘はありません。")
-        else:
-            print(f"[NOTICE] {len(result['findings'])} 件の見直し候補が見つかりました。\n")
-            for f in result["findings"]:
-                sev = f"[{f['severity'].upper()}]"
-                print(f"L{f['line']} {sev} {f['message']}")
-                print(f"  > {f['snippet']}\n")
 
-    if args.strict:
-        warn_count = sum(1 for f in result["findings"] if f["severity"] in ("warn", "error"))
-        if warn_count > 0:
-            sys.exit(1)
-    sys.exit(0)
+def _silence_stdout():
+    """標準出力を os.devnull に向け直す。インタプリタの終わりでもう一度書き出しに失敗しないようにする。"""
+    try:
+        devnull = os.open(os.devnull, os.O_WRONLY)
+        os.dup2(devnull, sys.stdout.fileno())
+    except (AttributeError, OSError, ValueError):
+        pass
+
+
+def main(argv=None):
+    """CLI。終了コードを返す（0: 条件に当たらない、1: 条件に当たった、2: 使い方か入力の誤り、3: 内部の誤り）。"""
+    try:
+        if _IMPORT_ERROR is not None:
+            raise _IMPORT_ERROR
+        _use_utf8(sys.stdout)
+        return _run(argv)
+    except BrokenPipeError:
+        # 出力先（パイプの読む側）が先に閉じた。lint の不具合ではないので、トレースバックは出さない。
+        # 結果を最後まで書けなかったので、終了コードは3にする。
+        _silence_stdout()
+        _error("yomiyasu_lint.py: 出力先が閉じられたため、結果を最後まで書けませんでした。")
+        return 3
+    except Exception as error:
+        _error("yomiyasu_lint.py: 内部エラー: {}: {}".format(type(error).__name__, error))
+        _error(traceback.format_exc().rstrip("\n"))
+        return 3
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

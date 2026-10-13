@@ -41,6 +41,14 @@ FORMAT_VERSIONS = {
     "RECORD_FORMAT_VERSION": 1,
     "RESULT_FORMAT_VERSION": 1,
 }
+# 10.1 L2: 形式の版の定数を置くファイル（1つのファイルにだけ置き、ほかは import して使う）
+FORMAT_CONSTANT_HOMES = {
+    "LINT_FORMAT_VERSION": "yomiyasu_lint.py",
+    "DIFF_FORMAT_VERSION": "yomiyasu_diff.py",
+    "MATERIALS_FORMAT_VERSION": "yomiyasu_diff.py",
+    "RECORD_FORMAT_VERSION": "yomiyasu_check.py",
+    "RESULT_FORMAT_VERSION": "yomiyasu_check.py",
+}
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")
 
 
@@ -256,7 +264,7 @@ class TestCliVersions(unittest.TestCase):
     def format_constant(self, constant):
         """形式の版の定数1つを、ルートの4本のうち、あるファイルから探す。
 
-        どのファイルに置くかは設計に書いていないので問わない（questions-lint.md の2）。
+        ここでは値だけを見る。どのファイルに置くか（10.1 L2）は test_format_constants_live_in_one_file で見る。
         まだないスクリプト（作業の途中の check など）に、lint と diff の版の試験が引きずられないようにする。
         """
         values = set()
@@ -291,30 +299,56 @@ class TestCliVersions(unittest.TestCase):
         """出力の形の版の定数5つが、スクリプトに整数で1つずつの値で定義され、値が4章のとおり。"""
         self.assertEqual(self.format_constants(), FORMAT_VERSIONS)
 
+    def test_format_constants_live_in_one_file(self):
+        """10.1 L2: 形式の版の定数は決まった1つのファイルにだけ最上位で定義する（ほかのファイルは import して使う）。"""
+        # まだないスクリプト（作業の途中の check など）は見ない。置くべきファイルがなければ失敗にする。
+        for constant, home in sorted(FORMAT_CONSTANT_HOMES.items()):
+            with self.subTest(constant=constant):
+                self.assertTrue((ROOT / "scripts" / home).is_file(), "scripts/{} がない".format(home))
+                homes = []
+                for name in SCRIPT_NAMES:
+                    path = ROOT / "scripts" / name
+                    if not path.is_file():
+                        continue
+                    _, pairs = module_constants(path)
+                    if any(found == constant for found, _, _ in pairs):
+                        homes.append(name)
+                self.assertEqual(homes, [home])
+
     def test_lint_version_line(self):
         """lint の --version は `yomiyasu_lint.py <__version__> (JSON format <LINT_FORMAT_VERSION>)` の1行で0。"""
         version = self.version_of(LINT)
         format_version = self.format_constant("LINT_FORMAT_VERSION")
         process = run_cli(LINT, ["--version"])
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
-        self.assertEqual(process.stdout.strip("\n"),
-                         "yomiyasu_lint.py {} (JSON format {})".format(version, format_version))
+        self.assertEqual(process.stdout, "yomiyasu_lint.py {} (JSON format {})\n".format(version, format_version))
+        # 10.1 L1: 完全一致
+        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.0.0 (JSON format 2)\n")
+        self.assertEqual(process.stderr, "")
 
     def test_diff_and_check_version_lines(self):
-        """diff と check の --version は、スクリプト名と __version__ で始まる1行で0（形式の版を書くなら定数と同じ）。"""
-        # 0.4 は lint の例（`yomiyasu_lint.py 2.0.0 (JSON format 2)` のような1行）だけを示す。
-        # check は形式が複数（記録、結果、照合）あるので、括弧の中は確かめない（questions-lint.md）。
+        """diff と check の --version は 10.1 L1 の1行（完全一致）で0。"""
+        # diff `yomiyasu_diff.py 2.0.0 (JSON format 2)`、
+        # check `yomiyasu_check.py 2.0.0 (record format 1, result format 1, materials format 1)`。
+        expected = {
+            DIFF: lambda version: "yomiyasu_diff.py {} (JSON format {})".format(
+                version, self.format_constant("DIFF_FORMAT_VERSION")),
+            CHECK: lambda version: "yomiyasu_check.py {} (record format {}, result format {}, materials format {})".format(
+                version, self.format_constant("RECORD_FORMAT_VERSION"), self.format_constant("RESULT_FORMAT_VERSION"),
+                self.format_constant("MATERIALS_FORMAT_VERSION")),
+        }
+        literal = {
+            DIFF: "yomiyasu_diff.py 2.0.0 (JSON format 2)",
+            CHECK: "yomiyasu_check.py 2.0.0 (record format 1, result format 1, materials format 1)",
+        }
         for script in (DIFF, CHECK):
             with self.subTest(script=script.name):
                 version = self.version_of(script)
                 process = run_cli(script, ["--version"], cwd=str(self.root), env=self.check_env())
                 self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
-                lines = process.stdout.strip("\n").split("\n")
-                self.assertEqual(len(lines), 1, process.stdout)
-                self.assertEqual(lines[0].split()[:2], [script.name, version])
-                format_match = re.search(r"\(JSON format (\d+)\)", lines[0])
-                if format_match and script == DIFF:
-                    self.assertEqual(int(format_match.group(1)), self.format_constant("DIFF_FORMAT_VERSION"))
+                self.assertEqual(process.stdout, expected[script](version) + "\n")
+                self.assertEqual(process.stdout, literal[script] + "\n")
+                self.assertEqual(process.stderr, "")
 
     def test_lint_and_diff_json_versions(self):
         """lint と diff の --json の tool_version が __version__、format_version が形式の版の定数と同じ。"""
