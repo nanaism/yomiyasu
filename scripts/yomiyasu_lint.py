@@ -708,6 +708,41 @@ def _mask_quoted_segments(text):
     return "".join(result)
 
 
+_QUOTE_MARKS = re.compile(r"[「」『』\[\]]")
+
+
+def _mask_quoted_segments_sparse(text):
+    """Same output as _mask_quoted_segments, but visits only the bracket marks.
+
+    Used for whole documents, where the per-character loop is the main cost.
+    """
+    closing = {"「": "」", "『": "』", "[": "]"}
+    stacks = {closer: [] for closer in closing.values()}
+    changes = {}
+    for match in _QUOTE_MARKS.finditer(text):
+        index = match.start()
+        char = text[index]
+        if char in closing:
+            stacks[closing[char]].append(index)
+        elif stacks[char]:
+            start = stacks[char].pop()
+            changes[start] = changes.get(start, 0) + 1
+            changes[index + 1] = changes.get(index + 1, 0) - 1
+    if not changes:
+        return text
+    pieces = []
+    depth = 0
+    cursor = 0
+    for point in sorted(changes):
+        if not changes[point]:
+            continue
+        pieces.append(" " * (point - cursor) if depth else text[cursor:point])
+        cursor = point
+        depth += changes[point]
+    pieces.append(" " * (len(text) - cursor) if depth else text[cursor:])
+    return "".join(pieces)
+
+
 def _mask_route_dashes(text):
     """Scan the adjacent noun runs once per dash, avoiding regex backtracking."""
     def noun_char(char):
@@ -837,6 +872,13 @@ METAPHOR_VERB_PATTERNS = [
 
 # メタフィラー・定型句
 # 文ごとに当てる（^ と $ は文の頭と終わり）。
+# 文末の推量・確信・念押し（でしょう、かもしれません、と思います、ね）や、文末の短い補足カッコが付いても拾う。
+# 「〜ではないとは思わない」や、読点で文が続く形（「〜ではないかもしれない、という表現」）は文末でないので拾わない。
+_OVERSTATEMENT_PATTERN = (r"とも?(?:言|い)(?:い切|いき)?っても(?:過言|言い過ぎ|言いすぎ|いいすぎ)"
+                          r"(?:では(?:ありません|ない)|じゃ(?:ありません|ない))(?:です)?"
+                          r"(?:でしょう|だろう|かもしれ(?:ません|ない)|と(?:思|おも)(?:います|う)|ね|よ)?"
+                          r"(?:[（(][^）)]*[）)])?[。！？!?]?$")
+_OVERSTATEMENT_DESC = "文末の付け足し「〜と言っても過言ではありません」"
 FILLER_PATTERNS = [
     (r"^(まず|ここで)?(重要|大切|大事)なのは、?", "前置フィラー「重要なのは」"),
     (r"^結論から(言|い)(う|い|え)|^結論から申し上げ", "前置フィラー「結論から言うと」"),
@@ -852,10 +894,12 @@ FILLER_PATTERNS = [
     (r"^ご質問ありがとうございます", "チャット応答の名残「ご質問ありがとうございます」"),
     (r"見ていきましょう[。！!]?$|深掘りしていきます", "定型導入「それでは見ていきましょう」など"),
     (r"^(必要なら|ご希望があれば|よろしければ)、?(次に|続けて|この後(?!の))[^。！？!?]*(?:ます|ましょう)(?:か|よ|ね|よね)?(?:（[^。！？!?（）]*）)?[。！？!?]?$", "チャット応答の名残「必要なら次に〜します」"),
+    (_OVERSTATEMENT_PATTERN, _OVERSTATEMENT_DESC),
 ]
 
 # 規則の説明に添える、残してよい場合（指針の例外に合わせる）
 FILLER_NOTES = {
+    _OVERSTATEMENT_DESC: "事実を淡々と書いてください。数値などの裏付けがあって誇張でない事実を強調する場合や、引用・会話・表現そのものへの言及は残してかまいません。",
     "チャット応答の名残「ご質問ありがとうございます」": "チャットやメールの返信そのものなら残してかまいません。",
     "チャット応答の名残「必要なら次に〜します」": "書き手が読み手に実際に申し出ている案内なら残してかまいません。",
     "定型クロージング「参考になれば幸いです」など": "メールや手紙の結びの挨拶や、書き手が実際に勧めている内容なら残してかまいません。",
@@ -876,6 +920,7 @@ INFO_SENTENCE_PATTERNS = [
 # Necessary literals for these exact patterns, not replacement rules. A changed
 # or custom pattern has no hint and keeps the complete regular-expression scan.
 _PATTERN_LITERAL_HINTS = {
+    _OVERSTATEMENT_PATTERN: ("過言", "言い過ぎ", "言いすぎ", "いいすぎ"),
     r"(地味に|よく|じわじわ)効[かきくけいた]": ("効",),
     r"(データ|仕様|設計|環境|ビルド|システム|秩序)が(静かに)?壊れ": ("壊れ",),
     r"静かに(壊れ|落ち|失敗|沈黙)": ("静かに",),
@@ -1843,6 +1888,80 @@ def _extra_negation_line_numbers(analysis):
     return hit_lines
 
 
+# AIへの指示残りは作者の意図を断定できないため info にとどめる。
+# 書く行為の予告と、書き方・除外の条件が同居する型だけを見る。
+_WRITING_ACTION = re.compile(
+    r"(?:書(?:きます|く|いてみます|いていきます)|(?:説明|紹介|解説)し(?:ます|ていきます)|"
+    r"まとめ(?:ます|る|ていきます)|お伝えし(?:ます|ていきます)|述べ(?:ます|る)|"
+    r"振り返(?:ります|る|っていきます)|お話し?し(?:ます|ていきます)|お届けします|話していきます)[。！？!?]?$"
+)
+# 書き方の条件は、敬体の予告か、記事の範囲を示す書き出しの文だけで見る（小説の地の文や規程の文を除く）。
+_RESIDUE_OPENER = r"^(?:この記事|本記事|本稿|このブログ|ここ|以下|今回)(?:では|は)"
+_RESIDUE_OPENER_RE = re.compile(_RESIDUE_OPENER)
+_WRITING_STYLE = re.compile(
+    r"(?:トーン|文体|口調)で|(?:専門用語|箇条書き)を\s*(?:できるだけ|なるべく)?"
+    r"(?:使わず|用いず|避け)|(?:AI|ＡＩ)(?:っぽさ|らしさ)(?:が出ないよう|を(?:抑え|なく|避け))|"
+    r"飾らない言葉で|語り口で|トーンを意識|(?<![0-9０-９])[0-9０-９]+文?字(?:程度|以内|前後)?で"
+)
+_WRITING_LIMIT = re.compile(r"に(?:絞って|限定して|焦点を(?:当てて|絞って))|触れず|扱わず|立ち入らず|[はを]抜きにして")
+_SCOPE_EXCLUSION = re.compile(
+    _RESIDUE_OPENER + r"[^。！？!?]*"
+    r"(?:扱いません|扱わない|触れません|触れない|省きます|省く|割愛します|省略します)[。！？!?]?$"
+)
+_READER_SCOPE = re.compile(r"^(?:この|本)?(?:マニュアル|手順書|ガイド|論文|研究)(?:では|は)")
+_SCOPE_REFERENCE = re.compile(
+    r"参照|ご覧|別途|付録|後述|後ほど|別の?[^。！？!?]{0,8}(?:記事|ページ|章|節|報告書?|資料|文書|ガイド)|"
+    r"(?:後|次|前)の(?:章|節)|第[0-9０-９一二三四五六七八九十]+章"
+)
+
+
+def _rule9_context(analysis):
+    """New rules alone use unquoted prose and the immediately following sentence.
+
+    Mask balanced quotes before splitting sentences, including paragraph breaks.
+    Retain each original line's width so the existing line numbers stay usable.
+    References cannot exempt a scope declaration across a paragraph boundary.
+    """
+    rows = analysis["lines"]
+    parts = [(_prose_visible_text(analysis, row["line"]).replace("__", "").replace("*", "")
+              if row["kind"] in ("paragraph", "list") and not row["quote_depth"] else "")
+             for row in rows]
+    masked = _mask_quoted_segments_sparse("\n".join(parts))
+    # _mask_quoted_segments also masks newlines inside quotations. Slice by
+    # the original widths instead of splitting its output on newlines.
+    offset = 0
+    visible_lines = {}
+    for row, part in zip(rows, parts):
+        visible_lines[row["line"]] = masked[offset:offset + len(part)].strip()
+        offset += len(part) + 1
+    contexts = {}
+    for block in analysis["blocks"]:
+        if block["kind"] not in ("paragraph", "list"):
+            continue
+        records = []
+        for row in block["lines"]:
+            contexts[row["line"]] = []
+            for sentence in _LINE_SENTENCE_BREAK.split(visible_lines[row["line"]]):
+                if sentence.strip():
+                    records.append((row["line"], sentence.strip()))
+        for index, (line, sentence) in enumerate(records):
+            following = records[index + 1][1] if index + 1 < len(records) else ""
+            contexts[line].append((sentence, following))
+    return contexts
+
+
+def _has_instruction_residue(sentence, following):
+    writing = _WRITING_ACTION.search(sentence)
+    if (writing and ("ます" in writing.group() or _RESIDUE_OPENER_RE.search(sentence))
+            and _WRITING_STYLE.search(sentence)):
+        return True
+    if not (_SCOPE_EXCLUSION.search(sentence) or (writing and _WRITING_LIMIT.search(sentence))):
+        return False
+    # A reader-facing scope and its adjacent reference are useful information.
+    return not (_READER_SCOPE.search(sentence)
+                or _SCOPE_REFERENCE.search(sentence) or _SCOPE_REFERENCE.search(following))
+
+
 def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
     """文章全体を総合検査する。
 
@@ -1851,6 +1970,7 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
     doc_type, reader = normalize_doc_type(doc_type), normalize_reader(reader)
     findings = []
     analysis = analyze_markdown(text)
+    rule9_context = _rule9_context(analysis)
     extra_negation_lines = _extra_negation_line_numbers(analysis)
     metrics, list_gate_chars = _metrics_and_list_gate(analysis)
     sentence_records = _plain_sentence_records(analysis)
@@ -2079,7 +2199,10 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
 
         # フィラーパターン（文ごとに見て、同じ型は1行1件）
         for pattern, desc, required in filler_patterns:
-            if _may_match_literals(required, plain_text) and any(pattern.search(sentence) for sentence in line_sentences):
+            # Do not change quote handling for any of the pre-existing fillers.
+            filler_sentences = (tuple(sentence for sentence, _ in rule9_context.get(line_no, ()))
+                                if pattern.pattern == _OVERSTATEMENT_PATTERN else line_sentences)
+            if _may_match_literals(required, plain_text) and any(pattern.search(sentence) for sentence in filler_sentences):
                 findings.append({
                     "rule": "meta_filler",
                     "line": line_no,
@@ -2092,6 +2215,16 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
         for pattern, rule, message, required in info_sentence_patterns:
             if _may_match_literals(required, plain_text) and any(pattern.search(sentence) for sentence in line_sentences):
                 findings.append({"rule": rule, "line": line_no, "severity": "info", "message": message, "snippet": stripped})
+
+        if any(_has_instruction_residue(sentence, following)
+               for sentence, following in rule9_context.get(line_no, ())):
+            findings.append({
+                "rule": "instruction_residue",
+                "line": line_no,
+                "severity": "info",
+                "message": "AIへの指示が本文に残る形（書き方や除外の予告）が検出されました。除外や書き方の指示を述べる文を削ってください。ただし、読者のための範囲・対象読者・前提・参照先・用語の定義を示す文は残してください。",
+                "snippet": stripped
+            })
 
         for index, sentence in enumerate(line_sentences):
             if ("もちろん、" not in plain_text and "勿論、" not in plain_text):

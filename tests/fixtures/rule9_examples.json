@@ -1,0 +1,122 @@
+[
+  {
+    "id": "R1-D1",
+    "text": "今回は一般論ではなく、自分の体験に絞って紹介します。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R1-D2",
+    "text": "この記事では〇〇は扱いません。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R1-D3",
+    "text": "ここでは専門用語をできるだけ使わずに説明します。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R1-D4",
+    "text": "前向きなトーンで、今回の障害を振り返ります。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R1-D5",
+    "text": "以下では、箇条書きを使わずに文章でまとめます。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R1-D6",
+    "text": "AIっぽさが出ないよう、飾らない言葉で書いてみます。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R1-D7",
+    "text": "本稿では、結論だけを800字程度で簡潔にお伝えします。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R1-D8",
+    "text": "細かい実装の話は省き、使い方だけに絞って書きます。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R1-K1",
+    "text": "このマニュアルでは、管理者向けの設定は扱いません。管理者の方は「管理者ガイド」を参照してください。",
+    "lint_expect": "no_new_rule_finding"
+  },
+  {
+    "id": "R1-K2",
+    "text": "本稿では、2025年度に回収した質問紙のデータだけを分析の対象とする。",
+    "lint_expect": "no_new_rule_finding"
+  },
+  {
+    "id": "R1-K3",
+    "text": "この記事は、Docker を一度は使ったことがある人を対象にしています。",
+    "lint_expect": "no_new_rule_finding"
+  },
+  {
+    "id": "R1-K4",
+    "text": "手順は macOS 15 で確かめました。Windows での手順は、別の記事にまとめています。",
+    "lint_expect": "no_new_rule_finding"
+  },
+  {
+    "id": "R1-K5",
+    "text": "ここでは、設定ファイルと手順書をまとめて「運用セット」と呼びます。",
+    "lint_expect": "no_new_rule_finding"
+  },
+  {
+    "id": "R1-K6",
+    "text": "このお知らせは、東京本社に勤務する社員を対象としています。大阪支社の方には、別途ご案内します。",
+    "lint_expect": "no_new_rule_finding"
+  },
+  {
+    "id": "R2-D1",
+    "text": "これは革命と言っても過言ではありません。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R2-D2",
+    "text": "これは革命といっても過言ではない。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R2-D3",
+    "text": "この設定ひとつで、ビルドの速さがすべて決まると言っても過言ではない。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R2-D4",
+    "text": "まさに、通知まわりの信頼性を根本から引き上げる変更と言っても過言ではありません。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R2-D5",
+    "text": "あの一杯のコーヒーが、私の人生を変えたと言っても過言ではない。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R2-D6",
+    "text": "今回の移行は、全社の働き方を変える転換点とも言っても過言ではありません。",
+    "lint_expect": "new_rule_finding"
+  },
+  {
+    "id": "R2-K1",
+    "text": "部長は会議で「今期最大の成果と言っても過言ではない」と話した。",
+    "lint_expect": "no_new_rule_finding"
+  },
+  {
+    "id": "R2-K2",
+    "text": "「〜と言っても過言ではない」は、文章を大げさに見せる決まり文句の一つだ。",
+    "lint_expect": "no_new_rule_finding"
+  },
+  {
+    "id": "R2-K3",
+    "text": "社内の42のサービスのうち42すべてがこのライブラリに依存しており、共通基盤と言っても過言ではありません。",
+    "lint_expect": "may_flag"
+  },
+  {
+    "id": "R2-K4",
+    "text": "「おまえがいなければ、このチームはなかったと言っても過言じゃない」と、先輩は笑った。",
+    "lint_expect": "no_new_rule_finding"
+  }
+]
