@@ -2344,7 +2344,7 @@ def _number_mask(text, analysis, masked_kinds=_NUMBER_MASKED):
     return _LIST_NUMBER.sub(lambda match: " " * len(match.group(0)), masked)
 
 
-def _find_numbers(text, analysis, masked_kinds=_NUMBER_MASKED):
+def _find_numbers(text, analysis, masked_kinds=_NUMBER_MASKED, unit_pattern=_UNIT):
     """数値の取り出し方で、文書の中の数値を位置の順に返す（_Number の並び）。
 
     英字が続く数（3D、5G、30s、8GiB）は、一覧の単位が続かなければ単位なしの数として取る（反証で見つけた例）。
@@ -2358,11 +2358,11 @@ def _find_numbers(text, analysis, masked_kinds=_NUMBER_MASKED):
         thousand = _THOUSAND.match(masked, after) if "," not in digits and "." not in digits else None
         if thousand is not None:
             after = thousand.end()
-        unit = _UNIT.match(masked, after)
+        unit = unit_pattern.match(masked, after)
         if unit is None:
             emphasis = _EMPHASIS.match(masked, after)
             if emphasis is not None:
-                unit = _UNIT.match(masked, emphasis.end())
+                unit = unit_pattern.match(masked, emphasis.end())
         if unit is None and thousand is None:
             unit = _SPACED_UNIT.match(masked, after)
         if unit is None and thousand is None:
@@ -5344,7 +5344,43 @@ def _ground_mask(text, analysis):
     return _URL_SCHEME.sub(lambda match: " " * len(match.group(0)), masked)
 
 
-def _ground_items(doc):
+_GROUND_SAME_UNIT = {"s": "秒", "sec": "秒", "secs": "秒", "ms": "ミリ秒", "msec": "ミリ秒",
+                    "min": "分", "mins": "分"}
+# 照合だけで使う単位。msec を ms より先に読み、英単語の途中の s / min などは単位にしない。
+_GROUND_UNIT = re.compile(r"(?:secs|sec|msec|mins|min|ms|s)(?![A-Za-z])|ミリ秒|" + _UNIT.pattern)
+
+
+def _ground_number_key(key):
+    """照合用の比較値。小数部が0だけのときだけ整数にし、非0の末尾や版の番号は削らない。"""
+    value, unit = key
+    whole, dot, fraction = value.partition(".")
+    if dot and fraction and not fraction.strip("0"):
+        value = whole
+    return value, _GROUND_SAME_UNIT.get(unit, unit)
+
+
+def _ground_comparison_numbers(numbers):
+    """表示用の値を変えずに、範囲・日付・時刻のまとまりと空白の手がかりも含めた比較用の写しを作る。"""
+    found = []
+    for number in numbers:
+        value, unit = _ground_number_key(number.key)
+        cluster = tuple(_ground_number_key(key) for key in number.cluster) if number.cluster is not None else None
+        notation = number.notation
+        if notation is not None:
+            group, follow, frame = notation
+            group = tuple(_ground_number_key((value, ""))[0] for value in group)
+            match = _GROUND_UNIT.match(follow)
+            if match is not None:
+                follow = _GROUND_SAME_UNIT.get(match.group(0), match.group(0)) + follow[match.end():]
+            if frame is not None:
+                joins, units, at = frame
+                frame = (joins, tuple(_GROUND_SAME_UNIT.get(unit, unit) for unit in units), at)
+            notation = (group, follow, frame)
+        found.append(_Number(number.start, number.end, value, unit, notation, number.weak, cluster))
+    return found
+
+
+def _ground_items(doc, numbers):
     """最終稿の項目を取り出す。{(kind, 比べる形): {"kind", "text", "value", "unit", "lines", "start", "key"}} を出てきた順に。"""
     text = doc.texts[0]
     found = OrderedDict()
@@ -5358,7 +5394,6 @@ def _ground_items(doc):
         elif entry["lines"][-1] != line:
             entry["lines"].append(line)
 
-    numbers = doc.numbers(0)[0]
     for number in numbers:
         add("number", number.key, number.start, number.end, number.value, number.unit)
     masked = _ground_mask(text, doc.analyses[0])
@@ -5393,9 +5428,10 @@ class _Source:
     def __init__(self, text):
         self.text = text
         analysis = _analyze(text)
-        self.found_numbers = _find_numbers(text, analysis)
-        self.numbers = _KeySet(self.found_numbers)
-        self.notation = _notation_index(self.found_numbers)
+        self.found_numbers = _find_numbers(text, analysis, unit_pattern=_GROUND_UNIT)
+        comparison = _ground_comparison_numbers(self.found_numbers)
+        self.numbers = _KeySet(comparison)
+        self.notation = _notation_index(comparison)
         self.squashed = _squash(text)
         # 同じ取り出し方で取った名前と語の集合。項目ごとに資料の全文を探すと「項目の数×資料の字数」の時間になるので、
         # まず集合で引き、ないときだけ部分文字列を探す（結果は部分文字列で探すのと同じ。反証で見つけた例）
@@ -5419,6 +5455,7 @@ class _Source:
         同じ数の「単位なし」と「単位あり」は、diff の組の文と同じ条件でだけ表記の違いとみなす（16 GB と 16GB、3〜5日 と 3日から5日、
         2026-10-13 と 2026年10月13日、10:30 と 10時30分。「手順2」と「2週間」、「表3」と「3%」はみなさない。
         反証で見つけた例）。"""
+        key = _ground_number_key(key)
         if key in self.numbers.keys:
             return True
         final_set, final_notation = final
@@ -5436,7 +5473,8 @@ def ground(final, materials, original=None):
     確度の語。名前と語と確度の語は、NFKC にして空白を除いた文字列の部分文字列かで「ある」とみなす。
     分類は in_original（原文にある）、from_materials（原文になく資料にある）、not_in_sources（どちらにもない）、
     dropped_certainty（資料にある確度の語が最終稿にない）、not_in_final（資料にある数値が最終稿にない。参考で、候補にしない。
-    final_lines は []。diff の詰めで足した）。数値は、同じ数の「単位なし」と「単位あり」を表記の違いとみなす。
+    final_lines は []。diff の詰めで足した）。数値は照合の中だけで時間の単位と小数部が0だけの数をそろえる。
+    「単位なし」と「単位あり」は、範囲・日付・時刻のまとまりか、空白のあとに単位がある形でだけ表記の違いとみなす。
     名前は英数字の境目で照らす。
 
     意味が変わる恐れ（kind unsupported）に入れるもの: 新規作成で資料にない数値（subkind number）と、両方のモードで資料にない
@@ -5455,9 +5493,10 @@ def ground(final, materials, original=None):
         sources.append({"role": "material", "index": index, "chars": len(text)})
 
     items, risks = [], []
-    found = _ground_items(doc)
-    final_found = doc.numbers(0)[0]
-    final = (_KeySet(final_found), _notation_index(final_found))
+    final_found = _find_numbers(doc.texts[0], doc.analyses[0], unit_pattern=_GROUND_UNIT)
+    found = _ground_items(doc, final_found)
+    comparison = _ground_comparison_numbers(final_found)
+    final = (_KeySet(comparison), _notation_index(comparison))
     # 数量を主張しない「一つ」（一つの、一つずつ、もう一つ）だけの値は、資料にない数値の候補にしない（反証で見つけた例）
     strong = set(number.key for number in final_found if not number.weak)
     for (kind, key), entry in sorted(found.items(), key=lambda pair: (_GROUND_KIND_ORDER[pair[0][0]], pair[1]["start"])):
@@ -5496,13 +5535,14 @@ def ground(final, materials, original=None):
     rest = OrderedDict()
     for source in material_sources:
         for number in source.found_numbers:
-            if number.key in rest or number.weak or number.key in final_set.keys:
+            key = _ground_number_key(number.key)
+            if number.key in rest or number.weak or key in final_set.keys:
                 continue
-            value, unit = number.key
+            value, unit = key
             if unit:
                 present = any(_notation_match(other, source.numbers, unit) for other in final_notation.get((value, ""), ()))
             else:
-                present = any(_notation_match(other, final_set) for other in source.notation.get(number.key, ()))
+                present = any(_notation_match(other, final_set) for other in source.notation.get(key, ()))
             if not present:
                 rest[number.key] = source.text[number.start:number.end]
     for (value, unit), text in rest.items():

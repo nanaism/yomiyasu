@@ -1186,6 +1186,13 @@ def _check_entry(name, target):
                         ("text_sha256", None), ("summary", None), ("stderr", ""), ("error", None)))
 
 
+def _material_number_keys(diff_module, item):
+    """照合の項目を diff の候補に結び付ける。照合だけで読むミリ秒・msec も、diff が読む形で引けるようにする。"""
+    keys = {(item.get("value"), item.get("unit"))}
+    keys.update((number["value"], number["unit"]) for number in diff_module.extract_numbers(item["text"]))
+    return keys
+
+
 def _with_basis(diff_module, risks, materials_result):
     """推敲で資料があるとき、diff の数値の候補に basis を入れた写しを作る。
     足した値が資料にもどこにもなければ "none"、資料にあれば "material"（どちらも混ざれば "none" を先にする）。"""
@@ -1195,7 +1202,10 @@ def _with_basis(diff_module, risks, materials_result):
     for item in materials_result.get("items", []):
         # 資料にあって最終稿にない数値（not_in_final。diff の詰めで足した参考の項目）は、最終稿の値の分類ではないので使わない
         if item.get("kind") == "number" and item.get("classification") != "not_in_final":
-            classes[(item.get("value"), item.get("unit"))] = item.get("classification")
+            for key in _material_number_keys(diff_module, item):
+                # diff が同じ形で読む別の値が混ざれば、資料にない値を優先する。
+                if classes.get(key) != "not_in_sources":
+                    classes[key] = item.get("classification")
     out = []
     for risk in risks:
         risk = dict(risk)
@@ -1623,7 +1633,7 @@ def _unsupported_count(result, diff_risks=None, diff_module=None):
         if risk.get("kind") == "number" and risk.get("basis") == "none":
             for text in (risk.get("detail") or {}).get("added") or []:
                 shown.update((number["value"], number["unit"]) for number in diff_module.extract_numbers(text))
-    return names + sum(1 for item in numbers if (item.get("value"), item.get("unit")) in shown)
+    return names + sum(1 for item in numbers if _material_number_keys(diff_module, item) & shown)
 
 
 def _summary_line(ctx, diff_module=None):
