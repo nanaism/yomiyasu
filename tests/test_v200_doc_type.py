@@ -3,7 +3,7 @@
 
 期待値は種類と読者の設計の9章（道具のオプション）と 10.1 の表（A〜E）、末尾の追記（2026-10-13 19時。種類に
 formal を足して9つにする。lint で外す規則はなし）と、diff の詰めで足した promo（10個目。lint で emoji_prohibited を外す。
-2026-10-14 朝の大賀さんの判断で fragment_run も外す）から取った。文はすべてこのファイルで作った合成の文。コーパスは読むだけ。
+2026-10-14 朝の作者の判断で fragment_run も外す）から取った。文はすべてこのファイルで作った合成の文。コーパスは読むだけ。
 
 - 指定しないときの出力（9章の不変の条件、10.1 の A）は、tests/fixtures/g7_unchanged_outputs.json と照らす。
   lint、diff、check の人が読む出力、終了コード、標準エラー、check の状態の行（と、context を除いた JSON）を、コーパスの
@@ -78,10 +78,10 @@ SKIP_RULES = {
     "formal": (),
     # D-5: promo では書き手の絵文字を残す（勢いの検査は絵文字が減ると候補にするので、lint の絵文字の候補と食い違わせない）。
     # diff の詰めで測って決めた。fragment_run（「安い。うまい。早い。」の型）も
-    # 外す（大賀さんの判断、2026-10-14 朝。紹介記事・宣伝文では評価の語を短く重ねる型も勢いとして残す）
+    # 外す（作者の判断、2026-10-14 朝。紹介記事・宣伝文では評価の語を短く重ねる型も勢いとして残す）
     "promo": ("emoji_prohibited", "fragment_run"),
 }
-# 5.3「外さない規則と理由」。どの種類でも外さない。ただし fragment_run は promo だけ外す（大賀さんの判断、2026-10-14 朝。
+# 5.3「外さない規則と理由」。どの種類でも外さない。ただし fragment_run は promo だけ外す（作者の判断、2026-10-14 朝。
 # 5.3 の理由はスライドの話で、紹介記事・宣伝文では評価の語を短く重ねる型を勢いとして残すと決めた）
 NEVER_SKIPPED_EXCEPT = {"fragment_run": ("promo",)}
 NEVER_SKIPPED = ("bold_not_rendered", "fragment_run", "meta_intro", "metaphor_verb", "trailing_colon", "excess_bold",

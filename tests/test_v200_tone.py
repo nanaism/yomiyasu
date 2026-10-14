@@ -258,7 +258,7 @@ class ListFileTest(unittest.TestCase):
 
 class PromoDocTypeTest(unittest.TestCase):
     """D-5: 文書の種類 promo（紹介記事・宣伝文）。lint は promo のとき emoji_prohibited を外す（diff の詰めで測って決めた）。
-    fragment_run も外す（大賀さんの判断、2026-10-14 朝。試験は test_v200_tone_stiffness_refine.LintPromoFragmentTest）。"""
+    fragment_run も外す（作者の判断、2026-10-14 朝。試験は test_v200_tone_stiffness_refine.LintPromoFragmentTest）。"""
 
     def test_promo_is_a_doc_type(self):
         import markdown_visibility
@@ -271,7 +271,7 @@ class PromoDocTypeTest(unittest.TestCase):
         self.assertIn("emoji_prohibited", [f["rule"] for f in plain["findings"]])
         promo = yomiyasu_lint.lint_text(text, doc_type="promo")
         self.assertNotIn("emoji_prohibited", [f["rule"] for f in promo["findings"]])
-        # 大賀さんの判断（2026-10-14 朝）で fragment_run も外す（評価の語を短く重ねる型を勢いとして残す）
+        # 作者の判断（2026-10-14 朝）で fragment_run も外す（評価の語を短く重ねる型を勢いとして残す）
         self.assertEqual(promo["context"]["skipped_by_doc_type"], {"emoji_prohibited": 1, "fragment_run": 0})
         self.assertEqual(yomiyasu_lint.DOC_TYPE_SKIP_RULES["promo"], ("emoji_prohibited", "fragment_run"))
 

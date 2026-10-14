@@ -2,7 +2,7 @@
 """v2.0.0（diff の詰めの直し）: 文体の硬化の検査（stiffness）、勢いの検査（tone）、lint の種類 promo。
 
 仕様の反証レビュー（反証で見つけた例の一部）と、誤検出の反証
-レビュー（反証で見つけた例）、大賀さんの判断（2026-10-14 朝。紹介記事・宣伝文では「！」を
+レビュー（反証で見つけた例）、作者の判断（2026-10-14 朝。紹介記事・宣伝文では「！」を
 同じ段落に3つ以上並べても減らさず、評価の語を短く重ねる型「安い。うまい。早い。」も残す）の直し。文はすべて合成の文
 （レビューの組の文と、それを言い換えた文、この段で足した文）。
 実在の会社や商品の名前は使わない。
@@ -11,7 +11,7 @@
   （種類なしと promo は見直し候補、技術文書などの参考の種類では参考のまま）。
 - lint: --doc-type promo のとき fragment_run（評価の語だけの短い文の並び）を外す。種類なしとほかの種類は今までどおり。
 - 勢い: 紹介記事で同じ強める語の繰り返しを減らした推敲（「とても」3個 → 1個）は、promo でも見直し候補のまま（fp の P6 は
-  採らない。強める語を削らない、減らさないという大賀さんの判断と食い違うため）。
+  採らない。強める語を削らない、減らさないという作者の判断と食い違うため）。
 - 硬化: 障害報告（incident）も参考（info）の種類にする（v1.1.2 の好み「報告書では『障害が発生した朝』が合う」）。
 - 硬化: 文書全体の候補は、変わった文の組が2つ以上のときだけ出す（fp の P3）。
 - 硬化: 「の」の連続は、新しい連続の名詞が組になった原文の文にすべてあれば出さない（補足カッコを外しただけの推敲。fp の P7）。
@@ -71,7 +71,7 @@ def section_lines(result, key):
     return yomiyasu_diff.report_parts(result)[key].split("\n")
 
 
-# ---- 大賀さんの判断 1: 「！」の3つ以上の許しを外す ----
+# ---- 作者の判断 1: 「！」の3つ以上の許しを外す ----
 THREE_ONE_LINE = ("安い！うまい！早い！", "安くてうまくて早い！")
 THREE_LINES = ("安い！\nうまい！\n早い！", "安くて\nうまくて\n早い！")
 # 紹介記事の組の many の3組と同じ形（同じ段落の3つの「！」を減らした推敲）
@@ -83,7 +83,7 @@ PROMO_MANY = (
 
 
 class ExclamationRunTest(unittest.TestCase):
-    """同じ段落に「！」が3つ以上並んでも、減らせば候補になる（勢いの文書 2.2 の許しを、大賀さんの判断で外した）。"""
+    """同じ段落に「！」が3つ以上並んでも、減らせば候補になる（勢いの文書 2.2 の許しを、作者の判断で外した）。"""
 
     def test_one_line_is_a_review_candidate_without_type_and_for_promo(self):
         for doc_type in (None, "promo"):
@@ -117,7 +117,7 @@ class ExclamationRunTest(unittest.TestCase):
         self.assertEqual(tone_of(before, before, doc_type="promo")["candidates"], [])
 
 
-# ---- 大賀さんの判断 2: lint の promo で fragment_run を外す ----
+# ---- 作者の判断 2: lint の promo で fragment_run を外す ----
 FRAGMENTS = "港町の駅前にある食堂の日替わり定食。安い。うまい。早い。\n"
 
 
@@ -144,7 +144,7 @@ class LintPromoFragmentTest(unittest.TestCase):
         self.assertEqual(tuple(yomiyasu_lint.DOC_TYPE_SKIP_RULES["promo"]), ("emoji_prohibited", "fragment_run"))
 
 
-# ---- 大賀さんの判断 3: 強める語の繰り返しを減らした推敲は promo でも候補のまま（fp の P6 を採らない）----
+# ---- 作者の判断 3: 強める語の繰り返しを減らした推敲は promo でも候補のまま（fp の P6 を採らない）----
 REPEATED_INTENSIFIERS = (
     # 反証で見つけた例
     ("とても安くて、とてもおいしくて、とても量が多い！ 学生に大人気の定食屋です。",

@@ -2187,6 +2187,24 @@ _QUANTITY_SAME = {"一括": "まとめて", "一度に": "まとめて", "並行
 _QUANTITY_CLAUSE_WORDS = {_WEAK_EACH: frozenset(("複数",)), _WEAK_SINGLE: frozenset(("別々",))}
 _QUANTITY_FOR = {_WEAK_EACH: frozenset(("まとめて",)),
                  _WEAK_SINGLE: frozenset(("複数", "上限", "無制限"))}
+# (3) 相手が1つの文で、「一つずつ」の動詞・「一つの」の名詞がその文に出ない（言い換えた）ときも、(1) と同じく、複数・いくつ・
+# 別々 を相手の文のどこに出ても数える（質問は一つずつ受け付けます → 質問は複数でも構いません、設定は一つのファイルに書きます →
+# 設定は別々の場所に置きます。反証で見つけた例）。ただし、相手の文に数の主張が同じ語（_QUANTITY_KEEP_ANY。打ち消していないもの）が
+# あれば、この3つの語は数えない（申請は一つずつ審査します → 申請は順番に見て、複数の担当で確かめます）。「一つずつ」の
+# 「複数の〜」「いくつかの〜」は、〜が元の文にない名詞なら数えない（ファイルを一つずつ確認する → ファイルを見て、複数の誤りを
+# 探す。_QUANTITY_OTHER_NOUN）。前から数えていた語（_QUANTITY_FOR）は今までどおり数える。「順に」は、すぐ前が漢字の「手順に」
+# 「語順に」を除く
+_QUANTITY_KEEP_ANY = {_WEAK_SINGLE: re.compile("同じ|同一|単一"),
+                      _WEAK_EACH: re.compile("(?<![㐀-䶿一-鿿豈-﫿々〆])順(?:番)?に|個別に|一件ずつ|一つずつ|ひとつずつ")}
+_QUANTITY_OTHER_NOUN = re.compile("(?:複数|いくつか|いくつも)の([㐀-䶿一-鿿豈-﫿々〆ァ-ヴーA-Za-z0-9]{1,12})")
+# (4) (3) で数える 複数・いくつ・別々 は、元の文の主題（文頭の「〜は」「〜が」。_QUANTITY_TOPIC）と違う主語（名詞＋が・は。
+# _QUANTITY_SUBJECT）を持つ節にあれば数えない（申請は一つずつ審査し、何人かの担当者が確かめます → 申請は逐一見て、複数の担当者が
+# 確かめます。「複数」は担当者の数で、申請の数の主張は変わっていない。反証で見つけた例）。その節に主題の語が出れば数える（申請は
+# 一つずつ審査します → 担当者は複数の申請を見ます）。主語は漢字・片仮名の並びと、そのあとの送り仮名1字まで（誤りが、揺れが）。
+# 主題と同じ語の主語（似た質問が）、主語のない節（版ごとに別々の名前を付けます）、送り仮名の途中で切れる主語（問い合わせが）は
+# 見分けない（限界）
+_QUANTITY_TOPIC = re.compile(r"\s*([^、。はがを]{1,20}?)(?:は|が)")
+_QUANTITY_SUBJECT = re.compile("([㐀-䶿一-鿿豈-﫿々〆ァ-ヴーA-Za-z0-9]{1,12}[りれえけげせめみいきしち]?)(?:が|は)")
 # 数を言う語の打ち消し（並列にせず、複数に分けない、まとめて受け付けず、並列ではなく、分けることなく）。打ち消した語は数えない
 # （「一つずつ → 並列にせず、順に」は数の主張が同じ。反証で見つけた例）。見るのは、数を言う語のあとから、その語がかかる述語の
 # 終わりまで（_QUANTITY_SCOPE_END。「複数の窓口で受け付けるので待ちません」「まとめて送って取りこぼしがない」の打ち消しは別の
@@ -2742,17 +2760,55 @@ def _order_changed(sides, old, old_numbers, new, new_numbers):
     2. 同じ語句に付く値が、元と後で2つ以上の語句について変わった（_number_phrases）。単位の違う数の入れ替え（設計は3日、試験は
        2人 → 設計は2人、試験は3日）と、同じ量の違う単位の入れ替え（準備に2時間、本番に30分 → 準備に30分、本番に2時間）を
        拾うため（1 だけにしたら見逃した。反証で見つけた例）。変わった語句が1つだけの「会議は3回、2時間ずつ行う → 会議は
-       2時間ずつ、3回行う」は、同じ語に付く2つの数の語順を変えた言い換えなので数えない。"""
+       2時間ずつ、3回行う」は、同じ語に付く2つの数の語順を変えた言い換えなので数えない。
+    3. 1 と 2 に当たらなくても、数量を言う値（数量を主張しない「一つ」などを除く）と、その数の直前の2字の組が入れ替わった
+       （_strong_swapped）。言い回しを変えて語句が一致しなくなった単位の違う入れ替え（まず設計に3日、次に試験に5時間 → 設計に
+       5時間、試験に3日）を拾うため（反証で見つけた例）。"""
     if [number.key for number in old_numbers] == [number.key for number in new_numbers]:
         return False
     if _number_contexts(sides, 0, old, old_numbers) == _number_contexts(sides, 1, new, new_numbers):
         return False
     if _unit_orders(old_numbers) != _unit_orders(new_numbers):
         return True
+    if _strong_swapped(sides.texts[0], old, old_numbers, sides.texts[1], new, new_numbers):
+        return True
     for olds, news in zip(_number_phrases(sides, 0, old, old_numbers), _number_phrases(sides, 1, new, new_numbers)):
         if sum(1 for phrase in set(olds) & set(news) if olds[phrase] != news[phrase]) >= 2:
             return True
     return False
+
+
+# 数のすぐ前の、どの数にも付く修飾語（_lead で飛ばす。長い語から見る）
+_LEAD_MODIFIERS = ("合計", "最大", "最小", "最短", "最長", "およそ", "約", "計")
+
+
+def _lead(text, sentence, number):
+    """数 number の直前の2字（文 sentence の中だけ）。文頭か読点の直後なら "^"。数のすぐ前の共通の修飾語（約、計、最大 など。
+    _LEAD_MODIFIERS）は飛ばしてから取る（「移行は約2週間、検証で約3日 → 検証は約3日、移行で約2週間」の直前の2字が「は約」
+    「で約」になり、語順だけの推敲が入れ替えに見える。反証で見つけた例）。"""
+    end = number.start
+    for word in _LEAD_MODIFIERS:
+        if text.endswith(word, max(sentence.start, end - len(word)), end):
+            end -= len(word)
+            break
+    before = text[max(sentence.start, end - 2):end]
+    return "^" if not before or before.endswith(("、", "，", ",")) else before
+
+
+def _strong_swapped(old_text, old, old_numbers, new_text, new, new_numbers):
+    """数量を言う値（weak でない値）と、その数の直前の2字（_lead）の組を元と後で比べ、値の並びが変わり、値の多重集合と直前の
+    2字の多重集合はどちらも同じなのに、組の多重集合が違えば真（値と直前の語の結び付きが入れ替わった）。直前が文頭か読点の数は
+    組に入れない（「会議は3回、2時間ずつ行う → 会議は2時間ずつ、3回行う」は同じ語に付く2つの数の語順だけの言い換え。入れると
+    候補になる。反証で見つけた例）。"""
+    olds = [(n.key, _lead(old_text, old, n)) for n in old_numbers if not n.weak]
+    news = [(n.key, _lead(new_text, new, n)) for n in new_numbers if not n.weak]
+    olds = [pair for pair in olds if pair[1] != "^"]
+    news = [pair for pair in news if pair[1] != "^"]
+    if Counter(k for k, _ in olds) != Counter(k for k, _ in news):
+        return False
+    if Counter(c for _, c in olds) != Counter(c for _, c in news):
+        return False
+    return [k for k, _ in olds] != [k for k, _ in news] and Counter(olds) != Counter(news)
 
 
 def _unit_orders(numbers):
@@ -2922,6 +2978,36 @@ def _head_clauses(text, head):
     return "、".join(picked)
 
 
+def _one_sentence_without(text, head):
+    """相手の文 text が1つの文で、「一つの」の名詞か「一つずつ」の動詞（head）が出ないなら真（言い換えた推敲）。"""
+    body = text.rstrip(" \t\n。！？!?」』）)")
+    return head not in body and not _QUANTITY_SENTENCE_END.search(body)
+
+
+def _other_subject_masked(own_text, partner_text):
+    """partner_text の節（読点で区切る）のうち、own_text の主題（_QUANTITY_TOPIC）と違う主語（_QUANTITY_SUBJECT）を持ち、その主語の
+    ほかに主題の語が出ない節（合鍵は各自が別々に持つ。主題は「鍵」）を伏せた文字列。助詞で終わる節（申請は、）は次の節と1つにして
+    見る。主題が取れなければ partner_text のまま。"""
+    topic = _QUANTITY_TOPIC.match(own_text)
+    topic = topic.group(1).strip() if topic else ""
+    if not topic:
+        return partner_text
+    clauses = []
+    for clause in _QUANTITY_CLAUSE_SPLIT.split(partner_text):
+        if clauses and _QUANTITY_PARTICLE_END.search(clauses[-1].strip()):
+            clauses[-1] += "、" + clause      # 「申請は、担当者が複数を見ます」の「申請は」は次の節と1つにして見る
+        else:
+            clauses.append(clause)
+    out = []
+    for clause in clauses:
+        subject = _QUANTITY_SUBJECT.search(clause)
+        if (subject and subject.group(1) not in topic
+                and topic not in clause[:subject.start(1)] + "＃" + clause[subject.end(1):]):
+            clause = "＃" * len(clause)
+        out.append(clause)
+    return "、".join(out)
+
+
 def _quantity_changed(number, doc, own_text, partner_text, partner_words):
     """weak の値 number（「一つの」「一つずつ」）の数の主張が、相手の文（partner_text）で変わったか。
     1. 相手の文で、「一つの」の名詞や「一つずつ」の動詞のすぐ前に数の主張が変わった語（複数のファイル、まとめて実行）があり、
@@ -2934,6 +3020,10 @@ def _quantity_changed(number, doc, own_text, partner_text, partner_words):
     4. 1 のほか、「一つの」の名詞のすぐあとに「を・は・が・も別々」があれば変わった（窓口を別々にする）。3 のほか、相手が1つの
        文で名詞・動詞の節に「複数」（一つずつ）か「別々に」（一つの）があれば変わった。名詞・動詞が取れないときは、複数・いくつ・
        別々 も相手の文のどこに出ても数える（_QUANTITY_CLAUSE_WORDS の前の注記）。
+    5. 相手が1つの文で、名詞・動詞がその文に出ないときは、3 の語のほか、複数・いくつ・別々 も相手の文のどこに出ても数える。
+       ただし、数の主張が同じ語（順番に、同じ）がその文にあるときと、「一つずつ」の「複数の〜」の〜が元の文にない名詞のときは、
+       この3つの語を数えない（_QUANTITY_KEEP_ANY の前の注記）。元の文の主題と違う主語の節にある語も数えない
+       （_QUANTITY_TOPIC の前の注記）。
     どれも打ち消した語は見ない。"""
     words = _QUANTITY_FOR.get(number.weak)
     if words is None:
@@ -2951,6 +3041,20 @@ def _quantity_changed(number, doc, own_text, partner_text, partner_words):
             if not _quantity_negated(partner_text, match.end()):
                 return False
         scope = _head_clauses(partner_text, head)
+        if scope is None and _one_sentence_without(partner_text, head):
+            if partner_words & words:
+                return True
+            if any(not _quantity_negated(partner_text, match.end())
+                   for match in _QUANTITY_KEEP_ANY[number.weak].finditer(partner_text)):
+                return False
+            extra = partner_words & _QUANTITY_CLAUSE_WORDS[number.weak]
+            if extra:
+                extra &= _quantity_words(_other_subject_masked(own_text, partner_text))
+            if extra and number.weak == _WEAK_EACH:
+                masked = _QUANTITY_OTHER_NOUN.sub(
+                    lambda match: match.group(0) if match.group(1) in own_text else "＃" * len(match.group(0)), partner_text)
+                extra &= _quantity_words(masked)
+            return bool(extra)
         if scope is not None and partner_words & words:
             partner_words = partner_words & _quantity_words(scope)
         if scope is not None and partner_words & _QUANTITY_CLAUSE_WORDS[number.weak]:
@@ -4249,11 +4353,14 @@ def _other_object(segment):
     return _OTHER_OBJECT.search(rest, 1) is not None
 
 
-def _affirmed_with_weight(text, token, clause_only=False):
+def _affirmed_with_weight(text, token, clause_only=False, affirmed_side=()):
     """text の中で token が否定のない節に出ていて、重みの語と同じ文にあれば、その位置を返す。なければ None。
     clause_only が真なら、重みの語が token の節そのものか、その節のすぐ前の主題の句（「最優先は、」「一番大事なのは、」。
     節の前の区切りの直前が「は」）か、すぐ前の重みの語だけの句（「まず、」「第一に、」。_WEIGHT_ONLY_CLAUSE）にあるときだけ
-    （文のどこかの「まず」では数えない。主題の句と重みの語だけの句は反証で見つけた例）。"""
+    （文のどこかの「まず」では数えない。主題の句と重みの語だけの句は反証で見つけた例）。
+    affirmed_side は原文で肯定した側（AではなくBの B）の語。重みの語だけの句から重みを取ったときだけ使い、B の語が同じ節の
+    A より後ろに肯定で出れば（_side_affirmed）、A を B に変えた推敲とみなして数えない（「## 手作業ではなく自動化で回す」→
+    「## まず、手作業の手順を自動化する」。反証で見つけた例）。"""
     if not _WEIGHT_PATTERN.search(text):
         return None
     start = 0
@@ -4270,12 +4377,18 @@ def _affirmed_with_weight(text, token, clause_only=False):
         if _demoted(text, left, position, after):
             continue      # 「Aより」「Aの代わりに」「Aは後にする」などは比べて下げた形
         clause_weight = bool(_WEIGHT_PATTERN.search(clause))
+        own_weight = clause_weight
+        topic_weight = False
         if clause_only and not clause_weight and left >= 2 and text[left - 2] == "は":
             # 「最優先は、Aを使うことだ」: A の節のすぐ前の主題の句の重みの語も、A の節の重みとして見る
             clause_weight = bool(_WEIGHT_PATTERN.search(text, _clause_bounds(text, left - 2)[0], left - 1))
+            topic_weight = clause_weight
         if clause_only and not clause_weight and left >= 2:
             # 「まず、Aで回す」「第一に、Aを使う」: A の節のすぐ前の節が重みの語だけの句なら、A の節の重みとして見る
             clause_weight = _WEIGHT_ONLY_CLAUSE.match(text[_clause_bounds(text, left - 2)[0]:left - 1].strip()) is not None
+        if (clause_only and clause_weight and not own_weight and not topic_weight
+                and _side_affirmed(text, position, token, right, affirmed_side)):
+            continue      # 「## まず、Aの手順をBにする」: 重みの語だけの句のあとで、A を B に変えた
         if clause_only and not clause_weight:
             continue
         if _HYPOTHESIS.search(clause):
@@ -4283,6 +4396,40 @@ def _affirmed_with_weight(text, token, clause_only=False):
         if not clause_weight and _ADVERSATIVE_END.search(clause):
             continue      # 「Aもできますが、目的は…」
         return position
+
+
+# B の語のすぐあとの、B を置き換えられる側にする言い方（「まず、外部のツールで社内のツールを置き換える」の「社内」。B を肯定した
+# のではない。反証で見つけた例）
+_SIDE_REPLACED = re.compile("(?:の[^、。をはもがでにへと]{0,12})?を(?:置き換|置換|差し替|入れ替|切り替|切替)")
+# B の語のすぐあとの、B を退ける言い方（「まず、手作業で回して自動化を中止する」「まず、会議で決めて文書は省く」の「自動化」「文書」。
+# B を肯定したのではない。反証で見つけた例）。B のすぐあとの「を・は・も」に続くときだけ見る（「自動化の漏れを減らす」は B を
+# 退けていない）
+_SIDE_REJECTED = re.compile("[をはも](?:中止|減ら|省|捨て|廃止|控え|見送|禁止|やめ|止め|取りやめ|なく[さしすせ]|削)")
+
+
+def _side_affirmed(text, position, token, right, words):
+    """text の position にある A（token）の節で、原文で肯定した側の語（words）のどれかが、A より後ろ（節の終わり right まで）に
+    肯定で出れば真。「Aの」のすぐあとの語（外部の認証の「認証」）は A の句の一部として見ない。B の語のすぐあとが「も」「にも」
+    「でも」のとき（A で回して B も試す）、否定や下げる形のとき、B を置き換えられる側にしたとき（_SIDE_REPLACED）と、B を退ける
+    言い方のとき（_SIDE_REJECTED。A で回して B を中止する）は数えない。"""
+    for word in words:
+        start = position + len(token)
+        while True:
+            at = text.find(word, start, right)
+            if at < 0:
+                break
+            start = at + 1
+            if text[position + len(token):at] == "の":
+                continue
+            after = text[at + len(word):right]
+            if after.startswith(("も", "にも", "でも")):
+                continue
+            if _neg_after(after, word) or _negative_zu(after) or _demoted(text, position, at, after):
+                continue
+            if _SIDE_REPLACED.match(after) or _SIDE_REJECTED.match(after):
+                continue
+            return True
+    return False
 
 
 def _affirmed_plain(text, token, others):
@@ -4422,7 +4569,9 @@ def _contrast_risks(sides, groups):
                     # 見出しの行と「Aは使わず」「Aはせず」から取った名詞は、A の節そのものの重みの語だけを見る（文のどこかの
                     # 「まず」では数えない。「## ツールではなく習慣から変える」→「## まず習慣、ツールはその次」。反証で見つけた例）
                     narrow = heading or _ZU_MARK.match(mark) is not None
-                    if (_affirmed_with_weight(probe, token, narrow) is None
+                    # 原文で肯定した側（否定の印より後ろ）の語。重みの語だけの句のあとで A を B に変えた推敲を見分ける
+                    side = [word for word in _TOKEN.findall(body.text[mark_end:]) if _is_token(word) and word not in negated]
+                    if (_affirmed_with_weight(probe, token, narrow, side) is None
                             and _affirmed_plain(probe, token, others) is None):
                         continue
                     paired = old_for_new.get(j)

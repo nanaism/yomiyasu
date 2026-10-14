@@ -1320,6 +1320,11 @@ def _details_inner_lines(analysis):
 
 def _metrics_from_analysis(analysis):
     """Use the same protected data boundary as lexical and sentence checks."""
+    return _metrics_and_list_gate(analysis)[0]
+
+
+def _metrics_and_list_gate(analysis):
+    """metrics と、箇条書きの比率の判定に使う地の文の字数（<details> の中の箇条書きの行の字数を除く）を返す。"""
     plain_rows = []
     for row in analysis["lines"]:
         stripped = row["raw"].strip()
@@ -1339,29 +1344,37 @@ def _metrics_from_analysis(analysis):
             plain_rows.append((row, visible))
     total_lines = len(plain_rows)
     # <details> の中の箇条書きは、箇条書きの比率に数えず、details_list_lines に別に数える（畳んだ根拠の一覧などで
-    # excess_list を出さないため）。分母の total_lines と、字数と太字は今までどおり中も数える。
+    # excess_list を出さないため）。total_lines と、字数と太字は今までどおり中も数える。比率の分母は、全体の非空行から
+    # 中の箇条書きの行を引いた数（中に箇条書きを多く畳んでも、外の箇条書きの比率が薄まらない。反証で見つけた例）。
+    # 外の箇条書きの行 L、中の箇条書きの行 M、全体の非空行 T で L/(T-M) <= (L+M)/T なので、中も数えていた前の比率より
+    # 大きくならず、excess_list が新しく出ることはない
     details_inside = _details_inner_lines(analysis)
     list_lines = 0
     details_list_lines = 0
-    for row, _ in plain_rows:
+    details_list_chars = 0
+    for row, visible in plain_rows:
         if _LIST_MARKER_LINE.match(row["raw"]):
             if not _LIST_LINK_LINE.search(row["raw"]):
                 if details_inside and row["line"] in details_inside:
                     details_list_lines += 1
+                    details_list_chars += len("".join(visible.split()))
                 else:
                     list_lines += 1
     plain_content = "\n".join(visible for _, visible in plain_rows)
     bold_count = len(re.findall(r"\*\*[^*]+\*\*", plain_content))
     char_count = len("".join(plain_content.split()))
     bold_per_1000 = bold_count / char_count * 1000 if char_count > 0 else 0
-    list_ratio = list_lines / total_lines if total_lines > 0 else 0
+    ratio_base = total_lines - details_list_lines
+    list_ratio = list_lines / ratio_base if ratio_base > 0 else 0
     metrics = {"char_count": char_count, "total_lines": total_lines, "list_lines": list_lines,
                "list_ratio": round(list_ratio, 3), "bold_count": bold_count,
                "bold_per_1000": round(bold_per_1000, 2)}
     if details_inside is not None:
         # 組になった <details> がある文書にだけ足す（ない文書の metrics は今までと同じキー）
         metrics["details_list_lines"] = details_list_lines
-    return metrics
+    # 箇条書きの比率の判定の門（地の文が300字を超える）も、比率と同じく <details> の中の箇条書きを数えない。外が短く、根拠の
+    # 箇条書きを畳んだ文書で、畳んだ字数で門を通って excess_list が出ないため（反証で見つけた例）。<details> がなければ char_count と同じ
+    return metrics, char_count - details_list_chars
 
 
 def analyze_markdown_metrics(text: str) -> Dict[str, Any]:
@@ -1839,7 +1852,7 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
     findings = []
     analysis = analyze_markdown(text)
     extra_negation_lines = _extra_negation_line_numbers(analysis)
-    metrics = _metrics_from_analysis(analysis)
+    metrics, list_gate_chars = _metrics_and_list_gate(analysis)
     sentence_records = _plain_sentence_records(analysis)
     sentences = [(line, visible) for line, visible, _, _ in sentence_records]
     source_sentences = [(line, source) for line, _, source, _ in sentence_records]
@@ -1872,8 +1885,11 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
                 "snippet": f"太字数: {metrics['bold_count']}回 / {metrics['char_count']}文字"
             })
 
+    if list_gate_chars > 300:
         if metrics["list_ratio"] > 0.25:
-            snippet = f"リスト行: {metrics['list_lines']} / 全非空行: {metrics['total_lines']}"
+            # 分母は比率と同じ（<details> の中の箇条書きの行を引いた数）。引いたときは注記で行の数を示す
+            snippet = (f"リスト行: {metrics['list_lines']} / "
+                       f"全非空行: {metrics['total_lines'] - metrics.get('details_list_lines', 0)}")
             if metrics.get("details_list_lines"):
                 snippet += f"（<details> の中の箇条書き{metrics['details_list_lines']}行は数えていません）"
             findings.append({

@@ -7,8 +7,9 @@ v1.1.2 はこの箇条書きも数えるので、本文に箇条書きがなく�
 決めたこと（このファイルの試験で固定する）:
 
 - <details> の中の箇条書きの行は list_lines と list_ratio に数えず、metrics の details_list_lines に別に数える。
-  分母の total_lines（非空行）と、char_count、bold_count、bold_per_1000 は今までどおり（<details> の中も数える）。
-  したがって list_ratio は v1.1.2 より大きくならず、excess_list が新しく出ることはない。
+  total_lines（非空行）と、char_count、bold_count、bold_per_1000 は今までどおり（<details> の中も数える）。
+  list_ratio は「<details> の外の箇条書きの行 ÷（全体の非空行 − <details> の中の箇条書きの行）」。中に箇条書きを多く畳んでも、
+  外の箇条書きの比率は薄まらない。この比率は v1.1.2 の比率より大きくならず、excess_list が新しく出ることはない。
   details_list_lines は、組になった <details> と </details> が1つでもある文書にだけ足す（ない文書の JSON は今までと同じ）。
 - <details> の外の箇条書きは今までどおり数える。
 - 開き（<details>）と閉じ（</details>）は、HTML のブロックの行（行頭から HTML を書いた行）でだけ見る。段落の中に書いた
@@ -148,7 +149,11 @@ class PrShapeTest(unittest.TestCase):
 class OutsideListsTest(unittest.TestCase):
     """<details> の外の箇条書きは今までどおり数える。"""
 
-    DOC = (BODY + "\n- 読み込みを1か所にした\n- 起動時に検証する\n- 既定値は同じ\n- 古い設定も読める\n"
+    # 外の地の文が300字を超える文書にしてある（<details> の中の箇条書きは、地の文の量の門にも数えないため。外が短い文書は
+    # ShortOutsideGateTest で見る）
+    DOC = (BODY + "\n変更のあとは、起動のたびに設定を一度だけ読み、各部品は読み込んだ値を受け取って使います。部品ごとに設定を"
+           "読み直すことはありません。値を変えたときは、起動し直すと新しい値が使われます。\n"
+           "\n- 読み込みを1か所にした\n- 起動時に検証する\n- 既定値は同じ\n- 古い設定も読める\n"
            "\n<details>\n<summary>根拠</summary>\n\n" + CLAIMS + "\n</details>\n")
 
     def test_outside_lists_still_raise_excess_list(self):
@@ -156,13 +161,13 @@ class OutsideListsTest(unittest.TestCase):
         self.assertIn("excess_list", rules(result))
         self.assertEqual(result["metrics"]["list_lines"], 4)
         self.assertEqual(result["metrics"]["details_list_lines"], 6)
-        self.assertEqual(result["metrics"]["total_lines"], 13)
-        self.assertEqual(result["metrics"]["list_ratio"], round(4 / 13, 3))
+        self.assertEqual(result["metrics"]["total_lines"], 14)
+        self.assertEqual(result["metrics"]["list_ratio"], round(4 / 8, 3))
 
     def test_snippet_says_details_lines_are_not_counted(self):
         finding = [item for item in lint(self.DOC)["findings"] if item["rule"] == "excess_list"][0]
-        self.assertEqual(finding["snippet"], "リスト行: 4 / 全非空行: 13（<details> の中の箇条書き6行は数えていません）")
-        self.assertIn("箇条書きの比率（30.8%）", finding["message"])
+        self.assertEqual(finding["snippet"], "リスト行: 4 / 全非空行: 8（<details> の中の箇条書き6行は数えていません）")
+        self.assertIn("箇条書きの比率（50.0%）", finding["message"])
 
     def test_snippet_is_unchanged_without_lists_inside(self):
         doc = (BODY + "\n- 一つ目\n- 二つ目\n- 三つ目\n\n<details>\n<summary>根拠</summary>\n\n"
@@ -366,3 +371,37 @@ class CheckPassesLintTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+SHORT_PR = (
+    "## 変更の概要\n\n設定の読み込みを1か所にまとめました。\n\n## 変更点\n\n- 起動時に値を検証する\n- 足りない項目の名前を出す\n\n"
+    "<details>\n<summary>根拠（試験の対応）</summary>\n\n"
+    + "".join("- 試験{0}: 設定の読み込みで、項目{0}の既定値が今までと同じことを確かめる\n".format(n) for n in range(1, 9))
+    + "\n</details>\n"
+)
+
+
+class ShortOutsideGateTest(unittest.TestCase):
+    """箇条書きの比率の判定は、地の文の量の門（300字）でも <details> の中の箇条書きを数えない。
+
+    外の地の文が短く、根拠の箇条書きを <details> に畳んだ PR の説明文で、畳んだ箇条書きの字数で門を通って excess_list が
+    出ないこと（反証で見つけた例）。<details> のない文書の門は今までどおり（字数は char_count と同じ）。"""
+
+    def test_short_body_with_folded_lists_has_no_excess_list(self):
+        result = lint(SHORT_PR)
+        self.assertNotIn("excess_list", rules(result))
+        self.assertEqual(result["metrics"]["details_list_lines"], 8)
+        self.assertEqual(list(result["metrics"]), NEW_METRIC_KEYS)
+
+    def test_strict_exit_code_is_zero(self):
+        code, out, err = call_lint(["--strict"], stdin=SHORT_PR.encode("utf-8"))
+        self.assertEqual((code, err), (0, ""))
+        self.assertNotIn("excess_list", out)
+
+    def test_long_body_with_outside_lists_still_raises(self):
+        doc = BODY + "\n" + CLAIMS + "\n<details>\n<summary>根拠</summary>\n\n" + CLAIMS + "\n</details>\n"
+        self.assertIn("excess_list", rules(lint(doc)))
+
+    def test_without_details_the_gate_is_unchanged(self):
+        open_doc = SHORT_PR.replace("<details>\n<summary>根拠（試験の対応）</summary>\n\n", "").replace("\n</details>\n", "\n")
+        self.assertIn("excess_list", rules(lint(open_doc)))
