@@ -2,6 +2,11 @@
 """
 記事の抜粋と、コード内に定義した例文・境界確認用の文章を保存する初期検証用スクリプト。
 実行すると保存済みファイルを上書きする。現行SKILLの実走検証には使わない。
+
+tests/corpus/human/ の中身（フォルダの名前は human だが、人が書いた文は半分だけ）:
+- human_oga_01〜08: 作者の Zenn の記事1本を見出しで8つに分けた抜粋。人が書いた文はこの8本だけ。
+  01 は本文がなく、ページの飾りと記事の題だけ。
+- human_doc_09〜16: このファイルの中に書いた例文（モデルに人の文章らしく書かせたもの）。人が書いた文ではない。
 """
 import argparse
 import os
@@ -40,7 +45,8 @@ class TextExtractor(HTMLParser):
 def setup_human_docs(html=None, output_dir=CORPUS_DIR):
     human_dir = os.path.join(output_dir, "human")
     os.makedirs(human_dir, exist_ok=True)
-    # 1. 作者の Zenn の記事から8本抽出
+    # 1. 作者の Zenn の記事1本を見出しで8つに分けて保存する（human_oga_01〜08。人が書いた文はこの8本だけ。
+    #    01 は本文がなく、ページの飾りと記事の題だけ）
     if html is not None:
         parser = TextExtractor()
         parser.feed(html)
@@ -60,7 +66,8 @@ def setup_human_docs(html=None, output_dir=CORPUS_DIR):
             with open(path, "w", encoding="utf-8") as f:
                 f.write(f"# 大賀愛一郎 実務エッセイ 抜粋 {idx+1}\n\n" + valid_chunks[idx])
 
-    # 2. コード内に定義した技術解説・障害メモ・READMEなどの例文8本を保存
+    # 2. コード内に定義した技術解説・障害メモ・READMEなどの例文8本を保存する（human_doc_09〜16）。
+    #    モデルに人の文章らしく書かせた例文で、人が書いた文ではない。変数名は前のまま残している
     additional_human_texts = [
         # 09: Pythonパッケージ設計のベストプラクティス
         """# Pythonライブラリのディレクトリ構成方針

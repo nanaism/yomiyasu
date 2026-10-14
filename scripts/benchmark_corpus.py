@@ -3,6 +3,10 @@
 保存済みコーパスに対し、単純な正規表現とyomiyasu_lint.pyの検出件数・スコア（規則の減点の目安）を集計する。
 スコアは lint の rule_penalty_score で、文章の品質の点数ではない。
 検出件数の比は精度や誤検出率ではない。実行するとbenchmark_results.jsonを上書きする。
+
+human 群（tests/corpus/human/ の16本）は、人が書いた文だけの群ではない。人が書いた文は human_oga_01〜08
+（作者の記事1本の抜粋）の8本だけで、human_doc_09〜16 の8本はモデルに人の文章らしく書かせた例文
+（setup_corpus_static.py の中に書いたもの）。この群の平均点を「人の文の点数」として読まない。
 """
 import os
 import sys
@@ -52,6 +56,7 @@ def run_naive_lint(text: str):
 
 def benchmark_corpus():
     groups = {
+        # human_oga（人が書いた抜粋8本）と human_doc（AI の例文8本）をまとめた群（上の説明）
         "human": os.path.join(CORPUS_DIR, "human"),
         "edge_cases": os.path.join(CORPUS_DIR, "edge_cases"),
         "raw_ai": os.path.join(CORPUS_DIR, "raw_ai"),
