@@ -5,7 +5,7 @@
 判断の要らないものを直した。文はすべて合成の文（反証の担当の再現の入力と同じ文と、それを言い換えた文）。
 実在の会社や商品の名前は使わない。
 
-- 文書（T1、T2、T6、T7）: rephrase-test.md 3章の4の検出の説明と拾えない語、gemini-syntax.md 原則15 の議事録の見出し、
+- 文書（T1、T2、T6、T7）: rephrase-test.md 3章の4の検出の説明と拾えない語、SKILL.md「案内用の見出し」の議事録の見出し、
   promo の箇条書きの太字の行、種類を直したときの --new-run。
 - 勢い（T3、R2-8）: 参考の5種類の理由の文を、参考にした候補に合わせる。--doc-type のヘルプの「残すだけで」をやめる。
   間接の問いの「かとお問い合わせ」「かとよく聞かれ」「かとご相談」。
@@ -134,10 +134,10 @@ class HiraganaNounKnownLimitTest(unittest.TestCase):
                                                 "{}と読み込みの速さを優先した。".format(noun)), [noun])
 
 
-# ---- T2: 議事録の見出し（gemini-syntax.md 原則15）----
+# ---- T2: 議事録の見出し（SKILL.md「案内用の見出し」。beta の gemini-syntax.md 原則15 は SKILL.md のこの節に移った）----
 class MinutesHeadingPrincipleTest(unittest.TestCase):
-    def test_principle_15_keeps_minutes_headings(self):
-        text = section_text(REFERENCES / "gemini-syntax.md", "### 原則 15: 案内用の見出し")
+    def test_guide_headings_keep_minutes_headings(self):
+        text = section_text(ROOT / "skills" / "yomiyasu" / "SKILL.md", "### 案内用の見出し")
         lines = [line for line in text.split("\n") if "議事録を推敲する" in line]
         self.assertEqual(len(lines), 1, text)
         self.assertIn("見出し", lines[0])

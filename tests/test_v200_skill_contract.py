@@ -30,7 +30,7 @@ REQUIRED = (
     "--material",
     "--stdin",
     "<<<yomiyasu:final>>>",
-    "1回まで",
+    "修正は1回のみ",
     "### 確認の記録",
     "実行した検査",
     "実行しなかった検査",
@@ -38,7 +38,8 @@ REQUIRED = (
     "no_python",
 )
 # 6.7 の1つ目の最後「本文だけの指定の扱いの文」。5.2 の文「…本文だけを返す指定があるときは付けない…」の要の語。
-BODY_ONLY_RULE = re.compile(r"本文だけ[^。\n]*付けない")
+# SKILL.md は敬体で書くので「付けません」も受ける。
+BODY_ONLY_RULE = re.compile(r"本文だけ[^。\n]*付け(?:ない|ません)")
 # 6.7 の2つ目: SKILL.md に含まない文字列
 FORBIDDEN_IN_SKILL = (
     "フルモード",

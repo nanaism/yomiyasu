@@ -1070,7 +1070,7 @@ class SkillFilesTest(unittest.TestCase):
         """C5: SKILL.md の種類の表に10の値がちょうど1回ずつあり、3つの読者の値、「ここに説明が必要です」、--doc-type、
         --reader がある（--doc-type と --reader が check run の --help にあることは TableTest.test_help_texts）。"""
         text = (PACKAGE / "SKILL.md").read_text(encoding="utf-8")
-        found = re.findall(r"^\|\s*([a-z]+)（", text, re.M)
+        found = re.findall(r"^[ \t]*\|\s*([a-z]+)（", text, re.M)
         self.assertEqual(sorted(found), sorted(DOC_TYPE_VALUES))
         for word in READER_VALUES + ("ここに説明が必要です", "--doc-type", "--reader"):
             self.assertIn(word, text)
