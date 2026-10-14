@@ -126,8 +126,10 @@ class ChapterFiveTest(unittest.TestCase):
         after = "「黒マー油」の力強い風味を自宅で味わうなら"
         self.assertEqual(subkinds(tone(before, after, doc_type="promo")[1]), ["intensifier"])
 
-    def test_fix_repeated_praise(self):
-        """直す（紹介記事）: 「絶品」の繰り返しを減らす推敲は、勢いの検査の候補にならない（絶品は強める語の一覧にない）。"""
+    def test_known_limit_repeated_praise_not_in_list(self):
+        """限界（紹介記事）: 強める語の一覧にない褒め言葉（絶品）の繰り返しを減らした推敲は、勢いの検査の候補にならない。
+        紹介記事では同じ褒め言葉の繰り返しを減らさずに残すのが決まり（references/doc-types/promo.md）なので、減らしていないかは
+        推敲の見直しで読み比べる（references/review-points.md）。"""
         before = "この麺は絶品です。スープも絶品で、具も絶品です。"
         after = "この麺は絶品です。スープも具も、よくできています。"
         self.assertEqual(tone(before, after, doc_type="promo")[1]["candidates"], [])

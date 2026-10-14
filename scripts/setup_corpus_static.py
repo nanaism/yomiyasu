@@ -40,7 +40,7 @@ class TextExtractor(HTMLParser):
 def setup_human_docs(html=None, output_dir=CORPUS_DIR):
     human_dir = os.path.join(output_dir, "human")
     os.makedirs(human_dir, exist_ok=True)
-    # 1. 大賀さんのZenn記事から8本抽出
+    # 1. 作者の Zenn の記事から8本抽出
     if html is not None:
         parser = TextExtractor()
         parser.feed(html)

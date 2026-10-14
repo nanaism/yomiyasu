@@ -146,7 +146,7 @@ SKILL.md 4章で当てない範囲は、SKILL.md 1章の種類の表のとおり
 | slides | bold_label_list、count_declaration、excess_list、short_summary_heading | 短い見出しと箇条書き、目次の数の宣言、まとめのページが普通の構成 |
 | essay | なし | 読み取れる比喩を残し、成り立たない比喩を直すのは、エージェントが doc-types/essay.md に従って行う。metaphor_verb の候補（エッセイの比喩動詞）は外さない |
 | formal | なし | 硬い語の言い換えと「〜を行う」の外枠は、エージェントが当てない（SKILL.md 1章の表）。diff の文体の硬化の候補は参考としてだけ出る |
-| promo | emoji_prohibited、fragment_run | 書き手が気持ちや勢いを表す絵文字と、本文で評価の語を短く重ねる型（安い。うまい。早い。）は普通の書き方。「！」、見出しのキャッチコピー、勢いのある語と強める語は、エージェントが doc-types/promo.md に従って残す |
+| promo | emoji_prohibited、fragment_run | 書き手が気持ちや勢いを表す絵文字と、本文で評価の語を短く重ねる型（安い。うまい。早い。）は普通の書き方。「！」、見出しのキャッチコピー、勢いのある語と強める語、同じ褒め言葉の繰り返しは、エージェントが doc-types/promo.md に従って残す |
 
 - lint は外した候補の件数だけを出す。中身は `--doc-type` を付けずに実行すると見られる。
 - bold_not_rendered（表示されない太字）と metaphor_verb は、どの種類でも外さない。fragment_run（「速い。軽い。安い。」の型）は promo のときだけ外す（ほかの種類では外さない）。

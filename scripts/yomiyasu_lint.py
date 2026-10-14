@@ -89,7 +89,7 @@ else:
 # v1.1.2 までの形（score、is_clean、metrics、findings）を1とみなす。
 LINT_FORMAT_VERSION = 2
 
-# 文書の種類ごとに外す規則（G7。種類と読者の設計 5.3、9.2 と、2026-10-13 19時の追記の formal、21時半の追記の promo）。
+# 文書の種類ごとに外す規則（種類ごとに決めた組。formal と promo はあとから足した）。
 # その種類で普通な書き方を候補にしてしまう規則のうち、根拠のある組だけ。規則ID の順に並べる。検出はそのまま行い、
 # 件数と点数を数える前に候補から除く（種類を付けた候補は、付けない候補からこの規則を除いたものと同じになる）。
 # 公開の名前として読むだけにし、書き換えて使う使い方は約束しない。
@@ -103,9 +103,9 @@ DOC_TYPE_SKIP_RULES = {
     "slides": ("bold_label_list", "count_declaration", "excess_list", "short_summary_heading"),
     "essay": (),
     "formal": (),
-    # 紹介記事・宣伝文では書き手の絵文字を残す（目標の D-5。diff の勢いの検査は絵文字が減ると候補にするので、lint の
+    # 紹介記事・宣伝文では書き手の絵文字を残す（diff の勢いの検査は絵文字が減ると候補にするので、lint の
     # 絵文字の候補と食い違わせない。diff の詰めで測って決めた）。
-    # 評価の語を短く重ねる型（「安い。うまい。早い。」。fragment_run）も勢いとして残す（大賀さんの判断、2026-10-14 朝）
+    # 評価の語を短く重ねる型（「安い。うまい。早い。」。fragment_run）も勢いとして残す（作者の判断）
     "promo": ("emoji_prohibited", "fragment_run"),
 }
 # 種類を限って当てる規則（規則ID から、当てる種類のタプルへ）。種類を指定しないときと、ほかの種類では除く。今は空
@@ -1262,6 +1262,61 @@ def _image_only_row(analysis, row, visible):
 
 _IMAGE_ONLY_ROW_DEFAULT = _image_only_row
 
+# HTML のブロックの行で、<details> の開きと閉じを探すときの印。コメントと、中身をタグとして読まない要素
+# （script、style、textarea）の中は飛ばす。
+_DETAILS_HINT = re.compile(r"<details", re.I)
+_DETAILS_TOKEN = re.compile(r"<!--|<(/?)(details|script|style|textarea)(?=[\s/>]|$)", re.I)
+
+
+def _details_inner_lines(analysis):
+    """組になった <details> と </details> の間にある行の番号の集合。組が1つもなければ None。
+
+    開きと閉じは、HTML のブロックの行（引用の外）でだけ見る。段落の中、インラインのコード、コードの囲みとインデントした
+    コード、HTML のコメントの中の <details> は見ない。閉じは、まだ閉じていないいちばん新しい開きと組にする（入れ子）。
+    組にならない開きと閉じは見ない（その範囲は今までどおり数える）。"""
+    if not _DETAILS_HINT.search(analysis["text"]):
+        return None
+    opened, pairs = [], []
+    in_comment, raw_close = False, None
+    for row in analysis["lines"]:
+        if row["kind"] != "html_block" or row["quote_depth"]:
+            # HTML のブロックが終わったら、コメントと script などの中にいる状態も終わる
+            in_comment, raw_close = False, None
+            continue
+        text, position = row["raw"], 0
+        while position < len(text):
+            if in_comment:
+                end = text.find("-->", position)
+                if end < 0:
+                    break
+                in_comment, position = False, end + 3
+                continue
+            if raw_close is not None:
+                found = raw_close.search(text, position)
+                if found is None:
+                    break
+                raw_close, position = None, found.end()
+                continue
+            token = _DETAILS_TOKEN.search(text, position)
+            if token is None:
+                break
+            position = token.end()
+            if token.group(0) == "<!--":
+                in_comment = True
+            elif token.group(2).lower() != "details":
+                if not token.group(1):
+                    raw_close = re.compile(r"</" + token.group(2) + r"(?=[\s>]|$)", re.I)
+            elif not token.group(1):
+                opened.append(row["line"])
+            elif opened:
+                pairs.append((opened.pop(), row["line"]))
+    if not pairs:
+        return None
+    inside = set()
+    for first, last in pairs:
+        inside.update(range(first + 1, last))
+    return inside
+
 
 def _metrics_from_analysis(analysis):
     """Use the same protected data boundary as lexical and sentence checks."""
@@ -1283,19 +1338,30 @@ def _metrics_from_analysis(analysis):
         if stripped:
             plain_rows.append((row, visible))
     total_lines = len(plain_rows)
+    # <details> の中の箇条書きは、箇条書きの比率に数えず、details_list_lines に別に数える（畳んだ根拠の一覧などで
+    # excess_list を出さないため）。分母の total_lines と、字数と太字は今までどおり中も数える。
+    details_inside = _details_inner_lines(analysis)
     list_lines = 0
+    details_list_lines = 0
     for row, _ in plain_rows:
         if _LIST_MARKER_LINE.match(row["raw"]):
             if not _LIST_LINK_LINE.search(row["raw"]):
-                list_lines += 1
+                if details_inside and row["line"] in details_inside:
+                    details_list_lines += 1
+                else:
+                    list_lines += 1
     plain_content = "\n".join(visible for _, visible in plain_rows)
     bold_count = len(re.findall(r"\*\*[^*]+\*\*", plain_content))
     char_count = len("".join(plain_content.split()))
     bold_per_1000 = bold_count / char_count * 1000 if char_count > 0 else 0
     list_ratio = list_lines / total_lines if total_lines > 0 else 0
-    return {"char_count": char_count, "total_lines": total_lines, "list_lines": list_lines,
-            "list_ratio": round(list_ratio, 3), "bold_count": bold_count,
-            "bold_per_1000": round(bold_per_1000, 2)}
+    metrics = {"char_count": char_count, "total_lines": total_lines, "list_lines": list_lines,
+               "list_ratio": round(list_ratio, 3), "bold_count": bold_count,
+               "bold_per_1000": round(bold_per_1000, 2)}
+    if details_inside is not None:
+        # 組になった <details> がある文書にだけ足す（ない文書の metrics は今までと同じキー）
+        metrics["details_list_lines"] = details_list_lines
+    return metrics
 
 
 def analyze_markdown_metrics(text: str) -> Dict[str, Any]:
@@ -1807,12 +1873,15 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
             })
 
         if metrics["list_ratio"] > 0.25:
+            snippet = f"リスト行: {metrics['list_lines']} / 全非空行: {metrics['total_lines']}"
+            if metrics.get("details_list_lines"):
+                snippet += f"（<details> の中の箇条書き{metrics['details_list_lines']}行は数えていません）"
             findings.append({
                 "rule": "excess_list",
                 "line": 1,
                 "severity": "warn",
                 "message": f"箇条書きの比率（{round(metrics['list_ratio']*100, 1)}%）が設定した目安を超えています（推奨: 15%以下）。項目の役割を確かめ、不要なものだけ整理してください。",
-                "snippet": f"リスト行: {metrics['list_lines']} / 全非空行: {metrics['total_lines']}"
+                "snippet": snippet
             })
 
     # 2. 文末重複検査
@@ -2074,7 +2143,7 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
             "snippet": f"行: {', '.join(str(n) for n in bold_label_lines[:5])}"
         })
 
-    # 文書の種類で外す規則（G7。種類と読者の設計 9.3）。検出が終わったあと、件数と点数を数える前に、前から順に
+    # 文書の種類で外す規則。検出が終わったあと、件数と点数を数える前に、前から順に
     # 除いて規則ごとに数える。残った候補の順は変えない。種類を指定しないときは、種類を限って当てる規則だけを除く（今は空）
     skipped = dict((rule, 0) for rule in DOC_TYPE_SKIP_RULES[doc_type]) if doc_type is not None else {}
     if skipped or DOC_TYPE_ONLY_RULES:
@@ -2140,7 +2209,7 @@ def render_findings(result: Dict[str, Any]) -> str:
 
 
 def _context_line(result):
-    """種類か読者を指定したときの4行目（G7。種類と読者の設計 9.3）。指定しないときは None。"""
+    """種類か読者を指定したときの4行目。指定しないときは None。"""
     context = result.get("context") or {}
     doc_type, reader = context.get("doc_type"), context.get("reader")
     if doc_type is None and reader is None:
@@ -2189,7 +2258,7 @@ _EXIT_CODES = """終了コード:
 
 
 def _doc_type_table():
-    """ヘルプの終了コードの表の前に置く、種類ごとに外す規則の一覧（DOC_TYPE_SKIP_RULES から作る。9.6）。"""
+    """ヘルプの終了コードの表の前に置く、種類ごとに外す規則の一覧（DOC_TYPE_SKIP_RULES から作る）。"""
     lines = ["文書の種類ごとに外す規則（--doc-type）:"]
     for value, rules in DOC_TYPE_SKIP_RULES.items():
         lines.append("  {:<10}{}".format(value, "、".join(rules) if rules else "なし"))
@@ -2220,7 +2289,7 @@ class _ArgumentParser(argparse.ArgumentParser):
         if stream is None:
             self.exit(2)
         # 使い方の誤りを標準エラーに書く前に、ほかの誤りの文と同じく UTF-8 にする。
-        # argparse の英語の行のあとに、日本語の案内を1行足す（0.4 の誤りの文の形）。
+        # argparse の英語の行のあとに、日本語の案内を1行足す（ほかの誤りの文と同じ形）。
         _use_utf8(stream, errors="backslashreplace")
         self.print_usage(stream)
         stream.write("{}: error: {}\n".format(self.prog, message))
@@ -2249,7 +2318,7 @@ def _build_parser():
         epilog=_doc_type_table() + "\n\n" + _EXIT_CODES,
         formatter_class=_HelpFormatter,
         add_help=False,
-        # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる（設計 10.7）
+        # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる
         allow_abbrev=False,
     )
     arguments = parser.add_argument_group("引数")
@@ -2370,7 +2439,7 @@ def _run(argv):
         _error(problem)
         return 2
     try:
-        # 種類と読者の値（G7。9.1）。使えない値と空の文字列は、入力を読む前に2で断る
+        # 種類と読者の値。使えない値と空の文字列は、入力を読む前に2で断る
         doc_type, reader = normalize_doc_type(args.doc_type), normalize_reader(args.reader)
     except ValueError as error:
         _error(str(error))

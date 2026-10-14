@@ -14,8 +14,8 @@ __version__ = "2.0.0-beta"
 
 import sys
 
-# lint と diff を読み込む前に、.pyc を書かないようにする（スキルのフォルダに __pycache__ を作らない。
-# 設計 3.4）。子プロセスは -B で動かす。
+# lint と diff を読み込む前に、.pyc を書かないようにする（スキルのフォルダに __pycache__ を作らない）。
+# 子プロセスは -B で動かす。
 sys.dont_write_bytecode = True
 
 import os  # noqa: E402
@@ -105,32 +105,32 @@ _LIST_NAMES = ("nominalization", "intensifiers", "feelings")
 _LIST_KEYS = tuple("references/lists/{}.txt".format(name) for name in _LIST_NAMES)
 # ファイルがないとみなす誤り（yomiyasu_diff.py の _LIST_ABSENT と同じ）
 _LIST_ABSENT = (FileNotFoundError, NotADirectoryError)
-# 外から渡す実行IDの形（3.7）。状態フォルダの外を指せないようにする
+# 外から渡す実行IDの形。状態フォルダの外を指せないようにする
 _RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 _ATTEMPT_FILE = re.compile(r"^attempt-([0-9]+)\.json$")
 _BY_PATH_ENTRY = re.compile(r"^([0-9]{8}T[0-9]{6}Z)\.(.+)\.([0-9]+)$")
 _TOOL_VERSION = re.compile(r"^__version__\s*=\s*[\"']([^\"']+)[\"']\s*$", re.M)
 _DEFAULT_TIMEOUT = 90          # 子プロセスの検査に使える秒数の合計の既定（Claude Code の Bash の既定の上限120秒より短い）
 # 子を待つ秒数がこれを超えたら、上限なしで待つ。とても大きな --timeout（約25日を超える値）は、OS の待ち方の時間の形を超えて
-# OverflowError になるため（反証レビュー spec F1、robust R6）。約11.6日なので、上限なしとみなしても違いは出ない
+# OverflowError になるため（反証で見つけた例）。約11.6日なので、上限なしとみなしても違いは出ない
 _WAIT_LIMIT = 1000000
 _MATERIALS_VERSION_LINE = re.compile(r"^MATERIALS_FORMAT_VERSION\s*=\s*([0-9]+)\s*(?:#.*)?$", re.M)
-# 人が読む文に書く検査名（5.2 の完了報告の4語）。状態の行の checks= と failed= は名前のまま
+# 人が読む文に書く検査名（完了報告の4語）。状態の行の checks= と failed= は名前のまま
 _CHECK_LABELS = {"lint": "lint", "diff": "diff", "materials": "資料との照合"}
 # 意味が変わる恐れを出す検査。これが最後まで動かなかったときは meaning_risk= を出さない（0件と読めるため）
 _RISK_CHECKS = ("diff", "materials")
-# 子の JSON で check が読むキーと型（3.4 の4: 形が違っても落ちずに、その検査を error にする。robust R5）
+# 子の JSON で check が読むキーと型（形が違っても落ちずに、その検査を error にする。反証で見つけた例）
 _REPORT_KEYS = {
     "lint": (("candidate_count", int), ("counts", dict), ("findings", list), ("context", dict)),
     "diff": (("status", str), ("candidate_count", int), ("meaning_risk_count", int),
              ("fail_on_meaning_risk_count", int), ("meaning_risks", list), ("full_diff", dict), ("new_words", list),
              ("context", dict)),
 }
-_LINK_SECONDS = 6 * 60 * 60     # 前の記録につなぐのは6時間以内（3.8 の5）
+_LINK_SECONDS = 6 * 60 * 60     # 前の記録につなぐのは6時間以内
 _STDERR_LIMIT = 2000            # 記録に残す子の標準エラーの字数
-_REPLACE_TRIES = 6              # os.replace を PermissionError のあと50ミリ秒待って5回まで書き直す（3.12、10.3 B4）
+_REPLACE_TRIES = 6              # os.replace を PermissionError のあと50ミリ秒待って5回まで書き直す
 _REPLACE_WAIT = 0.05
-_ATTEMPT_TRIES = 100            # 回の番号を確保するのは100回まで（3.12）
+_ATTEMPT_TRIES = 100            # 回の番号を確保するのは100回まで
 _NOT_JUDGED = ["meaning_preservation", "reader_comprehension"]
 
 _GITIGNORE = "# yomiyasu の検査記録。git に入れない。\n*\n"
@@ -143,12 +143,12 @@ _SAME_FILE_ERROR = ("原文と最終稿が同じファイルです。書き直�
                     "実行してください。原文を上書きしてしまったときは、git などで元の版を取り出して --source に渡してください。"
                     "元の版を取り出せないときは、最終稿を写して --source に渡さず、完了報告の「実行しなかった検査」に"
                     "「diff（原文を上書きしたため）」と書いてください。")
-# 資料と最終稿が同じ中身（同じファイルを含む）のとき（10.8 C-45）。照合が空回りするので2にする
+# 資料と最終稿が同じ中身（同じファイルを含む）のとき。照合が空回りするので2にする
 _SAME_AS_FINAL_ERROR = ("資料と最終稿が同じ中身です。資料には、利用者から受け取った資料を渡してください。"
                         "書き直す前の文章なら --source に渡してください。")
-# 空の最終稿（10.8 C-47。空白だけの本文も同じ）
+# 空の最終稿（空白だけの本文も同じ）
 _EMPTY_FINAL_ERROR = "最終稿が空です。書き終えた最終稿を渡してください。"
-# 1行目の {仕上げ}（3.5、10.4 S11）。--stdin と verify の executed は、本文だけを返す指定もあるので「完了報告を付けるときは」
+# 1行目の {仕上げ}。--stdin と verify の executed は、本文だけを返す指定もあるので「完了報告を付けるときは」
 # とする。--no-record は「直さないなら」に続けて読めるように並べ替えた
 _FINALIZE_FILE = "提出の直前に、本文を変えずに verify を1回実行してください。"
 _FINALIZE_STATE_DIR = "提出の直前に、本文を変えずに verify --state-dir {} を1回実行してください。"
@@ -156,7 +156,7 @@ _FINALIZE_STDIN = "本文はこのままで返答し、完了報告を付ける�
 _FINALIZE_NO_RECORD = ("完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください"
                        "（記録を残さない指定なので verify はできません）。")
 _FAILED_NAMES = {"timeout": "時間切れ", "error": "内部エラー"}
-# partial の1行目の最後（5.3）
+# partial の1行目の最後
 _PARTIAL_TAIL = "verify は実行せず、完了報告にこの出力の2行目を写してください。"
 # 検査の途中で最終稿が変わったとき。正しい次の行動は run のやり直し
 _FINAL_CHANGED_LINE = "最終稿が検査の途中で変わりました。変え終えてから yomiyasu_check.py run をもう一度実行してください。"
@@ -167,7 +167,7 @@ _TEXT_SAME_NOTE = "（改行コード、BOM、末尾の改行だけが違いま�
 # 原文が、前に最終稿として検査した本文と同じとき（2にはしない）
 _SOURCE_WAS_FINAL_NOTE = ("原文が、前に最終稿として検査した本文と同じです。続けて直す依頼でなければ、原文を上書きしたか、"
                           "原文と最終稿を逆に渡していないか確かめてください。")
-# 10.8 C-44: 新規作成で、資料の1つが最終稿とよく似ているとき、その資料を原文とみなして diff も実行する。
+# 資料を原文とみなす扱い: 新規作成で、資料の1つが最終稿とよく似ているとき、その資料を原文とみなして diff も実行する。
 # 似かたは、NFKC にして空白を除いた文字列の2字組（隣り合う2文字）の重なり。重なった2字組の数を最終稿の2字組の数で割った値と、
 # 資料の2字組の数で割った値の小さいほう（片側だけで決めると、大きな資料に短い最終稿の2字組がほとんど含まれてしまう）。
 # しきい値は、tests/corpus の推敲の48組（最小 0.577）と、正しい新規作成の組（最大 0.495）で測って決めた
@@ -175,10 +175,10 @@ _SOURCE_WAS_FINAL_NOTE = ("原文が、前に最終稿として検査した本�
 _SIMILAR_TO_SOURCE = 0.53
 _TREATED_NOTE = "資料の1つが最終稿とよく似ているので、原文とみなして diff も実行しました。書き直す前の文章なら --source に渡してください。"
 # 同じ実行の前の回で原文とみなした資料を、この回も原文とみなしたとき（似かたがしきい値を下回っても、直しを重ねて diff が
-# 外れないようにする。反証レビュー bypass 2）
+# 外れないようにする。反証で見つけた例）
 _TREATED_INHERITED_NOTE = ("前の回で原文とみなした資料を、この回も原文とみなして diff も実行しました。"
                            "書き直す前の文章なら --source に渡してください。")
-# diff が最後まで動かなかった partial では「実行しました」と書かない（partial の文の前に置く。反証レビュー compat 5）
+# diff が最後まで動かなかった partial では「実行しました」と書かない（partial の文の前に置く。反証で見つけた例）
 _TREATED_PENDING_NOTE = ("資料の1つが最終稿とよく似ているので、原文とみなして diff も必要な検査に入れました。"
                          "書き直す前の文章なら --source に渡してください。")
 _TREATED_INHERITED_PENDING_NOTE = ("前の回で原文とみなした資料を、この回も原文とみなして diff も必要な検査に入れました。"
@@ -191,7 +191,7 @@ _WINDOWS_RESERVED = re.compile(r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$", re.I)
 _RUN_ID_ERROR = ("--run-id に使えない値です: {}。英数字で始まり、英数字と「.」「_」「-」だけの64字までにしてください。"
                  "末尾の「.」と、Windows で使えない名前（CON、NUL、COM1 など）は使えません。")
 
-# 3.11 の区切りの行（行全体がこの文字列。行末の \r は無視する）
+# 標準入力を分ける区切りの行（行全体がこの文字列。行末の \r は無視する）
 _MARKERS = OrderedDict(((b"<<<yomiyasu:original>>>", "source"), (b"<<<yomiyasu:material>>>", "material"),
                         (b"<<<yomiyasu:final>>>", "final")))
 _STDIN_FORM = ("<<<yomiyasu:original>>>\n（書き直す前の原文）\n<<<yomiyasu:final>>>\n（最終稿）\n"
@@ -213,7 +213,7 @@ def _sha256(data):
 
 
 def _text_sha256(text):
-    """3.7 の text_sha256。decode_source のあとの文字列から、末尾の改行をすべて外して改行を1つ付ける（空なら空）。"""
+    """記録の text_sha256。decode_source のあとの文字列から、末尾の改行をすべて外して改行を1つ付ける（空なら空）。"""
     body = text.rstrip("\n")
     if body:
         body += "\n"
@@ -246,7 +246,7 @@ def _parse_iso(text):
 
 
 class _NoWorkingDirectory(Exception):
-    """作業ディレクトリが消えている、または読めない（入力の誤りとして終了コード2。robust R11）。"""
+    """作業ディレクトリが消えている、または読めない（入力の誤りとして終了コード2。反証で見つけた例）。"""
 
 
 def _getcwd():
@@ -265,17 +265,17 @@ def _abspath(path):
 
 
 def _label(name):
-    """人が読む文に書く検査名（5.2）。"""
+    """人が読む文に書く検査名（完了報告の語）。"""
     return _CHECK_LABELS.get(name, name)
 
 
 def _disk_path(path):
-    """パスの比べと by-path のキーに使う綴り（3.6、3.12）。realpath のあと、macOS では開いたファイルの F_GETPATH で
+    """パスの比べと by-path のキーに使う綴り。realpath のあと、macOS では開いたファイルの F_GETPATH で
     ディスク上の綴りを取る。大文字と小文字を区別しないファイルシステムで、大文字と小文字や NFC と NFD の違う綴りで同じファイルを
     渡しても、同じ綴りになる。
     macOS では、取った綴りを NFC にそろえ、大文字と小文字を区別しないファイルシステムでは casefold もする。ファイルを消して
     別の綴りで作り直すと（git restore、Finder で作った NFD の名前を NFC で打って作り直す）、ディスク上の綴りが変わり、
-    前の回につながらなくなるため（反証レビュー compat 3）。"""
+    前の回につながらなくなるため（反証で見つけた例）。"""
     real = os.path.realpath(path)
     if sys.platform != "darwin":
         return real
@@ -327,7 +327,7 @@ def _same_path(a, b):
 
 
 def _run_id_problem(run_id):
-    """外から渡す実行IDの誤りの文（なければ None）。3.7 の形に加えて、Windows で作れないか別の名前になるもの（末尾の「.」、
+    """外から渡す実行IDの誤りの文（なければ None）。実行IDの形に加えて、Windows で作れないか別の名前になるもの（末尾の「.」、
     CON、NUL、COM1 などの予約された名前。拡張子を付けても同じ）を断る。"""
     if (not _RUN_ID.match(run_id) or run_id.endswith(".")
             or _WINDOWS_RESERVED.match(run_id.split(".", 1)[0])):
@@ -350,8 +350,8 @@ def _run_id_case_problem(state, run_id):
 
 
 def _compact(text):
-    """C-44 の似かたと C-45 の比べの下ごしらえ。NFKC にし、空白（改行を含む）と書式の文字（一般カテゴリ Cf。ゼロ幅の空白、
-    ソフトハイフン、BOM など）を除く（反証レビュー bypass 4 と 7。文字の間に書式の文字を挟むと似かたが0になるため）。"""
+    """資料と最終稿の似かたと、同じ本文かの比べの下ごしらえ。NFKC にし、空白（改行を含む）と書式の文字（一般カテゴリ Cf。ゼロ幅の空白、
+    ソフトハイフン、BOM など）を除く（反証で見つけた例。文字の間に書式の文字を挟むと似かたが0になるため）。"""
     text = _SPACES.sub("", unicodedata.normalize("NFKC", text))
     if text.isascii():
         return text  # ASCII に書式の文字はない
@@ -361,7 +361,7 @@ def _compact(text):
 
 
 def _bigram_counts(text, compacted=False):
-    """C-44 の似かたの下ごしらえ。_compact の文字列の2字組を数える（compacted なら text はもう _compact したもの）。"""
+    """似かたの下ごしらえ。_compact の文字列の2字組を数える（compacted なら text はもう _compact したもの）。"""
     if not compacted:
         text = _compact(text)
     return Counter(text[index:index + 2] for index in range(len(text) - 1))
@@ -376,14 +376,14 @@ def _similarity_of_counts(material, final):
 
 
 def _similarity(material, final):
-    """C-44 の似かた（0 から 1）。重なった2字組の数を、最終稿の2字組の数で割った値と、資料の2字組の数で割った値の小さいほう。
+    """資料と最終稿の似かた（0 から 1）。重なった2字組の数を、最終稿の2字組の数で割った値と、資料の2字組の数で割った値の小さいほう。
     文字数に比例する時間で求める（6万字で約0.04秒）。"""
     return _similarity_of_counts(_bigram_counts(material), _bigram_counts(final))
 
 
 def _source_like(material_texts, final_text, compacted=False):
-    """C-44。資料ごとの似かたの並びと、原文とみなす資料の番号（1から。しきい値以上でいちばん似ているもの。同じなら若い番号。
-    なければ None）。compacted なら、渡す文字列はもう _compact したもの（run が C-45 の比べと同じ文字列を使い回す）。"""
+    """資料ごとの似かたの並びと、原文とみなす資料の番号（1から。しきい値以上でいちばん似ているもの。同じなら若い番号。
+    なければ None）。compacted なら、渡す文字列はもう _compact したもの（run が同じ本文かの比べと同じ文字列を使い回す）。"""
     final = _bigram_counts(final_text, compacted)
     values = [_similarity_of_counts(_bigram_counts(text, compacted), final) for text in material_texts]
     best = None
@@ -404,21 +404,21 @@ def _same_file(a, b):
 
 
 def _host_value(value):
-    """記録に入れる環境の値。空や、展開されなかった ${…} を含む値は null にする（3.2）。"""
+    """記録に入れる環境の値。空や、展開されなかった ${…} を含む値は null にする。"""
     if not value or "${" in value:
         return None
     return value
 
 
 def _chmod(path, mode):
-    # 原稿の写しを含むので、POSIX ではフォルダを 0o700、ファイルを 0o600 にする（3.6）。chmod は POSIX のときだけ（3.12）
+    # 原稿の写しを含むので、POSIX ではフォルダを 0o700、ファイルを 0o600 にする。chmod は POSIX のときだけ
     if os.name == "posix":
         os.chmod(path, mode)
 
 
 def _replace(source, target):
     """os.replace。ほかのプロセスがファイルを開いているときの PermissionError は、50ミリ秒待って5回まで書き直す
-    （Windows を考えたもの。OS によらず書き直す。3.12、10.3 B4）。"""
+    （Windows を考えたもの。OS によらず書き直す）。"""
     for attempt in range(_REPLACE_TRIES):
         try:
             os.replace(source, target)
@@ -430,7 +430,7 @@ def _replace(source, target):
 
 
 def _write_atomic(path, data):
-    """同じフォルダの一時ファイルに書いてから入れ替える（読む側が書きかけを見ない。3.12）。"""
+    """同じフォルダの一時ファイルに書いてから入れ替える（読む側が書きかけを見ない）。"""
     handle, temporary = tempfile.mkstemp(prefix=".tmp-", dir=os.path.dirname(path))
     try:
         with os.fdopen(handle, "wb") as stream:
@@ -469,10 +469,10 @@ def _ensure_dir(base, *parts):
 
 
 def _ensure_state(state):
-    """状態フォルダを用意する。作ったときだけ .gitignore と state.json を書く。すでにあるフォルダには足さない（10.3 B2）。
+    """状態フォルダを用意する。作ったときだけ .gitignore と state.json を書く。すでにあるフォルダには足さない。
 
     .gitignore と state.json を書けなかったときは、作りかけのフォルダを消す。残すと次の run が「すでにあるフォルダ」として
-    .gitignore なしで書き続け、git status に出る（3.6。反証レビュー robust R3）。"""
+    .gitignore なしで書き続け、git status に出る（反証で見つけた例）。"""
     if os.path.isdir(state):
         return
     parent = os.path.dirname(state)
@@ -506,12 +506,12 @@ def _ensure_state(state):
 
 
 def _state_dir(option):
-    """状態フォルダの決め方（3.6。run、verify、フックで同じ規則）。
+    """状態フォルダの決め方（run、verify、フックで同じ規則）。
 
     1 --state-dir、2 環境変数 YOMIYASU_STATE_DIR、3 作業ディレクトリから上へたどり、.git（フォルダでもファイルでもよい）が
     ある最初のフォルダの .yomiyasu/、4 作業ディレクトリの .yomiyasu/。ここではフォルダを作らない。
     環境変数が空白だけのときと、展開されなかった ${…} を含むときは、ないものとして3と4に進む（--session の ${ と同じ扱い。
-    作業フォルダに「${CLAUDE_PROJECT_DIR}」のようなフォルダを作らない。反証レビュー robust R10）。"""
+    作業フォルダに「${CLAUDE_PROJECT_DIR}」のようなフォルダを作らない。反証で見つけた例）。"""
     if option:
         return _abspath(option)
     environment = os.environ.get("YOMIYASU_STATE_DIR")
@@ -537,7 +537,7 @@ def _state_dir_given(option):
 
 
 def _record_digest(record):
-    """3.7 の record_digest。record_digest を除いて、キーを並べ替え、区切りを詰めた JSON の SHA-256。"""
+    """記録の record_digest。record_digest を除いて、キーを並べ替え、区切りを詰めた JSON の SHA-256。"""
     body = dict((key, value) for key, value in record.items() if key != "record_digest")
     text = json.dumps(body, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
     return "sha256:" + _sha256(text.encode("ascii"))
@@ -545,9 +545,9 @@ def _record_digest(record):
 
 def _status_line(state, via, run_id=None, attempt=None, final=None, expected=None, mode=None, checks=None,
                  meaning_risk=None, replay=None, failed=None, reason=None, doc_type=None, reader=None):
-    """状態の行（3.10）。キーの順は固定で、値に空白を入れない。読む側の正規表現は
+    """状態の行。キーの順は固定で、値に空白を入れない。読む側の正規表現は
     ^yomiyasu-check: ([a-z_]+)((?: [a-z_]+=\\S+)*)$
-    doc_type と reader は mode の次に、付けたときだけ出す（G7。種類と読者の設計 9.5）。"""
+    doc_type と reader は mode の次に、付けたときだけ出す。"""
     fields = [("via", via), ("run", run_id or "-"), ("attempt", str(attempt) if attempt else "-"), ("final", final or "-")]
     for key, value in (("expected", expected), ("mode", mode), ("doc_type", doc_type), ("reader", reader),
                        ("checks", checks), ("meaning_risk", meaning_risk),
@@ -559,7 +559,7 @@ def _status_line(state, via, run_id=None, attempt=None, final=None, expected=Non
 
 def _read_record_status(path):
     """記録を読む。("missing", None)、("bad", None)、("ok", 記録の dict) のどれかを返す。
-    大きさ0のファイルは書いている途中とみなし、50ミリ秒待って1回だけ読み直す（3.9 の4、3.12）。"""
+    大きさ0のファイルは書いている途中とみなし、50ミリ秒待って1回だけ読み直す。"""
     data = b""
     for attempt in range(2):
         try:
@@ -659,7 +659,7 @@ def _skill_version(data):
 
 
 def _skill_info():
-    """scripts の1つ上に SKILL.md があるときだけ埋める（リポジトリのルートの scripts から動かすと found は偽。3.7）。"""
+    """scripts の1つ上に SKILL.md があるときだけ埋める（リポジトリのルートの scripts から動かすと found は偽）。"""
     skill_dir = os.path.dirname(_HERE)
     path = os.path.join(skill_dir, "SKILL.md")
     try:
@@ -670,7 +670,7 @@ def _skill_info():
     return {"found": True, "dir": skill_dir, "skill_md_sha256": _sha256(data), "version": _skill_version(data)}
 
 
-# ---- lint と diff の読み込み（run と verify --replay の中だけ。3.4、3.13 の2）----
+# ---- lint と diff の読み込み（run と verify --replay の中だけ）----
 
 _MODULES = {}
 
@@ -727,7 +727,7 @@ class _Input(object):
     """入力1つ（原文、資料、最終稿）。バイト列を1回だけ読み、ハッシュと、decode_source でそろえた本文を持つ。"""
 
     def __init__(self, role, index, path, data):
-        self.role = role                      # "source"、"material"、"final"（10.3 C1）
+        self.role = role                      # "source"、"material"、"final"
         self.index = index                    # 資料は1から、ほかは0
         self.path = path                      # 絶対パス。標準入力なら None
         self.via = "file" if path is not None else "stdin"
@@ -737,15 +737,15 @@ class _Input(object):
         self.bom = info["bom"]
         self.eol = info["eol"]
         self.text_sha256 = _text_sha256(self.text)
-        self.similarity = None                # 資料だけ: 最終稿との似かた（新規作成のとき。10.8 C-44）
-        self.treated_as_source = False        # 資料だけ: 原文とみなして diff を実行したか（10.8 C-44）
+        self.similarity = None                # 資料だけ: 最終稿との似かた（新規作成のとき）
+        self.treated_as_source = False        # 資料だけ: 原文とみなして diff を実行したか
         self.treated_by = None                # 資料だけ: 原文とみなした決め方（_TREATED_BY のどちらか）
 
     def snapshot(self):
         return "inputs/" + self.sha256 + ".bin"
 
     def token(self):
-        """状態の行の final=。標準入力は本文のハッシュで照らすので text-sha256:（3.10、10.4 S14）。"""
+        """状態の行の final=。標準入力は本文のハッシュで照らすので text-sha256: を付ける。"""
         if self.via == "stdin":
             return "text-sha256:" + self.text_sha256[:12]
         return "sha256:" + self.sha256[:12]
@@ -755,8 +755,8 @@ class _Input(object):
                               ("bytes", len(self.data)), ("sha256", self.sha256), ("text_sha256", self.text_sha256),
                               ("bom", self.bom), ("eol", self.eol), ("snapshot", self.snapshot())))
         if self.role == "material":
-            # 10.8 C-44 の印。似かたは小数第3位まで（新規作成でないときは null）。treated_by は、似かたで決めたか（similarity）、
-            # 同じ実行の前の回から引き継いだか（previous_attempt）。印がなければ null（反証レビュー bypass 2）
+            # 資料を原文とみなした印。似かたは小数第3位まで（新規作成でないときは null）。treated_by は、似かたで決めたか（similarity）、
+            # 同じ実行の前の回から引き継いだか（previous_attempt）。印がなければ null（反証で見つけた例）
             record["treated_as_source"] = self.treated_as_source
             record["similarity"] = round(self.similarity, 3) if self.similarity is not None else None
             record["treated_by"] = self.treated_by
@@ -777,7 +777,7 @@ def _read_stdin_bytes():
         reason = getattr(error, "strerror", None) or error
         return None, "Error reading stdin: 標準入力を読めません（{}）".format(reason)
     if isinstance(data, str):
-        # StringIO のようにバイト列を読めないときは、読んだ文字列を UTF-8 にしてから同じように扱う（0.4）
+        # StringIO のようにバイト列を読めないときは、読んだ文字列を UTF-8 にしてから同じように扱う
         data = data.encode("utf-8", "surrogatepass")
     return data, None
 
@@ -794,8 +794,8 @@ def _make_input(role, index, path, data):
 def _read_named(role, index, given, stdin_data):
     """ファイル（または - なら標準入力）を読んで _Input にする。
 
-    最終稿は検査のあとで読み直す（3.4 の6）ので、通常のファイルでないもの（/dev/stdin、<(…) などのパイプ）は2にして
-    --final - を案内する。読み直すと空になり、変わっていない最終稿を「途中で変わった」と報告するため（robust R8）。"""
+    最終稿は検査のあとで読み直すので、通常のファイルでないもの（/dev/stdin、<(…) などのパイプ）は2にして
+    --final - を案内する。読み直すと空になり、変わっていない最終稿を「途中で変わった」と報告するため（反証で見つけた例）。"""
     if given == "-":
         return _make_input(role, index, None, stdin_data)
     try:
@@ -814,7 +814,7 @@ def _read_named(role, index, given, stdin_data):
 
 
 def _split_stdin(data):
-    """3.11 の区切りの行で標準入力を分ける。([(役割, バイト列)], None) か (None, 理由)。
+    """区切りの行で標準入力を分ける。([(役割, バイト列)], None) か (None, 理由)。
 
     各部分は、区切りの行の次のバイトから、次の区切りの行の先頭まで（末尾の改行を含む）。先頭の BOM は1つ外す。"""
     if data.startswith(b"\xef\xbb\xbf"):
@@ -909,10 +909,10 @@ def _read_inputs(args):
     return (source, materials, final), None
 
 
-# ---- 実行IDと回（3.8。3 の登録と 4 の start はフックの段で作る）----
+# ---- 実行IDと回（フックの登録と start は、フックを作るときに足す）----
 
 def _new_run_id(state, moment):
-    """新しい実行ID（UTC の時刻と os.urandom(4) の16進。3.7）。"""
+    """新しい実行ID（UTC の時刻と os.urandom(4) の16進）。"""
     while True:
         run_id = _stamp(moment) + "-" + os.urandom(4).hex()
         if not os.path.exists(os.path.join(state, "runs", run_id)):
@@ -951,7 +951,7 @@ def _latest_record(run_dir):
 
 
 def _path_key(final, source, materials):
-    """index/by-path のキー（3.6）。ファイルは最終稿の実際のパス、標準入力は原文（新規作成では資料）の本文のハッシュ。"""
+    """index/by-path のキー。ファイルは最終稿の実際のパス、標準入力は原文（新規作成では資料）の本文のハッシュ。"""
     if final.via == "file":
         base = _place(final.path)
     elif source is not None:
@@ -1019,7 +1019,7 @@ def _link(state, run_id, new_run, mode, source, materials, final, moment, cwd):
 
 def _previous_treated(state, run_id, attempt):
     """同じ実行の、attempt より前の読める最新の記録が、原文とみなした資料（記録の Input の dict）。なければ None
-    （その記録が新規作成でないか、印がないときも None）。run と verify で同じ決め方にする（反証レビュー bypass 2）。"""
+    （その記録が新規作成でないか、印がないときも None）。run と verify で同じ決め方にする（反証で見つけた例）。"""
     run_dir = os.path.join(state, "runs", run_id)
     for number in reversed(_attempt_numbers(run_dir)):
         if attempt is not None and number >= attempt:
@@ -1051,7 +1051,7 @@ def _was_checked_final(state, source):
 # ---- 検査 ----
 
 def _wait_seconds(remaining):
-    """子を待つ秒数。_WAIT_LIMIT を超える値は上限なし（None）にする（OverflowError を避ける。spec F1、robust R6）。"""
+    """子を待つ秒数。_WAIT_LIMIT を超える値は上限なし（None）にする（OverflowError を避ける。反証で見つけた例）。"""
     return None if remaining > _WAIT_LIMIT else remaining
 
 
@@ -1059,7 +1059,7 @@ class _Children(object):
     """lint と diff の子プロセスを、同じ締め切り（開始から --timeout 秒）で並べて動かす。
 
     check が外から止められたとき（SIGTERM、SIGHUP、Ctrl+C）は、呼ぶ側が stop() で動いている子を止める。止めないと、
-    子は親を失ったまま最後まで動き続ける（3.13 の7。反証レビュー robust R1、agent 12）。"""
+    子は親を失ったまま最後まで動き続ける（反証で見つけた例）。"""
 
     def __init__(self, timeout, environment):
         self.deadline = time.monotonic() + timeout
@@ -1160,7 +1160,7 @@ class _Children(object):
 
 def _parse_report(stdout, name, version):
     """子の標準出力（lint か diff の --json）を読み、形式の名前と版、check が読むキーと型を確かめる。
-    (値, None) か (None, 理由)。形が違えば、その検査を error にする（3.4 の4。check は落ちない。robust R5）。"""
+    (値, None) か (None, 理由)。形が違えば、その検査を error にする（check は落ちない。反証で見つけた例）。"""
     expected_format = "yomiyasu-" + name
     try:
         value = json.loads(stdout.decode("utf-8"))
@@ -1185,7 +1185,7 @@ def _check_entry(name, target):
 
 
 def _with_basis(diff_module, risks, materials_result):
-    """推敲で資料があるとき、diff の数値の候補に basis を入れた写しを作る（3.3、10.3 B3）。
+    """推敲で資料があるとき、diff の数値の候補に basis を入れた写しを作る。
     足した値が資料にもどこにもなければ "none"、資料にあれば "material"（どちらも混ざれば "none" を先にする）。"""
     if materials_result is None:
         return [dict(risk) for risk in risks]
@@ -1211,8 +1211,8 @@ def _with_basis(diff_module, risks, materials_result):
 
 
 def _materials_lines(diff_module, ctx):
-    """「■ 資料との照合」の節の行（3.3、3.5 の例3）。推敲の行にするか新規作成の行にするかは、照合の JSON の mode で決める
-    （新規作成で資料を原文とみなしたときは、照合を推敲として行うので推敲の行。反証レビュー spec 2）。"""
+    """「■ 資料との照合」の節の行。推敲の行にするか新規作成の行にするかは、照合の JSON の mode で決める
+    （新規作成で資料を原文とみなしたときは、照合を推敲として行うので推敲の行。反証で見つけた例）。"""
     result = ctx.materials_result
     items = result.get("items", [])
     rewrite = result.get("mode") == "rewrite"
@@ -1224,7 +1224,7 @@ def _materials_lines(diff_module, ctx):
     words = [item["text"] for item in items
              if item.get("kind") == "word" and item.get("classification") == "not_in_sources"]
     if rewrite and ctx.diff_result is not None:
-        # 推敲では diff の「元の文にない語」と重なる語を除く（3.3）
+        # 推敲では diff の「元の文にない語」と重なる語を除く
         new_words = set(ctx.diff_result.get("new_words") or [])
         words = [word for word in words if word not in new_words]
     if words:
@@ -1243,7 +1243,7 @@ def _materials_lines(diff_module, ctx):
 
 
 def _mode_checks(mode, materials, treated=False):
-    """3.3 の表: モードと資料の有無で決まる必要な検査。新規作成で資料の1つを原文とみなしたとき（treated。10.8 C-44）は
+    """モードと資料の有無で決まる必要な検査。新規作成で資料の1つを原文とみなしたとき（treated）は
     diff も要る（並びは推敲の資料つきと同じ lint、diff、materials）。"""
     if mode == "rewrite":
         return ["lint", "diff"] + (["materials"] if materials else [])
@@ -1273,10 +1273,10 @@ class _Context(object):
         self.no_record = False
         self.fail_on = []
         self.fail_on_hits = []
-        self.treated = None              # 原文とみなした資料（新規作成。10.8 C-44）
+        self.treated = None              # 原文とみなした資料（新規作成）
         self.source_was_final = False    # 原文が、前に最終稿として検査した本文と同じ
         self.state_dir_option = None     # --state-dir で決めた状態フォルダ（{仕上げ} に書く）
-        self.doc_type = None             # 文書の種類と読者（G7。正規化した値。lint と diff に渡し、記録と状態の行に残す）
+        self.doc_type = None             # 文書の種類と読者（正規化した値。lint と diff に渡し、記録と状態の行に残す）
         self.reader = None
 
     @property
@@ -1301,12 +1301,12 @@ class _Context(object):
 
     def risks_complete(self):
         """意味が変わる恐れを出す検査（diff、資料との照合）がすべて最後まで動き、途中で最終稿が変わっていないか。そうでなければ、
-        件数は出さない（状態の行の meaning_risk= を0件と読ませない。agent 4。変わる前の版の件数を今の最終稿の件数と読ませない）。"""
+        件数は出さない（状態の行の meaning_risk= を0件と読ませない。反証で見つけた例。変わる前の版の件数を今の最終稿の件数と読ませない）。"""
         return not self.final_changed and all(
             self.entries[name]["status"] == "ran" for name in self.required if name in _RISK_CHECKS)
 
     def candidate_total(self):
-        """1回目の「候補あり／なし」は、lint、diff、資料との照合の候補の合計で決める（10.3 B7）。"""
+        """1回目の「候補あり／なし」は、lint、diff、資料との照合の候補の合計で決める。"""
         total = 0
         for result in (self.lint_result, self.diff_result, self.materials_result):
             if result is not None:
@@ -1315,7 +1315,7 @@ class _Context(object):
 
 
 def _context_arguments(doc_type, reader):
-    """子の lint と diff に渡す種類と読者の引数（付けたときだけ。G7。種類と読者の設計 9.5）。"""
+    """子の lint と diff に渡す種類と読者の引数（付けたときだけ）。"""
     arguments = []
     if doc_type is not None:
         arguments += ["--doc-type", doc_type]
@@ -1338,7 +1338,7 @@ def _context_problem(parsed, doc_type, reader):
 
 
 def _run_checks(ctx, snapshots, stance, timeout):
-    """lint と diff を子プロセスで（並べて）動かし、資料があればプロセスの中で照らす（3.4 の4と5）。"""
+    """lint と diff を子プロセスで（並べて）動かし、資料があればプロセスの中で照らす。"""
     lint_module, diff_module = _lint_module(), _diff_module()
     environment = dict(os.environ, PYTHONIOENCODING="utf-8")
     final_snapshot = snapshots[id(ctx.final)]
@@ -1356,7 +1356,7 @@ def _run_checks(ctx, snapshots, stance, timeout):
         targets["diff"] = OrderedDict((("source", ctx.diff_source.sha256), ("final", ctx.final.sha256)))
     material_target = OrderedDict()
     if ctx.diff_source is not None:
-        # 新規作成で資料を原文とみなしたとき（10.8 C-44）も、照合はその資料を原文として行う（3.3 の推敲の扱い。反証レビュー spec 2）
+        # 新規作成で資料を原文とみなしたときも、照合はその資料を原文として行う（推敲の扱い。反証で見つけた例）
         material_target["source"] = ctx.diff_source.sha256
     material_target["materials"] = [item.sha256 for item in ctx.materials]
     material_target["final"] = ctx.final.sha256
@@ -1372,8 +1372,8 @@ def _run_checks(ctx, snapshots, stance, timeout):
             entry = ctx.entries["materials"]
             started = time.monotonic()
             try:
-                # 原文とみなした資料（10.8 C-44）は原文として渡す。資料にない数値は diff の数値の候補の basis "none" で出し、
-                # 照合の意味が変わる恐れに重ねない（3.3 の「二重に出さない」。反証レビュー spec 2）
+                # 原文とみなした資料は原文として渡す。資料にない数値は diff の数値の候補の basis "none" で出し、
+                # 照合の意味が変わる恐れに重ねない（同じ値を二重に出さない。反証で見つけた例）
                 ctx.materials_result = diff_module.ground(
                     ctx.final.text, [item.text for item in ctx.materials],
                     ctx.diff_source.text if ctx.diff_source is not None else None)
@@ -1405,7 +1405,7 @@ def _run_checks(ctx, snapshots, stance, timeout):
                 parsed = None
         try:
             if parsed is not None:
-                # 人が読む形をここで作っておく。子の JSON の形が違って作れなければ、その検査を error にする（robust R5）
+                # 人が読む形をここで作っておく。子の JSON の形が違って作れなければ、その検査を error にする（反証で見つけた例）
                 if name == "lint":
                     text = lint_module.render_report(parsed) + "\n"
                     findings = lint_module.render_findings(parsed)
@@ -1468,7 +1468,7 @@ def _review_count(section):
 
 
 def _fail_on_hits(ctx, diff_module):
-    """--fail-on に当たった値（指定した順）。meaning-risk は数値・否定・入れ替え・文の種類と資料にない数値（10.6 B1）、
+    """--fail-on に当たった値（指定した順）。meaning-risk は数値・否定・入れ替え・文の種類と資料にない数値、
     warn と error は lint の候補で決める。"""
     hits = []
     counts = (ctx.lint_result or {}).get("counts") or {}
@@ -1487,9 +1487,9 @@ def _fail_on_hits(ctx, diff_module):
 # ---- 出力 ----
 
 def _finalize_text(ctx):
-    """1行目の {仕上げ}（3.5、10.4 S11）。--state-dir か環境変数 YOMIYASU_STATE_DIR で状態フォルダを決めて記録したときは、
+    """1行目の {仕上げ}。--state-dir か環境変数 YOMIYASU_STATE_DIR で状態フォルダを決めて記録したときは、
     verify にも同じ状態フォルダを渡すよう書く（呼び出しごとに環境変数が引き継がれないシェルで、
-    案内どおりの verify が別のフォルダを探さないように。反証レビュー spec 3）。"""
+    案内どおりの verify が別のフォルダを探さないように。反証で見つけた例）。"""
     if ctx.no_record:
         return _FINALIZE_NO_RECORD
     if ctx.final.via == "stdin":
@@ -1500,8 +1500,8 @@ def _finalize_text(ctx):
 
 
 def _treated_note(ctx):
-    """10.8 C-44 の注記。似かたで決めたか前の回から引き継いだか（反証レビュー bypass 2）と、diff が最後まで動いたか
-    （動かなければ「必要な検査に入れました」。反証レビュー compat 5）で文を選ぶ。"""
+    """資料を原文とみなしたときの注記。似かたで決めたか前の回から引き継いだかと、diff が最後まで動いたか
+    （動かなければ「必要な検査に入れました」）で文を選ぶ（どちらも反証で見つけた例）。"""
     inherited = ctx.treated.treated_by == "previous_attempt"
     if ctx.entries.get("diff", {}).get("status") == "ran":
         return _TREATED_INHERITED_NOTE if inherited else _TREATED_NOTE
@@ -1509,11 +1509,11 @@ def _treated_note(ctx):
 
 
 def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0, same_as_previous=False):
-    """状態、1行目、next、状態の行を決める（3.5 の1行目の表を上から当てはめる、3.10）。"""
+    """状態、1行目、next、状態の行を決める（1行目の表を上から当てはめる）。"""
     finalize = _finalize_text(ctx)
     failed = ctx.failed
     if ctx.final_changed:
-        # 検査は読んだときの写しに対して動いたが、今の最終稿に対しては実行していない（3.4 の6）。正しい次の行動は、
+        # 検査は読んだときの写しに対して動いたが、今の最終稿に対しては実行していない。正しい次の行動は、
         # 変え終えてからの run のやり直し
         line, following = _FINAL_CHANGED_LINE, "rerun"
     elif failed:
@@ -1522,11 +1522,11 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
         for name, status in failed:
             if name == "final":
                 continue
-            # 完了報告の「実行しなかった検査」に写す文なので、検査名は 5.2 の語にする（agent 15）
+            # 完了報告の「実行しなかった検査」に写す文なので、検査名は完了報告の語にする（反証で見つけた例）
             groups.setdefault(_FAILED_NAMES[status], []).append(_label(name))
             items.append("{}（{}）".format(_label(name), _FAILED_NAMES[status]))
         clauses = ["{}が{}".format("、".join(names), reason) for reason, names in groups.items()]
-        # 5.3: partial のあとは verify をせず、run の2行目と止まった検査を完了報告に書く
+        # partial のあとは verify をせず、run の2行目と止まった検査を完了報告に書く
         line = ("検査の一部を実行できませんでした（{}）。完了報告の「実行しなかった検査」に「{}」と書いてください。".format(
             "、".join(clauses), "、".join(items)) + _PARTIAL_TAIL)
         following = "report_partial"
@@ -1559,7 +1559,7 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
                     "直したら同じコマンドをもう一度実行し、直さないなら" + finalize)
             following = "review"
         elif _detector_reviews(ctx):
-            # 文体の硬化と勢いの見直し候補（level review）は1行目の「候補あり／なし」（10.3 B7）に数えないが、「候補はない」だけ
+            # 文体の硬化と勢いの見直し候補（level review）は1行目の「候補あり／なし」に数えないが、「候補はない」だけ
             # だと節を見落とす（diff の詰めの直し。反証で見つけた例）。参考（info）だけなら添えない
             line = ("検査を実行しました（1回目）。規則に当たる候補はありませんが、文体の硬化と勢いの見直し候補が{}件あります。"
                     "その節を原文と照らし、全文差分で意図しない変更がないかを確かめ、直すなら1回まで、直さないなら".format(
@@ -1572,8 +1572,8 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
         if ctx.no_record:
             following = "report_unrecorded"
     if ctx.treated is not None and not ctx.final_changed:
-        # 10.8 C-44: 資料の1つを原文とみなして diff も実行した。partial では、partial の案内（「…と書いてください。verify は
-        # 実行せず…」）で1行目が終わるように、注記を前に置く（反証レビュー compat 5）
+        # 資料の1つを原文とみなして diff も実行した。partial では、partial の案内（「…と書いてください。verify は
+        # 実行せず…」）で1行目が終わるように、注記を前に置く（反証で見つけた例）
         note = _treated_note(ctx)
         line = note + line if failed else line + note
     if ctx.source_was_final:
@@ -1597,13 +1597,13 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
 
 
 def _unsupported_count(result, diff_risks=None, diff_module=None):
-    """3.5 の3行目の q（資料にない数値・名前の数）。出力に示した候補と同じ条件で数える（1行目の候補あり・なし（10.3 B7）と
+    """3行目の q（資料にない数値・名前の数）。出力に示した候補と同じ条件で数える（1行目の候補あり・なしと
     食い違わないため。反証で見つけた例）。
     - 名前と、新規作成の数値: 照合の意味が変わる恐れ（unsupported）の数。照合の items の not_in_sources の名前と、数量を
-      主張しない「一つ」だけの値（R4）を除いた数値の数と同じ。新規作成では照合の meaning_risk_count と同じ数になる。
+      主張しない「一つ」だけの値を除いた数値の数と同じ。新規作成では照合の meaning_risk_count と同じ数になる。
     - 推敲の数値（原文があるとき、資料を原文とみなしたとき）: 資料にない数値は diff の数値の候補の basis "none" で出し、照合の
-      meaning_risks に入れない（3.3）ので、照合の items の not_in_sources の数値のうち、basis "none" の diff の数値の候補に出た
-      値の数（spec F3）。diff_risks は check が basis を入れた diff の候補（diff が最後まで動かなかったときは None で、そのときは
+      meaning_risks に入れないので、照合の items の not_in_sources の数値のうち、basis "none" の diff の数値の候補に出た
+      値の数（反証で見つけた例）。diff_risks は check が basis を入れた diff の候補（diff が最後まで動かなかったときは None で、そのときは
       items の not_in_sources の数値をすべて数える）。"""
     risks = result.get("meaning_risks") or []
     if result.get("mode") != "rewrite":
@@ -1623,7 +1623,7 @@ def _unsupported_count(result, diff_risks=None, diff_module=None):
 
 def _summary_line(ctx, diff_module=None):
     """3行目（実行した検査の要約。完了報告の「実行した検査」に対応する）。最後まで動かなかった検査は並べない
-    （1行目で「実行しなかった検査」に書くよう案内する。agent 4）。1つもなければ「なし」（5.2）。途中で最終稿が変わったときは、
+    （1行目で「実行しなかった検査」に書くよう案内する。反証で見つけた例）。1つもなければ「なし」。途中で最終稿が変わったときは、
     今の最終稿に対して実行した検査はない。"""
     if ctx.final_changed:
         return _FINAL_CHANGED_SUMMARY
@@ -1632,13 +1632,13 @@ def _summary_line(ctx, diff_module=None):
     if "lint" not in failed:
         where = "最終稿"
         if ctx.doc_type is not None:
-            # 種類を付けたときだけ、種類と外した候補の数を書く。読者は検査を変えないので書かない（状態の行にはある。G7 の 9.5）
+            # 種類を付けたときだけ、種類と外した候補の数を書く。読者は検査を変えないので書かない（状態の行にはある）
             skipped = ctx.lint_result["context"].get("skipped_by_doc_type") or {}
             where += "、種類 {}、外した候補{}件".format(ctx.doc_type, sum(skipped.values()))
         parts.append("lint（{}）候補{}件".format(where, ctx.lint_result.get("candidate_count", 0)))
     if "diff" in ctx.required and "diff" not in failed:
         result = ctx.diff_result
-        # 新規作成で資料を原文とみなしたとき（10.8 C-44）は、どの資料と比べたかを書く
+        # 新規作成で資料を原文とみなしたときは、どの資料と比べたかを書く
         where = "原文→最終稿" if ctx.source is not None else "資料{}→最終稿".format(ctx.treated.index)
         unchanged = ctx.text_unchanged() or result.get("status") == "no_change"
         parts.append("diff（{}）{} 候補{}件（うち意味が変わる恐れ{}件）".format(
@@ -1680,8 +1680,8 @@ def _detector_reviews(ctx):
 
 
 def _detector_lines(ctx, diff_module):
-    """run の5行目のあとに足す2行（diff の詰め。追加文書 2.4、勢いの文書 3.3「完了報告に『硬化の検査：候補なし』または
-    候補の件数を書く」）。完了報告の確認の記録の「硬化の検査」「勢いの検査」にそのまま写せる形。diff を実行しなかったときは出さない。"""
+    """run の5行目のあとに足す2行（完了報告に「硬化の検査：候補なし」または
+    候補の件数を書くため）。完了報告の確認の記録の「硬化の検査」「勢いの検査」にそのまま写せる形。diff を実行しなかったときは出さない。"""
     lines = []
     for key, label in (("stiffness", "硬化の検査"), ("tone", "勢いの検査")):
         value = _detector_value(ctx, diff_module, key)
@@ -1691,7 +1691,7 @@ def _detector_lines(ctx, diff_module):
 
 
 def _sections(ctx, lint_module, diff_module):
-    """3.5 の節（候補が0件の節は出さない。照合の節は照合したときは必ず出す）。"""
+    """run の出力の節（候補が0件の節は出さない。照合の節は照合したときは必ず出す）。"""
     sections = []
     base = ctx.diff_result if ctx.diff_result is not None else diff_module.diff("", "")
     if ctx.risks:
@@ -1727,7 +1727,7 @@ def _materials_text(ctx, diff_module):
 # ---- 記録 ----
 
 def _write_reports(state, ctx, run_id, attempt, diff_module, created):
-    """runs/<実行ID>/attempt-<n>.<検査>.json と .txt を書き、Check に名前とハッシュを入れる（3.4 の7、3.7）。
+    """runs/<実行ID>/attempt-<n>.<検査>.json と .txt を書き、Check に名前とハッシュを入れる。
     書いたファイルのパスを created に足す（保存が途中で失敗したときに消すため）。"""
     for name in ctx.required:
         entry = ctx.entries[name]
@@ -1752,7 +1752,7 @@ def _write_reports(state, ctx, run_id, attempt, diff_module, created):
 
 
 def _reserve_attempt(run_dir, first):
-    """回の番号を O_CREAT | O_EXCL で確保する。取れなければ1つ増やす（100回まで。3.12）。"""
+    """回の番号を O_CREAT | O_EXCL で確保する。取れなければ1つ増やす（100回まで）。"""
     number = max(1, first)
     for _ in range(_ATTEMPT_TRIES):
         path = os.path.join(run_dir, "attempt-{}.json".format(number))
@@ -1768,10 +1768,10 @@ def _reserve_attempt(run_dir, first):
 
 
 def _history(run_dir, attempt, final):
-    """同じ実行の前の回から、previous、fix_count、前回と同じ最終稿か、を求める（3.7、3.8）。
+    """同じ実行の前の回から、previous、fix_count、前回と同じ最終稿か、を求める。
 
     previous は直前の読める回（状態によらない）。前回との比べと修正の回数は、最後まで動いた回（result.status が partial で
-    ない回）だけで行う（10.8 C-41。partial の回は候補を出していないことがあるので、そのあとの回を「前回と同じ最終稿」にしない）。
+    ない回）だけで行う（partial の回は候補を出していないことがあるので、そのあとの回を「前回と同じ最終稿」にしない）。
     最終稿は本文のハッシュ（text_sha256）で比べ、改行コード、BOM、末尾の改行だけの違いは修正に数えない。
     fix_count は、最後まで動いた回と今の回を順に並べたとき、本文が1つ前の回と違った回の数（A → B → A は2）。"""
     texts = []
@@ -1817,7 +1817,7 @@ def _write_problem(state, error):
 
 
 def _save(state, ctx, link, moment, cwd, host, tools, options, path_key, lint_module, diff_module):
-    """回を確保し、レポート、記録、索引を書く（3.4 の7、3.6、3.7、3.12）。(回, 記録のパス, fix_count, 決めたこと) を返す。
+    """回を確保し、レポート、記録、索引を書く。(回, 記録のパス, fix_count, 決めたこと) を返す。
     書けなければ OSError を出す（確保した回のファイルは消す）。"""
     run_id = link["run_id"]
     run_dir = _ensure_dir(state, "runs", run_id)
@@ -1848,7 +1848,7 @@ def _save(state, ctx, link, moment, cwd, host, tools, options, path_key, lint_mo
         record["skill"] = _skill_info()
         record["tools"] = tools
         # unicode_version は、似かた（NFKC と一般カテゴリ）を求めた Unicode の版。verify は、今の版と違えば似かたを求め直さない
-        # （書き換えていない記録を、別の版の Python で invalid_record にしない。反証レビュー compat 4）
+        # （書き換えていない記録を、別の版の Python で invalid_record にしない。反証で見つけた例）
         record["python"] = OrderedDict((("version", platform.python_version()),
                                         ("implementation", platform.python_implementation()),
                                         ("unicode_version", unicodedata.unidata_version)))
@@ -1873,7 +1873,7 @@ def _save(state, ctx, link, moment, cwd, host, tools, options, path_key, lint_mo
             _touch(folder, entry_name)
     except BaseException:
         # 記録を書けなかった回は残さない（verify が書きかけとして待たないように）。この回のレポートと索引も消す。
-        # 索引を残すと、次の回がこの番号を使い直したときに、別の最終稿の記録を指す（robust R7）
+        # 索引を残すと、次の回がこの番号を使い直したときに、別の最終稿の記録を指す（反証で見つけた例）
         for path in [record_path] + created:
             try:
                 os.unlink(path)
@@ -1886,7 +1886,7 @@ def _save(state, ctx, link, moment, cwd, host, tools, options, path_key, lint_mo
 # ---- run ----
 
 def _fail_on(values):
-    """--fail-on の値を確かめる。(値の並び, None) か (None, 誤りの文)。大文字と小文字、「_」と「-」は区別しない（10.5 M5）。"""
+    """--fail-on の値を確かめる。(値の並び, None) か (None, 誤りの文)。大文字と小文字、「_」と「-」は区別しない。"""
     found = []
     for value in values:
         pieces = [piece.strip().lower().replace("_", "-") for piece in value.split(",") if piece.strip()]
@@ -1914,7 +1914,7 @@ def _timeout(raw):
 
 
 def _run(args, parser):
-    # 1. 引数を確かめる。ここから入力を読み終えるまで、状態フォルダには何も書かない（3.4 の1、10.3 C4）
+    # 1. 引数を確かめる。ここから入力を読み終えるまで、状態フォルダには何も書かない
     if args.stdin and (args.final or args.source or args.materials):
         parser.error("--stdin のときは --final、--source、--material を使えません"
                      "（原文か資料と最終稿は、標準入力の区切りの行で渡します）")
@@ -1939,7 +1939,7 @@ def _run(args, parser):
         _error(problem)
         return 2
     try:
-        # 種類と読者（G7。種類と読者の設計 9.1、9.5）。状態フォルダに何かを書く前に確かめる（10.3 C4）
+        # 種類と読者。状態フォルダに何かを書く前に確かめる
         doc_type, reader = normalize_doc_type(args.doc_type), normalize_reader(args.reader)
     except ValueError as error:
         _error(str(error))
@@ -1952,7 +1952,7 @@ def _run(args, parser):
     if problem:
         _error(problem)
         return 2
-    # 作業ディレクトリは記録の cwd に入れる。消えていれば、何も書かずに2（_run_cli が受ける。robust R11）
+    # 作業ディレクトリは記録の cwd に入れる。消えていれば、何も書かずに2（_run_cli が受ける。反証で見つけた例）
     cwd = _getcwd()
     lint_module, diff_module = _lint_module(), _diff_module()
     stance = None
@@ -1964,7 +1964,7 @@ def _run(args, parser):
             return 2
     if (not args.stdin and args.source and "-" not in (args.source[0], args.final[0])
             and _same_file(args.source[0], args.final[0])):
-        # start（原文の写しを先に取る任意のコマンド）はフックの段で作る。今は同じファイルなら必ず2
+        # start（原文の写しを先に取る任意のコマンド）はフックを作るときに足す。今は同じファイルなら必ず2
         _error(_SAME_FILE_ERROR)
         return 2
     loaded, problem = _read_inputs(args)
@@ -1976,20 +1976,20 @@ def _run(args, parser):
     ctx.source, ctx.materials, ctx.final = loaded
     ctx.doc_type, ctx.reader = doc_type, reader
     if not ctx.final.text.strip():
-        # 10.8 C-47: 空の最終稿（空白と改行だけの本文も同じ）は検査しない
+        # 空の最終稿（空白と改行だけの本文も同じ）は検査しない
         _error(_EMPTY_FINAL_ERROR)
         return 2
     final_compact = _compact(ctx.final.text) if ctx.materials else ""
     compacts = [_compact(item.text) for item in ctx.materials]
     if any(item.text_sha256 == ctx.final.text_sha256 or (final_compact and compact == final_compact)
            for item, compact in zip(ctx.materials, compacts)):
-        # 10.8 C-45: 資料と最終稿が同じファイルか同じ本文なら、照合が空回りする（推敲でも新規作成でも2）。空白、全角と半角、
-        # 書式の文字だけが違う写しも同じ本文とみなす（C-44 の似かたと同じ下ごしらえ。反証レビュー bypass 4）
+        # 資料と最終稿が同じファイルか同じ本文なら、照合が空回りする（推敲でも新規作成でも2）。空白、全角と半角、
+        # 書式の文字だけが違う写しも同じ本文とみなす（似かたと同じ下ごしらえ。反証で見つけた例）
         _error(_SAME_AS_FINAL_ERROR)
         return 2
     ctx.mode = "rewrite" if ctx.source is not None else "compose"
     if ctx.mode == "compose":
-        # 10.8 C-44: 資料の1つが最終稿とよく似ていれば、その資料を原文とみなして diff も実行する
+        # 資料の1つが最終稿とよく似ていれば、その資料を原文とみなして diff も実行する
         best, values = _source_like(compacts, final_compact, compacted=True)
         for item, value in zip(ctx.materials, values):
             item.similarity = value
@@ -2005,7 +2005,7 @@ def _run(args, parser):
                         ("codex_thread_id", _host_value(os.environ.get("CODEX_THREAD_ID"))),
                         ("armed_by", None)))
     tools = _tool_versions()
-    # doc_type と reader は G7 で後ろに足した（キーを足すだけなので RECORD_FORMAT_VERSION は1のまま。9.5）
+    # doc_type と reader は、文書の種類と読者のオプションを足したときに後ろに足した（キーを足すだけなので RECORD_FORMAT_VERSION は1のまま）
     options = OrderedDict((("stance", stance), ("fail_on", list(fail_on)), ("timeout", timeout),
                            ("doc_type", doc_type), ("reader", reader)))
 
@@ -2026,7 +2026,7 @@ def _run(args, parser):
         ctx.source_was_final = ctx.source is not None and _was_checked_final(state, ctx.source)
         if ctx.mode == "compose" and ctx.treated is None:
             # 同じ実行の前の回が原文とみなした資料は、似かたがしきい値を下回っても原文とみなす（直しを重ねて diff が外れない
-            # ように。同じ実行は資料の集まりが同じ。反証レビュー bypass 2）
+            # ように。同じ実行は資料の集まりが同じ。反証で見つけた例）
             marked = _previous_treated(state, link["run_id"], link["attempt"])
             for item in ctx.materials if isinstance(marked, dict) else ():
                 if item.text_sha256 == marked.get("text_sha256"):
@@ -2037,7 +2037,7 @@ def _run(args, parser):
     ctx.required = _mode_checks(ctx.mode, ctx.materials, treated=ctx.treated is not None)
 
     # 3. 入力の写しを置き、検査はこの写しに対して行う。記録を書かないとき（--no-record、書けない）は、
-    #    消す前提の一時フォルダに写しを置き、終わったら消す（10.4 S12）。ほかの場所に記録を逃がさない
+    #    消す前提の一時フォルダに写しを置き、終わったら消す。ほかの場所に記録を逃がさない
     recording = state is not None
     write_problem = None
     inputs = ([ctx.source] if ctx.source is not None else []) + list(ctx.materials) + [ctx.final]
@@ -2080,10 +2080,10 @@ def _run(args, parser):
         decision = _decide(ctx, False, problem=write_problem)
     status, line, following, token = decision
 
-    # 6. 出力する（3.5）。意味が変わる恐れを出す検査が最後まで動かなかったときは、件数を null にする（agent 4）
+    # 6. 出力する。意味が変わる恐れを出す検査が最後まで動かなかったときは、件数を null にする（反証で見つけた例）
     complete = ctx.risks_complete()
     if status == "partial":
-        # 0.4: 終了コード3のときは標準エラーにも出す（止まった検査と、子の標準エラーの先頭）。標準出力より先に書き、
+        # 終了コード3のときは標準エラーにも出す（止まった検査と、子の標準エラーの先頭）。標準出力より先に書き、
         # 2>&1 でまとめて読んだときも、パイプと端末のどちらでも最後の行が状態の行になるようにする
         _error("yomiyasu_check.py: " + line)
         for name, entry in ctx.entries.items():
@@ -2132,7 +2132,7 @@ def _run(args, parser):
     return 1 if ctx.fail_on_hits else 0
 
 
-# ---- verify（3.9。読むだけで、何も書かない。--replay なしでは lint と diff を読み込まない）----
+# ---- verify（読むだけで、何も書かない。--replay なしでは lint と diff を読み込まない）----
 
 _VERIFY_LINES = {
     # 本文だけを返す指定では確認の記録を付けないので「完了報告を付けるときは」
@@ -2160,7 +2160,7 @@ _SCRIPT_AND_LIST_CHANGED_LINE = ("記録のあとで、検査スクリプトと�
 
 
 def _tool_changed_line(problems):
-    """tool_changed の1行目。変わったのがスクリプトだけなら 3.9 の表の文、一覧も変わっていれば一覧の名前を書く。"""
+    """tool_changed の1行目。変わったのがスクリプトだけなら決まった文、一覧も変わっていれば一覧の名前を書く。"""
     changed = [detail for code, detail in problems if code == "tool_changed"]
     lists = [key for key in _LIST_KEYS if key in changed]
     if not lists:
@@ -2170,7 +2170,7 @@ def _tool_changed_line(problems):
     return _SCRIPT_AND_LIST_CHANGED_LINE.format("、".join(lists))
 
 
-# --replay の作り直しが時間切れのとき（状態は incomplete。3.9 の10）。記録が欠けたわけではないので、別の文にする
+# --replay の作り直しが時間切れのとき（状態は incomplete）。記録が欠けたわけではないので、別の文にする
 _REPLAY_TIMEOUT_LINE = ("記録のレポートを作り直す途中で時間切れになりました（{}）。--timeout を長くして verify --replay を"
                         "もう一度実行してください。")
 _LINE_ENDINGS_NOTE = "改行コードだけが違います（git の autocrlf やエディタの設定で変わることがあります）。"
@@ -2179,16 +2179,16 @@ _TEXT_SAME_VERIFY_NOTE = "本文は記録と同じで、改行コード、BOM、
 # 同じ最終稿に、原文は同じで資料の集まりが違う記録が複数あるとき（--source では絞れない）
 _AMBIGUOUS_MATERIALS_LINE = ("同じ最終稿に、資料の集まりが違う記録が複数あります。どの検査の記録を使うかを決められないので、"
                              "--run-id を付けて verify を実行してください。")
-# 10.8 C-46: このパスの最新の記録と、ハッシュで見つけた記録の原文が違うとき（この最終稿の記録は1つでもある。
-# 3.9 の文「同じ最終稿に…複数」は事実と合わないので分ける。反証レビュー spec 4）
+# このパスの最新の記録と、ハッシュで見つけた記録の原文が違うとき（この最終稿の記録は1つでもある。
+# 「同じ最終稿に…複数」の文は事実と合わないので分ける。反証で見つけた例）
 _AMBIGUOUS_PLACE_LINE = ("この最終稿の記録と、このパスで最後に検査した記録とで、原文が違います。どちらの記録を使うかを"
                          "決められないので、--run-id か --source を付けて verify を実行してください。")
-# C-46 で、記録の原文をさかのぼって調べる記録の数の上限（続けて直す依頼が何回も重なっても、verify を速く保つ）
+# 最終稿のパスに別の原文の記録があるかを確かめるときに、記録の原文をさかのぼって調べる記録の数の上限（続けて直す依頼が何回も重なっても、verify を速く保つ）
 _LINEAGE_LIMIT = 20
-# 記録の検査が時間切れか内部エラーで終わっていたとき（5.3 の partial の扱いに合わせる）
+# 記録の検査が時間切れか内部エラーで終わっていたとき（run の partial の扱いに合わせる）
 _VERIFY_PARTIAL_LINE = ("記録の {}で終わっています。run をもう一度実行しても同じなら、完了報告に run の出力の2行目を写し、"
                         "「実行しなかった検査」に「{}」と書いてください。")
-# 空の最終稿（10.8 C-47。記録を探さずに no_record）
+# 空の最終稿（記録を探さずに no_record）
 _VERIFY_EMPTY_LINE = "最終稿が空です。書き終えた最終稿を渡してください。"
 _VERIFY_EMPTY_RECORD_LINE = "記録: なし（最終稿が空のため、探していません）"
 # no_record の3行目
@@ -2203,7 +2203,7 @@ _SINCE = re.compile(r"^([0-9]{4})-([0-9]{2})-([0-9]{2})[Tt ]([0-9]{2}):([0-9]{2}
                     r"([Zz]|[+-][0-9]{2}:?[0-9]{2})$")
 _CHECK_NAMES = ("lint", "diff", "materials")
 _EOLS = ("lf", "crlf", "cr", "mixed", "none")
-# 3.7 の必須のキー（記録、Input、Check）
+# 記録の必須のキー（記録、Input、Check）
 _RECORD_KEYS = ("format", "format_version", "run_id", "attempt", "fix_count", "previous", "created_at", "mode", "cwd",
                 "host", "skill", "tools", "python", "inputs", "options", "required_checks", "checks",
                 "materials_summary", "result", "record_digest")
@@ -2255,7 +2255,7 @@ class _Target(object):
         self.text_sha256 = _text_sha256(text) if text is not None else None
 
     def token(self):
-        """状態の行の final=。ファイルはバイト列の SHA-256、標準入力は本文のハッシュ（3.9 の2、10.4 S14）。"""
+        """状態の行の final=。ファイルはバイト列の SHA-256、標準入力は本文のハッシュ。"""
         if self.via == "stdin":
             return "text-sha256:" + self.text_sha256[:12]
         return "sha256:" + self.sha256[:12]
@@ -2354,7 +2354,7 @@ def _final_matches(final_record, final):
 
 
 def _record_treated(record):
-    """記録で原文とみなした資料（inputs.materials[] の treated_as_source が真の最初のもの。10.8 C-44）。なければ None。"""
+    """記録で原文とみなした資料（inputs.materials[] の treated_as_source が真の最初のもの）。なければ None。"""
     inputs = record.get("inputs") if isinstance(record, dict) else None
     materials = inputs.get("materials") if isinstance(inputs, dict) else None
     if not isinstance(materials, list):
@@ -2366,8 +2366,8 @@ def _record_treated(record):
 
 
 def _source_matches(record, source):
-    """記録の原文と --source が同じか。どちらもファイルならバイト列、標準入力が絡むなら本文のハッシュで比べる（10.3 A1）。
-    新規作成で資料を原文とみなした記録（10.8 C-44）は、その資料と比べる（フックや採点器が原文を知っていて --source を付けるため）。"""
+    """記録の原文と --source が同じか。どちらもファイルならバイト列、標準入力が絡むなら本文のハッシュで比べる。
+    新規作成で資料を原文とみなした記録は、その資料と比べる（フックや採点器が原文を知っていて --source を付けるため）。"""
     inputs = record.get("inputs") if isinstance(record, dict) else None
     recorded = inputs.get("source") if isinstance(inputs, dict) else None
     if recorded is None and isinstance(record, dict) and record.get("mode") == "compose":
@@ -2380,7 +2380,7 @@ def _source_matches(record, source):
 
 
 def _expected_token(final_record, final):
-    """final_changed の expected=。今の最終稿と同じ種類のハッシュで出す（標準入力は text-sha256:。10.4 S14）。"""
+    """final_changed の expected=。今の最終稿と同じ種類のハッシュで出す（標準入力は text-sha256:）。"""
     if final.via == "stdin":
         value = final_record.get("text_sha256")
         return "text-sha256:" + value[:12] if isinstance(value, str) and _HEX64.match(value) else None
@@ -2393,7 +2393,7 @@ def _normalize_eol(data):
 
 
 def _only_line_endings(state, final_record, final):
-    """記録の最終稿の写しと、今の最終稿が、改行コードだけ違うか（両方を LF にそろえると同じ。3.9 の注記）。"""
+    """記録の最終稿の写しと、今の最終稿が、改行コードだけ違うか（両方を LF にそろえると同じ）。"""
     if final.via != "file":
         return False  # 標準入力は本文のハッシュで照らすので、改行コードの違いでは食い違わない
     value = final_record.get("sha256")
@@ -2408,7 +2408,7 @@ def _only_line_endings(state, final_record, final):
 
 
 def _same_final_place(final_record, final):
-    """記録の最終稿と今の最終稿が同じ場所か（パスが null どうしは同じとみなす。10.3 A1）。"""
+    """記録の最終稿と今の最終稿が同じ場所か（パスが null どうしは同じとみなす）。"""
     recorded = final_record.get("path")
     if final.path is None or recorded is None:
         return final.path is None and recorded is None
@@ -2417,7 +2417,7 @@ def _same_final_place(final_record, final):
 
 def _ambiguity(items, kind=None):
     """ambiguous の値。(実行IDの並び（新しい順、重なりなし）, 曖昧さの種類)。種類は "materials"（原文は同じで資料の集まり
-    だけが違う）、"source"（原文が違う。3.9）、"place"（10.8 C-46。kind で渡す）。"""
+    だけが違う）、"source"（原文が違う）、"place"（このパスに別の原文の記録がある。kind で渡す）。"""
     ordered = sorted(items, key=lambda item: item.order(), reverse=True)
     run_ids = []
     for item in ordered:
@@ -2432,9 +2432,9 @@ def _ambiguity(items, kind=None):
 
 
 def _place_origin(record):
-    """10.8 C-46 で比べる原文。推敲は原文、新規作成で原文とみなした資料（10.8 C-44）はその資料（どちらも ("text", 本文のハッシュ)）、
-    原文とみなした資料のない新規作成は資料の集まり（3.9 の「原文（新規作成では資料）」）。推敲の資料の集まりは比べない
-    （C-46 の「原文が同じなら今のまま」。反証レビュー spec 4）。形がわからなければ None。"""
+    """最終稿のパスの記録どうしで比べる原文。推敲は原文、新規作成で原文とみなした資料はその資料（どちらも ("text", 本文のハッシュ)）、
+    原文とみなした資料のない新規作成は資料の集まり（新規作成では資料を原文とする）。推敲の資料の集まりは比べない
+    （原文が同じなら今のまま。反証で見つけた例）。形がわからなければ None。"""
     if not isinstance(record, dict) or not isinstance(record.get("inputs"), dict):
         return None
     inputs = record["inputs"]
@@ -2456,9 +2456,9 @@ def _place_origin(record):
 
 
 def _continues_to(state, record, target):
-    """10.8 C-46。記録の原文（原文とみなした資料を含む）から、その本文を最終稿として検査した記録へさかのぼり（_LINEAGE_LIMIT
+    """記録の原文（原文とみなした資料を含む）から、その本文を最終稿として検査した記録へさかのぼり（_LINEAGE_LIMIT
     件まで）、本文のハッシュ target に行き着くか。同じ文書を続けて直し、前の最終稿の場所（推敲の原文の場所）へ写した流れ
-    （3.9 の「原文の場所に写す」、5.1 の手順6。反証レビュー spec 1）。"""
+    （原文の場所に写す手順。反証で見つけた例）。"""
     pending = [record]
     seen = set()
     looked = 0
@@ -2475,9 +2475,9 @@ def _continues_to(state, record, target):
 
 
 def _other_origin_at_place(state, final, found):
-    """10.8 C-46。今の最終稿のパスの by-path の最新の記録が、ハッシュで見つけた記録と別の原文なら、その記録（_Found）。
+    """今の最終稿のパスの by-path の最新の記録が、ハッシュで見つけた記録と別の原文なら、その記録（_Found）。
     原文が同じか、見つけた記録の原文をさかのぼるとその記録の最終稿に行き着く（続けて直して原文の場所へ写した）か、
-    パスの記録がないか、読めなければ None（K6 の写しと、原文の場所へ写す流れは今のまま）。"""
+    パスの記録がないか、読めなければ None（検査ずみの最終稿を別のファイルの場所へ写す流れと、原文の場所へ写す流れは今のまま）。"""
     if final.via != "file":
         return None
     mine = _place_origin(found.record)
@@ -2499,7 +2499,7 @@ def _other_origin_at_place(state, final, found):
 
 
 def _find(state, final, run_id, source):
-    """3.9 の3。記録を探す。("found", _Found) か ("ambiguous", [実行ID]) か ("final_changed" | "wrong_file", _Found)
+    """記録を探す。("found", _Found) か ("ambiguous", [実行ID]) か ("final_changed" | "wrong_file", _Found)
     か ("invalid", _Found) か ("no_record", None)。"""
     if run_id is not None:
         run_dir = os.path.join(state, "runs", run_id)
@@ -2523,19 +2523,19 @@ def _find(state, final, run_id, source):
         pool = known or candidates
         if source is not None:
             narrowed = [item for item in pool if _source_matches(item.record, source)]
-            pool = narrowed or pool  # 絞れなければ最新の記録を使い、3.9 の5 で other_source にする
+            pool = narrowed or pool  # 絞れなければ最新の記録を使い、あとの照らしで other_source にする
         origins = set(_origin(item.record) for item in pool)
         if len(origins) > 1:
             return "ambiguous", _ambiguity(pool)
         best = max(pool, key=lambda item: item.order())
         if source is None:
-            # 10.8 C-46: 検査ずみの最終稿を、別の原文の記録があるパスへ写したときは、どちらの記録かを決められない
+            # 検査ずみの最終稿を、別の原文の記録があるパスへ写したときは、どちらの記録かを決められない
             other = _other_origin_at_place(state, final, best)
             if other is not None:
                 return "ambiguous", _ambiguity([best, other], kind="place")
         return "found", best
 
-    # ハッシュで見つからないとき、同じ場所の記録があれば final_changed（3.9 の3、10.3 A1）
+    # ハッシュで見つからないとき、同じ場所の記録があれば final_changed
     if final.via == "file":
         place = _place(final.path)
     elif source is not None and source.text_sha256 is not None:
@@ -2552,7 +2552,7 @@ def _find(state, final, run_id, source):
 
 
 def _record_shape(record):
-    """3.9 の4: 3.7 の必須のキーと型。食い違ったキーの名前の並び（空なら形は合っている）。"""
+    """記録の必須のキーと型。食い違ったキーの名前の並び（空なら形は合っている）。"""
     wrong = []
 
     def need(condition, name):
@@ -2615,7 +2615,7 @@ def _record_shape(record):
         isinstance(tools[key], dict) and tools[key].get("version") is None and text_or_null(tools[key].get("sha256"))
         for key in _LIST_KEYS if key in tools), "tools")
     python = record.get("python")
-    # unicode_version は、このキーを足す前の記録にはないので、あるときだけ型を確かめる（反証レビュー compat 4）
+    # unicode_version は、このキーを足す前の記録にはないので、あるときだけ型を確かめる（反証で見つけた例）
     need(isinstance(python, dict) and is_text(python.get("version")) and is_text(python.get("implementation"))
          and ("unicode_version" not in python or is_text(python["unicode_version"])), "python")
     inputs = record.get("inputs")
@@ -2628,13 +2628,13 @@ def _record_shape(record):
                 name = "inputs.materials[{}]".format(number)
                 check_input(item, name, "material", number)
                 if isinstance(item, dict):
-                    # 10.8 C-44 の印（このキーを足す前の記録にはないので、あるときだけ型を確かめる）。印は新規作成の1つだけ
+                    # 資料を原文とみなした印（このキーを足す前の記録にはないので、あるときだけ型を確かめる）。印は新規作成の1つだけ
                     treated = item.get("treated_as_source", False)
                     similarity = item.get("similarity")
                     need(type(treated) is bool and (mode == "compose" or treated is False), name + ".treated_as_source")
                     need(similarity is None or (type(similarity) in (int, float) and 0 <= similarity <= 1),
                          name + ".similarity")
-                    # 決め方（反証レビュー bypass 2。このキーを足す前の記録にはない）。印があれば決め方があり、なければ null
+                    # 決め方（反証で見つけた例。このキーを足す前の記録にはない）。印があれば決め方があり、なければ null
                     if "treated_by" in item:
                         treated_by = item["treated_by"]
                         need((treated_by in _TREATED_BY) if treated is True else (treated_by is None),
@@ -2645,7 +2645,7 @@ def _record_shape(record):
         if mode == "compose":
             need(inputs["source"] is None, "inputs.source")
     options = record.get("options")
-    # doc_type と reader（G7）は、このキーを足す前の記録にはないので、ないときは値なしとして読む。あるときは正規化した値か null
+    # doc_type と reader は、このキーを足す前の記録にはないので、ないときは値なしとして読む。あるときは正規化した値か null
     need(isinstance(options, dict) and text_or_null(options.get("stance"))
          and isinstance(options.get("fail_on"), list) and all(is_text(value) for value in options["fail_on"])
          and type(options.get("timeout")) in (int, float)
@@ -2674,9 +2674,9 @@ def _record_shape(record):
             need(entry["summary"] is None or isinstance(entry["summary"], dict), name + ".summary")
             need(is_text(entry.get("stderr")), name + ".stderr")
         need(len(set(names)) == len(names), "checks.name")
-        # モードと資料の有無で決まる検査（3.3 の表）の外にある項目は、run が書かない形。新規作成の記録に diff の項目が
-        # あると、--replay が原文のない記録の diff を作り直そうとして落ちる（反証レビュー spec F6、robust R12）
-        # 新規作成で資料を原文とみなした記録（10.8 C-44）には diff がある
+        # モードと資料の有無で決まる検査の外にある項目は、run が書かない形。新規作成の記録に diff の項目が
+        # あると、--replay が原文のない記録の diff を作り直そうとして落ちる（反証で見つけた例）
+        # 新規作成で資料を原文とみなした記録には diff がある
         if mode in ("rewrite", "compose") and isinstance(inputs, dict) and isinstance(inputs.get("materials"), list):
             allowed = _mode_checks(mode, inputs["materials"], treated=_record_treated(record) is not None)
             need(all(name in allowed for name in names), "checks.name")
@@ -2704,8 +2704,8 @@ def _record_context(record):
 
 
 def _required_for(record, treated=None):
-    """必要な検査（3.3 の表。モードと資料の有無で決まる）と、記録の required_checks を合わせたもの。新規作成で資料を原文と
-    みなしたとき（10.8 C-44）は diff も要る。treated を渡さなければ記録の印で決める。"""
+    """必要な検査（モードと資料の有無で決まる）と、記録の required_checks を合わせたもの。新規作成で資料を原文と
+    みなしたときは diff も要る。treated を渡さなければ記録の印で決める。"""
     if treated is None:
         treated = _record_treated(record) is not None
     expected = _mode_checks(record["mode"], record["inputs"]["materials"], treated=treated)
@@ -2713,7 +2713,7 @@ def _required_for(record, treated=None):
 
 
 def _diff_source_item(record):
-    """記録の diff の原文の Input（推敲では原文、新規作成では原文とみなした資料。10.8 C-44）。なければ None。"""
+    """記録の diff の原文の Input（推敲では原文、新規作成では原文とみなした資料）。なければ None。"""
     source = record["inputs"]["source"]
     if isinstance(source, dict):
         return source
@@ -2721,10 +2721,10 @@ def _diff_source_item(record):
 
 
 def _expected_target(record, name):
-    """各検査の target に入るはずのハッシュ（3.7。run の _run_checks と同じ形）。"""
+    """各検査の target に入るはずのハッシュ（run の _run_checks と同じ形）。"""
     inputs = record["inputs"]
     final = inputs["final"]["sha256"]
-    # diff と照合の原文（推敲では原文、新規作成では原文とみなした資料。10.8 C-44、反証レビュー spec 2）
+    # diff と照合の原文（推敲では原文、新規作成では原文とみなした資料。反証で見つけた例）
     item = _diff_source_item(record)
     source = item["sha256"] if item is not None else None
     if name == "lint":
@@ -2753,8 +2753,8 @@ def _snapshot_text(state, item):
 
 
 def _treated_again(state, record, run_id, attempt):
-    """10.8 C-44。新規作成の記録の写しから、原文とみなす資料の番号と決め方を求め直す（印を消した記録を見つけるため）。
-    似かたがしきい値に届かなければ、同じ実行の前の回の記録の印を引き継ぐ（run と同じ決め方。反証レビュー bypass 2）。
+    """新規作成の記録の写しから、原文とみなす資料の番号と決め方を求め直す（印を消した記録を見つけるため）。
+    似かたがしきい値に届かなければ、同じ実行の前の回の記録の印を引き継ぐ（run と同じ決め方。反証で見つけた例）。
     (求められたか, 番号 or None, 決め方 or None)。推敲の記録と、写しを読めないときは (False, None, None)。"""
     if record["mode"] != "compose":
         return False, None, None
@@ -2784,7 +2784,7 @@ def _treated_label(index, treated_by):
 def _recheck_problem(record, current_tools):
     """verify が、原文とみなす資料を写しから求め直してよいか。よければ None。記録を作ったときと Unicode の版（NFKC と一般
     カテゴリの結果が変わる）か check（しきい値と測り方）が違えば、その理由（"unicode" か "tool"）を返し、記録の印を使う
-    （印は record_digest で守られている。check が違うときは tool_changed になる。反証レビュー compat 4）。
+    （印は record_digest で守られている。check が違うときは tool_changed になる。反証で見つけた例）。
     unicode_version のない記録（このキーを足す前のもの）は求め直す。"""
     version = record["python"].get("unicode_version")
     if version is not None and version != unicodedata.unidata_version:
@@ -2796,7 +2796,7 @@ def _recheck_problem(record, current_tools):
 
 def _report_value(state, entry):
     """ハッシュを確かめた検査のレポート（.json）の値。読めないか、ハッシュが合わないか、JSON のオブジェクトでなければ None
-    （そのときは 3.9 の8 が report の食い違いにする）。"""
+    （そのときは、あとの照らしで report の食い違いにする）。"""
     report = entry.get("report")
     if not isinstance(report, str) or not report.startswith("runs/"):
         return None
@@ -2817,7 +2817,7 @@ def _report_value(state, entry):
 def _summary_problems(state, record, required):
     """記録の件数（checks[].summary、materials_summary、result）を、ハッシュを確かめたレポートの件数と
     照らす（--replay なしでも。lint と diff は読み込まない）。食い違ったものの名前の並び。result の件数は、必要な検査
-    （required）のレポートがすべて読めたときだけ照らす（欠けた検査は 3.9 の7 が incomplete にする）。"""
+    （required）のレポートがすべて読めたときだけ照らす（欠けた検査は、別の照らしで incomplete にする）。"""
     wrong = []
     reports = {}
     for entry in record["checks"]:
@@ -2839,8 +2839,8 @@ def _summary_problems(state, record, required):
         entry, value = reports[name]
         summary = entry["summary"] if isinstance(entry["summary"], dict) else {}
         if name in ("lint", "diff"):
-            # 記録の種類と読者（options）を、レポートの context と照らす（G7。digest を計算し直して種類を書き換えた記録を、
-            # --replay なしでも見つける。context のないレポートは G7 の前のもので、値なしとして読む）
+            # 記録の種類と読者（options）を、レポートの context と照らす（digest を計算し直して種類を書き換えた記録を、
+            # --replay なしでも見つける。context のないレポートは種類と読者のオプションを足す前のもので、値なしとして読む）
             found = value.get("context") if isinstance(value.get("context"), dict) else {}
             compare(name + ".context", context, [found.get("doc_type"), found.get("reader")])
         if name == "lint":
@@ -2877,7 +2877,7 @@ def _summary_problems(state, record, required):
                 compare("materials_summary." + key, recorded.get(key), classes.count(key))
             found = value.get("meaning_risks") if isinstance(value.get("meaning_risks"), list) else []
             risks += len(found)
-            # 照合の意味が変わる恐れは kind unsupported だけで、--fail-on=meaning-risk が数えるのは数値（10.6 B1）
+            # 照合の意味が変わる恐れは kind unsupported だけで、--fail-on=meaning-risk が数えるのは数値
             fail_on += sum(1 for risk in found if isinstance(risk, dict) and risk.get("subkind") == "number")
     if all(name in reports for name in required):
         result = record["result"]
@@ -2896,11 +2896,11 @@ class _Material(object):
 
 class _ReplayError(Exception):
     """--replay で子プロセスを起動できない、待てない、またはシグナルで止まった。記録の食い違いではないので、
-    not_reproducible にせず、verify の内部の誤り（終了コード3）にする（3.10。反証レビュー spec F1、robust R2）。"""
+    not_reproducible にせず、verify の内部の誤り（終了コード3）にする（反証で見つけた例）。"""
 
 
 def _replay(state, record, timeout):
-    """3.9 の10。写しに対して記録と同じ引数で lint と diff を子プロセスで動かし、照合はプロセスの中で作り直して、
+    """写しに対して記録と同じ引数で lint と diff を子プロセスで動かし、照合はプロセスの中で作り直して、
     レポート（.json と .txt）のハッシュを記録と比べる。[(問題のコード, 詳しく)] と replay の値を返す。
     子を動かせなかったときは _ReplayError を出す。"""
     lint_module, diff_module = _lint_module(), _diff_module()
@@ -2910,7 +2910,7 @@ def _replay(state, record, timeout):
     def snapshot(item):
         return os.path.join(state, "inputs", item["sha256"] + ".bin")
 
-    # 記録と同じ種類と読者を付ける（付けないと lint のレポートが合わない。G7 の 9.5）
+    # 記録と同じ種類と読者を付ける（付けないと lint のレポートが合わない）
     context = _context_arguments(*_record_context(record))
     commands = OrderedDict()
     if "lint" in entries:
@@ -2920,7 +2920,7 @@ def _replay(state, record, timeout):
         command = [sys.executable, "-B", os.path.join(_HERE, "yomiyasu_diff.py"), "--json"]
         if record["options"].get("stance") is not None:
             command += ["--stance", record["options"]["stance"]]
-        # 新規作成で資料を原文とみなした記録（10.8 C-44）は、その資料の写しと比べる
+        # 新規作成で資料を原文とみなした記録は、その資料の写しと比べる
         commands["diff"] = command + context + [snapshot(_diff_source_item(record)), snapshot(inputs["final"])]
     environment = dict(os.environ, PYTHONIOENCODING="utf-8")
     children = _Children(timeout, environment)
@@ -2934,7 +2934,7 @@ def _replay(state, record, timeout):
                 def text_of(item):
                     with open(snapshot(item), "rb") as handle:
                         return decode_source(handle.read())[0]
-                # 照合の原文は run と同じ（推敲では原文、新規作成では原文とみなした資料。反証レビュー spec 2）
+                # 照合の原文は run と同じ（推敲では原文、新規作成では原文とみなした資料。反証で見つけた例）
                 source_item = _diff_source_item(record)
                 source_text = text_of(source_item) if source_item is not None else None
                 material_texts = [text_of(item) for item in inputs["materials"]]
@@ -3021,7 +3021,7 @@ def _newer_attempt(state, found, record):
 def _recorded_as_input(state, final):
     """--final に渡した本文が、記録では原文か資料として使われているか。最終稿の記録が見つからなかった
     ときにだけ呼ぶ。inputs/ に写しがあり、読める記録の inputs.source か inputs.materials にこのハッシュがあるときだけ真。
-    写しだけを見ると、記録を書けなかった run が置いた最終稿の写しで誤って案内する（反証レビュー spec 5）。"""
+    写しだけを見ると、記録を書けなかった run が置いた最終稿の写しで誤って案内する（反証で見つけた例）。"""
     if not os.path.isfile(os.path.join(state, "inputs", final.sha256 + ".bin")):
         return False
     runs = os.path.join(state, "runs")
@@ -3043,7 +3043,7 @@ def _recorded_as_input(state, final):
 
 
 def _verify_record(state, found, final, source, since, replay, timeout):
-    """3.9 の4〜11。見つけた記録を確かめる。(状態, [(コード, 詳しく)], replay の値, 形を確かめられたか)。
+    """見つけた記録を確かめる。(状態, [(コード, 詳しく)], replay の値, 形を確かめられたか)。
     最初に当てはまった状態を返し、見つかった食い違いはすべて problems に入れる。"""
     problems = []
     states = []
@@ -3074,7 +3074,7 @@ def _verify_record(state, found, final, source, since, replay, timeout):
         fail("invalid_record", "record_digest", "record_digest が記録の中身と合いません")
     if not _final_matches(record["inputs"]["final"], final):
         fail("invalid_record", "final_hash", "記録の inputs.final のハッシュが今の最終稿と合いません")
-    # 10.8 C-44: 新規作成の記録は、写しから原文とみなす資料を求め直す。印を消して diff を外した記録を完了と扱わない
+    # 新規作成の記録は、写しから原文とみなす資料を求め直す。印を消して diff を外した記録を完了と扱わない
     current_tools = _tool_versions()
     recorded_treated = _record_treated(record)
     treated = recorded_treated is not None
@@ -3182,7 +3182,7 @@ def _verify_record(state, found, final, source, since, replay, timeout):
 
 
 def _verify(args, parser):
-    # 1. 引数を確かめ、最終稿のハッシュを先に計算する（10.4 S10）。誤りなら2で、何も書かない
+    # 1. 引数を確かめ、最終稿のハッシュを先に計算する。誤りなら2で、何も書かない
     if args.state_dir is not None and not args.state_dir.strip():
         parser.error("--state-dir に空の値は使えません")
     if args.final == "-" and args.source == "-":
@@ -3233,7 +3233,7 @@ def _verify(args, parser):
     trusted = False
     empty = final.data == b"" or (final.text_sha256 is not None and not decode_source(final.data)[0].strip())
     if empty:
-        # 10.8 C-47: 空の最終稿（空白と改行だけの本文も同じ）は、記録があっても executed にしない
+        # 空の最終稿（空白と改行だけの本文も同じ）は、記録があっても executed にしない
         status = "no_record"
         problems.append(("empty_final", "最終稿が空です"))
     elif not os.path.isdir(state):
@@ -3269,7 +3269,7 @@ def _verify(args, parser):
                 status, found_problems, replayed, trusted = _verify_record(
                     state, found, final, source, since, args.replay, timeout)
             except _ReplayError as error:
-                # 子を動かせなかったのは記録の食い違いではない。状態を決めず、内部の誤りとして3で終える（3.10）
+                # 子を動かせなかったのは記録の食い違いではない。状態を決めず、内部の誤りとして3で終える
                 _error("yomiyasu_check.py: 内部エラー: --replay で検査を動かせません（{}）。記録の食い違いではありません。"
                        "子プロセスを動かせる環境で verify --replay をもう一度実行してください。".format(error))
                 return 3
@@ -3281,8 +3281,8 @@ def _verify(args, parser):
 
     # 4. 出力する（3行。1行目に次の行動、2行目に状態の行、3行目に記録のパス）
     # 記録の mode、checks、meaning_risk を出すのは、記録の形と digest を確かめられたときだけ。
-    # meaning_risk は、意味が変わる恐れを出す検査（diff、資料との照合）がすべて ran のときだけ出す（0件と読ませない。agent 4）
-    # 人が読む1行目の検査名は 5.2 の語にする（materials は「資料との照合」。agent 15）
+    # meaning_risk は、意味が変わる恐れを出す検査（diff、資料との照合）がすべて ran のときだけ出す（0件と読ませない。反証で見つけた例）
+    # 人が読む1行目の検査名は完了報告の語にする（materials は「資料との照合」。反証で見つけた例）
     record = found.record if found is not None and found.status == "ok" else None
     shown = trusted
     meaning = None
@@ -3324,7 +3324,7 @@ def _verify(args, parser):
         if status == "no_record" and "is_recorded_source" in codes:
             line += _RECORDED_SOURCE_NOTE
     required = _required_for(record) if shown else None
-    # 記録の種類と読者（G7。状態の行と JSON に出す。記録の形を確かめられたときだけ）
+    # 記録の種類と読者（状態の行と JSON に出す。記録の形を確かめられたときだけ）
     doc_type, reader = _record_context(record) if shown else (None, None)
     replay_field = None
     if status == "executed" or status == "not_reproducible" or replayed == "timeout":
@@ -3405,7 +3405,7 @@ class _ArgumentParser(argparse.ArgumentParser):
         stream = sys.stderr
         if stream is None:
             self.exit(2)
-        # 使い方の行と argparse の英語の行のあとに、日本語の案内を1行足す（10.5 M2。lint、diff と同じ形）
+        # 使い方の行と argparse の英語の行のあとに、日本語の案内を1行足す（lint、diff と同じ形）
         _use_utf8(stream, errors="backslashreplace")
         self.print_usage(stream)
         stream.write("{}: error: {}\n".format(self.prog, message))
@@ -3427,7 +3427,7 @@ class _HelpFormatter(argparse.RawDescriptionHelpFormatter):
 
 
 def _build_parser():
-    """(全体の parser, run の parser, verify の parser)。省略形は受けない（10.7 の allow_abbrev=False）。"""
+    """(全体の parser, run の parser, verify の parser)。省略形は受けない（allow_abbrev=False）。"""
     parser = _ArgumentParser(prog="yomiyasu_check.py", usage=_USAGE, description=_DESCRIPTION + "\n" + _RECORD_NOTE,
                              epilog=_EXIT_CODES, formatter_class=_HelpFormatter, add_help=False, allow_abbrev=False)
     top = parser.add_argument_group("オプション")
@@ -3517,9 +3517,9 @@ def _build_parser():
 
 
 def _materials_format_version():
-    """照合の JSON の版（MATERIALS_FORMAT_VERSION）。定数は yomiyasu_diff.py にだけ置く（10.1 L2）が、--version では
-    diff を読み込まず、ファイルの行から読む（3.4: lint と diff の import は run と verify --replay の中だけ。
-    diff が壊れていても版の行を出せる。反証レビュー spec F5）。"""
+    """照合の JSON の版（MATERIALS_FORMAT_VERSION）。定数は yomiyasu_diff.py にだけ置くが、--version では
+    diff を読み込まず、ファイルの行から読む（lint と diff の import は run と verify --replay の中だけ。
+    diff が壊れていても版の行を出せる。反証で見つけた例）。"""
     path = os.path.join(_HERE, "yomiyasu_diff.py")
     try:
         with open(path, "rb") as handle:
@@ -3559,7 +3559,7 @@ def _error(message):
 
 def _run_cli(argv):
     argv = list(sys.argv[1:] if argv is None else argv)
-    # サブコマンドを省くと run とみなす（3.2。yomiyasu_check.py --source a --final b も動く）
+    # サブコマンドを省くと run とみなす（yomiyasu_check.py --source a --final b も動く）
     if not argv or argv[0] not in ("run", "verify", "-h", "--help", "--version"):
         argv.insert(0, "run")
     parser, run, verify = _build_parser()
@@ -3571,7 +3571,7 @@ def _run_cli(argv):
             else:
                 code = _verify(verify.parse_args(argv[1:]), verify)
         except _NoWorkingDirectory as error:
-            # 作業ディレクトリが消えている（run は何も書く前に確かめる）。入力の誤りとして2（robust R11）
+            # 作業ディレクトリが消えている（run は何も書く前に確かめる）。入力の誤りとして2（反証で見つけた例）
             _error(str(error))
             code = 2
     else:
@@ -3597,7 +3597,7 @@ def _silence_stdout():
 
 class _Stopped(BaseException):
     """SIGTERM か SIGHUP で止められた。BaseException にして、途中の except Exception で受けずに、finally（子を止める、
-    一時フォルダの写しを消す、書きかけの記録を消す）を通して main まで戻す（robust R1、agent 12）。"""
+    一時フォルダの写しを消す、書きかけの記録を消す）を通して main まで戻す（反証で見つけた例）。"""
 
     def __init__(self, number):
         super().__init__(number)

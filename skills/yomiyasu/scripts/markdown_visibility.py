@@ -746,12 +746,11 @@ def decode_source(data):
     return text, {"bom": bom, "eol": eol}
 
 
-# ---- 文書の種類と読者（G7。種類と読者の設計 9.1、9.2）----
+# ---- 文書の種類と読者 ----
 # lint、diff、check の3本が同じ値と名前を使うので、ここに1つだけ置く（ほかは import する）。
 # 公開の名前として読むだけにし、書き換えて使う使い方は約束しない。
 
-# (値, 名前, あわせて読む domains のファイル)。順は種類の表のとおり（formal は 2026-10-13 19時の追記で、promo は
-# 21時半の追記（勢いの文書2章、目標の D-5）で足した）
+# (値, 名前, あわせて読む domains のファイル)。順は種類の表のとおり（formal と promo は、あとから足した）
 DOC_TYPES = (
     ("pr", "PR説明", ("business.md",)),
     ("article", "技術記事", ("tech.md",)),
@@ -783,7 +782,7 @@ def _normalize_choice(option, value, rows):
             return normalized
     # 空や空白だけの値は、目に見えないので「（空）」と書く（--stance、--fail-on と同じ）
     shown = value if str(value).strip() else "（空）"
-    # 値の一覧の閉じ括弧と「です」の間に空白を入れない（種類と読者の設計 9.1 の文どおり。反証レビュー spec 6）
+    # 値の一覧の閉じ括弧と「です」の間に空白を入れない（設計の文どおり。反証で見つけた例）
     raise ValueError("{} に使えない値です: {}。使えるのは {}です。".format(
         option, shown, "、".join("{}（{}）".format(row[0], row[1]) for row in rows)))
 
