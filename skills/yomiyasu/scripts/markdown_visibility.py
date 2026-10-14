@@ -762,6 +762,8 @@ DOC_TYPES = (
     ("essay", "エッセイ・小説", ("essay.md",)),
     ("formal", "公用文、規程、契約書、仕様書", ("business.md", "tech.md")),
     ("promo", "紹介記事・宣伝文", ("essay.md", "business.md")),
+    ("mail", "メール・チャット", ("business.md",)),
+    ("paper", "論文・研究レポート", ("tech.md",)),
 )
 # (値, 名前)
 READER_LEVELS = (

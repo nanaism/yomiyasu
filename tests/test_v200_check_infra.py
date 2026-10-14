@@ -33,7 +33,7 @@ from test_v200_check import (  # noqa: E402
 sys.path.insert(0, str(SCRIPTS))
 import yomiyasu_diff  # noqa: E402
 
-LIST_NAMES = ("nominalization", "intensifiers", "feelings")
+LIST_NAMES = ("nominalization", "intensifiers", "feelings", "hedges")
 LIST_KEYS = tuple("references/lists/{}.txt".format(name) for name in LIST_NAMES)
 LISTS = ROOT / "references" / "lists"
 
@@ -310,7 +310,7 @@ class ListProblemTest(unittest.TestCase):
         self.assertEqual((result["stiffness"]["list"], result["stiffness"]["list_problem"]),
                          ("references/lists/nominalization.txt", None))
         self.assertEqual((result["tone"]["list"], result["tone"]["list_problem"]), ("references/lists/intensifiers.txt", None))
-        self.assertEqual(list(result)[-4:], ["full_diff", "stiffness", "tone", "feeling"])
+        self.assertEqual(list(result)[-7:], ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness"])
 
     def test_missing_lists_are_silent(self):
         scripts = copy_scripts(self.folder)
@@ -390,7 +390,7 @@ import json, sys
 sys.path.insert(0, sys.argv[1])
 import yomiyasu_diff
 out = {}
-for name in ("nominalization", "intensifiers", "feelings"):
+for name in ("nominalization", "intensifiers", "feelings", "hedges"):
     items, source = yomiyasu_diff._load_list(name)
     out[name] = {"source": source,
                  "items": [item if isinstance(item, str) else [item[0]] + [regex.pattern for regex in item[1:]]

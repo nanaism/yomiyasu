@@ -6,6 +6,8 @@ yomiyasu_check.py - 最終稿に lint、原文と最終稿に diff（新規作�
   run     lint と diff を子プロセスで動かし（時間の上限つき）、資料があればプロセスの中で照らし、
           入力の写し、レポート、記録を状態フォルダ（既定は git の最上位の .yomiyasu/）に書く。
   verify  最終稿のハッシュを記録と照らす（読むだけで、何も書かない）。
+mail（メール・チャット）と paper（論文・研究レポート）も指定できる。慎重表現・値・敬語の追加検査は
+硬化・勢いと同じく件数を表示・記録する。敬語は mail だけ。引用の印は meaning-risk の対象、宛名・敬語は対象外。
 返す状態は「検査を実行した」で、意味の保持や読みやすさの合格ではない。
 同じ権限で原稿と記録の両方を書き換えられる環境では、記録は実行漏れを見つけるためのもので、
 改ざんの防止や人の承認の証明にはならない。
@@ -101,7 +103,7 @@ _TOOL_NAMES = ("yomiyasu_check.py", "yomiyasu_lint.py", "yomiyasu_diff.py", "mar
 # 記録の tools に足す一覧のファイル（diff が scripts の隣の ../references/lists/<名前>.txt から読む。名前は yomiyasu_diff.py の
 # BUILTIN_LISTS と同じ）。ファイルがあるときだけ "references/lists/<名前>.txt" のキーで SHA-256 を入れ、verify で比べて、
 # 変わっていれば tool_changed にする（diff の詰めの直し。反証で見つけた例）
-_LIST_NAMES = ("nominalization", "intensifiers", "feelings")
+_LIST_NAMES = ("nominalization", "intensifiers", "feelings", "hedges")
 _LIST_KEYS = tuple("references/lists/{}.txt".format(name) for name in _LIST_NAMES)
 # ファイルがないとみなす誤り（yomiyasu_diff.py の _LIST_ABSENT と同じ）
 _LIST_ABSENT = (FileNotFoundError, NotADirectoryError)
@@ -1437,7 +1439,7 @@ def _run_checks(ctx, snapshots, stance, timeout):
             # diff の詰め: 文体の硬化の検査と勢いの検査の件数と level（完了報告の確認の記録に写す値のもと）。
             # candidate_count は参考（level が info の候補）を含む数なので、見直し候補（level が review）の数も残す。記録だけを
             # 読む使い方でも、見直し候補と参考が混ざった結果（「候補2件、参考1件」）が分かるようにする（反証で見つけた例）
-            for key in ("stiffness", "tone"):
+            for key in ("stiffness", "tone", "hedges", "immutable", "politeness"):
                 section = parsed.get(key)
                 if isinstance(section, dict):
                     entry["summary"][key + "_candidate_count"] = section.get("candidate_count")
@@ -1468,7 +1470,7 @@ def _review_count(section):
 
 
 def _fail_on_hits(ctx, diff_module):
-    """--fail-on に当たった値（指定した順）。meaning-risk は数値・否定・入れ替え・文の種類と資料にない数値、
+    """--fail-on に当たった値（指定した順）。meaning-risk は数値・否定・入れ替え・文の種類・引用の印と資料にない数値、
     warn と error は lint の候補で決める。"""
     hits = []
     counts = (ctx.lint_result or {}).get("counts") or {}
@@ -1569,6 +1571,9 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
             line = ("検査を実行しました（1回目）。規則に当たる候補はありません。全文差分で意図しない変更がないかを確かめ、"
                     "直すなら1回まで、直さないなら" + finalize)
             following = "review"
+        if ctx.diff_result and any((ctx.diff_result.get(key) or {}).get("candidate_count", 0)
+                                   for key in ("hedges", "immutable", "politeness")):
+            line = line.replace("文体の硬化と勢いの見直し候補", "文体の硬化・勢い・慎重表現・値・敬語の見直し候補")
         if ctx.no_record:
             following = "report_unrecorded"
     if ctx.treated is not None and not ctx.final_changed:
@@ -1671,7 +1676,7 @@ def _detector_reviews(ctx):
     if ctx.entries.get("diff", {}).get("status") != "ran":
         return 0
     count = 0
-    for key in ("stiffness", "tone"):
+    for key in ("stiffness", "tone", "hedges", "immutable", "politeness"):
         section = ctx.diff_result.get(key)
         if isinstance(section, dict) and isinstance(section.get("candidates"), list):
             count += sum(1 for candidate in section["candidates"]
@@ -1680,10 +1685,12 @@ def _detector_reviews(ctx):
 
 
 def _detector_lines(ctx, diff_module):
-    """run の5行目のあとに足す2行（完了報告に「硬化の検査：候補なし」または
-    候補の件数を書くため）。完了報告の確認の記録の「硬化の検査」「勢いの検査」にそのまま写せる形。diff を実行しなかったときは出さない。"""
+    """run の5行目のあとに足す行（硬化、勢い、慎重表現、値、敬語の検査。敬語の検査は mail のときだけ）。完了報告に
+    「硬化の検査：候補なし」または候補の件数を書くため、確認の記録にそのまま写せる形。値の検査は、意味が変わる恐れに
+    入れた引用の印と数値の補いの候補も数える。diff を実行しなかったときは出さない。"""
     lines = []
-    for key, label in (("stiffness", "硬化の検査"), ("tone", "勢いの検査")):
+    for key, label in (("stiffness", "硬化の検査"), ("tone", "勢いの検査"),
+                       ("hedges", "慎重表現の検査"), ("immutable", "値の検査"), ("politeness", "敬語の検査")):
         value = _detector_value(ctx, diff_module, key)
         if value is not None:
             lines.append("{}: {}".format(label, value))
@@ -1701,7 +1708,7 @@ def _sections(ctx, lint_module, diff_module):
         rules = parts["rules"]
         sections.append(rules.replace("■ 規則の見直し候補（", "■ 差分の見直し候補（diff、", 1))
     # diff の詰め: 文体の硬化の検査と勢いの検査の節（候補があるときだけ）
-    for key in ("stiffness", "tone"):
+    for key in ("stiffness", "tone", "hedges", "immutable", "politeness"):
         if parts is not None and parts.get(key):
             sections.append(parts[key])
     if ctx.lint_result is not None and ctx.lint_result.get("candidate_count"):
@@ -2110,6 +2117,9 @@ def _run(args, parser):
             ("fail_on_meaning_risk_count", diff_module.fail_on_count(ctx.risks) if complete else None),
             ("stiffness_check", _detector_value(ctx, diff_module, "stiffness")),
             ("tone_check", _detector_value(ctx, diff_module, "tone")),
+            ("hedges_check", _detector_value(ctx, diff_module, "hedges")),
+            ("immutable_check", _detector_value(ctx, diff_module, "immutable")),
+            ("politeness_check", _detector_value(ctx, diff_module, "politeness")),
             ("lint", ctx.lint_result), ("diff", diff_result), ("materials", ctx.materials_result)))
         print(json.dumps(result, ensure_ascii=True, indent=1))
     else:
@@ -2853,7 +2863,7 @@ def _summary_problems(state, record, required):
                 compare("diff." + key, summary.get(key), value.get(key))
             # 硬化の検査と勢いの検査（diff の詰めで足した。このキーを足す前の記録にはないので、あるときだけ照らす）。
             # 見直し候補の数（review_count）は、2回目の反証の直し（反証で見つけた例）で足した
-            for key in ("stiffness", "tone"):
+            for key in ("stiffness", "tone", "hedges", "immutable", "politeness"):
                 section = value.get(key) if isinstance(value.get(key), dict) else {}
                 for field in ("candidate_count", "level"):
                     name = "{}_{}".format(key, field)
@@ -3391,7 +3401,7 @@ _VERIFY_USAGE = ("yomiyasu_check.py verify --final 最終稿|- [--run-id ID] [--
                  "           [--replay] [--timeout 秒] [--state-dir DIR] [--json]")
 _FAIL_ON_HELP = ("指定した条件に当たれば、記録を残したうえで終了コード1で終わります。何度でも、カンマ区切りでも指定できます。"
                  "meaning-risk: 意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の"
-                 "変化と、資料にない数値。コード・URL・引用など変えない箇所の変化と、資料にない名前は数えません。"
+                 "変化、引用の印と、資料にない数値。コード・URL・引用ブロックなど変えない箇所の変化と、資料にない名前は数えません。"
                  "否定対比の主張の逆転と、元にない気持ちの語も数えません。"
                  "warn: lint の warn か error の候補。error: lint の error の候補。"
                  "条件に当たらなくても、意味が同じだという証明にはなりません。")
@@ -3463,10 +3473,11 @@ def _build_parser():
                               "資料との照合の判定は変わりません。"
                               # yomiyasu_diff.py の _detector_level_help() と同じ文（diff を読み込まずにヘルプを出すため、ここに書く。
                               # tests/test_v200_check_infra.py が一致を見張る。反証で見つけた例）
-                              "文体の硬化の検査は incident と formal のとき、勢いの検査は pr、article、incident、manual、formal "
-                              "のとき、候補を参考として出します。promo 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として"
-                              "出し、promo と minutes 以外では見出しの候補も参考として出します。promo では、番号つき項目の行と"
-                              "太字だけの行も勢いの検査の見出しに数えます。")
+                              "文体の硬化の検査は incident、formal、paper のとき、勢いの検査は pr、article、incident、manual、formal、paper "
+                              "のとき、候補を参考として出します。promo と mail 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として"
+                              "出し、promo、minutes、mail 以外では見出しの候補も参考として出します。promo では、番号つき項目の行と"
+                              "太字だけの行も勢いの検査の見出しに数えます。mail だけ敬語の度合いを検査します。値: "
+                              + "、".join("{}（{}）".format(row[0], row[1]) for row in DOC_TYPES) + "。")
     options.add_argument("--reader", metavar="読者",
                          help="想定する読者の知識。lint と diff に渡し、記録と状態の行に残します。判定は変わりません。")
     options.add_argument("--fail-on", action="append", dest="fail_on", metavar="meaning-risk|warn|error",

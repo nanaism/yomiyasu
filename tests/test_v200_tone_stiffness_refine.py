@@ -174,7 +174,7 @@ INCIDENT_PAIRS = (
 
 class IncidentStiffnessTest(unittest.TestCase):
     def test_incident_is_a_reference_doc_type(self):
-        self.assertEqual(tuple(yomiyasu_diff.STIFFNESS_INFO_DOC_TYPES), ("incident", "formal"))
+        self.assertEqual(tuple(yomiyasu_diff.STIFFNESS_INFO_DOC_TYPES), ("incident", "formal", "paper"))
 
     def test_incident_candidates_are_info(self):
         for before, after in INCIDENT_PAIRS:
@@ -284,7 +284,7 @@ LONG_HEADING = ("## 検索が遅くなっていた本当の原因は、実はイ
                 "## 検索が遅かった原因\n\n商品の数が増えたのに、索引を足していませんでした。")
 EMOJI_AND_EXCLAMATION = ("## 来期の方針🎯\n\n問い合わせの多い画面から直します！", "## 来期の方針\n\n問い合わせの多い画面から直します。")
 ESSAY_EMOJI = ("公園のベンチに座ると🌸、桜がもう散り始めていた。", "公園のベンチに座ると、桜がもう散り始めていた。")
-TYPED_NOT_PROMO = tuple(value for value in DOC_TYPES if value != "promo")
+TYPED_NOT_PROMO = tuple(value for value in DOC_TYPES if value not in ("promo", "mail"))
 
 
 class TypedEmojiHeadingTest(unittest.TestCase):

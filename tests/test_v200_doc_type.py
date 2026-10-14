@@ -55,6 +55,7 @@ import yomiyasu_check  # noqa: E402
 
 # ---- 9.1 と追記: 値、名前、外す規則 ----
 
+# 既存10種類の互換性と references の試験はこの集合を維持する。mail/paper は test_v200_mail_paper.py。
 # diff の詰め（目標の D-5、勢いの文書2章）: promo（紹介記事・宣伝文）を足して10にした
 DOC_TYPE_VALUES = ("pr", "article", "incident", "proposal", "minutes", "manual", "slides", "essay", "formal", "promo")
 DOC_TYPE_NAMES = {"pr": "PR説明", "article": "技術記事", "incident": "障害報告", "proposal": "提案書", "minutes": "議事録",
@@ -87,7 +88,9 @@ NEVER_SKIPPED_EXCEPT = {"fragment_run": ("promo",)}
 NEVER_SKIPPED = ("bold_not_rendered", "fragment_run", "meta_intro", "metaphor_verb", "trailing_colon", "excess_bold",
                  "dash_list_ending", "dash_insertion", "dash_decoration")
 
-DOC_TYPE_CHOICES = "、".join("{}（{}）".format(value, DOC_TYPE_NAMES[value]) for value in DOC_TYPE_VALUES)
+NEW_DOC_TYPES = (("mail", "メール・チャット", ("business.md",)), ("paper", "論文・研究レポート", ("tech.md",)))
+NEW_SKIP_RULES = {"mail": ("emoji_prohibited",), "paper": ()}
+DOC_TYPE_CHOICES = "、".join("{}（{}）".format(value, DOC_TYPE_NAMES[value]) for value in DOC_TYPE_VALUES) + "、" + "、".join("{}（{}）".format(row[0], row[1]) for row in NEW_DOC_TYPES)
 READER_CHOICES = "、".join("{}（{}）".format(value, READER_NAMES[value]) for value in READER_VALUES)
 # 9.1 の文どおり、値の一覧の閉じ括弧と「です」の間に空白を入れない（反証レビュー spec 6）
 DOC_TYPE_ERROR = "--doc-type に使えない値です: {}。使えるのは " + DOC_TYPE_CHOICES + "です。"
@@ -112,25 +115,28 @@ LINT_HELP_LIST = "\n".join([
     "  essay     なし",
     "  formal    なし",
     "  promo     emoji_prohibited、fragment_run",
+    "  mail      emoji_prohibited",
+    "  paper     なし",
+    "mail は meta_filler の返信・結びの5型だけも外します（ご質問ありがとうございます、必要なら次に〜します、いかがでしたでしょうか、ぜひ〜してみてください、参考になれば幸いです等）。宛名・挨拶・署名を削る専用規則はありません。paper は慎重表現を削る規則がないため除外なし。",
     "外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。",
 ])
 # diff の詰め: 文体の硬化の検査と勢いの検査は、種類で参考（info）にするかが決まるので、その文を足した。diff の詰めの直し
 # で、硬化の参考に incident を足し、promo 以外の種類で勢いの絵文字と見出しを参考にした文を足した
 # 1回目の反証の直し（反証で見つけた例）: 変わらないものを「規則の見直し候補」に絞り、
 # minutes の見出しと promo の見出しの数え方を書いた
-_DETECTOR_HELP = ("文体の硬化の検査は incident と formal のとき、勢いの検査は pr、article、incident、manual、formal のとき、"
-                  "候補を参考として出します。promo 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として出し、"
-                  "promo と minutes 以外では見出しの候補も参考として出します。promo では、番号つき項目の行と太字だけの行も"
+_DETECTOR_HELP = ("文体の硬化の検査は incident、formal、paper のとき、勢いの検査は pr、article、incident、manual、formal、paper のとき、"
+                  "候補を参考として出します。promo と mail 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として出し、"
+                  "promo、minutes、mail 以外では見出しの候補も参考として出します。promo では、番号つき項目の行と太字だけの行も"
                   "勢いの検査の見出しに数えます。")
 # 2回目の反証の直し（反証で見つけた例）: 種類で硬化と勢いの level と promo の見出しの数え方が
 # 変わるので、冒頭の「残すだけで」を「残し、」にした
 DIFF_DOC_TYPE_HELP = ("文書の種類（値は yomiyasu_lint.py と同じ）。表示と JSON に残し、差分、意味が変わる恐れ、規則の見直し候補、"
-                      "--fail-on は変わりません（意味の検査はどの種類でも同じに行います）。" + _DETECTOR_HELP)
+                      "--fail-on は変わりません（意味の検査はどの種類でも同じに行います）。" + _DETECTOR_HELP + "mail だけ敬語の度合いを検査します。値: " + DOC_TYPE_CHOICES + "。")
 DIFF_READER_HELP = "想定する読者の知識（値は yomiyasu_lint.py と同じ）。表示と JSON に残すだけで、判定は変わりません。"
 # diff の詰めの直し（反証で見つけた例）: diff と同じ、硬化と勢いを参考にする種類の文を足した
 CHECK_DOC_TYPE_HELP = ("文書の種類。lint と diff に渡し、記録と状態の行に残します。lint は、その種類で普通な書き方を候補にする規則を"
                        "外します（yomiyasu_lint.py -h の一覧）。差分（意味が変わる恐れと規則の見直し候補）と資料との照合の判定は"
-                       "変わりません。" + _DETECTOR_HELP)
+                       "変わりません。" + _DETECTOR_HELP + "mail だけ敬語の度合いを検査します。値: " + DOC_TYPE_CHOICES + "。")
 CHECK_READER_HELP = "想定する読者の知識。lint と diff に渡し、記録と状態の行に残します。判定は変わりません。"
 
 # 9.3 と 9.4 の1行
@@ -625,13 +631,13 @@ class LintSkipTest(DocTypeCase):
 class TableTest(unittest.TestCase):
     def test_c1_tables(self):
         """C1: DOC_TYPE_SKIP_RULES のキーは DOC_TYPES の10と同じで順も同じ。READER_LEVELS は3つ。"""
-        self.assertEqual(tuple(row[0] for row in markdown_visibility.DOC_TYPES), DOC_TYPE_VALUES)
-        self.assertEqual(dict((row[0], row[1]) for row in markdown_visibility.DOC_TYPES), DOC_TYPE_NAMES)
-        self.assertEqual(dict((row[0], tuple(row[2])) for row in markdown_visibility.DOC_TYPES), DOC_TYPE_DOMAINS)
+        self.assertEqual(tuple(row[0] for row in markdown_visibility.DOC_TYPES), DOC_TYPE_VALUES + ("mail", "paper"))
+        self.assertEqual(dict((row[0], row[1]) for row in markdown_visibility.DOC_TYPES), dict(DOC_TYPE_NAMES, **{r[0]: r[1] for r in NEW_DOC_TYPES}))
+        self.assertEqual(dict((row[0], tuple(row[2])) for row in markdown_visibility.DOC_TYPES), dict(DOC_TYPE_DOMAINS, **{r[0]: r[2] for r in NEW_DOC_TYPES}))
         self.assertEqual(tuple(markdown_visibility.READER_LEVELS),
                          tuple((value, READER_NAMES[value]) for value in READER_VALUES))
-        self.assertEqual(list(yomiyasu_lint.DOC_TYPE_SKIP_RULES), list(DOC_TYPE_VALUES))
-        self.assertEqual(dict((key, tuple(value)) for key, value in yomiyasu_lint.DOC_TYPE_SKIP_RULES.items()), SKIP_RULES)
+        self.assertEqual(list(yomiyasu_lint.DOC_TYPE_SKIP_RULES), list(DOC_TYPE_VALUES) + ["mail", "paper"])
+        self.assertEqual(dict((key, tuple(value)) for key, value in yomiyasu_lint.DOC_TYPE_SKIP_RULES.items()), dict(SKIP_RULES, **NEW_SKIP_RULES))
         for value, rules in yomiyasu_lint.DOC_TYPE_SKIP_RULES.items():
             self.assertEqual(list(rules), sorted(set(rules)), value)
 
@@ -648,6 +654,7 @@ class TableTest(unittest.TestCase):
         built = ["文書の種類ごとに外す規則（--doc-type）:"]
         for value, rules in yomiyasu_lint.DOC_TYPE_SKIP_RULES.items():
             built.append("  {:<10}{}".format(value, "、".join(rules) if rules else "なし"))
+        built.append(LINT_HELP_LIST.split("\n")[-2])
         built.append("外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。")
         self.assertEqual("\n".join(built), LINT_HELP_LIST)
         code, out, _ = call(yomiyasu_lint.main, ["--help"])
@@ -1033,14 +1040,22 @@ class SpeedTest(unittest.TestCase):
 
 class SkillFilesTest(unittest.TestCase):
     def test_c3_doc_type_files(self):
-        """C3: 10の references/doc-types/<値>.md がルートと skills/yomiyasu にあり、4行目が表と同じ。3行目の domains がある。"""
+        """C3: 12の references/doc-types/<値>.md がルートと skills/yomiyasu にあり、4行目が表と同じ。3行目の domains がある。
+        mail と paper は、4行目の規則 ID が DOC_TYPE_SKIP_RULES と DOC_TYPE_SKIP_PATTERNS（一部の型だけ外す規則）の和と同じ。"""
         for base in (ROOT / "references", PACKAGE / "references"):
-            for value in DOC_TYPE_VALUES:
+            for value in DOC_TYPE_VALUES + tuple(row[0] for row in NEW_DOC_TYPES):
                 path = base / "doc-types" / (value + ".md")
                 self.assertTrue(path.is_file(), str(path))
                 lines = path.read_text(encoding="utf-8").split("\n")
                 rules = yomiyasu_lint.DOC_TYPE_SKIP_RULES[value]
-                self.assertEqual(lines[3], "lint で外す規則: " + ("、".join(rules) if rules else "なし"), str(path))
+                if value in DOC_TYPE_VALUES:
+                    self.assertEqual(lines[3], "lint で外す規則: " + ("、".join(rules) if rules else "なし"), str(path))
+                else:
+                    self.assertTrue(lines[3].startswith("lint で外す規則: "), str(path))
+                    partial = tuple(yomiyasu_lint.DOC_TYPE_SKIP_PATTERNS.get(value, {}))
+                    self.assertEqual(set(re.findall(r"[a-z][a-z_]+", lines[3][len("lint で外す規則: "):])), set(rules + partial), str(path))
+                    if not rules and not partial:
+                        self.assertEqual(lines[3], "lint で外す規則: なし", str(path))
                 self.assertTrue(lines[2].startswith("あわせて読む: "), str(path))
                 named = re.findall(r"domains/([a-z]+\.md)", lines[2])
                 self.assertTrue(named, str(path))
@@ -1062,16 +1077,21 @@ class SkillFilesTest(unittest.TestCase):
                 if "lint で外す規則" in cells:
                     column = cells.index("lint で外す規則")
                     continue
-                if column is not None and cells[0] in DOC_TYPE_VALUES:
-                    rows[cells[0]] = tuple(rule for rule in re.split(r"[、,]\s*", cells[column]) if rule and rule != "なし")
-            self.assertEqual(rows, SKIP_RULES, str(path))
+                if column is not None and (cells[0] in DOC_TYPE_VALUES or cells[0] in NEW_SKIP_RULES):
+                    # mail の meta_filler は一部の型だけを外す（「meta_filler（返信と結びの5つの型だけ）」）。括弧の中は読まない
+                    rows[cells[0]] = tuple(re.sub(r"（[^）]*）", "", rule) for rule in re.split(r"[、,]\s*", cells[column])
+                                           if rule and rule != "なし")
+            expected = dict(SKIP_RULES)
+            for value, rules in NEW_SKIP_RULES.items():
+                expected[value] = rules + tuple(yomiyasu_lint.DOC_TYPE_SKIP_PATTERNS.get(value, {}))
+            self.assertEqual(rows, expected, str(path))
 
     def test_c5_skill_md(self):
-        """C5: SKILL.md の種類の表に10の値がちょうど1回ずつあり、3つの読者の値、「ここに説明が必要です」、--doc-type、
+        """C5: SKILL.md の種類の表に12の値がちょうど1回ずつあり、3つの読者の値、「ここに説明が必要です」、--doc-type、
         --reader がある（--doc-type と --reader が check run の --help にあることは TableTest.test_help_texts）。"""
         text = (PACKAGE / "SKILL.md").read_text(encoding="utf-8")
         found = re.findall(r"^[ \t]*\|\s*([a-z]+)（", text, re.M)
-        self.assertEqual(sorted(found), sorted(DOC_TYPE_VALUES))
+        self.assertEqual(sorted(found), sorted(DOC_TYPE_VALUES + tuple(row[0] for row in NEW_DOC_TYPES)))
         for word in READER_VALUES + ("ここに説明が必要です", "--doc-type", "--reader"):
             self.assertIn(word, text)
 

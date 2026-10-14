@@ -3,7 +3,7 @@
 yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所をすべて出し、意味が変わる恐れと規則の見直し候補を挙げる。
 
 標準ライブラリだけで動く。モデルは呼ばない。外へ通信しない。
-出すものは5つ。
+出すものは8つ。
   1. 全文差分: 変わった箇所を省略せずに出す（太字、見出しの段、空白、空行、字下げ、コード、引用、表の変化も残す）。
      変わった箇所を示すだけで、意味が同じだという証明ではない。
   2. 意味が変わる恐れ: 数値、否定、主語と目的語の入れ替え、問いと平叙、文の種類の印、コード・URL・引用など変えない箇所の変化、
@@ -13,7 +13,12 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
      文末の種類と文書の立場、文の種類の印、太字にならない書き方と直し方の案。
   4. 文体の硬化の検査: 漢字の割合、名詞化の言い回し、「の」の連続が推敲で増えた所（見直し候補だけで、件数と合否に入れない）。
   5. 勢いの検査: 「！」「？」、絵文字、強める語が減った所と、見出しが大きく縮んだ所（同じく見直し候補だけ）。
-  名詞化の言い回し、強める語、気持ちの語の一覧は ../references/lists/ から読み、なければ内蔵の一覧を使う。
+  6. 慎重表現の減り: 同じ文の推量印の候補と重ねず、hedges の節に出す（合否には入れない）。
+  7. 動かしてはいけない値: 引用の印は meaning_risks（citation、合否の対象）、宛名と裸のメールは immutable（合否の対象外）。
+     数字・単位とURLは既存検査を使い、空白つきの科学単位・数値の符号・統計値の比較記号の抜けだけ補う。引用の数値だけの変化が number で出たら重ねない。
+  8. 敬語の度合い: mail だけ。敬語の数/文数と敬体文末の割合の差が0.20以上なら politeness の節に出す。
+  paper の硬化と勢いは参考。mail の勢い（絵文字を含む）は見直し候補。
+  名詞化の言い回し、強める語、気持ちの語、慎重表現の一覧は ../references/lists/ から読み、なければ内蔵の一覧を使う。
 意味が同じかどうか、つながりが合っているか、文末が立場に合っているかの最終判断は、この結果を見たモデル（または人）がする。
 """
 __version__ = "2.0.0-beta"
@@ -28,15 +33,15 @@ import traceback
 import unicodedata
 from bisect import bisect_left, bisect_right
 _VISIBILITY_NAMES = ("analyze_markdown", "inline_protected_spans", "unicode_whitespace", "decode_source",
-                     "normalize_doc_type", "normalize_reader", "context_label")
+                     "normalize_doc_type", "normalize_reader", "context_label", "DOC_TYPES")
 try:
     try:
         if __package__:
             from .markdown_visibility import analyze_markdown, inline_protected_spans, unicode_whitespace, decode_source
-            from .markdown_visibility import normalize_doc_type, normalize_reader, context_label
+            from .markdown_visibility import normalize_doc_type, normalize_reader, context_label, DOC_TYPES
         else:
             from markdown_visibility import analyze_markdown, inline_protected_spans, unicode_whitespace, decode_source
-            from markdown_visibility import normalize_doc_type, normalize_reader, context_label
+            from markdown_visibility import normalize_doc_type, normalize_reader, context_label, DOC_TYPES
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
@@ -78,6 +83,7 @@ try:
         normalize_doc_type = _visibility_module.normalize_doc_type
         normalize_reader = _visibility_module.normalize_reader
         context_label = _visibility_module.context_label
+        DOC_TYPES = _visibility_module.DOC_TYPES
 except ImportError as _import_error:
     # スクリプトとして動かしたときは、main() が内部エラー（終了コード3）として出す。
     # 終了コード1は --fail-on の条件に当たったときだけに使う。
@@ -1828,11 +1834,11 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
 # 同じ塊の中で並べる順
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
                "feeling": 6}
-# --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類の変化）。
+# --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の印の変化）。
 # 変えない箇所（protected）は意味が変わる恐れの節に出すが数えない。check は資料にない数値（unsupported/number）も数える。
 # diff の詰めで足した否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）も数えない（どちらも
 # 見直しの候補を出すだけで、点数や合否には使わない）
-FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type")
+FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation")
 
 
 def fail_on_count(risks):
@@ -3756,18 +3762,24 @@ def _meaning_risks(sides, full, type_changes, groups=None):
              + _question_risks(sides, groups) + _protected_risks(sides, full) + _contrast_risks(sides, groups)
              + _feeling_risks(sides, groups))
     found.sort(key=lambda item: (item[0], _RISK_ORDER.get(item[2]["kind"], 9), item[1]))
-    return [risk for _, _, risk in found] + _marks_risks(sides, type_changes)
+    risks = [risk for _, _, risk in found] + _marks_risks(sides, type_changes)
+    sides.immutable, citations = _immutable_values(sides, risks, groups)
+    # 足した候補は既存の候補の後ろに、行の順で並べる（既存の並びは変えない。反証で見つけた例）
+    citations.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
+                                  r["new_line"] if r["new_line"] is not None else 0))
+    return risks + citations
 
 
 # ---- 一覧のファイル（diff の詰め）----
-# 名詞化の言い回し、強める語、気持ちの語の一覧は references/lists/ に置き、足し引きできるようにする。diff はスクリプトの隣の
+# 名詞化の言い回し、強める語、気持ちの語、慎重表現の一覧は references/lists/ に置き、足し引きできるようにする。diff はスクリプトの隣の
 # ../references/lists/<名前>.txt を読み、ないとき（配布 ZIP に入っていない、ZIP の中から読み込まれた）や読めないとき
 # （UTF-8 でない、正規表現の誤り）は、ここに置いた内蔵の一覧で動く。どちらを使ったかは JSON の "list" に出す。
-# 書き方: 1行に1つ。空行と「#」で始まる行は読み飛ばす。名詞化の言い回しと気持ちの語は「名前<TAB>正規表現」、強める語は語だけ。
+# 書き方: 1行に1つ。空行と「#」で始まる行は読み飛ばす。名詞化の言い回しと気持ちの語は「名前<TAB>正規表現」、強める語と慎重表現は語だけ。
 # 気持ちの語は3つ目の欄を置いてよい（「名前<TAB>正規表現<TAB>原文の言い方の正規表現」。原文にこの言い方があれば、その家族の
 # 気持ちは原文にあるとみなす。お詫び → 申し訳、ありがとう → 感謝。diff の詰めの直し、反証で見つけた例）。
 
 BUILTIN_LISTS = {
+    "hedges": ("と考えられる", "と思われる", "可能性がある", "示唆する", "推測される", "の範囲では", "かもしれない"),
     # 和語の言い回しを名詞化した決まった形の11個と、試作で測って足した「不可能」
     "nominalization": (
         ("が可能", "が可能(?:です|でした|だ|である|となり|となる|となっ|になり|になる|になっ|な|に|で|。|、)"),
@@ -3858,7 +3870,7 @@ BUILTIN_LISTS = {
     ),
 }
 # 一覧の書き方（True は「名前<TAB>正規表現」）
-_LIST_PATTERNS = {"nominalization": True, "intensifiers": False, "feelings": True}
+_LIST_PATTERNS = {"nominalization": True, "intensifiers": False, "feelings": True, "hedges": False}
 # 3つ目の欄（原文の言い方）を置ける一覧
 _LIST_THIRD_COLUMN = frozenset(("feelings",))
 _LIST_CACHE = {}
@@ -3945,7 +3957,7 @@ def _list_problem_text(error):
 
 def _load_list(name):
     """一覧を読む。(項目, 出どころ) を返す。出どころは "references/lists/<名前>.txt" か "builtin"。
-    pattern の一覧の項目は (名前, コンパイルした正規表現)。強める語の項目は語。
+    pattern の一覧の項目は (名前, コンパイルした正規表現)。強める語と慎重表現の項目は語。
     ファイルがあるのに読めなかったとき（UTF-8 でない、書き方や正規表現の誤り、開けない）は、内蔵の一覧で動き、理由を
     _LIST_PROBLEMS に残す（_list_info）。BOM つきの UTF-8 も読む（utf-8-sig。反証で見つけた例）。"""
     if name in _LIST_CACHE:
@@ -4669,7 +4681,7 @@ STIFFNESS_THRESHOLDS = {
 # 硬化の検査を参考（level info）としてだけ出す文書の種類。incident は diff の詰めの直しで足した（反証で見つけた例。
 # v1.1.2 の人間A/Bの好み「報告書では『障害が起きた朝』より『障害が発生した朝』が合う」と、SKILL.md の incident の行（発生、
 # 復旧などの報告の語の規則を当てない）に合わせる）。並びは DOC_TYPES の順
-STIFFNESS_INFO_DOC_TYPES = ("incident", "formal")
+STIFFNESS_INFO_DOC_TYPES = ("incident", "formal", "paper")
 _HIRAGANA_CHARS = re.compile("[ぁ-ゖ]")
 # 「の」の連続の名詞（漢字・片仮名・英数字の並び。漢字の間の送り仮名を1字ずつ許す。助詞になりうる仮名は送り仮名にしない）。
 # 量指定子を入れ子にしない（入れ子にすると長い名詞の並びで後戻りが爆発する）
@@ -4942,7 +4954,7 @@ def _stiffness(sides, full, groups, doc_type):
 # 同じ強める語の繰り返しを減らした推敲を数えない案（反証で見つけた例）は採らない（強める語を削らない、減らさないという
 # 作者の判断と食い違うため）。
 
-TONE_INFO_DOC_TYPES = ("pr", "article", "incident", "manual", "formal")
+TONE_INFO_DOC_TYPES = ("pr", "article", "incident", "manual", "formal", "paper")
 # 種類を指定していて promo でないとき、参考（info）にする候補。絵文字を外す（lint の emoji_prohibited）、文の見出しを短い項目名に
 # する（SKILL.md 4章）のは yomiyasu の決まりどおりの直しなので。種類なしは見直し候補のまま（紹介記事を種類の判定で取り違えた
 # ときに気づくための検査なので）
@@ -4950,7 +4962,7 @@ TONE_TYPED_INFO_SUBKINDS = ("emoji", "heading")
 # TONE_TYPED_INFO_SUBKINDS の候補を参考にしない種類（候補ごと）。promo は絵文字も見出しも残す種類。minutes は推敲で見出しを
 # 変えない種類（作者の判断、domains/business.md 3章）なので、見出しの候補は見直し候補のまま
 # （diff の詰めの直しのあとの反証で見つけた例）
-TONE_TYPED_REVIEW_DOC_TYPES = {"emoji": ("promo",), "heading": ("promo", "minutes")}
+TONE_TYPED_REVIEW_DOC_TYPES = {"emoji": ("promo", "mail"), "heading": ("promo", "minutes", "mail")}
 # 参考の理由の文で、参考にした候補ごとに書く決まり（_detector_section）
 _TONE_TYPED_RULES = (("emoji", "絵文字を外し", "絵文字を外す"), ("heading", "見出しを短い項目名にし", "見出しを短い項目名にする"))
 # 参考の5種類（TONE_INFO_DOC_TYPES）の理由の文で、参考にした候補ごとに書く直し方（_detector_section。絵文字や見出しだけの候補に
@@ -5141,7 +5153,7 @@ def _tone_excerpt(old, new, spans, width=_TONE_EXCERPT_WIDTH):
 
 def tone(orig, rw, doc_type=None):
     """勢いの検査（JSON の tone と同じ形）。doc_type は文書の種類（pr、article、incident、manual、formal なら参考。
-    ほかの種類を指定したときも、promo でなければ絵文字と見出しの候補は参考）。"""
+    paper も参考。mail と promo は絵文字と見出しも見直し候補、minutes は見出しを見直し候補にする）。"""
     full, sides = _build_full_diff(orig, rw, None)
     return _tone(sides, full, normalize_doc_type(doc_type))
 
@@ -5513,15 +5525,367 @@ def ground(final, materials, original=None):
 
 # ---- diff() ----
 
+# ---- 慎重表現・動かしてはいけない値・敬語（mail / paper） ----
+# 既存の9キーと推量印の判定は変更しない。慎重表現は独立した節にして、既存の推量印の候補と
+# 文単位で重ねない。引用の新しい候補だけは meaning_risks に加える（fail-on の対象）。
+NEW_REVIEW_SECTIONS = ("hedges", "immutable", "politeness")
+_NEW_SECTION_NAMES = {"hedges": "慎重な言い方", "immutable": "動かしてはいけない値", "politeness": "敬語の度合い"}
+
+
+def _review_section(candidates, **fields):
+    result = {"level": "review", "candidate_count": len(candidates), "candidates": candidates}
+    result.update(fields)
+    return result
+
+
+def _review_candidate(subkind, old, new, detail):
+    return {"subkind": subkind, "level": "review", "old_line": old.line if old else None,
+            "new_line": new.line if new else None, "old": old.raw if old else None,
+            "new": new.raw if new else None, "detail": detail}
+
+
+def _hedges(sides, groups, risks):
+    """一覧の語の出現総数が減った文。文の分割先も数え、移動しただけの文は除く。
+    同じ文に既存の sentence_type/marks の推量減少があれば独立の候補を出さない。
+    既存の候補は元のまま残すため、その場合の --fail-on は既存の推量印の扱いに従う。"""
+    words, _ = _load_list("hedges")
+    regex = re.compile("|".join(re.escape(w) for w in sorted(set(words), key=len, reverse=True))) if words else None
+    masks = (_Masker(sides, 0), _Masker(sides, 1))
+    marks = [r for r in risks if r["kind"] == "sentence_type" and r["subkind"] == "marks"
+             and any(m["kind"] == "推量" for m in r["detail"].get("lost", []))]
+    out = []
+    for group in groups:
+        pairs = dict(group["pairs"])
+        paired_new = set(pairs.values())
+        for i, sentence in enumerate(group["old"]):
+            old = masks[0].body(sentence)
+            if old is None or regex is None:
+                continue
+            before = regex.findall(old.text)
+            if not before:
+                continue
+            j = pairs.get(i)
+            new = masks[1].body(group["new"][j]) if j is not None else None
+            # 分割された後半に慎重表現が残った場合を削除と取り違えない。
+            after_text = new.text if new else ""
+            if j is not None:
+                after_text = _with_unpaired_text(
+                    [masks[1].body(s) or _Body("", s.text, s.line, s.start) for s in group["new"]], j, paired_new)
+            elif old.raw in sides.texts[1]:
+                continue
+            after = regex.findall(after_text)
+            if len(before) <= len(after):
+                continue
+            normalized = normalize(old.raw).strip()
+            if any((r["old_line"] is None or r["old_line"] == old.line)
+                   and (normalized in normalize(r["old"]) or normalize(r["old"]).strip() in normalized)
+                   for r in marks):
+                continue
+            out.append(_review_candidate("decreased", old, new,
+                       {"old_count": len(before), "new_count": len(after),
+                        "removed": list((Counter(before) - Counter(after)).elements())}))
+    return _review_section(out, **_list_info("hedges"))
+
+
+# 引用は数値の角括弧か、著者名＋西暦。注記、TODO、リンクのラベルは含めない。
+# 英字の著者は、年の前に「,」か「et al.」があるものだけ（(Smith, 2019)、(Smith et al. 2019)）。「(Windows 2000)」
+# 「(RFC 2119)」のような製品名・規格名と年の括弧を引用と取らないため（反証で見つけた例）。(Smith 2019) は拾わない。
+_CITATION_LATIN = (r"[A-Z][a-z][A-Za-z'’.-]*(?:\s*(?:&|and)\s*[A-Z][A-Za-z'’.-]*)*"
+                   r"(?:\s+et\s+al\.[,，]?\s*|[,，]\s*)")
+_CITATION_JA = r"[一-鿿々〆ァ-ヴー]+(?:ほか|ら)?[,，]?\s+"
+_CITATION = re.compile(
+    r"\[[0-9]+(?:\s*[,、–—-]\s*[0-9]+)*\](?!\s*[([])"
+    r"|[(（](?:" + _CITATION_JA + "|" + _CITATION_LATIN + r")[12][0-9]{3}[a-z]?[)）]")
+# 引用の印は書き方だけの違い（括弧の全角と半角、空白、「、」と「,」、ダッシュの種類）をそろえてから比べる（反証で見つけた例）
+_CITATION_KEY = str.maketrans({"（": "(", "）": ")", "，": ",", "、": ",", "–": "-", "—": "-", "−": "-"})
+
+
+def _citation_key(text):
+    return re.sub(r"\s+", "", text.translate(_CITATION_KEY))
+# 既存 number が空白つきの mg 等を単位として取らない穴だけを補う。未知の英単語は単位とみなさない。
+_SCIENTIFIC_VALUE = re.compile(r"(?<![A-Za-z0-9_.])[0-9]+(?:\.[0-9]+)?[ \t　]*"
+                               r"(?:[numcdkMGTμµ]?g|[numcdkμµ]?m(?:ol)?|[numcdkMμµ]?[lL]|[numkMGTμµ]?s|[kMGT]?Hz|[kMGT]?Pa|[kMGT]?W|℃|°C)(?![A-Za-z])")
+
+
+# 符号は、直前が漢字・片仮名・数字・英字・%・閉じ括弧でないときだけ取る。「10月-12月」「9時-17時」「1万円-2万円」の
+# 範囲のハイフンを負の数と取らないため（反証で見つけた例）。そのため「前年比-5%」の符号も見ない（限界）。
+_SIGNED_VALUE = re.compile(r"(?<![A-Za-z0-9_.])(?:(?<![一-鿿々〆ァ-ヴー%％)）\]])[+−-])?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)")
+
+
+_STATISTIC_VALUE = re.compile(r"(?<![A-Za-z])(?:p|P|α|β|r|t|F|SD|SE)[ \t]*(?:<=|>=|[<>=≤≥])[ \t]*"
+                              r"[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+
+
+_EMAIL = re.compile(r"(?<![A-Za-z0-9.!#$%&'*+/=?^_`{|}~@-])[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+# 宛名と分かる行頭か「宛先:」の後だけ。名前のあとの助詞（田中さんは）は本文中の言及として対象外。
+_ADDRESSEE = re.compile(r"(?m)(?:^[ \t]*(?:宛先[：:][ \t]*)?|(?<=様、)[ \t]*|(?<=さん、)[ \t]*|(?<=様,)[ \t]*|(?<=さん,)[ \t]*)"
+                        r"(?P<address>(?P<name>[一-鿿々〆〇○ぁ-ゖァ-ヴーA-Za-zＡ-Ｚａ-ｚ][一-鿿々〆〇○ぁ-ゖァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９・＆& .　\t]{0,79}?)(?:様|さん))"
+                        r"(?=[ \t　]*(?:[、，,：:！!\n]|$))")
+# 「さん」「様」が付いても宛名でない語（家族の呼び方など）。名前がこれで終わるものは除く（反証で見つけた例）
+_ADDRESSEE_FAMILY = ("婆", "爺", "母", "父", "娘", "息子", "奥", "嫁", "兄", "姉", "坊")
+_VALUE_SKIP_KINDS = frozenset(("code", "frontmatter", "html_block", "reference_definition"))
+
+
+def _value_tokens(sides, side, regex):
+    """元の位置を保ってコード・URL等を除く。表・見出しの引用も検査する。"""
+    text = sides.texts[side]
+    analysis = sides.analyses[side]
+    spans = sorted((a, b) for a, b, kind in analysis["protected_spans"] if kind in _BODY_MASK_KINDS)
+    lefts = [a for a, _ in spans]
+    out = []
+    for match in regex.finditer(text):
+        a, b = match.span()
+        line = sides.line_of(side, a)
+        if analysis["lines"][line - 1]["kind"] in _VALUE_SKIP_KINDS:
+            continue
+        index = max(0, bisect_right(lefts, a) - 1)
+        if any(left < b and right > a for left, right in spans[index:index + 2]):
+            continue
+        if regex is _ADDRESSEE and match.group("name").strip() in ("皆", "みな", "たく", "お客", "お子", "お父", "お母", "お兄", "お姉", "おじい", "おばあ",
+                                                                 "お疲れ", "ご苦労", "おかげ", "お陰", "お互い", "逆", "同", "有", "無"):
+            continue
+        value = (match.group("address") if regex is _ADDRESSEE else match.group()).strip()
+        # 「仕様」「模様」等の語末の様は敬称でない（正しい推敲48組の見出しで1件誤検出した）。
+        if regex is _ADDRESSEE and value.endswith(("仕様", "模様", "同様", "多様", "異様", "有様", "無様", "一様")):
+            continue
+        if regex is _ADDRESSEE and match.group("name").strip().endswith(_ADDRESSEE_FAMILY):
+            continue
+        if regex in (_SCIENTIFIC_VALUE, _STATISTIC_VALUE):
+            value = re.sub(r"[ \t　]+", "", value)
+        raw = sides.lines[side][line - 1]
+        # 比べるのは key（引用は書き方をそろえた形）、出すのは body.text（書いてあるとおり）
+        key = _citation_key(value) if regex is _CITATION else value
+        out.append((key, _Body(value, raw, line, a)))
+    return out
+
+
+def _value_places(sides, groups):
+    """全文差分の塊の行ごとに [組の番号, [(文の始まり, 終わり, 文の番号)]]（元と後）。塊の外の行は変わっていない行。"""
+    places = ({}, {})
+    for g_index, group in enumerate(groups):
+        for side, start_key, end_key, name in ((0, "old_start", "old_end", "old"), (1, "new_start", "new_end", "new")):
+            for hunk in group.get("hunks") or [group["hunk"]]:
+                for line in range(hunk[start_key], hunk[end_key] + 1):
+                    places[side].setdefault(line, [g_index, []])
+            for s_index, sentence in enumerate(group[name]):
+                entry = places[side].get(sentence.line)
+                if entry is not None:
+                    entry[1].append((sentence.start, sentence.start + len(sentence.text), s_index))
+    return places
+
+
+def _uncancelled_tokens(old, new, places=None, groups=None):
+    """同じ値を元と後で打ち消し、残った値（消えた値、足した値）を返す。同じ値の移動は候補にせず、同じ値が2回から1回に
+    減ったときは残す。
+
+    places と groups を渡すと、全文差分で変わっていない行の値は除き（両側で同じ）、残りを組の文どうし、同じ塊の中、
+    文書全体の順に打ち消す。同じ値が文書に何度もあるとき、位置を見ずに前から打ち消すと、変えていない別の行の値が
+    残って候補の行がずれ、既存の数値の候補と重ねない仕組みも効かなかったため（反証で見つけた例）。"""
+    tagged = []
+    for side, tokens in ((0, old), (1, new)):
+        rows = []
+        for value, body in tokens:
+            if places is None:
+                rows.append((value, body, 0, None))
+                continue
+            entry = places[side].get(body.line)
+            if entry is None:
+                continue
+            sentence = next((s for a, b, s in entry[1] if a <= body.start < b), None)
+            rows.append((value, body, entry[0], sentence))
+        tagged.append(rows)
+    alive = [[True] * len(rows) for rows in tagged]
+    pair_maps = [dict(group["pairs"]) for group in groups] if groups is not None else []
+
+    def cancel(old_key, new_key):
+        waiting = {}
+        for j, row in enumerate(tagged[1]):
+            key = new_key(row) if alive[1][j] else None
+            if key is not None:
+                waiting.setdefault((key, row[0]), []).append(j)
+        for i, row in enumerate(tagged[0]):
+            key = old_key(row) if alive[0][i] else None
+            queue = waiting.get((key, row[0])) if key is not None else None
+            if queue:
+                j = queue.pop(0)
+                alive[0][i] = alive[1][j] = False
+
+    if groups is not None:
+        cancel(lambda row: None if row[3] is None or row[3] not in pair_maps[row[2]] else (row[2], pair_maps[row[2]][row[3]]),
+               lambda row: None if row[3] is None else (row[2], row[3]))
+        cancel(lambda row: row[2], lambda row: row[2])
+    cancel(lambda row: 0, lambda row: 0)
+    return [[(row[0], row[1]) for k, row in enumerate(rows) if alive[side][k]] for side, rows in enumerate(tagged)]
+
+
+def _citation_number_covered(old, new, risks):
+    """同じ引用の数字だけの変化と、数字を含む印の追加・削除が、同じ行の既存 number で出た場合は重ねない
+    （番号や年の変化、[3] の削除は数値の候補として出る）。著者の変化（数字以外の違い）は省かない。
+    protected は fail-on 対象でないため、その存在だけで引用の候補を省かない。"""
+    a, b = old[0] if old else "", new[0] if new else ""
+    if old and new and re.sub(r"[0-9]+", "", a) != re.sub(r"[0-9]+", "", b):
+        return False
+    if old and new:
+        for risk in risks:
+            if (risk["kind"] == "number" and risk["subkind"] == "order"
+                    and risk.get("old_line") == old[1].line and risk.get("new_line") == new[1].line
+                    and risk["detail"].get("old_order") == re.findall(r"[0-9]+", a)
+                    and risk["detail"].get("new_order") == re.findall(r"[0-9]+", b)):
+                return True
+    for side, own, other in (("removed", old, new), ("added", new, old)):
+        if own is None:
+            continue
+        changed = Counter(re.findall(r"[0-9]+", own[0])) - Counter(re.findall(r"[0-9]+", other[0] if other else ""))
+        if not changed:
+            continue
+        line_key = "old_line" if side == "removed" else "new_line"
+        reported = Counter()
+        for risk in risks:
+            if risk["kind"] == "number" and risk.get(line_key) == own[1].line:
+                for item in risk["detail"].get(side, []):
+                    reported.update(re.findall(r"[0-9]+", item))
+        if changed - reported:
+            return False
+    return bool(Counter(re.findall(r"[0-9]+", a)) != Counter(re.findall(r"[0-9]+", b)))
+
+
+def _immutable_values(sides, risks, groups=None):
+    """引用・宛名・裸のメールアドレスの増減。数字・単位・URLは既存 number/protected に任せる。
+    戻り値は (独立の節, meaning_risks に足す引用候補)。既存候補の中身は変えない。
+    独立の節の meaning_risk_count は meaning_risks に足した候補の数（run の「値の検査」の行で一緒に数える）。"""
+    out, citations = [], []
+    places = _value_places(sides, groups) if groups is not None else None
+    for kind, regex in (("citation", _CITATION), ("addressee", _ADDRESSEE), ("email", _EMAIL),
+                        ("scientific_unit", _SCIENTIFIC_VALUE), ("statistic", _STATISTIC_VALUE), ("number_sign", _SIGNED_VALUE)):
+        removed, added = _uncancelled_tokens(_value_tokens(sides, 0, regex), _value_tokens(sides, 1, regex), places, groups)
+        if kind == "number_sign":
+            # 同じ絶対値の符号だけ変わった穴を補う。数そのものの増減は既存 number に任せる。
+            by_value = {}
+            for value, body in added:
+                by_value.setdefault(value.lstrip("+−-"), []).append((value, body))
+            sign_pairs = []
+            for own in removed:
+                matches = by_value.get(own[0].lstrip("+−-"), [])
+                if matches:
+                    other = matches.pop(0)
+                    if own[0].startswith(("-", "−")) != other[0].startswith(("-", "−")):
+                        sign_pairs.append((own, other))
+            removed, added = [a for a, _ in sign_pairs], [b for _, b in sign_pairs]
+        for index in range(max(len(removed), len(added))):
+            old = removed[index] if index < len(removed) else None
+            new = added[index] if index < len(added) else None
+            if kind == "statistic":
+                # 数字の変化は既存 number が扱う。数が同じで比較の印だけ変わった穴に限定する。
+                if old is None or new is None or re.findall(r"[0-9.]+", old[0]) != re.findall(r"[0-9.]+", new[0]):
+                    continue
+                if re.findall(r"<=|>=|[<>=≤≥]", old[0]) == re.findall(r"<=|>=|[<>=≤≥]", new[0]):
+                    continue
+            if kind == "scientific_unit":
+                # 数字・単位の変化を既存 number がすでに報告していれば追加しない。
+                covered = True
+                for side, own in (("removed", old), ("added", new)):
+                    if own is None:
+                        continue
+                    line_key = "old_line" if side == "removed" else "new_line"
+                    if not any(r["kind"] == "number" and r.get(line_key) == own[1].line
+                               and own[0] in [re.sub(r"[ \t　]+", "", v) for v in r["detail"].get(side, [])]
+                               for r in risks):
+                        covered = False
+                if covered:
+                    continue
+            if kind == "citation" and _citation_number_covered(old, new, risks):
+                continue
+            detail = {"removed": [old[1].text] if old else [], "added": [new[1].text] if new else []}
+            item = _review_candidate(kind, old[1] if old else None, new[1] if new else None, detail)
+            if kind in ("citation", "scientific_unit", "statistic", "number_sign"):
+                subkind = "replaced" if old and new else ("lost" if old else "added")
+                citations.append(_risk("citation" if kind == "citation" else "number", subkind, item["old_line"], item["new_line"], item["old"], item["new"], detail))
+            else:
+                out.append(item)
+    return _review_section(out, meaning_risk_count=len(citations)), citations
+
+
+POLITENESS_THRESHOLD = 0.20
+# 活用形も数える。長い「させていただく」を先に取り、いただくと二重に数えない。
+_MAIL_HONORIFIC = re.compile(r"(?P<causative>させていただ(?:く|き|け|い|か))|(?P<receive>いただ(?:く|き|け|い|か))"
+                        r"|(?P<give>くださ(?:る|り|れ|い|っ|ら))|(?P<say>申し上げ(?:る|ま|た|て))|(?P<know>存じま(?:す|した|せん))")
+_MAIL_HONORIFIC_NAMES = {"causative": "させていただく", "receive": "いただく", "give": "くださる", "say": "申し上げる", "know": "存じます"}
+_POLITE_END = re.compile(r"(?:です|でした|ます|ました|ません|ませんでした)(?:か|ね|よ|よね)?$")
+_PLAIN_END = re.compile(r"(?:だ|だった|である|であった)(?:ね|よ)?$")
+
+
+def _politeness_metrics(bodies):
+    counts = dict((name, 0) for name in _MAIL_HONORIFIC_NAMES.values())
+    polite = plain = 0
+    for body in bodies:
+        for match in _MAIL_HONORIFIC.finditer(body.text):
+            counts[_MAIL_HONORIFIC_NAMES[match.lastgroup]] += 1
+        end = bare_end(body.text)
+        polite += bool(_POLITE_END.search(end))
+        plain += bool(_PLAIN_END.search(end))
+    return {"sentences": len(bodies), "honorifics": counts, "honorific_count": sum(counts.values()),
+            "honorific_rate": sum(counts.values()) / len(bodies) if bodies else 0.0,
+            "polite_endings": polite, "plain_endings": plain,
+            "polite_ratio": polite / (polite + plain) if polite + plain else None}
+
+
+def _politeness(sides, doc_type):
+    """mail だけ。敬語5家族の出現数/本文の文数、敬体/(敬体+だ・である)の差が0.20以上なら候補。
+    分母0の文末は比較しない。体言止め・口語を無理に常体とみなさない。件数と割合を記録し、合否には使わない。"""
+    if doc_type != "mail":
+        return _review_section([], applicable=False, threshold=POLITENESS_THRESHOLD, metrics=None)
+    bodies = [_all_bodies(sides, side) for side in (0, 1)]
+    old, new = [_politeness_metrics(rows) for rows in bodies]
+    out = []
+    for key in ("honorific_rate", "polite_ratio"):
+        a, b = old[key], new[key]
+        if a is not None and b is not None and abs(a - b) + 1e-12 >= POLITENESS_THRESHOLD:
+            samples = [next((body for body in rows if (_MAIL_HONORIFIC.search(body.text) if key == "honorific_rate"
+                       else _POLITE_END.search(bare_end(body.text)) or _PLAIN_END.search(bare_end(body.text)))), None)
+                       for rows in bodies]
+            out.append(_review_candidate(key, samples[0], samples[1],
+                                         {"old_ratio": a, "new_ratio": b, "threshold": POLITENESS_THRESHOLD}))
+    return _review_section(out, applicable=True, threshold=POLITENESS_THRESHOLD, metrics={"old": old, "new": new})
+
+
+def _new_review_section(d, key):
+    section = d.get(key) or {}
+    candidates = section.get("candidates") or []
+    notes = []
+    if section.get("list_problem"):
+        notes.append(_LIST_NOTE.format("慎重な言い方の一覧", "hedges", section["list_problem"]))
+    if not candidates and not notes:
+        return ""
+    label = _NEW_SECTION_NAMES[key]
+    lines = ["■ {}（見直し候補 {}件）".format(label, len(candidates))] + notes
+    for item in candidates:
+        detail = item["detail"]
+        where = _where(item["old_line"], item["new_line"])
+        if key == "hedges":
+            text = "慎重な言い方が減りました{}: {} → {}（{}）。断定に変わっていないか確かめてください。".format(
+                where, detail["old_count"], detail["new_count"], "、".join(detail["removed"]))
+        elif key == "immutable":
+            text = "{}が変わりました{}: {} → {}".format("宛名" if item["subkind"] == "addressee" else "メールアドレス", where,
+                       "、".join(detail["removed"]) or "なし", "、".join(detail["added"]) or "なし")
+        else:
+            text = "{}が変わりました: {:.1%} → {:.1%}。相手への敬語の度合いを確かめてください。".format(
+                "1文あたりの敬語の数" if item["subkind"] == "honorific_rate" else "です・ますの割合",
+                detail["old_ratio"], detail["new_ratio"])
+        lines.append("- " + text)
+        for field, label in (("old", "元"), ("new", "後")):
+            if item.get(field) is not None:
+                lines.append("  {}: {}".format(label, item[field]))
+    return "\n".join(lines)
+
+
 def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_type=None, reader=None) -> dict:
     """元の文と書き直した文を比べる（JSON の形式2）。
 
     渡された文字列をそのまま使う（BOM を外したり、改行をそろえたりしない。CLI と check は読むときに decode_source で
     そろえ、違いを encoding_notes で渡す）。stance は STANCES の値（勧め、決まり、説明）か None。
-    doc_type（文書の種類）と reader（読者）は context に入れるだけで、差分と意味が変わる恐れの判定は変えない
+    doc_type（文書の種類）と reader（読者）は context に残す。差分と意味が変わる恐れの判定は変えない
     （種類と読者を指定しても同じ規則）。文体の硬化の検査（stiffness）と勢いの検査（tone）は、種類で level を決める
-    （incident・formal の硬化、pr・article・incident・manual・formal の勢いは参考の info。promo 以外の種類を指定したときの
-    勢いの絵文字と見出しも info）。値は中で正規化し、使えない値は ValueError。"""
+    （paper の硬化と勢いも参考の info。mail の勢いは絵文字・見出しも review）。mail だけ敬語の度合いも検査する。値は中で正規化し、使えない値は ValueError。"""
     context = {"doc_type": normalize_doc_type(doc_type), "reader": normalize_reader(reader)}
     rules = _rule_candidates(orig_raw, rw_raw, stance)
     full, sides = _build_full_diff(orig_raw, rw_raw, encoding_notes)
@@ -5546,6 +5910,9 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
     # diff の詰めの直し: 気持ちの語（meaning_risks の kind feeling）の一覧の出どころ（stiffness.list、tone.list と同じ形。
     # 反証で見つけた例）
     out["feeling"] = _list_info("feelings")
+    out["hedges"] = _hedges(sides, groups, risks)
+    out["immutable"] = sides.immutable
+    out["politeness"] = _politeness(sides, context["doc_type"])
     return out
 
 
@@ -5607,7 +5974,11 @@ def _status_line(d, note=_DETECTOR_STATUS_NOTE):
         line = "状態: 変更あり（{}か所）。見直し候補 {}件、うち意味が変わる恐れ {}件".format(
             places, d["candidate_count"], d["meaning_risk_count"])
     reviews = detector_review_count(d)
-    return line + note.format(reviews) if reviews else line
+    line = line + note.format(reviews) if reviews else line
+    extra = sum((d.get(key) or {}).get("candidate_count", 0) for key in NEW_REVIEW_SECTIONS)
+    if extra:
+        line += "（慎重表現・値・敬語の見直し候補 {}件は{}の節）".format(extra, "上" if note == _DETECTOR_STATUS_NOTE_ABOVE else "下")
+    return line
 
 
 def _where(old_line, new_line):
@@ -5641,6 +6012,9 @@ def _risk_line(risk):
         if risk.get("basis") == "material":
             text += "（資料にある値）"
         return text
+    if kind == "citation":
+        return "引用の印が変わった{}: {} → {}".format(where, "、".join(detail.get("removed", [])) or "なし",
+                                              "、".join(detail.get("added", [])) or "なし")
     if kind == "negation":
         return "否定の有無が変わった{}: {} → {}".format(where, detail.get("old", ""), detail.get("new", ""))
     if kind == "swap":
@@ -6053,11 +6427,15 @@ def _detector_section(d, key):
 
 def detector_summary(d, key):
     """完了報告の確認の記録に写す値（「候補なし」「候補{n}件」、参考だけなら「参考{n}件」、見直し候補と参考が混ざれば
-    「候補{n}件、参考{m}件」）。key は stiffness か tone。d にその検査の結果がなければ None。"""
+    「候補{n}件、参考{m}件」）。key は stiffness、tone、hedges、immutable、politeness。d にその検査の結果がなければ None。"""
     section = d.get(key) if isinstance(d, dict) else None
-    if not isinstance(section, dict):
+    if not isinstance(section, dict) or section.get("applicable") is False:
         return None
     count = section.get("candidate_count") or 0
+    risky = section.get("meaning_risk_count") or 0 if key == "immutable" else 0
+    if risky:
+        # 値の検査で意味が変わる恐れに入れた候補（引用の印、数値の補い）も数える（反証で見つけた例）
+        return "{}意味が変わる恐れ {}件".format("候補{}件、".format(count) if count else "", risky)
     if not count:
         return "候補なし"
     candidates = section.get("candidates")
@@ -6075,7 +6453,8 @@ def report_parts(d: dict) -> dict:
     """レポートの節の文字列（{"risks", "rules", "stiffness", "tone", "full_diff"}）。ない節は空の文字列。末尾に改行は付けない。
     stiffness と tone は diff の詰めで足した（文体の硬化の検査と勢いの検査。候補がなければ空）。"""
     return {"risks": _risk_section(d), "rules": _rule_section(d), "stiffness": _detector_section(d, "stiffness"),
-            "tone": _detector_section(d, "tone"), "full_diff": _full_diff_section(d)}
+            "tone": _detector_section(d, "tone"), "full_diff": _full_diff_section(d),
+            **{key: _new_review_section(d, key) for key in NEW_REVIEW_SECTIONS}}
 
 
 def report(d: dict) -> str:
@@ -6084,7 +6463,8 @@ def report(d: dict) -> str:
     末尾に改行は付けない。"""
     status = _status_line(d)
     parts = report_parts(d)
-    body = [part for part in (parts["risks"], parts["rules"], parts["stiffness"], parts["tone"], parts["full_diff"]) if part]
+    body = [part for part in (parts["risks"], parts["rules"], parts["stiffness"], parts["tone"],
+                             parts["hedges"], parts["immutable"], parts["politeness"], parts["full_diff"]) if part]
     head = [_REPORT_FIRST_LINE, status, _REPORT_DISCLAIMER]
     context = d.get("context") or {}
     if context.get("doc_type") is not None or context.get("reader") is not None:
@@ -6101,14 +6481,14 @@ def read_text(path):
 
 _EXIT_CODES = """終了コード:
   0  比べ終わり、--fail-on の条件に当たらなかった（候補の有無によらない）。--endings の正常終了、-h と --version も0
-  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類の恐れが1件以上）
+  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印の恐れが1件以上）
   2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk] 元の文 書き直した文\n"
           "       yomiyasu_diff.py --endings ファイル [--stance 立場]\n"
           "       yomiyasu_diff.py --version")
-_FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の変化が"
-                 "1件でもあれば、終了コード1で終わります。コード・URL・引用など変えない箇所の変化は、意味が変わる恐れとして出しますが、"
+_FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化が"
+                 "1件でもあれば、終了コード1で終わります。コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
                  "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。"
                  "候補は確かめる場所で、意味が変わったという判定ではありません。"
                  "条件に当たらなくても、意味が同じだという証明にはなりません。")
@@ -6128,7 +6508,7 @@ def _detector_level_help():
     反証で見つけた例）。promo の見出しの数え方も書く（反証で見つけた例）。"""
     heading_kept = [doc_type for doc_type in TONE_TYPED_REVIEW_DOC_TYPES["heading"] if doc_type != "promo"]
     return ("文体の硬化の検査は {} のとき、勢いの検査は {} のとき、候補を参考として出します。"
-            "promo 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として出し、{} 以外では見出しの候補も参考として出します。"
+            "promo と mail 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として出し、{} 以外では見出しの候補も参考として出します。"
             "promo では、番号つき項目の行と太字だけの行も勢いの検査の見出しに数えます。").format(
         _join_doc_types(STIFFNESS_INFO_DOC_TYPES), _join_doc_types(TONE_INFO_DOC_TYPES),
         _join_doc_types(["promo"] + heading_kept))
@@ -6193,7 +6573,8 @@ def _build_parser():
     options.add_argument("--doc-type", metavar="種類",
                          help="文書の種類（値は yomiyasu_lint.py と同じ）。表示と JSON に残し、差分、意味が変わる恐れ、"
                               "規則の見直し候補、--fail-on は変わりません（意味の検査はどの種類でも同じに行います）。"
-                              + _detector_level_help())
+                              + _detector_level_help() + "mail だけ敬語の度合いを検査します。値: "
+                              + "、".join("{}（{}）".format(row[0], row[1]) for row in DOC_TYPES) + "。")
     options.add_argument("--reader", metavar="読者",
                          help="想定する読者の知識（値は yomiyasu_lint.py と同じ）。表示と JSON に残すだけで、判定は変わりません。")
     options.add_argument("--endings", action="store_true",

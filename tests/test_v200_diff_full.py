@@ -36,7 +36,7 @@ NINE_KEYS = ["markers", "new_words", "lost_words", "structure", "spans", "logic"
 # diff の詰めの直し（反証で見つけた例）: 気持ちの語の一覧の出どころ（feeling）を最後に足す
 TOP_KEYS = (["format", "format_version", "tool_version", "status", "changed", "candidate_count", "meaning_risk_count",
              "fail_on_meaning_risk_count", "not_judged", "context", "meaning_risks"] + NINE_KEYS
-            + ["full_diff", "stiffness", "tone", "feeling"])
+            + ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness"])
 FIRST_LINE = "差分の検査を実行しました。"
 DISCLAIMER = ("全文差分は変わった箇所を示すだけで、意味が同じだという証明ではありません。"
               "この検査では、意味の保持と読者にとっての分かりやすさは判定していません。")
@@ -664,7 +664,7 @@ class TestPresentation(DiffCase):
         report_parts = self.need_function("report_parts")
         result = self.diff2(C_OLD, C_NEW)
         parts = report_parts(result)
-        self.assertEqual(sorted(parts), ["full_diff", "risks", "rules", "stiffness", "tone"])
+        self.assertEqual(sorted(parts), ["full_diff", "hedges", "immutable", "politeness", "risks", "rules", "stiffness", "tone"])
         status = self.report(result).split("\n")[1]
         body = [part for part in (parts["risks"], parts["rules"], parts["stiffness"], parts["tone"], parts["full_diff"])
                 if part]
@@ -673,7 +673,7 @@ class TestPresentation(DiffCase):
         self.assertTrue(parts["rules"].startswith("■ 規則の見直し候補（"), parts["rules"])
         self.assertTrue(parts["full_diff"].startswith("■ 全文差分（変更 2か所。省略していません）"), parts["full_diff"])
         same = report_parts(self.diff2(A_OLD, A_OLD))
-        self.assertEqual(same, {"risks": "", "rules": "", "stiffness": "", "tone": "",
+        self.assertEqual(same, {"risks": "", "rules": "", "stiffness": "", "tone": "", "hedges": "", "immutable": "", "politeness": "",
                                 "full_diff": "■ 全文差分: 変わった箇所はありません。"})
         unsupported = {"kind": "unsupported", "subkind": "number", "old_line": None, "new_line": 4, "old": None,
                        "new": "再試行は最大3回です。", "detail": {"text": "3回", "value": "3", "unit": "回"}, "basis": None}
@@ -1277,8 +1277,8 @@ DIFF_HELP_DESCRIPTION = ("元の文と書き直した文を比べ、変わった
                          "全文差分は意味が同じだという証明ではありません。意味が同じかどうかは判定しません。")
 # 10.6 B1: 数える種類を書く。変えない箇所（コード、URL、引用など）は数えない
 # diff の詰めの直し（反証で見つけた例）: 否定対比の主張の逆転と気持ちの語も数えないことを足した
-DIFF_HELP_FAIL_ON = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の変化が"
-                     "1件でもあれば、終了コード1で終わります。コード・URL・引用など変えない箇所の変化は、意味が変わる恐れとして出しますが、"
+DIFF_HELP_FAIL_ON = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化が"
+                     "1件でもあれば、終了コード1で終わります。コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
                      "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。"
                      "候補は確かめる場所で、意味が変わったという判定ではありません。"
                      "条件に当たらなくても、意味が同じだという証明にはなりません。")

@@ -4,6 +4,8 @@ yomiyasu_lint.py - 日本語の表現とMarkdownの書式を、設定された�
 
 指摘は見直し候補であり、意味の保持や読みやすさを判定するものではない。
 Python標準ライブラリだけで動作する。
+mail は絵文字と meta_filler の返信・結びの5型を外す。宛名・挨拶・署名・クッション言葉を削る専用規則はない。
+paper は慎重表現をぼかしとして削る規則がないので、外す規則はない。
 """
 __version__ = "2.0.0-beta"
 
@@ -107,7 +109,19 @@ DOC_TYPE_SKIP_RULES = {
     # 絵文字の候補と食い違わせない。diff の詰めで測って決めた）。
     # 評価の語を短く重ねる型（「安い。うまい。早い。」。fragment_run）も勢いとして残す（作者の判断）
     "promo": ("emoji_prohibited", "fragment_run"),
+    "mail": ("emoji_prohibited",),
+    "paper": (),
 }
+# meta_filler 全体を外すと誇張や無関係な前置きまで残すため、既存の型の説明で5型だけを選ぶ。
+# これらは mail では相手への返信・結びとして普通の形。宛名、挨拶、署名、クッション言葉の専用規則は元からない。
+DOC_TYPE_SKIP_PATTERNS = {"mail": {"meta_filler": (
+    "チャット応答の名残「ご質問ありがとうございます」",
+    "チャット応答の名残「必要なら次に〜します」",
+    "定型クロージング「いかがでしたでしょうか」",
+    "定型クロージング「ぜひ〜してみてください」",
+    "定型クロージング「参考になれば幸いです」など",
+)}}
+# paper: 慎重表現そのものを削る規則はない。誇張の「過言ではない」や文末反復まで一括で外さない。
 # 種類を限って当てる規則（規則ID から、当てる種類のタプルへ）。種類を指定しないときと、ほかの種類では除く。今は空
 DOC_TYPE_ONLY_RULES = {}
 
@@ -2295,11 +2309,14 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
     # 文書の種類で外す規則。検出が終わったあと、件数と点数を数える前に、前から順に
     # 除いて規則ごとに数える。残った候補の順は変えない。種類を指定しないときは、種類を限って当てる規則だけを除く（今は空）
     skipped = dict((rule, 0) for rule in DOC_TYPE_SKIP_RULES[doc_type]) if doc_type is not None else {}
+    partial = DOC_TYPE_SKIP_PATTERNS.get(doc_type, {})
+    skipped.update((rule, 0) for rule in partial)
     if skipped or DOC_TYPE_ONLY_RULES:
         kept = []
         for finding in findings:
             rule = finding["rule"]
-            if rule in skipped:
+            if (rule in DOC_TYPE_SKIP_RULES.get(doc_type, ())
+                    or finding["message"].startswith(partial.get(rule, ()))):
                 skipped[rule] += 1
             elif rule not in DOC_TYPE_ONLY_RULES or doc_type in DOC_TYPE_ONLY_RULES[rule]:
                 kept.append(finding)
@@ -2411,6 +2428,7 @@ def _doc_type_table():
     lines = ["文書の種類ごとに外す規則（--doc-type）:"]
     for value, rules in DOC_TYPE_SKIP_RULES.items():
         lines.append("  {:<10}{}".format(value, "、".join(rules) if rules else "なし"))
+    lines.append("mail は meta_filler の返信・結びの5型だけも外します（ご質問ありがとうございます、必要なら次に〜します、いかがでしたでしょうか、ぜひ〜してみてください、参考になれば幸いです等）。宛名・挨拶・署名を削る専用規則はありません。paper は慎重表現を削る規則がないため除外なし。")
     lines.append("外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。")
     return "\n".join(lines)
 

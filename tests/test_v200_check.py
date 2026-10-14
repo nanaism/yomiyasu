@@ -471,6 +471,8 @@ class TestK1RecordAndOutput(CheckCase):
             # diff の詰め: 5行目のあとに硬化の検査と勢いの検査の結果（完了報告の確認の記録に写す2行）
             "硬化の検査: 候補なし",
             "勢いの検査: 候補なし",
+            "慎重表現の検査: 候補なし",
+            "値の検査: 候補なし",
             "",
             "■ 意味が変わる恐れ（1件。原文と資料に照らして確かめる）",
             "- 数値が変わった（1行目）: 3日 → 30日",
@@ -517,7 +519,7 @@ class TestK1RecordAndOutput(CheckCase):
         # diff の詰めの直し（反証で見つけた例）: scripts の隣の
         # references/lists/ にある一覧のファイルの SHA-256 も tools に入れる（ルートの scripts の隣には3つともある）
         lists = ROOT / "references" / "lists"
-        list_keys = ["references/lists/{}.txt".format(name) for name in ("nominalization", "intensifiers", "feelings")]
+        list_keys = ["references/lists/{}.txt".format(name) for name in ("nominalization", "intensifiers", "feelings", "hedges")]
         self.assertEqual(set(record["tools"]), set(TOOL_NAMES) | set(list_keys))
         for name in TOOL_NAMES:
             self.assertEqual(record["tools"][name], {"version": "2.0.0-beta", "sha256": sha256_file(SCRIPTS / name)})
@@ -783,6 +785,8 @@ class TestRunThenVerify(CheckCase):
             "記録: " + str(record),
             "硬化の検査: 候補なし",
             "勢いの検査: 候補なし",
+            "慎重表現の検査: 候補なし",
+            "値の検査: 候補なし",
             "",
             "■ 差分の見直し候補（diff、1件）",
             "■ 元の文にない語: データ",
