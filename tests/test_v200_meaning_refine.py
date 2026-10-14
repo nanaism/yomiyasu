@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""v2.0.0（diff の詰め）: 意味が変わる恐れの判定の詰め（DESIGN-interfaces.md 10.7、step2-diff/questions.md 33〜48 と 51 の勧め）と、
-気持ちの創作（kind feeling。10.6 B2、GOALS の D-1）。
+"""v2.0.0（diff の詰め）: 意味が変わる恐れの判定の詰め（設計 10.7 の勧め）と、
+気持ちの創作（kind feeling。10.6 B2、目標の D-1）。
 
-入力は反証レビュー（v200-development/step2-diff/review-risk.md、review-spec.md、review-edge.md）の例と、このファイルで作った
-合成の文。期待は questions.md の勧めのとおり。--fail-on=meaning-risk が数える4つの kind（number、negation、swap、
+入力は反証レビュー（反証で見つけた例）の例と、このファイルで作った
+合成の文。期待は diff の詰めで決めた勧めのとおり。--fail-on=meaning-risk が数える4つの kind（number、negation、swap、
 sentence_type）の誤検知を減らし、取りこぼしを拾う。feeling は意味が変わる恐れの節に出すが、--fail-on には数えない。
 """
 
@@ -111,7 +111,7 @@ class MidSentenceNegationTest(unittest.TestCase):
 
 
 class ParagraphShiftTest(unittest.TestCase):
-    """35: 段落を1つ分けても、後ろの段落がずれて組にならない（review-edge E2）。"""
+    """35: 段落を1つ分けても、後ろの段落がずれて組にならない（反証で見つけた例）。"""
 
     def test_split_without_number_change_has_no_number(self):
         o_p, r_p = [], []
@@ -348,7 +348,7 @@ class GroundTest(unittest.TestCase):
 
 
 class FeelingTest(unittest.TestCase):
-    """10.6 B2、GOALS の D-1: 元の文にない気持ちの語を足した書き換えを kind feeling の候補にする（--fail-on には数えない）。"""
+    """10.6 B2、目標の D-1: 元の文にない気持ちの語を足した書き換えを kind feeling の候補にする（--fail-on には数えない）。"""
 
     FOUND = (
         ("設定を変更した。", "設定を変更して、ほっとした。", "ほっと"),

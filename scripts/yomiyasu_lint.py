@@ -89,7 +89,7 @@ else:
 # v1.1.2 までの形（score、is_clean、metrics、findings）を1とみなす。
 LINT_FORMAT_VERSION = 2
 
-# 文書の種類ごとに外す規則（G7。DESIGN-reader-doctype.md 5.3、9.2 と、2026-10-13 19時の追記の formal、21時半の追記の promo）。
+# 文書の種類ごとに外す規則（G7。種類と読者の設計 5.3、9.2 と、2026-10-13 19時の追記の formal、21時半の追記の promo）。
 # その種類で普通な書き方を候補にしてしまう規則のうち、根拠のある組だけ。規則ID の順に並べる。検出はそのまま行い、
 # 件数と点数を数える前に候補から除く（種類を付けた候補は、付けない候補からこの規則を除いたものと同じになる）。
 # 公開の名前として読むだけにし、書き換えて使う使い方は約束しない。
@@ -103,8 +103,8 @@ DOC_TYPE_SKIP_RULES = {
     "slides": ("bold_label_list", "count_declaration", "excess_list", "short_summary_heading"),
     "essay": (),
     "formal": (),
-    # 紹介記事・宣伝文では書き手の絵文字を残す（GOALS の D-5。diff の勢いの検査は絵文字が減ると候補にするので、lint の
-    # 絵文字の候補と食い違わせない。diff の詰めで測って決めた。v200-development/step-c-detectors/measure.md）。
+    # 紹介記事・宣伝文では書き手の絵文字を残す（目標の D-5。diff の勢いの検査は絵文字が減ると候補にするので、lint の
+    # 絵文字の候補と食い違わせない。diff の詰めで測って決めた）。
     # 評価の語を短く重ねる型（「安い。うまい。早い。」。fragment_run）も勢いとして残す（大賀さんの判断、2026-10-14 朝）
     "promo": ("emoji_prohibited", "fragment_run"),
 }
@@ -2074,7 +2074,7 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
             "snippet": f"行: {', '.join(str(n) for n in bold_label_lines[:5])}"
         })
 
-    # 文書の種類で外す規則（G7。DESIGN-reader-doctype.md 9.3）。検出が終わったあと、件数と点数を数える前に、前から順に
+    # 文書の種類で外す規則（G7。種類と読者の設計 9.3）。検出が終わったあと、件数と点数を数える前に、前から順に
     # 除いて規則ごとに数える。残った候補の順は変えない。種類を指定しないときは、種類を限って当てる規則だけを除く（今は空）
     skipped = dict((rule, 0) for rule in DOC_TYPE_SKIP_RULES[doc_type]) if doc_type is not None else {}
     if skipped or DOC_TYPE_ONLY_RULES:
@@ -2140,7 +2140,7 @@ def render_findings(result: Dict[str, Any]) -> str:
 
 
 def _context_line(result):
-    """種類か読者を指定したときの4行目（G7。DESIGN-reader-doctype.md 9.3）。指定しないときは None。"""
+    """種類か読者を指定したときの4行目（G7。種類と読者の設計 9.3）。指定しないときは None。"""
     context = result.get("context") or {}
     doc_type, reader = context.get("doc_type"), context.get("reader")
     if doc_type is None and reader is None:
@@ -2249,7 +2249,7 @@ def _build_parser():
         epilog=_doc_type_table() + "\n\n" + _EXIT_CODES,
         formatter_class=_HelpFormatter,
         add_help=False,
-        # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる（DESIGN-interfaces.md 10.7）
+        # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる（設計 10.7）
         allow_abbrev=False,
     )
     arguments = parser.add_argument_group("引数")

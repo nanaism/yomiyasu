@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """v2.0.0（diff の詰めの直しのあとの反証、1回目の直し）。
 
-v200-development/step-c-fix/review1-spec.md（S2、S3、S5〜S8、S10）、review1-fp.md（指摘1、2、4〜7、9〜11）、
-review1-regress.md（Q1、Q2、Q4）の指摘のうち、判断の要らないものを直した。直しの記録は
-v200-development/step-c-fix/fix-round1.md。文はすべて合成の文（反証の担当の再現の入力と同じ文と、それを言い換えた文）。
+1回目の反証（仕様の S2、S3、S5〜S8、S10、誤検出の指摘1、2、4〜7、9〜11、後戻りの Q1、Q2、Q4）の指摘のうち、
+判断の要らないものを直した。文はすべて合成の文（反証の担当の再現の入力と同じ文と、それを言い換えた文）。
 実在の会社や商品の名前は使わない。
 
 - 勢い（S2）: --doc-type minutes の見出しの候補は見直し候補のまま（議事録の推敲では見出しを変えない。大賀さんの判断
@@ -191,7 +190,7 @@ class UnsupportedCountTest(CheckCase):
         self.assertEqual(self.third_line_count(split_lines(process.stdout)), 1)
 
     def test_corpus_compose_count_matches_the_candidates(self):
-        """review1-regress.md Q4 のコーパスの5組: 新規作成の3行目の数と、状態の行の meaning_risk が同じ。"""
+        """反証で見つけたコーパスの5組（Q4）: 新規作成の3行目の数と、状態の行の meaning_risk が同じ。"""
         pairs = (("blacklist_ai/01_tech_arch_sonnet_default.md", "yomiyasu_rewritten/01_tech_arch_sonnet_default_bl.md"),
                  ("human/human_oga_07.md", "human/human_oga_08.md"),
                  ("raw_ai/06_spec_draft_sonnet_formal.md", "raw_ai/07_code_review_sonnet_casual.md"),
@@ -581,7 +580,7 @@ class MovedValueTest(unittest.TestCase):
                          [("replaced", ["3日"], ["5日"])])
 
     def test_moved_sentence_with_shifted_pairs_is_not_a_change(self):
-        """文を前へ動かして文の組が1つずれた推敲（v200-handoff/tools/ext_harness.py の keitai:move_change の1組と同じ文）。
+        """文を前へ動かして文の組が1つずれた推敲（正解つきの書き換えの組の1つと同じ文）。
         続く文のほうが組の相手によく似ていれば、今までどおり値を移しただけとみなす（Q2 の直しで「4倍 → 3倍」を出さない）。"""
         queue = "非同期メッセージングキューでサービス間をつなぐと、送信側と受信側の障害が互いに広がりにくくなると言われています。"
         worker = "ワーカーの処理が失敗した場合、指数バックオフにジッタを加えて再実行するのです。"
@@ -591,7 +590,7 @@ class MovedValueTest(unittest.TestCase):
         self.assertEqual(number_risks(before, after), [])
 
     def test_deleted_sentence_with_shifted_pairs_is_lost(self):
-        """文を消し、次の文の言い回しだけを変えた推敲（v200-handoff/tools/truth_harness.py の delete_change の1組と同じ文）。
+        """文を消し、次の文の言い回しだけを変えた推敲（正解つきの書き換えの組の1つと同じ文）。
         消えた値として出す（「4倍 → 3倍」の入れ替えにしない）。"""
         tail = "から20:47までの35分間、注文APIとユーザー情報APIへのリクエストの約38%に対してゲートウェイが504を返したかもしれない。"
         risks = number_risks("キャンペーン通知の配信で、同時アクセスが平常時の4倍になったという。"

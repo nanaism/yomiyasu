@@ -376,10 +376,10 @@ class TestFinalCheckCases(unittest.TestCase):
 class TestOutputShape(unittest.TestCase):
     def test_existing_keys_are_kept_and_type_changes_is_added(self):
         result = yomiyasu_diff.diff("資料を共有してください。\n", "資料を共有します。\n")
-        # v2.0.0 の形式2（DESIGN-interfaces.md 2.8）。v1.1.2 の9キーは名前と間の順を保ち、前後に新しいキーが付く
-        # G7（DESIGN-reader-doctype.md 9.4）: not_judged の次に context
+        # v2.0.0 の形式2（設計 2.8）。v1.1.2 の9キーは名前と間の順を保ち、前後に新しいキーが付く
+        # G7（種類と読者の設計 9.4）: not_judged の次に context
         # diff の詰め: full_diff のあとに文体の硬化の検査（stiffness）と勢いの検査（tone）
-        # diff の詰めの直し（step-c-fix/check-infra-speed.md。review-spec.md の F5）: 気持ちの語の一覧の出どころ（feeling）
+        # diff の詰めの直し（反証で見つけた例）: 気持ちの語の一覧の出どころ（feeling）
         self.assertEqual(list(result), ["format", "format_version", "tool_version", "status", "changed",
                                         "candidate_count", "meaning_risk_count", "fail_on_meaning_risk_count",
                                         "not_judged", "context", "meaning_risks",

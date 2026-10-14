@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """v2.0.0（diff の詰めの直しのあとの反証、2回目の直し）。
 
-v200-development/step-c-fix/review2-spec.md（T1〜T7）、review2-fp.md（指摘1〜8。下では R2-1〜R2-8）、
-review2-regress.md（V1〜V4）の指摘のうち、判断の要らないものを直した。直しの記録は
-v200-development/step-c-fix/fix-round2.md。文はすべて合成の文（反証の担当の再現の入力と同じ文と、それを言い換えた文）。
+2回目の反証（仕様の T1〜T7、誤検出の指摘1〜8（下では R2-1〜R2-8）、後戻りの V1〜V4）の指摘のうち、
+判断の要らないものを直した。文はすべて合成の文（反証の担当の再現の入力と同じ文と、それを言い換えた文）。
 実在の会社や商品の名前は使わない。
 
 - 文書（T1、T2、T6、T7）: rephrase-test.md 3章の4の検出の説明と拾えない語、gemini-syntax.md 原則15 の議事録の見出し、
@@ -89,28 +88,44 @@ def help_text(*args):
 
 # ---- T1: rephrase-test.md 3章の4（検出の説明と、拾えない平仮名の入る語）----
 class RephraseTestWordingTest(unittest.TestCase):
+    """3回目の直しで、否定対比の名詞に平仮名の入る語（見た目、使い方、締め切り）も取るようにした。文書もそれに合わせ、
+    拾えない語は平仮名で始まる語（お知らせ）とする（反証で見つけた例: 文書が古い動きのままだった）。"""
+
     def test_detection_is_described_like_review_points(self):
         text = section_text(REFERENCES / "rephrase-test.md", "## 3. 否定対比（AではなくB）")
         item = [line for line in text.split("\n") if line.startswith("4. ")][0]
-        for word in ("並べて肯定", "AとB", "Aに加えてB", "AだけでなくB", "平仮名", "見た目"):
+        for word in ("並べて肯定", "AとB", "Aに加えてB", "AだけでなくB", "平仮名で始まる語", "お知らせ"):
             with self.subTest(word=word):
                 self.assertIn(word, item)
         self.assertNotIn("否定していた語が「目的」「重視」「まず」などの語と同じ文に出たときに見直し候補を出す", item)
+        self.assertNotIn("平仮名の入る語は拾えない", item)
 
-    def test_wrong_fix_example_says_diff_does_not_find_it(self):
+    def test_wrong_fix_example_says_diff_finds_it(self):
         text = section_text(REFERENCES / "rephrase-test.md", "### 直し方を誤った例（合成）")
         row = [line for line in text.split("\n") if line.startswith("| 見た目ではなく")][0]
         self.assertIn("diff", row)
+        self.assertIn("否定対比の主張が逆になった恐れ", row)
+        self.assertNotIn("候補に出ない", row)
+
+    def test_wrong_fix_example_matches_the_diff(self):
+        """文書の例を今の diff に通すと、文書のとおり逆転の候補が出る。"""
+        self.assertEqual(reversal_words("見た目ではなく、読み込みの速さを優先した。", "見た目と読み込みの速さを優先した。"),
+                         ["見た目"])
 
 
 class HiraganaNounKnownLimitTest(unittest.TestCase):
-    """平仮名の入る和語の名詞（見た目、使い方）は、否定対比の名詞として取らない（拾えない形。直したら、この試験を変える）。"""
+    """平仮名の入る和語の名詞。3回目の直しで、否定対比の名詞に送り仮名として漢字の間の「た」「い」「め」「わ」を許し、見た目、
+    使い方、締め切り、問い合わせ（比べには「問い合」を使い、候補には送り仮名までの「問い合わせ」を示す）を取るようにした
+    （test_v200_fix_round3.HiraganaNounContrastTest、ShownWordTest）。平仮名で始まる語（お知らせ）は今も取らない（拾えない形）。"""
 
-    def test_hiragana_nouns_are_not_taken(self):
-        for noun in ("見た目", "使い方", "締め切り", "問い合わせ"):
+    def test_hiragana_nouns_are_taken(self):
+        for noun, word in (("見た目", "見た目"), ("使い方", "使い方"), ("締め切り", "締め切り"), ("問い合わせ", "問い合わせ")):
             with self.subTest(noun=noun):
                 self.assertEqual(reversal_words("{}ではなく、読み込みの速さを優先した。".format(noun),
-                                                "{}と読み込みの速さを優先した。".format(noun)), [])
+                                                "{}と読み込みの速さを優先した。".format(noun)), [word])
+
+    def test_words_starting_with_hiragana_are_not_taken(self):
+        self.assertEqual(reversal_words("お知らせではなく、読み込みの速さを優先した。", "お知らせと読み込みの速さを優先した。"), [])
 
     def test_kanji_and_katakana_nouns_are_taken(self):
         for noun in ("デザイン", "外観"):
@@ -307,7 +322,7 @@ class DemoteKeepTest(unittest.TestCase):
 
     def test_known_limits(self):
         """除けない形（記録の限界。直したら、この試験を変える）: 「Aに手を付けるのは見送り」の「手を」は別の目的語に見える。
-        「新機能は、今回は見送り」は読点で節が切れる（fix-round1 の前から）。"""
+        「新機能は、今回は見送り」は読点で節が切れる（1回目の直しの前から）。"""
         self.assertEqual(reversal_words("最優先はリファクタリングではなく、不具合の修正です。",
                                         "不具合の修正を最優先にし、リファクタリングに手を付けるのは見送ります。", "pr"),
                          ["リファクタリング"])
@@ -562,7 +577,7 @@ class NarrowedRangeTest(unittest.TestCase):
                 self.assertEqual(number_risks(before, after), wanted)
 
     def test_moved_sentence_with_a_range_is_not_lost(self):
-        """範囲を含む文を丸ごと別の所へ動かした推敲（v200-handoff/tools/ext_harness.py の wrapped:move の1組と同じ文）。
+        """範囲を含む文を丸ごと別の所へ動かした推敲（正解つきの書き換えの組の1つと同じ文）。
         組の相手の文に範囲の値が1つも残らないときは、今までどおり文書全体で「ある」を見る（範囲を縮めた形と分ける）。"""
         listing = "一覧画面がAPIを3〜4回直列に呼んでおり、画面ごとに必要な項目も違うためだという。"
         token = "認証トークンのリフレッシュ処理を、リクエスト内の同期呼び出しから非同期キューのワーカーへ移しましたとされる。"
@@ -582,9 +597,9 @@ class NarrowedRangeTest(unittest.TestCase):
         self.assertEqual(number_risks("# 計画\n\n作業は3〜5日で終える。", "# 計画\n\n作業は5日で終え、予備に3日をとる。"), [])
 
 
-# ---- V4: 続く文に移った値の似かたの比べ（6万字で3秒未満。DESIGN-interfaces.md 2.11 の約束1）----
+# ---- V4: 続く文に移った値の似かたの比べ（6万字で3秒未満。設計 2.11 の約束1）----
 def moved_document(paragraphs, length):
-    """review2-regress.md の V4 の文書（review2-work/regress/tools/moved_time3.py と同じ作り）。"""
+    """反証で見つけた例の文書（反証の測りと同じ作り）。"""
     olds, news = [], []
     for i in range(paragraphs):
         body = "".join("第{}項の設定を開き、値を確かめてから記録に残し、担当者へ知らせる手順を守る".format(i * 100 + k)

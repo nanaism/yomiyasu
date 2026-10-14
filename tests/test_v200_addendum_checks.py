@@ -2,7 +2,7 @@
 """v2.0.0（G10、G11）: diff の否定対比の主張の逆転（kind contrast_reversal）と、文体の硬化の検査（stiffness）。
 
 期待値は追加文書（yomiyasu-v2.0.0-addendum-rephrase-stiffness_20261013-1900.md）の 1.4、1.5、2.2〜2.5 と、
-試作（v200-development/addendum/prototype.md、check.md）で決め直した数値から取った。文はすべて合成の文
+試作で決め直した数値から取った。文はすべて合成の文
 （追加文書の表の文と、試作の段で作った合成の組）。
 
 - contrast_reversal は meaning_risks に入る（意味が変わる恐れの節に出す）が、--fail-on=meaning-risk には数えない。
@@ -54,7 +54,7 @@ KEEP_UNCHANGED = (
     "怒っているのではなく、心配しているだけです。",
     "仮説では書き込みが遅いと考えていたが、実際は読み込みが遅かった。",
 )
-# 残す例の言い回しだけを変えた形（試作 prototype.md 2.1）
+# 残す例の言い回しだけを変えた形（試作）
 KEEP_REWORDED = (
     ("原因はキャッシュではなく、DNSの設定でした。", "キャッシュではなく、DNSの設定が原因でした。"),
     ("怒っているのではなく、心配しているだけです。", "怒ってはいません。心配しているだけです。"),
@@ -64,7 +64,7 @@ FIX = ("渡すのは判断ではなく、項目です。", "渡すのは項目�
 DETECT = ("共通化ではなく、障害時の切り分けを速くするために導入しました。", "共通化と障害時の切り分けの迅速化を目的に導入しました。")
 DETECT_MESSAGE = "原文で否定されていた『共通化』が、推敲後は否定のない文に出ています。主張が逆になっていないか確かめてください。"
 
-# 試作の合成の組（addendum/cases/contrast_cases.json、check/check_cases*.json から）。残す・正しく直す例を、逆転の例より多くする
+# 試作の合成の組から取った。残す・正しく直す例を、逆転の例より多くする
 REVERSED = (
     ("今回の改修は速度改善ではなく、保守のしやすさを狙ったものです。", "今回の改修は、速度改善と保守のしやすさを狙いとしたものです。", "速度改善"),
     ("重要なのはテストの数ではなく、落ちたときに原因がわかることです。", "重要なのは、テストの数と、落ちたときに原因がわかることです。", "テスト"),
@@ -269,7 +269,7 @@ class StiffnessTest(unittest.TestCase):
                 self.assertIn("■ 文体の硬化（参考 ", report)
 
     def test_other_doc_types_keep_review(self):
-        # incident は diff の詰めの直し（step-c-fix、review-spec.md の F3）で参考の種類に移した
+        # incident は diff の詰めの直し（反証で見つけた例）で参考の種類に移した
         # （試験は test_v200_tone_stiffness_refine.IncidentStiffnessTest）
         for value in ("pr", "article", "proposal", "minutes", "manual", "slides", "essay", "promo"):
             with self.subTest(doc_type=value):
@@ -362,7 +362,7 @@ class ListFileTest(unittest.TestCase):
 class JsonAndReportTest(unittest.TestCase):
     def test_new_keys_are_added_after_full_diff(self):
         """新しい出力は追加の項目。既存のキーの順は変えず、full_diff のあとに stiffness と tone を足す。
-        diff の詰めの直し（step-c-fix/check-infra-speed.md。review-spec.md の F5）で、気持ちの語の一覧の出どころ（feeling）を最後に足した。"""
+        diff の詰めの直し（反証で見つけた例）で、気持ちの語の一覧の出どころ（feeling）を最後に足した。"""
         keys = list(diff(*DETECT))
         self.assertEqual(keys[-4:], ["full_diff", "stiffness", "tone", "feeling"])
 

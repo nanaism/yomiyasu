@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""v2.0.0-beta: check の固めの試験（DESIGN-interfaces.md 10.8 の C-44、C-45、C-46、C-47、C-41 と、
-v200-development/step2-check/questions.md の 41〜65 の勧めのうち実装が要るもの）。
+"""v2.0.0-beta: check の固めの試験（設計 10.8 の C-44、C-45、C-46、C-47、C-41 と、
+check の段の問いへの勧めのうち実装が要るもの）。
 
 - C-44 の似かたのしきい値は、tests/corpus の推敲の48組（原文 → 推敲）と、正しい新規作成の組（下の COMPOSITIONS。
-  評価の題材とは別に作った合成の文）で測って決めた（測った値の表は v200-development/step2b/c44-threshold.md）。
+  評価の題材とは別に作った合成の文）で測って決めた。
 - 実装の前に書き、v2.0.0 の check の段（45a5885）で落ちることを確かめてから実装した。文はすべて合成。
 - 動かし方と一時フォルダの扱いは test_v200_check.py の CheckCase と同じ。
 """
@@ -73,11 +73,11 @@ AMBIGUOUS_MATERIALS = ("同じ最終稿に、資料の集まりが違う記録�
 # 51: 実行IDの誤り
 RUN_ID_ERROR_TAIL = "末尾の「.」と、Windows で使えない名前（CON、NUL、COM1 など）は使えません。"
 
-# C-44 のしきい値（c44-threshold.md の表で決めた値）
+# C-44 のしきい値（測って決めた値）
 THRESHOLD = 0.53
 
-# 正しい新規作成の組（資料 → 最終稿）。評価の題材（v200-development/step3/eval-cases）とは別の内容で作った合成の文。
-# minutes_close は、メモの言い回しを多く残した議事録で、しきい値にいちばん近い（c44-threshold.md）。
+# 正しい新規作成の組（資料 → 最終稿）。評価の題材とは別の内容で作った合成の文。
+# minutes_close は、メモの言い回しを多く残した議事録で、しきい値にいちばん近い。
 COMPOSITIONS = {
     "release": (
         [
@@ -217,9 +217,9 @@ def load_check():
     return module
 
 
-# メモの言い回しをほぼそのまま残し、敬称と句点を足して並べ直しただけの議事録（c44-threshold.md の B2.final-b や E3 と同じ型）。
-# 推敲の組と見分けられないので、原文とみなして diff も実行する（diff は止めずに足すだけ。c44-threshold.md の「しきい値を
-# 超える新規作成」）
+# メモの言い回しをほぼそのまま残し、敬称と句点を足して並べ直しただけの議事録（しきい値を測った組と同じ型）。
+# 推敲の組と見分けられないので、原文とみなして diff も実行する（diff は止めずに足すだけ。しきい値を
+# 超える新規作成）
 MEMO_KEPT = (
     "9/30 運用会議メモ\n"
     "出席: 小松、千葉、仁科\n\n"
@@ -241,7 +241,7 @@ MEMO_KEPT = (
 
 
 class TestC44Similarity(unittest.TestCase):
-    """C-44 の似かたの測り方としきい値（c44-threshold.md）。"""
+    """C-44 の似かたの測り方としきい値。"""
 
     @classmethod
     def setUpClass(cls):
@@ -923,7 +923,7 @@ class TestOutputWording(CheckCase):
         self.assertEqual(self.status(lines[1])[1]["reason"], "no_record_option")
 
 
-# ---- 反証レビュー（step2b の review-spec.md、review-bypass.md、review-compat.md）の直し ----
+# ---- check の固めの反証レビューの直し ----
 # 直す前の作業ツリー（check の SHA-256 の先頭 829dbe1372d4b1bc）で落ちることを確かめてから直した。
 
 # spec 4: C-46（このパスの最新の記録と原文が違う）の ambiguous の1行目。3.9 の文は「同じ最終稿に…複数」で、事実と合わない
@@ -1097,7 +1097,7 @@ class TestReviewRecordedSource(CheckCase):
 
 
 class TestReviewChildContext(CheckCase):
-    """spec 7（questions.md の G7-8）: 子の JSON の context が、渡した種類と読者と違うか、lint の外した件数が0以上の整数で
+    """spec 7（G7-8）: 子の JSON の context が、渡した種類と読者と違うか、lint の外した件数が0以上の整数で
     ないときは、その検査を error にして partial（終了コード3）にする。"""
 
     CASES = (

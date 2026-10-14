@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """v2.0.0: lint と diff をまとめて実行し、記録を残して照らす yomiyasu_check.py（run と verify）の試験。
 
-期待値は DESIGN-interfaces.md の 3章と 6.5 の表（K1〜K38。start の K19 と、フックの登録の K34 は
+期待値は設計の 3章と 6.5 の表（K1〜K38。start の K19 と、フックの登録の K34 は
 2番目の作業で作らないので除く）と、試験づくりで決めたこと（10章。10.3、10.4 の S10〜S16、10.5、10.6 B1、10.7）から
-取った。10章に合わせて強めた試験は、check の段（v200-development/step2-check）で実装の前に足した。文はすべて合成。
+取った。10章に合わせて強めた試験は、check の段で実装の前に足した。文はすべて合成。
 
 - yomiyasu_check.py は v1.1.2 にないので、import せず subprocess で動かす。CheckCase の setUp で
   ファイルの有無を確かめ、v1.1.2 では skip ではなく失敗にする。
@@ -44,7 +44,7 @@ TOOL_NAMES = ("yomiyasu_check.py", "yomiyasu_lint.py", "yomiyasu_diff.py", "mark
 
 # 3.10 状態の行の文法と、読む側の正規表現
 STATUS_LINE = re.compile(r"^yomiyasu-check: ([a-z_]+)((?: [a-z_]+=\S+)*)$")
-# G7（DESIGN-reader-doctype.md 9.5）: mode の次に、付けたときだけ doc_type と reader
+# G7（種類と読者の設計 9.5）: mode の次に、付けたときだけ doc_type と reader
 FIELD_ORDER = ("via", "run", "attempt", "final", "source", "expected", "mode", "doc_type", "reader", "checks",
                "meaning_risk", "replay", "failed", "reason")
 RUN_ID = r"\d{8}T\d{6}Z-[0-9a-f]{8}"
@@ -54,13 +54,13 @@ K1_STATUS = re.compile(r"^yomiyasu-check: executed via=run run=" + RUN_ID
 
 # 3.5 run の出力の1行目（{仕上げ} の前まで）と、決まった行
 FINALIZE_FILE = "提出の直前に、本文を変えずに verify を1回実行してください。"
-# step2b（勧め55、反証レビュー spec 3）: --state-dir か YOMIYASU_STATE_DIR で状態フォルダを決めたときの {仕上げ}。
+# check の固め（勧め55、反証レビュー spec 3）: --state-dir か YOMIYASU_STATE_DIR で状態フォルダを決めたときの {仕上げ}。
 # 試験は YOMIYASU_STATE_DIR で状態フォルダを決めるので、ふつうはこちら（CheckCase.finalize_file）
 FINALIZE_STATE_DIR = "提出の直前に、本文を変えずに verify --state-dir {} を1回実行してください。"
-# step2b（勧め56）: 本文だけを返す指定では確認の記録を付けないので「完了報告を付けるときは」
+# check の固め（勧め56）: 本文だけを返す指定では確認の記録を付けないので「完了報告を付けるときは」
 FINALIZE_STDIN = "本文はこのままで返答し、完了報告を付けるときは、この出力の2行目を写してください。"
 # 10.4 S11: --no-record のときの {仕上げ}
-# step2b（勧め59）: 「直さないなら」に続けて読めるように並べ替えた
+# check の固め（勧め59）: 「直さないなら」に続けて読めるように並べ替えた
 FINALIZE_NO_RECORD = ("完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください"
                       "（記録を残さない指定なので verify はできません）。")
 RUN_REWRITE_FIRST = ("検査を実行しました（1回目）。下の候補を原文と資料に照らして確かめてください。"
@@ -72,13 +72,13 @@ RUN_COMPOSE_FIRST = ("検査を実行しました（新規作成、1回目）。
                      "直したら同じコマンドをもう一度実行し、直さないなら")
 RUN_AFTER_FIX = "検査を実行しました（修正後の検査）。本文はもう変えず、残った候補は完了報告に書いてください。"
 RUN_SAME_FINAL = "検査を実行しました（前回と同じ最終稿）。"
-# step2b（勧め58）: 書き直したのに変更なしと出たときの確かめを添える
+# check の固め（勧め58）: 書き直したのに変更なしと出たときの確かめを添える
 RUN_NO_CHANGE = ("検査を実行しました。原文から変更はありません。書き直したのに変更なしと出たときは、"
                  "原文を上書きしていないか確かめてください。")
 RUN_OVER_LIMIT = ("検査を実行しました（修正{n}回目のあと）。修正は1回までの決まりを超えています（このコマンドは止めません）。"
                   "利用者から新しい依頼がない限り本文はもう変えず、残った候補は完了報告に書いてください。")
 RUN_PARTIAL_HEAD = "検査の一部を実行できませんでした（"
-# step2b（勧め42の1）: partial の1行目の最後に足す文（5.3）
+# check の固め（勧め42の1）: partial の1行目の最後に足す文（5.3）
 PARTIAL_TAIL = "verify は実行せず、完了報告にこの出力の2行目を写してください。"
 RUN_UNRECORDED_PART = "記録を書けませんでした"
 RUN_DISCLAIMER = "この記録は検査を実行したことを示すだけで、意味が保たれたことや読みやすさの合格を示すものではありません。"
@@ -106,10 +106,10 @@ VERIFY_LINE1 = {
     "not_reproducible": "記録のレポートを今のスクリプトで作り直せません。yomiyasu_check.py run をもう一度実行してください。",
 }
 VERIFY_INCOMPLETE_TAIL = " の結果がありません。yomiyasu_check.py run をもう一度実行してください。"
-# step2b（勧め42の2）: 記録の検査が時間切れか内部エラーで終わっていたとき
+# check の固め（勧め42の2）: 記録の検査が時間切れか内部エラーで終わっていたとき
 VERIFY_PARTIAL_LINE = ("記録の {}で終わっています。run をもう一度実行しても同じなら、完了報告に run の出力の2行目を写し、"
                        "「実行しなかった検査」に「{}」と書いてください。")
-# step2b（勧め55）: verify の no_record の3行目に、探した状態フォルダを書く
+# check の固め（勧め55）: verify の no_record の3行目に、探した状態フォルダを書く
 NO_RECORD_LINE3 = "記録: なし（探した状態フォルダ: {}）"
 LINE_ENDINGS_NOTE = "改行コードだけが違います（git の autocrlf やエディタの設定で変わることがあります）"
 
@@ -121,7 +121,7 @@ CHECK_KEYS = ("name", "status", "exit_code", "duration_ms", "target", "report", 
               "text_sha256", "summary", "stderr", "error")
 RESULT_KEYS = ("status", "token", "next", "fail_on_hit", "meaning_risk_count", "final_unchanged_during_run",
                "not_judged")
-# G7（DESIGN-reader-doctype.md 9.5、10.1）: run と verify の JSON の mode の次に context
+# G7（種類と読者の設計 9.5、10.1）: run と verify の JSON の mode の次に context
 RUN_JSON_KEYS = ("format", "format_version", "tool_version", "command", "status", "status_line", "message",
                  "next", "run_id", "attempt", "fix_count", "mode", "context", "record_path", "fail_on_hit", "lint", "diff",
                  "materials")
@@ -514,7 +514,7 @@ class TestK1RecordAndOutput(CheckCase):
         # 3.7: scripts の1つ上に SKILL.md があるときだけ埋める
         self.assertEqual((record["skill"]["dir"], record["skill"]["skill_md_sha256"], record["skill"]["version"]),
                          (None, None, None))
-        # diff の詰めの直し（step-c-fix/check-infra-speed.md。review-spec.md の F5、review-regress.md の R9）: scripts の隣の
+        # diff の詰めの直し（反証で見つけた例）: scripts の隣の
         # references/lists/ にある一覧のファイルの SHA-256 も tools に入れる（ルートの scripts の隣には3つともある）
         lists = ROOT / "references" / "lists"
         list_keys = ["references/lists/{}.txt".format(name) for name in ("nominalization", "intensifiers", "feelings")]
@@ -523,7 +523,7 @@ class TestK1RecordAndOutput(CheckCase):
             self.assertEqual(record["tools"][name], {"version": "2.0.0-beta", "sha256": sha256_file(SCRIPTS / name)})
         for key in list_keys:
             self.assertEqual(record["tools"][key], {"version": None, "sha256": sha256_file(ROOT / key)})
-        # unicode_version は step2b（反証レビュー compat 4）で足した。似かたを求めた Unicode の版
+        # unicode_version は check の固め（反証レビュー compat 4）で足した。似かたを求めた Unicode の版
         self.assertEqual(record["python"], {"version": platform.python_version(),
                                             "implementation": platform.python_implementation(),
                                             "unicode_version": unicodedata.unidata_version})
@@ -533,7 +533,7 @@ class TestK1RecordAndOutput(CheckCase):
             item = record["inputs"][role]
             for key in INPUT_KEYS:
                 self.assertIn(key, item)
-            self.assertEqual(item["role"], role)  # DESIGN-interfaces 10.3 C1
+            self.assertEqual(item["role"], role)  # 設計 10.3 C1
             data = file.read_bytes()
             self.assertEqual(item["index"], 0)
             self.assertEqual(os.path.realpath(item["path"]), str(file))
@@ -544,7 +544,7 @@ class TestK1RecordAndOutput(CheckCase):
             self.assertEqual((item["bom"], item["eol"]), (False, "lf"))
             self.assertEqual(item["snapshot"], "inputs/{}.bin".format(sha256_bytes(data)))
             self.assertEqual((self.state / item["snapshot"]).read_bytes(), data)
-        # G7（DESIGN-reader-doctype.md 9.5、10.1）: options に doc_type と reader を足す（付けなければ null）
+        # G7（種類と読者の設計 9.5、10.1）: options に doc_type と reader を足す（付けなければ null）
         self.assertEqual(record["options"], {"stance": None, "fail_on": [], "timeout": 90, "doc_type": None, "reader": None})
         self.assertEqual(record["required_checks"], ["lint", "diff"])
         self.assertEqual(sorted(entry["name"] for entry in record["checks"]), ["diff", "lint"])
@@ -634,7 +634,7 @@ class TestK1RecordAndOutput(CheckCase):
         self.assertEqual(result["next"], "review")
         self.assertEqual((result["attempt"], result["fix_count"], result["mode"]), (1, 0, "rewrite"))
         self.assertIs(result["fail_on_hit"], False)
-        # 10.6 B1: 全件の数と、--fail-on=meaning-risk が数える種類の数（questions.md の 4）
+        # 10.6 B1: 全件の数と、--fail-on=meaning-risk が数える種類の数
         self.assertEqual((result["meaning_risk_count"], result["fail_on_meaning_risk_count"]), (1, 1))
         self.assertEqual(result["lint"]["format"], "yomiyasu-lint")
         self.assertEqual(result["diff"]["format"], "yomiyasu-diff")
@@ -650,7 +650,7 @@ class TestK1RecordAndOutput(CheckCase):
 class TestK2SameAsCli(CheckCase):
     def test_k2_reports_are_the_cli_outputs(self):
         """K2: 記録のレポートは lint と diff の CLI（--json）の出力のバイト列と同じ。.txt は通常の出力と同じ
-        バイト列（DESIGN-interfaces 10.3 B5。末尾の改行を含む）。"""
+        バイト列（設計 10.3 B5。末尾の改行を含む）。"""
         a, b, lines = self.run_pair("保存期間は3日です。\n", "保存期間は30日です。\n")
         path, record = self.record_from(lines)
         cli_env = self.env(PYTHONIOENCODING="utf-8")
@@ -868,7 +868,7 @@ class TestRunThenVerify(CheckCase):
         crafted = (json.dumps(report, ensure_ascii=True, indent=1) + "\n").encode("ascii")
         (self.state / entry["report"]).write_bytes(crafted)
         entry["report_sha256"] = sha256_bytes(crafted)
-        # step2b（勧め49）: 記録の件数もレポートに合わせて作り込む（件数だけの食い違いは --replay なしでも見つかる）
+        # check の固め（勧め49）: 記録の件数もレポートに合わせて作り込む（件数だけの食い違いは --replay なしでも見つかる）
         entry["summary"]["meaning_risk_count"] = 0
         entry["summary"]["fail_on_meaning_risk_count"] = 0
         record["result"]["meaning_risk_count"] = 0
@@ -943,7 +943,7 @@ class TestRunThenVerify(CheckCase):
 
 
 class TestVerifyDetails(CheckCase):
-    """3.9 の verify の細部（6.5 の表にない形）。check の段の後半（v200-development/step2-check）で、verify を作る前に足した。"""
+    """3.9 の verify の細部（6.5 の表にない形）。check の段の後半で、verify を作る前に足した。"""
 
     def run_record(self, before="保存期間は3日です。\n", after="保存期間は30日です。\n", *extra):
         a, b, lines = self.run_pair(before, after, *extra)
@@ -1171,7 +1171,7 @@ class TestVerifyDetails(CheckCase):
         crafted = json.dumps(report, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode("ascii")
         (self.state / entry["report"]).write_bytes(crafted)
         entry["report_sha256"] = sha256_bytes(crafted)
-        # step2b（勧め49）: 記録の件数もレポートに合わせて作り込む
+        # check の固め（勧め49）: 記録の件数もレポートに合わせて作り込む
         entry["summary"]["meaning_risk_count"] = 0
         record["result"]["meaning_risk_count"] = 0
         record["result"]["fail_on_meaning_risk_count"] = 0
@@ -1203,7 +1203,7 @@ class TestVerifyDetails(CheckCase):
         self.assertEqual((fields["checks"], fields["replay"]), ("lint,diff,materials", "ok"))
 
     def test_index_entry_without_record_is_skipped(self):
-        """索引が指す記録のファイルがないときは、その索引を飛ばす（step2-check/questions.md の15）。"""
+        """索引が指す記録のファイルがないときは、その索引を飛ばす。"""
         b = self.write("b.md", "保存期間は30日です。\n")
         index = self.state / "index" / "by-final" / sha256_file(b)
         index.mkdir(parents=True)
@@ -1215,7 +1215,7 @@ class TestVerifyDetails(CheckCase):
         self.assertEqual(fields["run"], self.status(lines[1])[1]["run"])
 
     def test_text_index_finds_a_file_record(self):
-        """3.6 の by-text はファイルで渡した記録にも書く。返答の本文を verify --final - で照らせる（questions.md の10）。"""
+        """3.6 の by-text はファイルで渡した記録にも書く。返答の本文を verify --final - で照らせる。"""
         a, b, lines, path, record = self.run_record()
         _, fields = self.assert_verify(self.check("verify", "--final", "-", stdin="保存期間は30日です。\n\n"),
                                        "executed", code=0)
@@ -1545,7 +1545,7 @@ class TestStdin(CheckCase):
                 self.assertEqual(verify_fields["final"], "text-sha256:" + expected_hash[:12])
 
     def test_k24_one_character_changed_on_stdin(self):
-        """K24 の「1字違えば final_changed」（DESIGN-interfaces 10.3 A1）。標準入力にはパスがないので、
+        """K24 の「1字違えば final_changed」（設計 10.3 A1）。標準入力にはパスがないので、
         --run-id か --source があるときだけ final_changed、どちらもなければ no_record。"""
         process, lines = self.check_ok("run", "--stdin", stdin=self.BODY)
         run_id = self.status(lines[1])[1]["run"]
@@ -1644,8 +1644,8 @@ class TestRecordingFailures(CheckCase):
         self.assertEqual(lines[0], RUN_REWRITE_FIRST + FINALIZE_NO_RECORD)
         self.assertEqual(lines[4], "記録: なし（--no-record）")
         self.assertEqual(lines[-2:], lines[:2])
-        # 記録がないので実行IDと回は「-」。理由は reason= に書く（questions.md の 2）
-        # step2b（勧め59）: verify の状態の名前 no_record と重ならない値にした
+        # 記録がないので実行IDと回は「-」。理由は reason= に書く
+        # check の固め（勧め59）: verify の状態の名前 no_record と重ならない値にした
         self.assertEqual((fields["run"], fields["attempt"], fields.get("reason")), ("-", "-", "no_record_option"))
         self.assertEqual((fields["mode"], fields["checks"], fields["meaning_risk"]), ("rewrite", "lint,diff", "1"))
         self.assertEqual(fields["final"], "sha256:" + sha256_file(b)[:12])
@@ -1763,7 +1763,7 @@ class TestRecordingFailures(CheckCase):
         lines = split_lines(process.stdout)
         status, fields = self.status(lines[1])
         self.assertEqual((status, fields["failed"], fields["final"]), ("partial", "final(changed)", "sha256:" + checked[:12]))
-        # step2b（勧め42の3）: 正しい次の行動は run のやり直しなので、questions.md の5の案の文にした
+        # check の固め（勧め42の3）: 正しい次の行動は run のやり直しなので、その案の文にした
         self.assertEqual(lines[0], "最終稿が検査の途中で変わりました。変え終えてから yomiyasu_check.py run を"
                                    "もう一度実行してください。")
         self.assertEqual(lines[2], "実行した検査: なし（途中で最終稿が変わったため）")
@@ -1991,7 +1991,7 @@ class TestParallelAndFiles(CheckCase):
 
     def test_k38_os_replace_is_retried_after_permission_errors(self):
         """K38: os.replace の最初の2回を PermissionError にしても記録が書ける（プロセスの中で動かす）。
-        書き直しは OS によらず行う（DESIGN-interfaces 10.3 B4）。"""
+        書き直しは OS によらず行う（設計 10.3 B4）。"""
         a = self.write("a.md", "保存期間は3日です。\n")
         b = self.write("b.md", "保存期間は30日です。\n")
         real_replace = os.replace
@@ -2291,7 +2291,7 @@ class TestCommonPromises(CheckCase):
 
 
 class TestReviewFixes(CheckCase):
-    """check の段の反証レビュー（v200-development/step2-check/review-*.md）で見つかった食い違いの試験。
+    """check の段の反証レビューで見つかった食い違いの試験。
     直す前に落ちることを確かめてから、実装を直した。文はすべて合成。"""
 
     def pair(self):
@@ -2784,7 +2784,7 @@ class TestReviewFixes(CheckCase):
 
 
 class TestRecordsOnlyFromCheck(unittest.TestCase):
-    """（v1.1.2 でも通る後戻り防止）記録は yomiyasu_check.py だけが作る（DESIGN-interfaces 3.1）。"""
+    """（v1.1.2 でも通る後戻り防止）記録は yomiyasu_check.py だけが作る（設計 3.1）。"""
 
     def test_lint_and_diff_cli_do_not_create_a_state_folder(self):
         """（v1.1.2 でも通る後戻り防止）lint と diff の CLI を動かしても、状態フォルダもほかのファイルもできない。"""

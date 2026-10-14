@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v2.0.0: diff の「意味が変わる恐れ」（meaning_risks）の試験（DESIGN-interfaces.md 2.5、2.7、2.8、6.4）。
+"""v2.0.0: diff の「意味が変わる恐れ」（meaning_risks）の試験（設計 2.5、2.7、2.8、6.4）。
 
 指示書10章の種類（数字、日付、固有名詞、否定、条件、例外、確度、実施済みと未確認、元にない書き手の気持ちの追加）を含む。
 候補は「確かめる場所」で、意味が変わったという判定ではない。拾えない例も、限界として期待値に固定する。
@@ -52,7 +52,7 @@ class RiskCase(unittest.TestCase):
         """元と後は1行の文。各ファイルの末尾に改行がある形で比べる（2.7 の例と同じ）。"""
         result = yomiyasu_diff.diff(before + "\n", after + "\n")
         for key in ("meaning_risks", "status", "full_diff"):
-            self.assertTrue(key in result, "v2.0.0 の diff() は %s を返す（DESIGN-interfaces.md 2.8）。今のキー: %s"
+            self.assertTrue(key in result, "v2.0.0 の diff() は %s を返す（設計 2.8）。今のキー: %s"
                             % (key, list(result)))
         return result
 
@@ -224,7 +224,7 @@ class TestNumbers(RiskCase):
         self.assertEqual(self.kinds(result["meaning_risks"]), [("protected", "url")])
 
     def test_clause_swap_keeps_the_word_number_links(self):
-        """節を入れ替えただけで、語と数値の結び付きが同じなら number/order にしない（ext_harness の節の入れ替えで誤検知だった）。"""
+        """節を入れ替えただけで、語と数値の結び付きが同じなら number/order にしない（正解つきの書き換えの組の節の入れ替えで誤検知だった）。"""
         self.need_v2_diff()
         for before, after in (("応答は504を返したが、上限は20接続だった。", "上限は20接続だったが、応答は504を返した。"),
                               ("Aは3日、Bは5日です。", "Bは5日、Aは3日です。")):
@@ -265,20 +265,20 @@ class TestNegation(RiskCase):
         ("在庫が少ない。", "在庫が足りない。"),
         ("まず、設定を開いて値を変える。", "設定を開いて、まず値を変える。"),
         ("列の幅を固定して崩れを防ぐ。", "列の幅を固定してずれないようにする。"),
-        # コーパス48組で誤検知だった形（step2-diff/measure.md）。印の数が同じ言い換え、文字の対応で1字だけ同じとされた箇所、
+        # コーパス48組で誤検知だった形。印の数が同じ言い換え、文字の対応で1字だけ同じとされた箇所、
         # 印の手前に読点を足しただけの変更
         ("障害対応の間は調査が止まった。", "障害が起きている間は調査が進まなかった。"),
         ("処理不能なデータが後続を妨げる。", "処理できないデータが後続を止める。"),
         ("認証を同期呼び出しから非同期キューでの実行に変えた。", "認証を同期呼び出しから、非同期キューでの実行に変えた。"),
         ("本流のキューを詰まらせない。", "本流のキューが詰まらないようにします。"),
         ("再投入しても二重反映は起きない。", "再投入しても二重に反映されることはない。"),
-        # diff の詰め（questions.md 34、review-risk 4）: 句点の前の規則が言い換えを否定に出さない
+        # diff の詰め（反証で見つけた例）: 句点の前の規則が言い換えを否定に出さない
         ("結果は変わらない。", "結果は同じだ。"),
         ("値が一致しない。", "値が異なる。"),
         ("この確認は欠かせない。", "この確認は重要だ。"),
         ("変更して構いません。", "変更してよいです。"),
         ("ファイルは残らない。", "ファイルは消える。"),
-        # questions.md 45: 「未来」は否定の「未」にしない
+        # 「未来」は否定の「未」にしない
         ("将来の計画を立てる。", "未来の計画を立てる。"),
     )
 
@@ -309,7 +309,7 @@ class TestNegation(RiskCase):
 
     def test_suru_to_shinai_is_found_by_the_end_rule(self):
         """10.2 D1: 句点の前の規則を入れると決めた（コーパス48組で、規則ありの negation 2件が、LIMIT=2 だけの1件の2倍を
-        超えない。step2-diff/measure.md）。「する → しない」は negation として出る。全文差分にも出る。"""
+        超えない）。「する → しない」は negation として出る。全文差分にも出る。"""
         result = self.result("設定を変更する。", "設定を変更しない。")
         self.assertNotEqual(result["status"], "no_change")
         self.assertIn("設定を変更しない。", self.changed_lines(result))
@@ -326,9 +326,9 @@ class TestNegation(RiskCase):
         """反証レビュー E1: 全面書き換えの途中に、空行のない9行の箇条書きを足しても、そのあとの段落が1つの塊にまとまらず、
         段落ごとの hunk になる。後ろの段落の否定（確認します → 確認しません）が出る。数値（節の番号）は変えていないので出ない。
 
-        diff の詰め（step2-diff/questions.md 34）で入力を1つ変えた。句点の前の規則を「印でない字の違いが平仮名だけ（漢字・
+        diff の詰めで入力を1つ変えた。句点の前の規則を「印でない字の違いが平仮名だけ（漢字・
         片仮名は両側で同じ）」に絞ったので、前の入力「値を確認します → 値を確かめません」（語幹ごと書き換えた否定）は、
-        2.5.3 の残る限界どおり negation に出なくなった（前は出ていた。step-c-detectors/measure.md に前後を記録）。
+        2.5.3 の残る限界どおり negation に出なくなった（前は出ていた。前後を測って記録した）。
         この試験の狙いは行の対応なので、15節の後を「値を確認しません」にした。"""
         words = ("開く", "選ぶ", "直す", "保存する", "閉じる", "送る", "待つ", "確かめる", "終える")
         old_paragraphs = ["第{}節では、設定ファイルを開いて値を確認します。".format(i) for i in range(1, 21)]
@@ -406,7 +406,7 @@ class TestSentenceType(RiskCase):
         """設計の表から入力を1つ変えた。
         - 「来週公開しますか」は句読点がなく 2.5.5 の問いの定義（？、?、か。、か？）に入らないので、
           「来週公開しますか。」にした（questions-diff.md 5、10.2 D5）。
-        - 6.4 の「動くでしょうか。→ 動きます。」は、diff の詰め（questions.md 33）で、1行対1行の置き換えで両側が1文ずつなら
+        - 6.4 の「動くでしょうか。→ 動きます。」は、diff の詰めで、1行対1行の置き換えで両側が1文ずつなら
           似かたによらず組にするようにしたので、6.4 の入力のまま試す（前は主語を足した形に変えていた）。"""
         self.need_v2_diff()
         for before, after in (("動くでしょうか。", "動きます。"), ("この設定で動くでしょうか。", "この設定で動きます。"),
@@ -543,7 +543,7 @@ class TestProtected(RiskCase):
     def test_budget_omitted_replace_hunk_still_shows_inline_changes(self):
         """反証レビュー E8: 予算で文字の対応を省いた置き換えの hunk でも、インラインのコードとリンク先の変化は protected に出る。
         変えていない種類（この hunk では引用やコードの囲みはない）は出さない。
-        diff の詰め（questions.md 36 の (a)）で、塊をそのまま文字で対応させる上限を500字にしたので、予算に届くよう、前の入力
+        diff の詰めで、塊をそのまま文字で対応させる上限を500字にしたので、予算に届くよう、前の入力
         （1,000字の行を100個）から500字の行を200個に変えた。"""
         base = ("これは記録の文です。" * 50)[:499]
         olds = ["## 節%d\n%s壱" % (n, base) for n in range(200)]
@@ -654,9 +654,9 @@ class TestFixedLimits(RiskCase):
         self.assertIn("Bは3日、Aは5日です。", self.changed_lines(result))
 
     def test_negation_with_a_rephrased_stem_is_only_in_the_full_diff(self):
-        """diff の詰め（step2-diff/questions.md 34）で、句点の前の規則を「印でない字の違いが平仮名だけ」に絞った。そのため、
+        """diff の詰めで、句点の前の規則を「印でない字の違いが平仮名だけ」に絞った。そのため、
         語幹ごと書き換えた否定（確認します → 確かめません）は negation に出ない（2.5.3 の残る限界。基準 38d6556 では出ていた。
-        step-c-detectors/review-regress.md R6）。全文差分には出る。限界として固定する。"""
+        反証で見つけた例）。全文差分には出る。限界として固定する。"""
         result = self.result("値を確認します。", "値を確かめません。")
         self.assertNotIn("negation", [kind for kind, _ in self.kinds(result["meaning_risks"])])
         self.assertEqual(result["fail_on_meaning_risk_count"], 0)
@@ -678,15 +678,15 @@ class TestFixedLimits(RiskCase):
 
 class TestCorpusWatch(RiskCase):
     """6.4 誤検知の見張り: コーパス48組で、要素の形と kind・subkind の値が 2.8 のとおり。
-    10.2 D2: kind・subkind ごとの件数が、実装したときに測った値（step2-diff/measure.md）を超えない。
+    10.2 D2: kind・subkind ごとの件数が、実装したときに測った値を超えない。
     コーパスの書き換えは yomiyasu の正しい推敲なので、ここに出るものは確かめれば済む候補で、増えれば誤検知が増えたことになる。"""
 
     # 2026-10-13 に測った値（句点の前の規則あり）。number/order、swap、sentence_type/question、protected は0件。
-    # diff の詰め（step2-diff/questions.md 33〜48、51、step-c-detectors/measure.md）で測り直した。前の値は
+    # diff の詰めで測り直した。前の値は
     # negation 2、number/added 4、number/lost 1、number/replaced 1、sentence_type/marks 5（合計13）。今の値は
     # negation 1（「二重処理を防ぐ → 処理しない」の誤検知が 34 の直しで消えた）、number/added 5（「1」が「1つ」になった1件は同じ文、
     # 「一つのサービス」を 40 で数えるようになった1件が増えた）、ほかは同じ（合計13）。contrast_reversal と feeling は0件。
-    # diff の詰めの直し（step-c-fix/numbers.md、review-regress.md R4）で、数量を主張しない「一つ」（一つの、一つずつ、もう一つ）を
+    # diff の詰めの直し（反証で見つけた例）で、数量を主張しない「一つ」（一つの、一つずつ、もう一つ）を
     # 単独では数値の候補にしないようにしたので、number/added を 5 から基準の 4 に戻した（合計12）
     MEASURED = {"negation": 1, "number/added": 4, "number/lost": 1, "number/replaced": 1, "sentence_type/marks": 5}
 

@@ -1,6 +1,6 @@
 {
- "description": "yomiyasu v1.1.2 の diff() が合成20組に返した9キー。v2.0.0 の diff() も、同じ文字列なら同じ中身を返す（DESIGN-interfaces.md 2.2、2.8、6.3）。入力は合成の文で、BOM を含まない。",
- "generated_by": "v200-development/step1/make_diff_fixture.py",
+ "description": "yomiyasu v1.1.2 の diff() が合成20組に返した9キー。v2.0.0 の diff() も、同じ文字列なら同じ中身を返す（設計 2.2、2.8、6.3）。入力は合成の文で、BOM を含まない。",
+ "generated_by": "yomiyasu v1.1.2 の diff() に合成20組を通して作った",
  "source_commit": "602a369",
  "source_sha256": {
   "yomiyasu_diff.py": "b704e088fd6e1b01c21fb6b97373cc21d441cb14e976f3a47a95c3ba1c73a964",

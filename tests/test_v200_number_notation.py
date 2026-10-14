@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
-"""v2.0.0（diff の詰めの直し）: 数値の判定の後戻りを直す（v200-development/step-c-detectors/review-regress.md の R1〜R4、
-review-fp.md の F10）。
+"""v2.0.0（diff の詰めの直し）: 数値の判定の後戻りを直す（反証で見つけた例。後戻りの R1〜R4 と
+誤検出の F10）。
 
 - R1: 組の文のあとに続く、組にならない文の数値は、組の文の数値と「表記の違い」として打ち消さない。続く文に同じ値
   （数と単位が同じ）があれば、文を分けた・合わせた推敲として数えない。それ以外は文書全体の比べに回す。
@@ -13,7 +13,7 @@ review-fp.md の F10）。
   同じ単位の数と入れ替わったとき（二つ → 一つ、一つの → 三つの）は number/replaced。
 - F10: 漢数字の助数詞と算用数字の単位に「条」「号」「階」を足す。漢数字の助数詞に「分」を足し、「十分」を数にしないのは
   直前が漢数字でないときだけにする（三十分 → 30分 は候補なし）。万を含む数の換算は限界のまま。
-文はすべてこのファイルで作った合成の文（R1〜R3 の入力は review-regress.md の再現の入力と同じ文）。
+文はすべてこのファイルで作った合成の文（R1〜R3 の入力は反証の再現の入力と同じ文）。
 """
 
 from pathlib import Path
@@ -58,7 +58,7 @@ class CrossSentenceTest(unittest.TestCase):
     """R1: 組の文に続く文の数値を、組の文の数値と打ち消し合わせない（基準 38d6556 と同じ候補が出る）。"""
 
     def test_version_number_and_new_days_in_the_following_sentence(self):
-        """入力1（review-regress.md R1）: 続く文の「3」（単位なし）と「3日」を打ち消さない。"""
+        """入力1（反証で見つけた例）: 続く文の「3」（単位なし）と「3日」を打ち消さない。"""
         result = result_of("# 報告\n\n障害は昨夜のうちに解消しました。対応した版は3です。",
                            "# 報告\n\n障害は昨夜のうちに解消した。再発に備えて、監視の間隔を3日ごとに見直す。")
         self.assertEqual(sorted(shape(result)), [("added", None, 3, [], ["3日"]), ("lost", 3, None, ["3"], [])])
@@ -68,7 +68,7 @@ class CrossSentenceTest(unittest.TestCase):
         self.assertIn("- 消えた数値（元3行目）: 3", lines)
 
     def test_lost_days_and_appendix_number_in_the_following_sentence(self):
-        """入力2（review-regress.md R1）: 「保存期間は3日」が消えたことを出す。"""
+        """入力2（反証で見つけた例）: 「保存期間は3日」が消えたことを出す。"""
         result = result_of("障害は昨夜のうちに解消しました。ログの保存期間は3日です。",
                            "障害は昨夜のうちに解消した。詳しい経緯は付録3にまとめた。")
         self.assertEqual(sorted(shape(result)), [("added", None, 1, [], ["3"]), ("lost", 1, None, ["3日"], [])])
@@ -103,7 +103,7 @@ class CrossSentenceTest(unittest.TestCase):
         self.assertEqual(shape(result), [("replaced", 1, 1, ["10", "30"], ["10時", "30分"])])
 
     def test_split_sentence_keeps_values_that_moved_to_the_next_sentence(self):
-        """文を2つに分けた推敲で、続く文に移った値（数と単位が同じ）は数値の候補にしない（questions.md 35 の組み方のための処理）。"""
+        """文を2つに分けた推敲で、続く文に移った値（数と単位が同じ）は数値の候補にしない（diff の詰めの組み方のための処理）。"""
         before = "接続待ちが30秒のタイムアウトに達し、ゲートウェイが504を返した。"
         after = "接続待ちが30秒のタイムアウトに達した。ゲートウェイはそのとき504を返した。"
         self.assertEqual(numbers(result_of(before, after)), [])
@@ -128,7 +128,7 @@ class PlaceTest(unittest.TestCase):
     """R3: 数値の候補は、値の書かれている文と行を示す。"""
 
     def test_values_point_to_their_own_lines(self):
-        """review-regress.md R3 の入力（見出しの組のあとに続く文の値を、見出しの行に付けない）。"""
+        """反証で見つけた例（R3）の入力（見出しの組のあとに続く文の値を、見出しの行に付けない）。"""
         result = result_of("【概要】\nその日の夜、決済の画面が開かなくなった。\n影響は全体の35%に及んだ。",
                            "概要\n夜になって、利用者が決済を終えられない状態が続いた。\nこのとき失敗した要求は、全体のおよそ38%だった。")
         self.assertTrue(numbers(result))
@@ -143,7 +143,7 @@ class PlaceTest(unittest.TestCase):
 
     def test_corpus_number_risks_show_the_sentence_with_the_value(self):
         """コーパス（推敲の48組と、同じフォルダの続く文書を並べた組）で、数値の候補が示す文に、挙げた値が書かれている
-        （step-c-detectors/review-work/regress/misattr.py と同じ数え方。直す前は139件中22件で書かれていなかった）。"""
+        （反証で見つけた例と同じ数え方。直す前は139件中22件で書かれていなかった）。"""
         pairs = []
         for name in sorted(os.listdir(str(CORPUS / "yomiyasu_rewritten"))):
             source = ("blacklist_ai/" + name[:-6] + ".md") if name.endswith("_bl.md") else ("raw_ai/" + name)
@@ -276,7 +276,7 @@ class GroundNumberTest(unittest.TestCase):
         self.assertEqual(rest, ["2回"])
 
     def test_check_run_with_material_fails_on_meaning_risk(self):
-        """review-regress.md R2b の入力: check run --material で「資料にない数値: 2週間」が出て、終了コード1。"""
+        """反証で見つけた例（R2b）の入力: check run --material で「資料にない数値: 2週間」が出て、終了コード1。"""
         with tempfile.TemporaryDirectory(prefix="yomiyasu-numbers-") as folder:
             root = Path(os.path.realpath(folder))
             material = root / "mat.md"
@@ -302,7 +302,7 @@ class OneThingTest(unittest.TestCase):
         ("手順を確かめる。", "手順を一つずつ確かめる。"),
         ("理由がある。", "もう一つ理由がある。"),
         ("一つの画面で確かめる。", "画面で確かめる。"),
-        ("1つの画面で確かめる。", "画面で確かめる。"),
+        # 算用数字の「1つの画面」は数として数える（3回目の直しで決めた。test_v200_fix_round3.ArabicOneTest）
         ("理由がある。", "ひとつの理由がある。"),
         ("画面を開く。", "画面を開く。\n\nもう一つの画面も開く。"),
     )

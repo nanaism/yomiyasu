@@ -137,7 +137,7 @@ another:
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         self.assertEqual(process.stderr, "")
         result = json.loads(process.stdout)
-        # G7（DESIGN-reader-doctype.md 9.3）: context を足した
+        # G7（種類と読者の設計 9.3）: context を足した
         self.assertEqual(set(result), {"format", "format_version", "tool_version", "candidate_count", "counts",
                                        "no_rule_findings", "rule_penalty_score", "not_judged", "context", "metrics",
                                        "findings"})
@@ -162,7 +162,7 @@ another:
                 self.assertEqual(process.returncode, expected_exit, process.stdout + process.stderr)
                 self.assertEqual(process.stderr, "")
                 result = json.loads(process.stdout)
-                # G7（DESIGN-reader-doctype.md 9.3）: context を足した
+                # G7（種類と読者の設計 9.3）: context を足した
                 self.assertEqual(set(result), {"format", "format_version", "tool_version", "candidate_count", "counts",
                                                "no_rule_findings", "rule_penalty_score", "not_judged", "context",
                                                "metrics", "findings"})

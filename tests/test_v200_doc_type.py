@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """v2.0.0（G7）: lint、diff、check run の文書の種類（--doc-type）と読者（--reader）。
 
-期待値は DESIGN-reader-doctype.md の9章（道具のオプション）と 10.1 の表（A〜E）、末尾の追記（2026-10-13 19時。種類に
+期待値は種類と読者の設計の9章（道具のオプション）と 10.1 の表（A〜E）、末尾の追記（2026-10-13 19時。種類に
 formal を足して9つにする。lint で外す規則はなし）と、diff の詰めで足した promo（10個目。lint で emoji_prohibited を外す。
 2026-10-14 朝の大賀さんの判断で fragment_run も外す）から取った。文はすべてこのファイルで作った合成の文。コーパスは読むだけ。
 
@@ -9,14 +9,17 @@ formal を足して9つにする。lint で外す規則はなし）と、diff �
   lint、diff、check の人が読む出力、終了コード、標準エラー、check の状態の行（と、context を除いた JSON）を、コーパスの
   全ファイルと全組で比べる。fixture の行は出どころが違う（fixture の generated_by、source_commit、source_sha256 の
   lint、diff、check）。
-  - lint の行は G7 を入れる前の作業ツリー（45a5885 に step2b の check の固めを入れたもの）の出力で、作り直していない。
+  - lint の行は G7 を入れる前の作業ツリー（45a5885 に check の固めを入れたもの）の出力で、作り直していない。
     指定しないときの lint の出力が G7 の前と1字も違わないことを見る。
   - diff と check の行は、diff の詰め（文体の硬化、勢い、否定対比の逆転、気持ちの語の検査と、意味が変わる恐れの判定の詰め）
-    とその直し（step-c-fix）のあとの出力で作り直したもので、G7 の前の出力とは違う。そのあとの変更で出力が変わらないことを見る。
-    G7 の前からの変化（足した節とキー、判定が変わった組、--fail-on の終了コードが変わった組と理由）は fixture の updates に書いた。
-  lint、diff、check の出力をわざと変えたときは、fixture の generated_by の道具で diff と check の行を作り直し（lint の行は
-  作り直さず、1字も違わないことを確かめる）、作り直した理由と、終了コードが変わった組を updates と報告に書く（条件をゆるめて
-  通さない）。
+    とその直し（反証で見つけた例の直しを3回）のあとの出力で作り直したもので、G7 の前の出力とは違う。そのあとの変更で出力が
+    変わらないことを見る。G7 の前からの変化（足した節とキー、判定が変わった組、--fail-on の終了コードが変わった組と理由）は
+    fixture の updates に書いた。
+  lint、diff、check の出力をわざと変えたときは、fixture の generated_by に書いた作り方（このファイルの unchanged_diff() と
+  unchanged_check() の値で diff と check の行を作り直し、lint の行は作り直さず、unchanged_lint() と1字も違わないことを
+  確かめる）で作り直し、作り直した理由と、終了コードが変わった組を updates と報告に書く（条件をゆるめて通さない）。
+  fixture の説明の欄（description、generated_by、source_commit、updates）には、手元の記録と道具の名前を書かない
+  （test_v200_fix_round3.PrivatePathTest が見張る）。
 - SkillFilesTest（10.1 の C3、C4 と C5 の SKILL.md の部分）は、SKILL.md と references を入れる段までは失敗する。
 """
 
@@ -52,7 +55,7 @@ import yomiyasu_check  # noqa: E402
 
 # ---- 9.1 と追記: 値、名前、外す規則 ----
 
-# diff の詰め（GOALS の D-5、勢いの文書2章）: promo（紹介記事・宣伝文）を足して10にした
+# diff の詰め（目標の D-5、勢いの文書2章）: promo（紹介記事・宣伝文）を足して10にした
 DOC_TYPE_VALUES = ("pr", "article", "incident", "proposal", "minutes", "manual", "slides", "essay", "formal", "promo")
 DOC_TYPE_NAMES = {"pr": "PR説明", "article": "技術記事", "incident": "障害報告", "proposal": "提案書", "minutes": "議事録",
                   "manual": "マニュアル", "slides": "スライド", "essay": "エッセイ・小説",
@@ -74,7 +77,7 @@ SKIP_RULES = {
     "essay": (),
     "formal": (),
     # D-5: promo では書き手の絵文字を残す（勢いの検査は絵文字が減ると候補にするので、lint の絵文字の候補と食い違わせない）。
-    # diff の詰めで測って決めた（v200-development/step-c-detectors/measure.md）。fragment_run（「安い。うまい。早い。」の型）も
+    # diff の詰めで測って決めた。fragment_run（「安い。うまい。早い。」の型）も
     # 外す（大賀さんの判断、2026-10-14 朝。紹介記事・宣伝文では評価の語を短く重ねる型も勢いとして残す）
     "promo": ("emoji_prohibited", "fragment_run"),
 }
@@ -112,19 +115,19 @@ LINT_HELP_LIST = "\n".join([
     "外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。",
 ])
 # diff の詰め: 文体の硬化の検査と勢いの検査は、種類で参考（info）にするかが決まるので、その文を足した。diff の詰めの直し
-# （step-c-fix）で、硬化の参考に incident を足し、promo 以外の種類で勢いの絵文字と見出しを参考にした文を足した
-# 1回目の反証の直し（step-c-fix/fix-round1.md。review1-spec.md の S2 と S5）: 変わらないものを「規則の見直し候補」に絞り、
+# で、硬化の参考に incident を足し、promo 以外の種類で勢いの絵文字と見出しを参考にした文を足した
+# 1回目の反証の直し（反証で見つけた例）: 変わらないものを「規則の見直し候補」に絞り、
 # minutes の見出しと promo の見出しの数え方を書いた
 _DETECTOR_HELP = ("文体の硬化の検査は incident と formal のとき、勢いの検査は pr、article、incident、manual、formal のとき、"
                   "候補を参考として出します。promo 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として出し、"
                   "promo と minutes 以外では見出しの候補も参考として出します。promo では、番号つき項目の行と太字だけの行も"
                   "勢いの検査の見出しに数えます。")
-# 2回目の反証の直し（step-c-fix/fix-round2.md。review2-spec.md の T3）: 種類で硬化と勢いの level と promo の見出しの数え方が
+# 2回目の反証の直し（反証で見つけた例）: 種類で硬化と勢いの level と promo の見出しの数え方が
 # 変わるので、冒頭の「残すだけで」を「残し、」にした
 DIFF_DOC_TYPE_HELP = ("文書の種類（値は yomiyasu_lint.py と同じ）。表示と JSON に残し、差分、意味が変わる恐れ、規則の見直し候補、"
                       "--fail-on は変わりません（意味の検査はどの種類でも同じに行います）。" + _DETECTOR_HELP)
 DIFF_READER_HELP = "想定する読者の知識（値は yomiyasu_lint.py と同じ）。表示と JSON に残すだけで、判定は変わりません。"
-# diff の詰めの直し（step-c-fix/check-infra-speed.md。review-spec.md の F7）: diff と同じ、硬化と勢いを参考にする種類の文を足した
+# diff の詰めの直し（反証で見つけた例）: diff と同じ、硬化と勢いを参考にする種類の文を足した
 CHECK_DOC_TYPE_HELP = ("文書の種類。lint と diff に渡し、記録と状態の行に残します。lint は、その種類で普通な書き方を候補にする規則を"
                        "外します（yomiyasu_lint.py -h の一覧）。差分（意味が変わる恐れと規則の見直し候補）と資料との照合の判定は"
                        "変わりません。" + _DETECTOR_HELP)
@@ -210,7 +213,7 @@ def corpus_pairs():
 
 
 def _fixture_tool_version():
-    """fixture を作ったときの版（GOALS の D-3 で版の文字列を 2.0.0-beta に変えたので、比べるときに読み替える）。"""
+    """fixture を作ったときの版（目標の D-3 で版の文字列を 2.0.0-beta に変えたので、比べるときに読み替える）。"""
     path = FIXTURES / "g7_unchanged_outputs.json"
     try:
         return json.loads(path.read_text(encoding="utf-8")).get("tool_version")
@@ -771,9 +774,9 @@ class OptionTest(DocTypeCase):
         """D4: 指示書2.2の3組と推敲の48組で、種類と読者を付けても、context 以外の JSON と --fail-on の終了コードは同じ。
         diff の詰めで足した文体の硬化の検査（stiffness）と勢いの検査（tone）だけは、種類で level（見直し候補 review か
         参考 info）が変わる（追加文書 2.4、勢いの文書 3.3）。候補と値は同じなので、level を除いて比べ、level は表のとおりか見る。
-        diff の詰めの直し（step-c-fix/stiffness-tone-lint.md）で、硬化の参考に incident を足し、promo 以外の種類では勢いの
+        diff の詰めの直しで、硬化の参考に incident を足し、promo 以外の種類では勢いの
         絵文字と見出しを参考にした（候補ごとの level）。promo では、番号つき項目の行と太字だけの行も勢いの見出しの字数に数える
-        （review-spec.md の F2）ので、promo だけは見出しの字数と見出しの候補を除いて比べ、違いがそこだけであることを見る。"""
+        （反証で見つけた例）ので、promo だけは見出しの字数と見出しの候補を除いて比べ、違いがそこだけであることを見る。"""
         pairs = list(PAIRS_22) + [((CORPUS / a).read_text(encoding="utf-8"), (CORPUS / b).read_text(encoding="utf-8"))
                                   for a, b in corpus_pairs()[:48]]
         options = ({"doc_type": "slides", "reader": "general"}, {"doc_type": "essay", "reader": "expert"},
@@ -974,7 +977,7 @@ class OptionTest(DocTypeCase):
         code, out, err = self.check("verify", "--final", b)
         self.assertEqual(out.split("\n")[1].split()[1], "invalid_record", out)
         # digest を計算し直して別の種類にした記録は、ハッシュを確かめたレポートの context と合わないので、--replay なしでも
-        # invalid_record（questions.md の49 の件数の照らしと同じ。step2b の G7-13）
+        # invalid_record（記録の件数の照らしと同じ）
         for change in ({"doc_type": "pr"}, {"doc_type": None}, {"reader": None}, {"reader": "expert"}):
             rewrite(lambda value: value["options"].update(change), True)
             code, out, err = self.check("verify", "--final", b)

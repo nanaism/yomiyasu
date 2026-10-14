@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v2.0.0: 版の文字列をすべてそろえる試験（DESIGN-interfaces.md 4章の7項目）。
+"""v2.0.0: 版の文字列をすべてそろえる試験（設計 4章の7項目）。
 
 スクリプトは import せず、ast と正規表現で読む。CLI は子プロセスで動かす。
 v1.1.2 には metadata.version、__version__、CHANGELOG.md、--version がないので、それらの試験は失敗する。
@@ -49,7 +49,7 @@ FORMAT_CONSTANT_HOMES = {
     "RECORD_FORMAT_VERSION": "yomiyasu_check.py",
     "RESULT_FORMAT_VERSION": "yomiyasu_check.py",
 }
-SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$")  # 先行版（2.0.0-beta）も版の形に数える（GOALS の D-3）
+SEMVER = re.compile(r"^\d+\.\d+\.\d+(?:-[0-9A-Za-z.]+)?$")  # 先行版（2.0.0-beta）も版の形に数える（目標の D-3）
 
 
 def read_json(path):

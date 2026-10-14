@@ -475,8 +475,7 @@ CONTENT = re.compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴー]{2,}|[A-Za-z][A-Za-
 
 
 # v1.1.2 から引き継いだ点検（9つのキー）で使う正規表現。v1.1.2 は関数の中で re.sub(文字列, …) と書いていたが、呼ぶたびに
-# re のキャッシュを引く手間がかかるので、モジュールで1回だけコンパイルする（中身は同じ。diff の詰めの直し、速さ。
-# step-c-fix/check-infra-speed.md）
+# re のキャッシュを引く手間がかかるので、モジュールで1回だけコンパイルする（中身は同じ。diff の詰めの直しで、速さのため）
 _NORMALIZE_BOLD = re.compile(r"\*\*(.+?)\*\*")
 _NORMALIZE_LIST = re.compile(r"(?m)^\s*(?:[*\-・]|\d+[.)])\s+")
 _NORMALIZE_HEADING = re.compile(r"(?m)^#+\s*")
@@ -1292,19 +1291,19 @@ def bold_lines(problems):
 
 
 
-# ---- 全文差分（v2.0.0。DESIGN-interfaces.md 2.3、2.4）----
+# ---- 全文差分（v2.0.0。設計 2.3、2.4）----
 # 生の文を行で対応させ、変わった塊の中を文字で対応させる。normalize() は通さない。
 
 _CHAR_ALIGN_LIMIT = 2000        # 文の断片をそのまま文字で対応させる、片側の字数の上限
-# 塊をそのまま文字で対応させる、片側の字数の上限。これを超える塊は文の断片に分けてから対応させる（diff の詰め、
-# step2-diff/questions.md 36 の (a)。1行が1,500〜2,000字の文書の全面書き換えで、塊ごとの文字の対応が重かった）
+# 塊をそのまま文字で対応させる、片側の字数の上限。これを超える塊は文の断片に分けてから対応させる（diff の詰め。
+# 1行が1,500〜2,000字の文書の全面書き換えで、塊ごとの文字の対応が重かった）
 _BLOCK_ALIGN_LIMIT = 500
 _CHAR_BUDGET = 200000           # 文書全体で文字の対応にかける字数（対応させる文字列の長さの、両側の合計）
 _PAIR_WINDOW = 4                # 文や断片を組にするとき、直前の組の次から見る数
 _PAIR_RATIO = 0.45              # 組にする似かたの下限（difflib の ratio）
 _LONG_LINE = 160                # これを超える行の「差:」は、変わった文のまわりだけを出す
-# 文の断片。句点（。！？!?）のほか、「．」と、空白か行末が続く「.」（英語の文）でも切る（questions.md 36 の (b)。
-# 「．」の文と英語の文は、前は1行が1つの断片になり、長い文字列の対応が重かった）。3.14 のような数の中の「.」では切らない
+# 文の断片。句点（。！？!?）のほか、「．」と、空白か行末が続く「.」（英語の文）でも切る
+# （「．」の文と英語の文は、前は1行が1つの断片になり、長い文字列の対応が重かった）。3.14 のような数の中の「.」では切らない
 _FRAGMENT = re.compile(r"(?:[^。！？!?．.\n]|\.(?![ \t\n]|$))*(?:[。！？!?．]+|\.+(?=[ \t\n]|$))?[」』）)]*[ \t]*\n?")
 _SENTENCE_END = re.compile(r"[。！？!?]+[」』）)]*")
 _SPACES = re.compile("[\\s\ufeff]+")
@@ -1644,7 +1643,7 @@ def _plan_segments(a, b):
                 segments.append(["=", old[x]])
             elif len(old[x]) > _CHAR_ALIGN_LIMIT or len(new[y]) > _CHAR_ALIGN_LIMIT:
                 # 長い断片の組は文字で対応させないが、前と後ろの同じ字は外す（時間は字数に比例するだけ）。
-                # 変えていないインラインのコードやリンク先を「変わった」と出さず、「差:」も出せる（questions.md 37）
+                # 変えていないインラインのコードやリンク先を「変わった」と出さず、「差:」も出せる
                 head, tail = _common_affix(old[x], new[y])
                 segments.append(["=", old[x][:head]])
                 segments.append(["-", old[x][head:len(old[x]) - tail]])
@@ -1718,7 +1717,7 @@ class _Sides:
 
 
 def full_diff(orig, rw, encoding_notes=None):
-    """元の文と書き直した文の全文差分（DESIGN-interfaces.md 2.3、2.8 の full_diff）。
+    """元の文と書き直した文の全文差分（設計 2.3、2.8 の full_diff）。
 
     渡された文字列をそのまま比べる（BOM を外したり、改行をそろえたりしない）。encoding_notes は CLI と check が
     decode_source の情報から作って渡す注記で、そのまま入れる（渡さなければ []）。"""
@@ -1804,15 +1803,15 @@ def _mark_moved(hunks):
                 break
 
 
-# ---- 意味が変わる恐れ（v2.0.0。DESIGN-interfaces.md 2.5）----
+# ---- 意味が変わる恐れ（v2.0.0。設計 2.5）----
 # どれも確かめる場所で、意味が変わったという判定ではない。ここに出なかった変化も全文差分には必ず出る。
 
 # 行頭の印（引用の >、箇条書きの印、見出しの #）。match(行, 位置) で位置から当てるので ^ は付けない
 _LINE_PREFIX = re.compile(r"(?:[ \t]{0,3}>[ \t]?|[ \t]*(?:[-*+・]|\d+[.)])[ \t]+|[ \t]{0,3}#{1,6}(?:[ \t]+|$)"
-                          # 「(1)」「（１）」「1）」の番号（diff の詰め、questions.md 41）。後ろの空白はなくてもよい
+                          # 「(1)」「（１）」「1）」の番号（diff の詰め）。後ろの空白はなくてもよい
                           r"|[ \t]*(?:[(（]\d{1,9}[)）]|\d{1,9}）)[ \t　]*)")
 # 2.5.1 の文の区切り。9キーの _SENTENCE_PIECE は変えず、句点（。！？!?）のほか「．」と、空白か行末が続く「.」でも切る
-# （questions.md 36 の (b)。「．」の文と英語の文で、1行が1つの文になって判定が長い文字列にかかるのを防ぐ）
+# （「．」の文と英語の文で、1行が1つの文になって判定が長い文字列にかかるのを防ぐ）
 _RISK_SENTENCE_PIECE = re.compile(r"(?:[^。！？!?．.\n]|\.(?![ \t]|$))+(?:[。！？!?．]+|\.+(?=[ \t]|$))?[」』）)]*")
 # 文に分けない行の種類（中の変化は「変えない箇所」で見る）
 _NO_SENTENCE_KINDS = ("code", "frontmatter", "html_block")
@@ -1832,7 +1831,7 @@ _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "prote
 # --fail-on=meaning-risk が数える kind（10.6 B1。beta 文書 2.2「数値・否定・主語と目的語の入れ替え・文の種類の変化」）。
 # 変えない箇所（protected）は意味が変わる恐れの節に出すが数えない。check は資料にない数値（unsupported/number）も数える。
 # diff の詰めで足した否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）も数えない（追加文書 0章「検査の結果は
-# 見直しの候補として出します。点数や合否には使いません」と、10.6 B2。理由は step-c-detectors/implement.md）
+# 見直しの候補として出します。点数や合否には使いません」と、10.6 B2）
 FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type")
 
 
@@ -1890,7 +1889,7 @@ def _sentence_pairs(sides, full):
     組み方は、中身が同じ文を先に組にしてから、その間の文を 2.5.1 の窓（直前の組の次から4文、ratio 0.45以上で最大）で
     組にする（全文差分の文の断片と同じ _align）。長い塊の途中に4文以上を足しても、その後ろの文が組になる。
 
-    diff の詰め（step2-diff/questions.md 33、35）で2つ足した。
+    diff の詰めで2つ足した。
     - 1行対1行の置き換えの塊で、両側が1文ずつなら、似かたによらず組にする（行の対応で同じ場所と分かっているため。
       「動くでしょうか。→ 動きます。」「3日 → 3週間」のような短い文が組にならず、問い・否定・数値を取りこぼしていた）。
     - 空白だけの行しか挟まない hunk の並び（全面書き換えの段落の並び）で、元と後の空白でない行の数が違う（段落を分けたか
@@ -1995,11 +1994,11 @@ _THOUSANDS = re.compile(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?")
 _UNITS = ("週間", "時間", "か月", "ヶ月", "カ月", "ヵ月", "TB", "GB", "MB", "KB", "ms", "px", "%",
           "年", "月", "日", "時", "分", "秒", "件", "個", "人", "名", "回", "円", "倍", "割", "度", "点",
           "本", "枚", "台", "社", "週", "歳", "字", "行",
-          # diff の詰め（questions.md 40）: 漢数字の助数詞とそろえる
+          # diff の詰め: 漢数字の助数詞とそろえる
           "か所", "カ所", "ヶ所", "箇所", "種類", "章", "節", "項", "つ",
-          # diff の詰めの直し（review-fp.md F10）: 第3条、第2号、3階
+          # diff の詰めの直し（反証で見つけた例）: 第3条、第2号、3階
           "条", "号", "階")
-# 単位にしない続き（「3階層」「3条件」の「階」「条」は助数詞ではない。diff の詰めの直し、review-fp.md F10 で足した単位のため）
+# 単位にしない続き（「3階層」「3条件」の「階」「条」は助数詞ではない。diff の詰めの直しで、反証で見つけた例から足した単位のため）
 _UNIT_NOT_BEFORE = {"階": "層", "条": "件"}
 
 
@@ -2009,37 +2008,89 @@ def _unit_pattern(units):
 
 
 _UNIT = re.compile(_unit_pattern(_UNITS))
-# 英字の単位と % は、前に半角か全角の空白が1つあってもよい（「16 GB」「95 %」。questions.md 39 の (1)）
+# 英字の単位と % は、前に半角か全角の空白が1つあってもよい（「16 GB」「95 %」）
 _SPACED_UNIT = re.compile(r"[ \u3000](TB|GB|MB|KB|ms|px|%)(?![A-Za-z])")
-# 一覧にない英字の並び（5字まで）は単位として取る（「30s」「100Mbps」「8GiB」。questions.md 51）
+# 一覧にない英字の並び（5字まで）は単位として取る（「30s」「100Mbps」「8GiB」）
 _LETTER_UNIT = re.compile(r"[A-Za-z]{1,5}(?![A-Za-z])")
-# 「2千件」の「千」（千倍した1つの値にする。万と億は限界のまま。questions.md 40）
+# 「2千件」の「千」（千倍した1つの値にする。万と億は限界のまま）
 _THOUSAND = re.compile(r"千")
 # 月の数え方の表記の違い（か月、ヶ月、カ月、ヵ月）は値を比べるときにそろえる（表記だけの違い）
 _SAME_UNIT = {"ヶ月": "か月", "カ月": "か月", "ヵ月": "か月", "カ所": "か所", "ヶ所": "か所", "箇所": "か所"}
 # 漢数字は、意味が1つに決まる助数詞が続くときだけ取る
 _KANJI_COUNTERS = ("週間", "時間", "か月", "ヶ月", "カ月", "ヵ月",
                    "年", "日", "件", "個", "人", "名", "回", "円", "倍", "割", "本", "枚", "台", "社", "歳",
-                   # diff の詰め（questions.md 40）: 二つ、三か所、三種類、第三章、十二月など
+                   # diff の詰め: 二つ、三か所、三種類、第三章、十二月など
                    "か所", "カ所", "ヶ所", "箇所", "種類", "章", "節", "項", "月", "つ",
-                   # diff の詰めの直し（review-fp.md F10）: 第三条、第二号、三階、三十分（「十分」は _KANJI_EXCLUDED で除く）
-                   "条", "号", "階", "分")
+                   # diff の詰めの直し（反証で見つけた例）: 第三条、第二号、三階、三十分（「十分」は _KANJI_EXCLUDED で除く）
+                   "条", "号", "階", "分",
+                   # 十時、十二時（「一時」は _KANJI_EXCLUDED で除く。「十一時」は除かない）
+                   "時")
 _KANJI_NUMBER = re.compile("(?<![〇一二三四五六七八九十百千])([〇一二三四五六七八九十百千]+)("
                            + _unit_pattern(_KANJI_COUNTERS) + ")")
 _KANJI_DIGITS = {"〇": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 _KANJI_UNITS = {"十": 10, "百": 100, "千": 1000}
-# 漢数字の直前が漢字なら取らない。ただし直前がこの字なら取る（「最大三回」「後二週間」「第三回」）
-_KANJI_BEFORE = set("約後計全第毎各残大小長短")
+# 漢数字の直前が漢字なら取らない（「統一」「一般」のような語の中の漢数字）。ただし直前がこの字なら取る（「最大三回」「後二週間」
+# 「第三回」と、頻度の「年二回」「月一回」「週三日」「一日三回」）
+_KANJI_BEFORE = set("約後計全第毎各残大小長短年月週日")
+# 直前がこの2字なら取る（「午前九時」と元号の年。反証で見つけた例: 「午前九時 → 午前9時」「令和七年 → 令和7年」を元にない数値にし、
+# 「午前九時 → 午前十時」を見逃していた）。1字の「前」「和」「成」にせず、語で見る
+_KANJI_BEFORE_WORDS = frozenset(("午前", "令和", "平成", "昭和", "大正", "明治"))
+# 時刻を言う語（朝九時、夜十時、夕方五時、毎朝八時、深夜一時）。このあとの漢数字は、助数詞が「時」のときだけ取る（「夜一人で」の
+# 人数は今までどおり取らない。反証で見つけた例: 「朝九時 → 朝9時」「深夜一時 → 深夜1時」を元にない数値にし、「朝九時 → 朝十時」を
+# 見逃していた）。「一時」は、このあと（と「午前」「午後」と漢数字）のときだけ時刻として取る（_kanji_excluded）
+_TIME_OF_DAY_WORDS = frozenset(("午前", "午後", "深夜", "未明", "早朝", "夕方", "毎朝", "今朝", "明朝", "毎晩", "今晩",
+                                "今夜", "毎夜", "夜中"))
+_TIME_OF_DAY_CHARS = frozenset("朝夜晩昼")
+# 時刻の「一時」のすぐあとに続いてよい字（一時十分、一時半、一時頃、一時過ぎ。「一時的」「一時金」の「一時」は時刻にしない）
+_ICHIJI_HOUR_NEXT = frozenset("〇一二三四五六七八九十百半頃過前")
 _KANJI = re.compile(r"[一-龥々〆ヵヶ]")
+# 期間の語のあとの、同じ期間の漢数字の「一日」「一年」「一か月」「一週間」（今日一日、本日一日、去年一年、今週一週間）は、その
+# 期間の全体を言い、数量を主張しない。前に漢字のない「日一日と」「年一年と」（日ごとに、年ごとに）も同じ。どちらも数量を主張しない
+# 「一つ」と同じ weak の値として取る（_drop_weak が、相手の側に同じ単位の値がないときだけ比べから外す。反証で見つけた例:
+# 頻度の年・月・週・日のあとの漢数字を取るようにしたため、「今日一日 → 今日は」「日一日と → 日ごとに」が消えた数値になった）。
+# 値が1のときだけ（「今年二年目」「今月三日」は数）。「毎年一年分」の「毎年」はこの語に入れない（数）。1日しかない日（当日、前日、
+# 翌日、初日、元日、日曜日などの「曜日」）のあとの「一日」も同じ（反証で見つけた例: 「当日一日限り → 当日のみ」）。「休日一日」
+# 「平日一日」は「休日のうち一日」とも読めるので入れない。
+# 算用数字の「1日」「1年」（今日1日、去年1年）は、いつも数として取る。1回目の直しでは取らないようにしたが、「本日1日は → 本日は
+# 1日」のように助詞を足しただけの推敲が片側だけの値になり、「今日1日 → 今日から数日」を見逃した（反証で見つけた例）。漢数字の
+# 「今日一日」を weak の値として取るので、「今日一日 → 今日1日」は値が同じで候補にならない
+_WHOLE_PERIOD_WORDS = frozenset(("今日", "本日", "昨日", "明日", "終日", "当日", "前日", "翌日", "初日", "元日", "曜日",
+                                 "今年", "去年", "昨年", "来年", "今月", "先月", "来月", "今週", "先週", "来週"))
+_SAME_PERIOD = {"日": ("日",), "年": ("年",), "月": ("月", "か月", "ヶ月", "カ月", "ヵ月"), "週": ("週間",)}
+# 直前が、漢数字に続いた助数詞（十時三十分、一時間三十分、二週間三日）なら取る（日付と時刻、時間の2つ目の数）。年・月・日は
+# _KANJI_BEFORE にある。どれも、漢数字を算用数字にしただけの書き換えを元にない数値にし、漢数字どうしの値の変化（年二回 →
+# 年一回、十月十三日 → 十月十五日）を見逃していた（反証で見つけた例。コーパス、誤検出の組、must・keep で、正しい推敲への新しい
+# 候補が増えないことを測って入れた）
+# 「人」「名」「回」「件」「個」「枚」は、反証で見つけた例（「一人一回 → 1人1回」「一回三十分 → 1回30分」を元にない数値にし、
+# 「一人一回 → 一人三回」「一件三百円 → 一件五百円」を見逃していた）で足した。「一枚一枚」の2つ目も値として取るが、同じ値が推敲後の
+# 文書にあれば消えた数値にはならない（コーパス、誤検出の組、must・keep で、正しい推敲への新しい候補が増えないことを測って入れた）
+_KANJI_CHAIN = re.compile("[〇一二三四五六七八九十百千]+(?:時間|週間|時|分|人|名|回|件|個|枚)$")
+# 「十分」の直前の、漢数字に続いた「時」（十時十分）と、「時間」「人」「名」「回」「件」「個」「枚」「日」（一時間十分、一人十分、
+# 一日十分）と「毎日」（毎日十分）。反証で見つけた例
+_KANJI_HOUR_BEFORE = re.compile("[〇一二三四五六七八九十百千]+(?:時|(時間|人|名|回|件|個|枚|日))$|(毎日)$")
+# 「時間」「人」などのあとの「十分」は、時間の量に続く字が続くときだけ取る（「一時間十分かかった」「一人十分とする」「一時間十分の
+# 遅れ」）。「七時間十分眠れば」「八時間十分とる」「二時間十分に眠った」「一回十分です」の「十分」（じゅうぶん）は取らない
+# （反証で見つけた例。1回目の直しでは に・な・だ・で が続くときだけ除いたので、「七時間十分眠れば」を時間にした）
+_JIPPUN_AFTER = ("の", "、", "。", "，", "．", ",", ".", ")", "）", "」", "』", "\n", "ほど", "くらい", "ぐらい", "程度",
+                 "前", "後", "以", "未満", "まで", "から", "かか", "を", "も", "が", "は", "強", "弱", "余", "ずつ", "ごと",
+                 "おき", "とす", "とし", "だけ")
+# 「で」も時間の量に続く字（一人十分で行う、毎日十分で終える）。ただし「十分です」「十分できる」「十分でしょう」はじゅうぶん
+# （反証で見つけた例）
+_JIPPUN_DE = "で"
+_JIPPUN_DE_NOT = ("です", "でき", "でし")
+# 前に漢数字も時刻を言う語もない「一時」（一時的に、の意味にも読める）のあとの「十分」は、時刻に続く字が続くときだけ取る
+# （「受付は一時十分まで → 一時まで」を見逃さない。「景気は一時十分に回復した」の「十分に」は取らない。反証で見つけた例）
+_ICHIJI_JIPPUN_AFTER = ("まで", "から", "前", "後", "過ぎ", "すぎ", "ごろ", "頃", "以", "。", ")", "）", "」")
+_KANJI_CHAIN_REACH = 12         # 直前を見る字数（「千九百九十九時間」のような長い漢数字と助数詞が収まる）
 # 漢数字を含むが数ではない語。「十分」は、直前が漢数字でなく「十分間」でもないときだけ除く（「三十分」「十分間」は時間。
-# 「十分に確かめた」「数十分」は数にしない。review-fp.md F10。正規表現の中で後読みにすると遅くなるので _kanji_excluded で見る）
+# 「十分に確かめた」「数十分」は数にしない。反証で見つけた例。正規表現の中で後読みにすると遅くなるので _kanji_excluded で見る）
 _KANJI_EXCLUDED = re.compile(r"一時(?!間)|一度|一部|一方|一般|一緒|一切|一応|一番|一定|一致|一意|一括|一本化|一日中|一年中|一日も|"
-                             r"一人ひとり|一人一人|一回り|一枚岩|十分|十人十色|万一")
+                             r"一人ひとり|一人一人|一回り|一枚岩|十分|十人十色|万一|四六時中")
 _KANJI_NUMERALS = frozenset("〇一二三四五六七八九十百千")
-# 漢数字の「分」「条」で、数量を言わないことのある慣用句（review1-fp.md の指摘2）。正規表現の後読みや先読みにすると、まとめた
+# 漢数字の「分」「条」で、数量を言わないことのある慣用句（反証で見つけた例）。正規表現の後読みや先読みにすると、まとめた
 # 漢数字の正規表現が遅くなる（48組で約2%）ので、取った語のあとの字を _find_numbers の繰り返しの中で見る。
 # 1回目の直しでは取り出しから外したが、同じ形が時間の「二分しか」「二分すぎ」「十二分に縮めた」「五分位（くらい）」にも当たり、
-# 算用数字にした推敲の「2分」だけが元にない数値になった（review2-fp.md の指摘5）。外さずに取り、数量を主張しない「一つ」と同じ
+# 算用数字にした推敲の「2分」だけが元にない数値になった（反証で見つけた例）。外さずに取り、数量を主張しない「一つ」と同じ
 # weak の印を付ける（_drop_weak が、相手の側に同じ単位の値がないときだけ比べから外す。「二分した → 分かれた」は出さず、
 # 「二分しか → 5分しか」は数値が変わった候補）。
 # 「分」のあとが分数（三分の一）、率（百分率）、位（四分位）、五分五分、九分九厘
@@ -2053,30 +2104,99 @@ _JUNIBUN_NOT_BEFORE = ("に", "な")
 _JOU_NOT_BEFORE = ("の光", "の煙")
 # 範囲や並べの前の漢数字（三〜五日、三から五日、三、四日、三・四日 の「三」）。助数詞が続かないので _KANJI_NUMBER では取らないが、
 # 算用数字の「3〜5日」の「3」と同じく、単位なしの数として取る（漢数字の範囲を算用数字にしただけの書き換えを、元にない数値に
-# しない。review2-spec.md の T5。DESIGN-interfaces.md 2.5.2 の表記の違い）。助数詞の付いた漢数字の直前だけを見る
+# しない。反証で見つけた例。設計 2.5.2 の表記の違い）。助数詞の付いた漢数字の直前だけを見る
 _KANJI_RANGE_HEAD = re.compile(r"(?<![〇一二三四五六七八九十百千])([〇一二三四五六七八九十百千]+)"
                                r"(?:[ \t]*(?:[~\u301c]|から)[ \t]*|[、・])$")
 _KANJI_RANGE_REACH = 16
 # 範囲・日付・時刻のまとまりをつなぐ字（数と数の間がこれだけなら、同じまとまり。3〜5日、3から5日、3-5日、2026-10-13、
-# 2026/10/13、10:30。review-regress.md R2）。全角の「～」「－」「／」「：」は半角にしてから見る
+# 2026/10/13、10:30。反証で見つけた例）。全角の「～」「－」「／」「：」は半角にしてから見る
 _NOTATION_JOIN = re.compile(r"[ \t]*(?:[~\u301c]|から)[ \t]*|[-/:\u2010-\u2013\u2212]")
 # つなぎの字の種類（_join_kind）。範囲（〜、から）、日付（/、-）、時刻（:）。字がなければ（10時30、2026年10月13日）adjacent
 _JOIN_RANGE = re.compile(r"[~\u301c]|から")
-# 日付と時刻の単位の並び（範囲・日付・時刻のまとまりの表記の違いを、単位の並びで確かめる。review1-regress.md の Q1）
+# 日付と時刻の単位の並び（範囲・日付・時刻のまとまりの表記の違いを、単位の並びで確かめる。反証で見つけた例）
 _DATE_UNITS = ("年", "月", "日")
 _TIME_UNITS = ("時", "分", "秒")
 # まとまりの中で、単位のある数のすぐあとの単位なしの数が持つ単位（10時30 の 30 は分、10月13 の 13 は日）
 _NEXT_UNIT = {"年": "月", "月": "日", "時": "分", "分": "秒"}
-# 単位なしの数のあとの空白（3 日、3 s。単位の前の空白だけの違いを表記の違いとみなす。review-regress.md R2）
+# 単位なしの数のあとの空白（3 日、3 s。単位の前の空白だけの違いを表記の違いとみなす。反証で見つけた例）
 _NOTATION_SPACE = re.compile(r"[ \t]+")
-# 数量を主張しない「一つ」（一つの、一つずつ、もう一つ。review-regress.md R4）。強めた否定の「一つも」と、「どれも順に」の
-# 「一つひとつ」「一つ一つ」も数量を主張しない（review1-fp.md の指摘6。「一つもらう」の「も」は除く）。
-# 「一つも」は、同じ文のあとに打ち消し（ない、なく、なし、ません、ず、ぬ、無）があるときだけ（強めた否定）。「1つもしくは2つ」
-# 「一つもって」の「も」は別の語なので、数量を主張する値のまま（review2-fp.md の指摘6、review2-regress.md の V3）
-_WEAK_ONE_AFTER = ("の", "ずつ", "ひとつ", "一つ", "1つ")
+# 数量を主張しない「一つ」（一つの、一つずつ、もう一つ）。強めた否定の「一つも」と、「どれも順に」の「一つひとつ」「一つ一つ」も
+# 数量を主張しない（「一つもらう」の「も」は除く）。「一つも」は、同じ文のあとに打ち消し（ない、なく、なし、ません、ず、ぬ、無）が
+# あるときだけ（強めた否定）。「一つもしくは二つ」「一つもって」の「も」は別の語なので、数量を主張する値のまま。
+# 「一つの」「一つずつ」「もう一つ」を数量を主張しない値にするのは漢数字の「一つ」だけ。算用数字の「1つ」は「1つのリクエストで
+# 送る」のように数を言う書き方に使われやすいので、数として数える。ただし繰り返しの「1つ1つ」と強めた否定の「1つも〜ない」は、
+# どちらの書き方でも数量を主張しない（「1つ1つ → 順に」を元にない数値にしない。測って、正しい推敲への候補が増えないように
+# した）。「一つのみ」は数を限る言い方なので、数量を主張しない値にしない（反証で見つけた例: 「一つのみ → 複数でもかまわない」を
+# 見逃していた）
+_WEAK_ONE_AFTER = ("ひとつ", "一つ", "1つ")
 _WEAK_ONE_BEFORE = "もう"
 _WEAK_ONE_REPEATED = ("一つ", "1つ")
 _WEAK_ONE_MO = re.compile(r"も(?!ら|しく|って)(?=[^。！？!?\n]*?(?:な[いくかしけ]|ません|ず|ぬ|無))")
+# 「一つの」「一つずつ」は、組の相手の文に数を言う語（_QUANTITY_WORDS）が新しく出れば比べに残す（_drop_weak。「一つずつ →
+# まとめて」「一つの → 複数の」を見逃さない）。その印（weak の値）
+_WEAK_ONE_PAIRED = ("の", "ずつ")
+_WEAK_ONE_ONLY = "のみ"
+_WEAK_SINGLE = "single"       # 一つの
+_WEAK_EACH = "each"           # 一つずつ
+# 数を言う語（「一つの」「一つずつ」の相手の文で見る。反証で見つけた例と、それを言い換えた合成の組で決めた）。書き方の違いは
+# そろえてから比べる（_QUANTITY_SAME。「複数 → いくつも」「一括 → まとめて」を新しく出た語にしない。反証で見つけた例）。
+# 「いくつ」は「いくつか」「いくつも」「いくつでも」だけ（「いくつになっても」の年齢は数を言う語にしない。反証で見つけた例）。
+# 「すべて」と語の頭の「各」は、相手の文のどこに出ても数える語にはせず、「一つの」の名詞のすぐ前（すべての窓口、各窓口）だけで
+# 見る（_QUANTITY_CHANGE_BEFORE。「一つの表にまとめ、行ごとに… → 表にまとめ、各行に…」「関係者各位」「表にすべての項目を」は、
+# 「一つの」の名詞を複数にしていない。反証で見つけた例）
+_QUANTITY_WORDS = re.compile(r"一斉|一気に|いっぺんに|別々|まとめて|一括|一度に|並列|並行|同時|複数|上限|無制限|いくつ(?=[かもで])")
+_QUANTITY_SAME = {"一括": "まとめて", "一度に": "まとめて", "並行": "並列", "いくつ": "複数"}
+# 形ごとに、数の主張が変わったとみなす語（そろえたあとの語）。「一つずつ」は一つずつ処理するのと逆の語、「一つの」は一つで
+# あるのと逆の語。「一つの表に整理 → 表にまとめて整理」は同じことを言うので、「まとめて」を「一つの」に数えない（反証で
+# 見つけた例）。「一つずつ → 複数選ぶ、いくつでも開ける、一斉に、一気に、いっぺんに」「一つの → 別々の」も数の主張が変わった形
+# （反証で見つけた例）
+_QUANTITY_FOR = {_WEAK_EACH: frozenset(("まとめて", "並列", "同時", "複数", "一斉", "一気に", "いっぺんに")),
+                 _WEAK_SINGLE: frozenset(("複数", "上限", "無制限", "別々"))}
+# 数を言う語の打ち消し（並列にせず、複数に分けない、まとめて受け付けず、並列ではなく、分けることなく）。打ち消した語は数えない
+# （「一つずつ → 並列にせず、順に」は数の主張が同じ。反証で見つけた例）。見るのは、数を言う語のあとから、その語がかかる述語の
+# 終わりまで（_QUANTITY_SCOPE_END。「複数の窓口で受け付けるので待ちません」「まとめて送って取りこぼしがない」の打ち消しは別の
+# 述語のもの。反証で見つけた例）。語のすぐあとの「して」「にして」（並行して、並列にして）は読み飛ばしてから探す。
+# 許す言い方（かまいません、問題ない、差し支えない）と、義務や条件の言い方（なければならない、ないといけない、ないと間に合わない、
+# ざるを得ない、しかない、ほかない、かもしれない）は打ち消しにしない（_QUANTITY_NOT_NEG。否定の検査が伏せる言い方と同じ向き）。
+# 平仮名の動詞（おこなう、まかなう、ともなう、おはなし、みなす、こなす）の「な」と、「少ない」「危ない」なども打ち消しにしない。
+# 「上限」は逆で、上限そのものを打ち消したとき（上限はない、上限なし、上限を設けない、上限をなくす、上限を撤廃する）だけ数える
+# （_QUANTITY_LIMIT_OFF。「部屋ごとの上限の十人を超えない」の打ち消しは「超える」のもの。反証で見つけた例）。
+# 打ち消しの「ず」は _negative_zu で見る（「一つずつ」「必ず」「まず」を打ち消しにしない）
+_QUANTITY_CLAUSE_END = re.compile(r"[、。，．,.！？!?\n]")
+_QUANTITY_NEG = re.compile(r"(?<!かまわ)(?<!構わ)(?<!問題)(?<!差し支え)(?<!少)ない|なかっ|なし|(?:では|でも|じゃ|で|ことは?)なく"
+                           r"|(?<!かまい)(?<!構い)(?<!問題あり)(?<!差し支えあり)ません")
+_QUANTITY_LEAD = re.compile(r"(?:に|で)?して(?![もは])")
+_QUANTITY_SCOPE_END = re.compile(r"ので(?!き)|のに|(?<!あら)ため|けど|けれど|(?<=[ぁ-ゖ])ても|(?<=[んい])でも"
+                                 r"|(?<=[うくぐすつぬぶむるたい])から"
+                                 r"|(?<=[いきぎしちびみりっえけげせねべめれ])て(?=[㐀-䶿一-鿿豈-﫿々〆ァ-ヴ])"
+                                 r"|(?<=ん)で(?=[㐀-䶿一-鿿豈-﫿々〆ァ-ヴ])")
+_QUANTITY_NOT_NEG = re.compile(
+    r"なければ(?:なら|なりませ|いけ|だめ)[ぁ-ゖ]{0,4}|なくては(?:なら|なりませ|いけ|だめ)[ぁ-ゖ]{0,4}|ねば(?:なら|なりませ)[ぁ-ゖ]{0,4}"
+    r"|ないと(?!し[たてま]|する).*|ざるを(?:得|え)[ぁ-ゖ]{0,4}|かもしれ[ぁ-ゖ]{0,4}|に違い(?:ない|ありません)"
+    r"|(?:しか|ほか|ほかは)(?:ない|なかっ|ありません)"
+    r"|(?:おこ|まか|とも)な(?=[いうえわっ])|(?<=お)はな(?=[しすさせ])|(?:み|こ)な(?=[しすさせ])")
+_QUANTITY_LIMIT_OFF = re.compile(
+    r"上限(?:[はがもをの]|について(?:は)?)?(?:特に)?(?:な[いくしかけ]|無[いくし]|ありません"
+    r"|(?:設け|定め|決め|置か|置い)[ぁ-ゖ]{0,4}?(?:ない|なかっ|ず|ません)"
+    r"|なく[さしすせなっ]|撤廃|廃止|外[さしすせ]|はず[さしすせ]|取り払|取り除|取り外|解除)")
+# 1つの文の中で、読点で区切った節。助詞で終わる節（窓口は、部屋で、）は、述語のある次の節と1つにして見る
+_QUANTITY_SENTENCE_END = re.compile(r"[。！？!?\n]")
+_QUANTITY_CLAUSE_SPLIT = re.compile(r"[、，,]")
+_QUANTITY_PARTICLE_END = re.compile(r"(?:[はもがをにでとへや]|には|では|とは|からは|までは)$")
+# 「一つの」の名詞、「一つずつ」の動詞（「の」「ずつ」のすぐあとの、漢字・片仮名・英数字の並び）
+_QUANTITY_HEAD = re.compile("[" + "㐀-䶿一-鿿豈-﫿々〆" + "ァ-ヴーA-Za-z0-9]{1,12}")
+# その名詞・動詞のすぐ前の、数の主張が同じ語（同じ窓口、順に確認）と、変わった語（複数のファイル、まとめて実行）。相手の文で
+# 「一つの」の名詞や「一つずつ」の動詞にかかる語だけを見る（別の述語にかかる語（結果はまとめて共有）は、同じ語でも数の主張を
+# 変えない。2つの文をまとめた推敲で、元の隣の文の語が「一つの」の名詞に移った「複数のファイル」は、数の主張が変わった形。
+# 反証で見つけた例）
+_QUANTITY_KEEP_BEFORE = {_WEAK_SINGLE: "(?:同じ|同一の?|単一の?)",
+                         _WEAK_EACH: "(?:順に|順番に|個別に|一件ずつ|一つずつ|ひとつずつ)"}
+# 「一つの」の名詞のすぐ前の「各」（各窓口）と「〜ごとの」「〜ごとに別の」（機能ごとのファイル、画面ごとに別のファイル）も、
+# 数の主張が変わった形（反証で見つけた例。「すべて」を相手の文のどこに出ても数える語から外したので、ここで見る）。「別の」
+# （別のファイル）は数の主張を変えていない
+_QUANTITY_CHANGE_BEFORE = {_WEAK_SINGLE: "(?:(?:複数|すべて|全て|全部|別々|いくつか|いくつも)の?|各|ごと[にの](?:別々?の)?)",
+                           _WEAK_EACH: "(?:まとめて|一括(?:で|して)?|一度に|並列(?:で|に|して)?|並行(?:で|に|して)?|同時(?:に|で)?"
+                                       "|一斉に|一気に|いっぺんに)"}
 # 番号つき箇条書きの番号（行頭の「1.」「2)」、diff の詰めで足した「(1)」「（１）」。引用の中も）。数値ではなく並びの印。
 # 隣り合う2つの [ \t]* が同じ空白を取り合う形にすると、伏せて空白だけになった長い行で2乗の時間になる（反証レビュー regress 1）
 _LIST_NUMBER = re.compile(r"^[ \t]*(?:>[ \t]*)*(?:[0-9]{1,9}[.)](?=[ \t]|$)|\([0-9]{1,9}\))", re.M)
@@ -2101,7 +2221,7 @@ class _Number(tuple):
     notation は単位なしの数の書き方の手がかり（単位つきの数と、手がかりのない単位なしの数は None）。(まとまり, 続く字, 形) の組で、
     まとまりは cluster の中の単位なしの数の値の並び（まとまりがなければ ()）、続く字は数のあとの空白に続く字（3 日 の「日」から
     8字まで。空白がなければ ""）、形はまとまりの (数と数の間のつなぎの字の種類の並び, 単位の並び, この数の位置)（まとまりがなければ None。
-    _notation_match が単位を確かめるのに使う。review1-regress.md の Q1）。weak は数量を主張しない「一つ」。"""
+    _notation_match が単位を確かめるのに使う。反証で見つけた例）。weak は数量を主張しない「一つ」。"""
     __slots__ = ()
 
     def __new__(cls, start, end, value, unit, notation=None, weak=False, cluster=None):
@@ -2202,8 +2322,8 @@ def _find_numbers(text, analysis, masked_kinds=_NUMBER_MASKED):
                              _SAME_UNIT.get(unit_text, unit_text)))
     kanji_text = _KANJI_EXCLUDED.sub(_kanji_excluded, masked)
     for match in _KANJI_NUMBER.finditer(kanji_text):
-        before = kanji_text[match.start() - 1] if match.start() else ""
-        if before and _KANJI.match(before) and before not in _KANJI_BEFORE:
+        if not _kanji_before_ok(kanji_text, match.start()) and not (
+                match.group(2) == "時" and _hour_word_before(kanji_text, match.start())):
             continue
         if any(left <= match.start() < right for left, right in taken):
             continue
@@ -2211,11 +2331,12 @@ def _find_numbers(text, analysis, masked_kinds=_NUMBER_MASKED):
         if value is None:
             continue
         counter = match.group(2)
-        idiom = False
+        # 今日一日、去年一年、日一日と（期間の全体を言う。反証で見つけた例）は、数量を主張しない値として取る
+        idiom = value == 1 and _whole_period(kanji_text, match.start(), counter)
         if counter == "分":
             word = match.group(0)
-            # 分数、率、四分位、二分する、十二分に、五分五分、九分九厘（review1-fp.md の指摘2）。数量を主張しない値として取る
-            # （review2-fp.md の指摘5）
+            # 分数、率、四分位、二分する、十二分に、五分五分、九分九厘（反証で見つけた例）。数量を主張しない値として取る
+            # （反証で見つけた例）
             idiom = (kanji_text.startswith(_BUN_NOT_BEFORE, match.end())
                      or (word == "二分" and kanji_text.startswith(_NIBUN_NOT_BEFORE, match.end()))
                      or (word == "十二分" and kanji_text.startswith(_JUNIBUN_NOT_BEFORE, match.end()))
@@ -2224,7 +2345,7 @@ def _find_numbers(text, analysis, masked_kinds=_NUMBER_MASKED):
             idiom = kanji_text.startswith(_JOU_NOT_BEFORE, match.end())     # 一条の光
         head = _KANJI_RANGE_HEAD.search(kanji_text, max(0, match.start() - _KANJI_RANGE_REACH), match.start())
         if head is not None and _kanji_head_ok(kanji_text, head, taken, found):
-            # 「三〜五日」「三から五日」「三、四日」の前の漢数字（review2-spec.md の T5）
+            # 「三〜五日」「三から五日」「三、四日」の前の漢数字（反証で見つけた例）
             found.append(_Number(head.start(1), head.end(1), str(_kanji_value(head.group(1))), ""))
         found.append(_Number(match.start(), match.end(), str(value), _SAME_UNIT.get(counter, counter), None, idiom))
     found.sort(key=lambda number: (number.start, number.end))
@@ -2236,8 +2357,7 @@ def _kanji_head_ok(kanji_text, head, taken, found):
     （直前が漢字なら取らない。ただし _KANJI_BEFORE の字なら取る）。算用数字と「千」で取った範囲と、取った漢数字に重なれば
     取らない。読めない並び（二三）は取らない。"""
     start = head.start(1)
-    before = kanji_text[start - 1] if start else ""
-    if before and _KANJI.match(before) and before not in _KANJI_BEFORE:
+    if not _kanji_before_ok(kanji_text, start):
         return False
     if any(left <= start < right for left, right in taken):
         return False
@@ -2246,16 +2366,62 @@ def _kanji_head_ok(kanji_text, head, taken, found):
     return _kanji_value(head.group(1)) is not None
 
 
+def _kanji_before_ok(kanji_text, start):
+    """kanji_text の start から始まる漢数字を、直前の字で数として取るか。直前が漢字でないか、_KANJI_BEFORE の字か、
+    直前の2字が _KANJI_BEFORE_WORDS の語か、漢数字に続いた助数詞（_KANJI_CHAIN）なら取る。"""
+    before = kanji_text[start - 1] if start else ""
+    if not before or not _KANJI.match(before) or before in _KANJI_BEFORE:
+        return True
+    if kanji_text[max(0, start - 2):start] in _KANJI_BEFORE_WORDS:
+        return True
+    return _KANJI_CHAIN.search(kanji_text, max(0, start - _KANJI_CHAIN_REACH), start) is not None
+
+
+def _whole_period(kanji_text, start, counter):
+    """start から始まる漢数字（値が1）が、期間の語のあとの同じ期間の数（今日一日、去年一年、今週一週間）か、前に漢字のない
+    「日一日」「年一年」（日一日と、年一年と）なら真。"""
+    if not start or counter not in _SAME_PERIOD.get(kanji_text[start - 1], ()):
+        return False
+    if kanji_text[max(0, start - 2):start] in _WHOLE_PERIOD_WORDS:
+        return True
+    return counter in ("日", "年") and (start < 2 or not _KANJI.match(kanji_text[start - 2]))
+
+
 def _kanji_excluded(match):
     """_KANJI_EXCLUDED に当たった語を同じ長さの「＃」にする。「十分」は、直前が漢数字（三十分）か、あとが「間」（十分間）なら残す。
-    ただし「十分間に合う」（十分 間に合う）の「間」は十分間にしない（review1-fp.md の指摘2）。"""
+    ただし「十分間に合う」（十分 間に合う）の「間」は十分間にしない（反証で見つけた例）。"""
     text = match.group(0)
     if text == "十分":
         start = match.start()
         if (start and match.string[start - 1] in _KANJI_NUMERALS) or (match.string.startswith("間", match.end())
                                                                        and not match.string.startswith("間に合", match.end())):
             return text
+        # 十時十分、一時間十分、一人十分（漢数字に続いた「時」「時間」「人」などのあと。反証で見つけた例）。「時」は、前に漢数字のない
+        # 「一時」（一時的に）を除く（「一時」を数にしない決まりとそろえる。「景気は一時十分に回復した」）。「時間」「人」などのあとは、
+        # 時間の量に続く字が続くときだけ（_JIPPUN_AFTER）
+        hour = _KANJI_HOUR_BEFORE.search(match.string, max(0, start - _KANJI_CHAIN_REACH), start)
+        if hour is not None:
+            end = match.end()
+            if hour.group(1) is None and hour.group(2) is None:
+                # 「時」のあと。前に漢数字も時刻を言う語もない「一時」は、時刻に続く字が続くときだけ
+                if (hour.group(0) != "一時" or _hour_word_before(match.string, hour.start())
+                        or match.string.startswith(_ICHIJI_JIPPUN_AFTER, end)):
+                    return text
+            elif (end == len(match.string) or match.string.startswith(_JIPPUN_AFTER, end)
+                  or (match.string.startswith(_JIPPUN_DE, end) and not match.string.startswith(_JIPPUN_DE_NOT, end))):
+                return text
+    if text == "一時" and match.start() and (
+            match.string[match.start() - 1] in _KANJI_NUMERALS
+            or (_hour_word_before(match.string, match.start())
+                and (match.end() == len(match.string) or not _KANJI.match(match.string[match.end()])
+                     or match.string[match.end()] in _ICHIJI_HOUR_NEXT))):
+        return text       # 十一時、二十一時、午前一時、深夜一時（「一時的」「一時保存」の「一時」ではない）
     return "＃" * len(text)
+
+
+def _hour_word_before(text, start):
+    """text の start の直前が、時刻を言う語（午前、午後、深夜、朝、夜 など。_TIME_OF_DAY_WORDS と _TIME_OF_DAY_CHARS）なら真。"""
+    return text[max(0, start - 2):start] in _TIME_OF_DAY_WORDS or (start > 0 and text[start - 1] in _TIME_OF_DAY_CHARS)
 
 
 def _join_kind(between):
@@ -2300,16 +2466,21 @@ def _with_notation(masked, found):
                              next(at for at, member in enumerate(cluster) if member is number))
                 notation = (group, follow, frame)
         elif number.key == ("1", "つ"):
-            weak = (weak or masked.startswith(_WEAK_ONE_AFTER, number.end) or _WEAK_ONE_MO.match(masked, number.end) is not None
-                    or masked[max(0, number.start - len(_WEAK_ONE_BEFORE)):number.start] == _WEAK_ONE_BEFORE
-                    or masked[max(0, number.start - 2):number.start] in _WEAK_ONE_REPEATED)
+            kanji = masked.startswith("一", number.start)
+            if (masked.startswith(_WEAK_ONE_AFTER, number.end) or _WEAK_ONE_MO.match(masked, number.end) is not None
+                    or masked[max(0, number.start - 2):number.start] in _WEAK_ONE_REPEATED
+                    or (kanji and masked[max(0, number.start - len(_WEAK_ONE_BEFORE)):number.start] == _WEAK_ONE_BEFORE)):
+                weak = True
+            elif (kanji and masked.startswith(_WEAK_ONE_PAIRED, number.end)
+                  and not masked.startswith(_WEAK_ONE_ONLY, number.end)):
+                weak = _WEAK_EACH if masked.startswith("ずつ", number.end) else _WEAK_SINGLE
         out.append(_Number(number.start, number.end, number.value, number.unit, notation, weak, keys)
                    if notation is not None or weak or keys else number)
     return out
 
 
 def extract_numbers(text):
-    """文の中の数値を取り出す（DESIGN-interfaces.md 2.5.2）。位置の順に
+    """文の中の数値を取り出す（設計 2.5.2）。位置の順に
     {"text": 書かれた形, "value": 数（算用数字、3桁区切りなし）, "unit": 単位（なければ ""）, "start": 位置, "end": 位置}
     の並びを返す。コード、インラインのコード、URL、リンク先、先頭の設定、HTML の中の数は取らない。引用と表の中の数は取る。
     表記だけの違い（全角と半角、3桁区切りの有無、漢数字と算用数字、か月とヶ月）は value と unit が同じになる。"""
@@ -2377,9 +2548,9 @@ def _number_risks(sides, full, groups):
     文書全体の比べで出すのは、hunk の行の中にある値だけ（2.5 の前書き「対象は全文差分で変わった塊の中だけ」）。
     変わっていない行をコードの囲みに入れただけで、その行の値を「消えた数値」にしないため（反証レビュー E4）。
 
-    数量を主張しない「一つ」（一つの、一つずつ、もう一つ）は、単独では元にない数値・消えた数値にしない（review-regress.md R4）。
+    数量を主張しない「一つ」（一つの、一つずつ、もう一つ）は、単独では元にない数値・消えた数値にしない（反証で見つけた例）。
     組の文の added と lost で、範囲・日付・時刻のまとまりの部品の値は、文書全体ではなく組の相手の文と、そのすぐ前とすぐあとの
-    組にならなかった文の中だけで「ある」を見る（_cluster_partners、_unpaired_around。review2-regress.md の V2）。"""
+    組にならなかった文の中だけで「ある」を見る（_cluster_partners、_unpaired_around。反証で見つけた例）。"""
     out = []
     old_all, new_all = sides.all_keys(0), sides.all_keys(1)
     shown_removed, shown_added = set(), set()
@@ -2399,13 +2570,13 @@ def _number_risks(sides, full, groups):
             raw_removed, raw_added = old_count - new_count, new_count - old_count
             # 文を2つに分けた・2つを合わせた推敲（組の文のすぐあとに、組にならなかった文が続く）。組の文で消えた値が続く文に
             # あれば（数と単位が同じ）、移しただけとみなして比べから外す。「…30秒のタイムアウトに達し、ゲートウェイが504を返した。」
-            # →「…30秒のタイムアウトに達した。ゲートウェイは…504を返した。」で、504 を「変わった数値」にしない（diff の詰め。
-            # questions.md 35 の組み方で組になった分割の文）。続く文のほかの値は、組の文の値と打ち消さず（表記の違いの打ち消しも
+            # →「…30秒のタイムアウトに達した。ゲートウェイは…504を返した。」で、504 を「変わった数値」にしない（diff の詰めの
+            # 組み方で組になった分割の文）。続く文のほかの値は、組の文の値と打ち消さず（表記の違いの打ち消しも
             # しない）、文書全体の比べに回す。別の文の「3」と「3日」を打ち消し合わせて取りこぼしたり、値のない文を示したり
-            # しないため（diff の詰めの直し。review-regress.md R1、R3）
+            # しないため（diff の詰めの直し。反証で見つけた例）
             # 続く文に移ったとみなすのは、組の文の反対の側に同じ単位の値が増えて（減って）いない値だけ。「移行は3日で終える。」→
             # 「移行は5日で終える。予備として3日を見込む。」は、3日が続く文にあっても、組の文で3日が5日に変わっている
-            # （review1-regress.md の Q2）。ただし続く文のほうが組の相手の文によく似ていれば（文を動かした推敲で、組が1つずれた
+            # （反証で見つけた例）。ただし続く文のほうが組の相手の文によく似ていれば（文を動かした推敲で、組が1つずれた
             # とき）、今までどおり移しただけとみなす（_moved_keys）
             extra_old = _following_unpaired(sides, 0, group["old"], i, paired_old)
             extra_new = _following_unpaired(sides, 1, group["new"], j, paired_new)
@@ -2419,7 +2590,16 @@ def _number_risks(sides, full, groups):
             # 表記の違いとして打ち消した値は、文書全体の比べでもう一度出さない
             shown_removed.update(raw_removed - removed)
             shown_added.update(raw_added - added)
-            removed, added = _drop_weak(removed, added, old_numbers, new_numbers)
+            old_text, new_text = old.text, new.text
+            if any(number.weak in _QUANTITY_FOR for number in old_numbers) or any(
+                    number.weak in _QUANTITY_FOR for number in new_numbers):
+                # 2つの文をまとめた・分けた推敲では、組にならなかった隣の文の語も相手の文の語として見る（反証で見つけた例:
+                # 「一つずつ確認します。すべての確認が…」→「順に確認し、すべて済んだら…」を、新しく出た「すべて」とみなしていた）。
+                # つなぐときは _quantity_text の決まりで
+                old_text = _quantity_text(group["old"], i, paired_old, old, old_numbers, new_numbers, sides.texts[1])
+                new_text = _quantity_text(group["new"], j, paired_new, new, new_numbers, old_numbers, sides.texts[0])
+            removed, added = _drop_weak(removed, added, old_numbers, new_numbers, old_text, new_text,
+                                        sides.texts[0], sides.texts[1])
             risk = None
             if removed and added:
                 risk = _risk("number", "replaced", old.line, new.line, old.text, new.text,
@@ -2492,7 +2672,7 @@ def _cluster_partners(numbers, cancelled, others):
     「ある」を見る値の集合（_unpaired_around）。単位なしの数を持つまとまりと、表記の違いとして打ち消した値（cancelled）を含む
     まとまりのうち、値の一部が組の相手の文（others）に残るか打ち消したもの（範囲の片方の端だけを残した）の、すべての値。
     「移行は3〜5日で終える。」→「移行は5日で終える。」で、消えた 3 を文書の別の段落の「予備日は3日」で「ある」とすると、範囲を
-    1つの値に縮めた書き換えを見逃す（review2-regress.md の V2。逆向きの、範囲に広げた書き換えも同じ）。まとまりの値が相手の文に
+    1つの値に縮めた書き換えを見逃す（反証で見つけた例。逆向きの、範囲に広げた書き換えも同じ）。まとまりの値が相手の文に
     1つも残らないとき（範囲を含む文を丸ごと動かした推敲）は、今までどおり文書全体で見る。"""
     partners = set()
     kept = None
@@ -2512,7 +2692,7 @@ def _moved_keys(extra, opposite, source, partner):
 
     source は値が消えた（増えた）側の組の文、partner は続く文と同じ側の組の文、opposite は partner の側の増減（Counter）。
     続く文が partner より source に似ていれば（文を動かして組が1つずれた）、その文の値はすべて移した値。そうでなければ、
-    opposite に同じ単位の値がない値だけを移した値とする（review1-regress.md の Q2）。"""
+    opposite に同じ単位の値がない値だけを移した値とする（反証で見つけた例）。"""
     units = set(unit for (_, unit), count in opposite.items() if count > 0)
     moved = Counter()
     pair_ratio = None
@@ -2523,7 +2703,7 @@ def _moved_keys(extra, opposite, source, partner):
             if pair_ratio is None:
                 pair_ratio = _text_ratio(source, partner)
             # ratio の上限（quick_ratio）が組の似かた以下なら、ratio も超えないので求めない（結果は同じ）。長く繰り返しの多い文が
-            # 組にならずに続く文書で、ratio が2乗に近い時間になるのを避ける（review2-regress.md の V4）
+            # 組にならずに続く文書で、ratio が2乗に近い時間になるのを避ける（反証で見つけた例）
             if _ratio_bound(source, sentence.text) > pair_ratio and _text_ratio(source, sentence.text) > pair_ratio:
                 moved.update(number.key for number in numbers)
                 continue
@@ -2562,6 +2742,106 @@ def _unpaired_around(sides, side, sentences, index, paired):
     return found
 
 
+def _quantity_text(sentences, index, paired, own, own_numbers, other_numbers, other_doc):
+    """「一つの」「一つずつ」の相手の文の語を見るときの、組の文（own）の側の文字列。2つの文をまとめた・分けた推敲では、組の文の
+    すぐ前とすぐあとの組にならなかった文もつなぐ（_with_unpaired_text）。ただし、つなぐのは次のときだけ（反証で見つけた例:
+    文を分けた推敲の「各行に時刻 → すべての行に時刻」を、ファイルの数の変化にしていた）。
+    (a) 自分の側に「一つの」「一つずつ」がある（まとめた推敲で、隣の文にもともとあった語を新しく出た語にしない）。
+    (b) 相手の側に「一つずつ」がある（分けた推敲の「ただし並列で動かす」）。
+    (c) 相手の側の「一つの」の名詞が、つなぐ隣の文に出る（分けた推敲の「ファイルは複数に分けてよい」）。"""
+    joined = _with_unpaired_text(sentences, index, paired)
+    if joined == own.text:
+        return joined
+    if any(number.weak in _QUANTITY_FOR for number in own_numbers):
+        return joined
+    if any(number.weak == _WEAK_EACH for number in other_numbers):
+        return joined
+    rest = joined.replace(own.text, "", 1)
+    if any(number.weak == _WEAK_SINGLE and _weak_head(other_doc, number) in rest
+           for number in other_numbers if _weak_head(other_doc, number)):
+        return joined
+    return own.text
+
+
+def _weak_head(doc, number):
+    """「一つの」の名詞、「一つずつ」の動詞（doc の中の number のすぐあとの「の」「ずつ」に続く、漢字・片仮名・英数字の並び）。
+    なければ ""。"""
+    skip = 1 if number.weak == _WEAK_SINGLE else 2
+    match = _QUANTITY_HEAD.match(doc, number.end + skip) if doc else None
+    return match.group(0) if match else ""
+
+
+def _quantity_negated(text, position):
+    """text の position からの数を言う語の打ち消しがあれば真（_QUANTITY_NEG と打ち消しの「ず」）。見るのは節の終わりまでのうち、
+    語がかかる述語の終わり（_QUANTITY_SCOPE_END）まで。義務や条件の言い方と平仮名の動詞の「な」（_QUANTITY_NOT_NEG）、「少ない」
+    などの語（_NEGATION_WORDS）は伏せてから探す。"""
+    end = _QUANTITY_CLAUSE_END.search(text, position)
+    rest = text[position:end.start() if end else len(text)]
+    lead = _QUANTITY_LEAD.match(rest)
+    stop = _QUANTITY_SCOPE_END.search(rest, lead.end() if lead else 0)
+    if stop is not None:
+        rest = rest[:stop.start()]
+    rest = _QUANTITY_NOT_NEG.sub(lambda match: "＃" * len(match.group(0)), rest)
+    rest = _NEGATION_WORDS.sub(lambda match: match.group(0)[:-1] + "＃", rest)
+    return _QUANTITY_NEG.search(rest) is not None or _negative_zu(rest)
+
+
+def _head_clauses(text, head):
+    """相手の文 text が1つの文で、「一つの」の名詞か「一つずつ」の動詞（head）が出るなら、head の出る節（読点で区切る。助詞で
+    終わる節は次の節も）をつないだ文字列。2つ以上の文（まとめた・分けた推敲でつないだ文）か、head が出なければ None。"""
+    body = text.rstrip(" \t\n。！？!?」』）)")
+    if head not in body or _QUANTITY_SENTENCE_END.search(body):
+        return None
+    clauses = _QUANTITY_CLAUSE_SPLIT.split(body)
+    picked = []
+    for index, clause in enumerate(clauses):
+        if head not in clause:
+            continue
+        picked.append(clause)
+        while _QUANTITY_PARTICLE_END.search(clauses[index].strip()) and index + 1 < len(clauses):
+            index += 1
+            picked.append(clauses[index])
+    return "、".join(picked)
+
+
+def _quantity_changed(number, doc, own_text, partner_text, partner_words):
+    """weak の値 number（「一つの」「一つずつ」）の数の主張が、相手の文（partner_text）で変わったか。
+    1. 相手の文で、「一つの」の名詞や「一つずつ」の動詞のすぐ前に数の主張が変わった語（複数のファイル、まとめて実行）があり、
+       自分の文にその形がなければ変わった（2つの文をまとめた推敲で、元の隣の文の「複数」が「一つの」の名詞に移った形を見逃さない）。
+       同じ文の別の節に 2 の形（返却は同じ窓口で）があっても変わった（反証で見つけた例）。
+    2. すぐ前に数の主張が同じ語（同じ窓口、順に確認）があれば変わっていない。
+    3. ほかは、相手の文に新しく出た数を言う語（partner_words）が、その形の語（_QUANTITY_FOR）であれば変わった。相手の文が1つの
+       文で「一つの」の名詞や「一つずつ」の動詞が出るなら、その語のある節の語だけを見る（「議題を確認し、結果はまとめて共有する」の
+       「まとめて」は別の述語にかかる。反証で見つけた例）。文を分けた推敲（ただし並列で動かす）は、つないだ文のどこの語も見る。
+    どれも打ち消した語は見ない。"""
+    words = _QUANTITY_FOR.get(number.weak)
+    if words is None:
+        return False
+    head = _weak_head(doc, number)
+    if head:
+        for match in re.finditer(_QUANTITY_CHANGE_BEFORE[number.weak] + re.escape(head), partner_text):
+            if match.group(0) not in own_text and not _quantity_negated(partner_text, match.end()):
+                return True
+        for match in re.finditer(_QUANTITY_KEEP_BEFORE[number.weak] + re.escape(head), partner_text):
+            if not _quantity_negated(partner_text, match.end()):
+                return False
+        scope = _head_clauses(partner_text, head)
+        if scope is not None and partner_words & words:
+            partner_words = partner_words & _quantity_words(scope)
+    return bool(partner_words & words)
+
+
+def _with_unpaired_text(sentences, index, paired):
+    """組の文 sentences[index] と、そのすぐ前とすぐあとに続く組にならなかった文（前と次の組の文の手前まで）をつないだ文字列。"""
+    first = index
+    while first > 0 and first - 1 not in paired:
+        first -= 1
+    last = index
+    while last + 1 < len(sentences) and last + 1 not in paired:
+        last += 1
+    return "".join(sentence.text for sentence in sentences[first:last + 1])
+
+
 def _following_unpaired(sides, side, sentences, index, paired):
     """組の文 sentences[index] のすぐあとに続く、組にならなかった文と、その数値の並び（次の組の文の手前まで）。"""
     found = []
@@ -2573,12 +2853,12 @@ def _following_unpaired(sides, side, sentences, index, paired):
 
 
 def _cancel_notation(removed, added, old_numbers, new_numbers):
-    """組の文の数値の比べで、同じ数の「単位なし」と「単位あり」を表記の違いとして打ち消す（questions.md 39 の (2)）。
+    """組の文の数値の比べで、同じ数の「単位なし」と「単位あり」を表記の違いとして打ち消す。
     打ち消すのは、単位なしの側が範囲・日付・時刻のまとまりの部品で、まとまりの中の単位なしの数がすべて相手の側の1つのまとまりに
     そろって出てくるとき（「3〜5日 → 3日から5日」「2026-10-13 → 2026年10月13日」「10:30 → 10時30分」。「12:25 → 25分」、
     「10:30 → 10時に始め、30分休む」は打ち消さない。_notation_match）と、
     単位なしの数のあとの空白に、相手の側の単位が続くとき（「3 日 → 3日」「3 s → 3s」）だけ。「手順3 → 3日」「3回 → 3」
-    「5 → 5GB」は打ち消さない（diff の詰めの直し。review-regress.md R2）。単位どうしが違う組（3日 → 3週間）は残す。
+    「5 → 5GB」は打ち消さない（diff の詰めの直し。反証で見つけた例）。単位どうしが違う組（3日 → 3週間）は残す。
     old_numbers と new_numbers は組の文の数値（_Number の並び。notation を見る）。"""
     if not removed or not added:
         return removed, added
@@ -2599,11 +2879,32 @@ def _cancel_notation(removed, added, old_numbers, new_numbers):
     return +removed, +added
 
 
-def _drop_weak(removed, added, old_numbers, new_numbers):
+def _quantity_words(text):
+    """text の数を言う語（_QUANTITY_WORDS。書き方の違いをそろえた語）の集合。打ち消した語は数えない（「上限」は上限そのものを
+    打ち消したとき（_QUANTITY_LIMIT_OFF）だけ数える）。"""
+    words = set()
+    for match in _QUANTITY_WORDS.finditer(text):
+        word = _QUANTITY_SAME.get(match.group(0), match.group(0))
+        if word == "上限":
+            if _QUANTITY_LIMIT_OFF.match(text, match.start()) is not None:
+                words.add(word)
+        elif not _quantity_negated(text, match.end()):
+            words.add(word)
+    return words
+
+
+def _drop_weak(removed, added, old_numbers, new_numbers, old_text="", new_text="", old_doc="", new_doc=""):
     """数量を主張しない「一つ」（一つの、一つずつ、もう一つ）を、相手の側に同じ単位の値がなければ比べから外す
-    （単独では元にない数値・消えた数値にしない。「二つの → 一つの」「一つの → 三つの」は数が変わったので残す。review-regress.md R4）。"""
-    for mine, other, numbers in ((removed, added, old_numbers), (added, removed, new_numbers)):
-        weak = Counter(number.key for number in numbers if number.weak)
+    （単独では元にない数値・消えた数値にしない。「二つの → 一つの」「一つの → 三つの」は数が変わったので残す）。
+    「一つの」「一つずつ」は、相手の文（old_text と new_text は組の元と後の文と、まとめた・分けた推敲の隣の文。_quantity_text）で
+    数の主張が変わっていれば（_quantity_changed。「一つずつ → まとめて」「一つの → 複数の」）外さない。old_doc と new_doc は
+    元と後の文書（「一つの」の名詞、「一つずつ」の動詞を見る）。"""
+    old_words, new_words = _quantity_words(old_text), _quantity_words(new_text)
+    for mine, other, numbers, partner_words, doc, own_text, partner_text in (
+            (removed, added, old_numbers, new_words - old_words, old_doc, old_text, new_text),
+            (added, removed, new_numbers, old_words - new_words, new_doc, new_text, old_text)):
+        weak = Counter(number.key for number in numbers
+                       if number.weak and not _quantity_changed(number, doc, own_text, partner_text, partner_words))
         for key, count in weak.items():
             if mine[key] > 0 and not any(count_other > 0 and unit == key[1]
                                          for (value, unit), count_other in other.items() if (value, unit) != key):
@@ -2639,15 +2940,15 @@ def _notation_index(numbers):
 
 def _notation_match(number, other, unit=None):
     """単位なしの数 number と、相手の側（_KeySet）の同じ数の単位つきの値を、表記の違いとみなせるか（_cancel_notation と
-    同じ条件。review-regress.md R2、R2b）。unit を渡せば、その単位の値だけを見る。
+    同じ条件。反証で見つけた例）。unit を渡せば、その単位の値だけを見る。
 
     みなすのは2つの形だけ。(1) 数のあとの空白に、相手の側の単位が続く（3 日 → 3日、3 s → 3s）。(2) 数が範囲・日付・時刻の
-    まとまりの部品で、単位がまとまりの形に合う（review1-regress.md の Q1）。
+    まとまりの部品で、単位がまとまりの形に合う（反証で見つけた例）。
     - まとまりの中の単位なしの数がこの数だけ（3〜5日 の 3、10時30 の 30）なら、相手の側の単位が、まとまりのほかの数の単位
       （3〜5日 なら日）か、直前の数の単位に続く単位（10時30 なら分、10月13 なら日）のときだけ。「2〜3か月 → 2週間から3か月」の
       2 はみなさない。
     - 2つ以上なら、まとまりの中の単位なしの数がすべて、相手の側の1つのまとまりに同じ順にそろって出てきて、この数と同じ位置の
-      単位が相手の単位で、その単位の並びがつなぎの字に合うときだけ（「3/4 → 4月3日」はみなさない。review2-regress.md の V1）。
+      単位が相手の単位で、その単位の並びがつなぎの字に合うときだけ（「3/4 → 4月3日」はみなさない。反証で見つけた例）。
       「:」は時・分・秒、「/」と「-」は年・月・日の順の単位（10:30 → 10時30分、2026-10-13 → 2026年10月13日）。
       「〜」「から」は1種類の単位（5〜10 → 5人から10人）。「10/30 → 10時30分」「10:30 → 10月30日」「手順3-5 → 3日から5日」は
       みなさない。「12:25」と、別の所の「20:12」「25分」もみなさない。"""
@@ -2674,7 +2975,7 @@ def _notation_match(number, other, unit=None):
     # 相手の側のまとまりの中の、group と同じ数が同じ順に続いた並び（2026年10月13日10時30分 の中の 10時30分）ごとに見る。
     # この数（まとまりの単位なしの数のうち mine 番目）は、並びの同じ位置の単位がその単位のときだけみなす。順と位置を見ないと、
     # 「3/4 → 4月3日」「10:30〜11:15 → 10時15分から11時30分」の月と日、時と分の入れ替えを表記の違いとして打ち消す
-    # （review2-regress.md の V1）
+    # （反証で見つけた例）
     mine = [position for position, own in enumerate(own_units) if not own].index(at)
     size = len(group)
     for cluster in other.clusters.get(number.value, ()):
@@ -2714,7 +3015,7 @@ def _units_fit(joins, units):
 
 
 def _present(key, notation, other):
-    """(数, 単位) が相手の文書の値（_KeySet）にあるか（questions.md 39 の (2) を R2 の条件に絞ったもの）。同じ数と単位が
+    """(数, 単位) が相手の文書の値（_KeySet）にあるか。同じ数と単位が
     あれば「ある」。単位なしの値は、この側の同じ値（notation は _notation_index の形）が範囲・日付・時刻の部品か、空白のあとに
     単位が続く形で、相手の側に同じ数の単位つきの値があれば「ある」（2026-10-13 → 2026年10月13日）。単位つきの値は、同じ数と
     単位があるときだけ「ある」（diff の文書全体の比べで単位つきの値まで単位なしの値で打ち消すと、「BFFを1枚挟む」の「1枚」が
@@ -2783,7 +3084,7 @@ _NEGATION_WORDS = re.compile(r"(?:少|危|切|仕方|間違い|もったい|つ�
 # 「まず」の「ず」は、直前が漢字でなければ副詞（「まず、」）として除く
 _ADVERB_MAZU = re.compile(r"(?<![一-龥々])まず")
 _NEGATION_LIMIT = 2         # 変わった文字のうち、否定の印でない文字の数の上限（両側の合計。agent の試作の LIMIT）
-# 句点の前の規則（10.2 D1。コーパス48組で測って入れると決めた。step2-diff/measure.md）。変わった箇所が元と後の両方で
+# 句点の前の規則（10.2 D1。コーパス48組で測って入れると決めた）。変わった箇所が元と後の両方で
 # 文末（句点と閉じかっこの前。句点のない箇条書きの項目などは文の終わり）の直前5字の中に収まり、印の数が違えば数える
 # （「設定する → 設定しない」のように語幹の仮名が変わる形のため）
 _NEGATION_END_RULE = True
@@ -2807,13 +3108,13 @@ def _char_opcodes(a, b):
 
 
 # 否定の detail を右へ広げる平仮名の字数の上限（10.2 D7 は3字。diff の詰めで、句読点か漢字・片仮名の直前まで、
-# 上限6字にした。「変更してくださ → 変更しないでくださ」のように語の途中で切れていた。questions.md 48）
+# 上限6字にした。「変更してくださ → 変更しないでくださ」のように語の途中で切れていた）
 _WIDEN_RIGHT = 6
 
 
 def _widen(text, left, right):
     """変わった箇所 [left, right) を語の切れ目まで広げる（10.2 D7）。左へは平仮名を4字まで、そのあと続く漢字・片仮名の並び全部。
-    右へは平仮名を6字まで（questions.md 48）。句読点と空白で止める。変わった箇所の頭が漢字か片仮名なら、左の平仮名（助詞）は取らず、
+    右へは平仮名を6字まで。句読点と空白で止める。変わった箇所の頭が漢字か片仮名なら、左の平仮名（助詞）は取らず、
     右へは続く漢字・片仮名の並びを先に取る（「有効 → 無効」を「有効です → 無効です」にする）。"""
     head = text[left] if left < len(text) else ""
     starts_with_word = bool(head) and bool(_WORD_CHAR.match(head))
@@ -2870,7 +3171,7 @@ def _unmarked_letters(text, left, right, hits):
                    if not any(a <= position < b for a, b in hits) and not _HIRAGANA.match(text[position]))
 
 
-# 文の途中の「する → しない」「せずに ↔ して」（questions.md 42）。語幹の仮名だけが変わる形で、LIMIT に収まらなかった
+# 文の途中の「する → しない」「せずに ↔ して」。語幹の仮名だけが変わる形で、LIMIT に収まらなかった
 _ZU_TO_TE = (frozenset(("さずに", "せずに", "さず", "せず")), frozenset(("して", "し")))
 
 
@@ -2913,8 +3214,8 @@ def _negation_flip(old, new):
         rest -= _verb_stem_change(old_part, new_part)
         near_end = (_NEGATION_END_RULE and i1 >= old_end - _END_WINDOW and i2 <= old_end
                     and j1 >= new_end - _END_WINDOW and j2 <= new_end
-                    # 句点の前の規則は、印でない字の違いが平仮名だけ（漢字・片仮名は両側で同じ）のときに限る（questions.md 34。
-                    # 「変わらない → 同じだ」「欠かせない → 重要だ」のような言い換えを否定に出さない。「設定する → 設定しない」
+                    # 句点の前の規則は、印でない字の違いが平仮名だけ（漢字・片仮名は両側で同じ）のときに限る
+                    # （「変わらない → 同じだ」「欠かせない → 重要だ」のような言い換えを否定に出さない。「設定する → 設定しない」
                     # 「この変更で直る → この変更では直らない」は残る）
                     and _unmarked_letters(old, i1, i2, old_hits) == _unmarked_letters(new, j1, j2, new_hits))
         if rest <= _NEGATION_LIMIT or near_end:
@@ -2978,7 +3279,7 @@ _PASSIVE = re.compile(r"(?:さ|ら)れ(?:る|た|て|ます|ました|ない)")
 
 def _passive_rewrite(old_text, new_text, before, after, words):
     """「に」をとる動詞の受け身への書き換え（この変更がユーザーに影響する → ユーザーがこの変更に影響される）か。片側だけに
-    受け身の形があり、入れ替えた助詞の組がすべて「が」と「に」なら真（questions.md 43。2.5.4「受け身への書き換えは出ない」）。"""
+    受け身の形があり、入れ替えた助詞の組がすべて「が」と「に」なら真（2.5.4「受け身への書き換えは出ない」）。"""
     if bool(_PASSIVE.search(old_text)) == bool(_PASSIVE.search(new_text)):
         return False
     return all(set((before[word], after[word])) == set(("が", "に")) for word in words)
@@ -3017,7 +3318,7 @@ def _swap_risks(sides, groups):
 # ---- 問い（2.5.5）----
 
 _QUESTION = re.compile(r"(?:[？?]|か[。？?])[」』）)]*$")
-# 「か。」で終わっても問いでない語（形容動詞の語幹と「ほか」。原因は明らか。→ 原因は明らかだ。questions.md 44）
+# 「か。」で終わっても問いでない語（形容動詞の語幹と「ほか」。原因は明らか。→ 原因は明らかだ）
 _NOT_QUESTION_KA = re.compile(r"(?:明ら|確|わず|僅|静|豊|ほ|速や|穏や|鮮や|細や|爽や|健や|和や|緩や|賑や|にぎや|華や|"
                               r"密|愚|疎|おろ|遥|はる|ほの|柔ら|滑ら|なめら|清ら|朗ら|安ら|大ま)か。[」』）)]*$")
 
@@ -3198,7 +3499,7 @@ def _marks_risks(sides, type_changes):
 
 
 def meaning_risks(orig, rw, full=None, type_changes=None):
-    """意味が変わる恐れ（DESIGN-interfaces.md 2.5、2.8 の meaning_risks）。
+    """意味が変わる恐れ（設計 2.5、2.8 の meaning_risks）。
 
     full は full_diff(orig, rw) の戻り値（渡さなければ作る）。type_changes は diff() の type_changes で、
     None か [] なら文の種類の印（sentence_type/marks）を含めない。この関数の中で9キーの分析は作らない。"""
@@ -3223,10 +3524,10 @@ def _meaning_risks(sides, full, type_changes, groups=None):
 # （UTF-8 でない、正規表現の誤り）は、ここに置いた内蔵の一覧で動く。どちらを使ったかは JSON の "list" に出す。
 # 書き方: 1行に1つ。空行と「#」で始まる行は読み飛ばす。名詞化の言い回しと気持ちの語は「名前<TAB>正規表現」、強める語は語だけ。
 # 気持ちの語は3つ目の欄を置いてよい（「名前<TAB>正規表現<TAB>原文の言い方の正規表現」。原文にこの言い方があれば、その家族の
-# 気持ちは原文にあるとみなす。お詫び → 申し訳、ありがとう → 感謝。diff の詰めの直し、review-fp.md の P5）。
+# 気持ちは原文にあるとみなす。お詫び → 申し訳、ありがとう → 感謝。diff の詰めの直し、反証で見つけた例）。
 
 BUILTIN_LISTS = {
-    # 追加文書 2.2 の3 の11個と、試作で測って足した「不可能」（prototype.md 5章）
+    # 追加文書 2.2 の3 の11個と、試作で測って足した「不可能」
     "nominalization": (
         ("が可能", "が可能(?:です|でした|だ|である|となり|となる|となっ|になり|になる|になっ|な|に|で|。|、)"),
         ("することが可能", "することが可能"),
@@ -3243,8 +3544,8 @@ BUILTIN_LISTS = {
     ),
     # 勢いの文書 3.1 の4 の9個と、2.2 が勢いのある語・強める語に挙げる「パンチ」「ずらり」（diff の詰めで測って足した）
     "intensifiers": ("本当に", "とても", "すごく", "ぜひ", "絶対", "最強", "抜群", "イチオシ", "大活躍", "パンチ", "ずらり"),
-    # 気持ちの語（10.6 B2、GOALS の D-1。step2-diff/feeling_probe.py の辞書を、語の家族ごとにまとめた）。diff の詰めの直し
-    # （step-c-fix/contrast-feeling.md、review-fp.md の F5・F6 と P5）で、心配・満足・落ち込むの気持ちでない言い方を除き、
+    # 気持ちの語（10.6 B2、目標の D-1。試作の辞書を、語の家族ごとにまとめた）。diff の詰めの直し
+    # （反証で見つけた例）で、心配・満足・落ち込むの気持ちでない言い方を除き、
     # 感謝と申し訳に原文の言い方の欄を足し、苦しい〜胸が の8つの家族を足した
     "feelings": (
         ("ほっと", "ほっと(?=し|す|で|一息|ひと息|息)"),
@@ -3264,7 +3565,7 @@ BUILTIN_LISTS = {
         ("驚く", "驚[いきくか]|おどろ[いきくか]|びっくり"),
         ("不安", "不安(?!定)"),
         # 「心配はありません」「心配いりません」「心配無用」「心配なく」は、恐れがないことを言う決まった言い方
-        # 「心配は要りません」「ご心配には及びません」も同じ（review1-fp.md の指摘10）
+        # 「心配は要りません」「ご心配には及びません」も同じ（反証で見つけた例）
         ("心配", "心配(?!り)(?!(?:は|も)?(?:ありません|ない|いりません|いらない|要りません|要らない|無用|ご無用|なく)"
                  "|(?:に)?は及(?:びません|ばない))"),
         ("怖い", "怖[いかくがさ]|恐ろし|こわ(?:い|かっ|く(?!し|ず|れ))"),
@@ -3280,7 +3581,7 @@ BUILTIN_LISTS = {
         ("どきどき", "どきどき|ドキドキ"),
         # 「条件を満足する」「満足する場合」は満たすの意味
         ("満足", "満足(?!度)(?<!を満足)(?!する(?:場合|とき|こと|もの))"),
-        # 原文の言い方の「礼を」は「失礼を」「無礼を」「非礼を」の中に当てない（review1-fp.md の指摘10）
+        # 原文の言い方の「礼を」は「失礼を」「無礼を」「非礼を」の中に当てない（反証で見つけた例）
         ("感謝", "感謝", "ありがと|お礼|(?<![失無非])礼を|謝意"),
         ("ありがたい", "ありがた|有難|有り難"),
         ("申し訳", "申し訳", "すみません|すいません|お詫び|おわび|詫び|ごめん|陳謝|謝罪"),
@@ -3292,10 +3593,10 @@ BUILTIN_LISTS = {
         ("憂鬱", "憂鬱|ゆううつ"),
         # 「売上が落ち込む」「数が落ち込む」は数の減り（先に「落ち込」を探してから前を見る。前を先に見ると遅い）。数の減りを言う
         # 名詞（売り上げ、件数、率、量、額、残高、需要、業績、景気、利益、株価）の終わりの字と「が」「は」「の」のあと（件数の
-        # 落ち込み）と、「半分に落ち込む」（数が下がった先）を除く（review1-fp.md の指摘10。名詞を1つずつ並べると後読みが48個に
+        # 落ち込み）と、「半分に落ち込む」（数が下がった先）を除く（反証で見つけた例。名詞を1つずつ並べると後読みが48個に
         # なるので、終わりの字で見る）。「上」「ト」「ク」「ス」で終わる数の名詞（売上、コスト、レート、リクエスト、スループット、
         # トラフィック、アクセス、パフォーマンス、ペース、セールス）は語ごとに除く。終わりの字で除くと、苗字（井上、村上）、
-        # 片仮名の名前（マーク、ルーカス）、呼び名（母上、ゲスト）のあとの気持ちの語を見逃す（review2-fp.md の指摘7）
+        # 片仮名の名前（マーク、ルーカス）、呼び名（母上、ゲスト）のあとの気持ちの語を見逃す（反証で見つけた例）
         ("落ち込む", "落ち込(?<!に落ち込)(?<![げ数率量額高要績気益価][がはの]落ち込)(?<!売上[がはの]落ち込)(?<!コスト[がはの]落ち込)"
                     "(?<!レート[がはの]落ち込)(?<!リクエスト[がはの]落ち込)(?<!スループット[がはの]落ち込)(?<!トラフィック[がはの]落ち込)"
                     "(?<!アクセス[がはの]落ち込)(?<!パフォーマンス[がはの]落ち込)(?<!ペース[がはの]落ち込)(?<!セールス[がはの]落ち込)"),
@@ -3304,7 +3605,7 @@ BUILTIN_LISTS = {
         ("涙", "涙"),
         ("緊張", "緊張(?!感のある|状態|関係)"),
         # 物事の様子を言う「堅苦しい」「見苦しい」「重苦しい」「暑苦しい」は除く（後読みを「苦し」の前に置くと遅い。
-        # review1-fp.md の指摘9）
+        # 反証で見つけた例）
         ("苦しい", "苦し(?<![堅見重暑]苦し)(?:い|かっ|く|さ|み|そう)"),
         ("恐怖", "恐怖"),
         ("嫌だ", "嫌(?:な(?:気|思い|予感)|だっ|気が|になっ)"),
@@ -3321,7 +3622,7 @@ _LIST_PATTERNS = {"nominalization": True, "intensifiers": False, "feelings": Tru
 _LIST_THIRD_COLUMN = frozenset(("feelings",))
 _LIST_CACHE = {}
 # 一覧のファイルがあるのに読めなかった理由（なければ None）。人が読む出力の硬化と勢いの節に1行出し、JSON の list_problem に
-# 入れる（diff の詰めの直し。review-spec.md の F5、step-c-fix/check-infra-speed.md）。ファイルがないとき（配布 ZIP、
+# 入れる（diff の詰めの直し。反証で見つけた例）。ファイルがないとき（配布 ZIP、
 # スクリプトだけの置き方）は理由にしない
 _LIST_PROBLEMS = {}
 # ファイルがないとみなす誤り（ZIP の中から読み込まれたときは、ZIP のパスの下を開こうとして NotADirectoryError になる）
@@ -3332,7 +3633,7 @@ _LIST_PROBLEM_WIDTH = 40        # 理由に写す行の字数の上限
 def parse_list(text, pattern=False):
     """一覧のファイルの中身を読む。pattern が真なら [(名前, 正規表現の文字列)]、偽なら [語]。空行と「#」で始まる行は読み飛ばす。
     pattern が真で3つ目の欄（タブのあと）がある行は (名前, 正規表現, 3つ目の欄) にする（気持ちの語の「原文の言い方」）。
-    先頭の BOM（U+FEFF）は外す（Windows のメモ帳の「UTF-8（BOM 付き）」。review-regress.md の R8）。
+    先頭の BOM（U+FEFF）は外す（Windows のメモ帳の「UTF-8（BOM 付き）」。反証で見つけた例）。
     正規表現の誤りはここでは確かめない（_load_list が確かめ、誤りがあれば内蔵の一覧にする）。"""
     if text.startswith("﻿"):
         text = text[1:]
@@ -3405,7 +3706,7 @@ def _load_list(name):
     """一覧を読む。(項目, 出どころ) を返す。出どころは "references/lists/<名前>.txt" か "builtin"。
     pattern の一覧の項目は (名前, コンパイルした正規表現)。強める語の項目は語。
     ファイルがあるのに読めなかったとき（UTF-8 でない、書き方や正規表現の誤り、開けない）は、内蔵の一覧で動き、理由を
-    _LIST_PROBLEMS に残す（_list_info）。BOM つきの UTF-8 も読む（utf-8-sig。review-regress.md の R8）。"""
+    _LIST_PROBLEMS に残す（_list_info）。BOM つきの UTF-8 も読む（utf-8-sig。反証で見つけた例）。"""
     if name in _LIST_CACHE:
         return _LIST_CACHE[name]
     pattern = _LIST_PATTERNS[name]
@@ -3498,6 +3799,11 @@ class _Masker:
             pieces.append(text[cursor - start:])
         return "".join(pieces)
 
+    def kind(self, sentence):
+        """文の行の種類（paragraph、heading など）。行がなければ None。"""
+        index = sentence.line - 1
+        return self.rows[index]["kind"] if index < len(self.rows) else None
+
     def body(self, sentence):
         index = sentence.line - 1
         if index < len(self.rows) and self.rows[index]["kind"] in self.skip_kinds:
@@ -3515,14 +3821,16 @@ def _all_bodies(sides, side, masker=None):
 # ---- 否定対比の主張の逆転（追加文書 1.4。kind contrast_reversal）----
 # 原文の変わった塊の文から、否定対比の節（「Aではなく」「Aではない」「Aじゃない」など）の名詞を取り出す。推敲後の文（変わった文
 # だけ）で、その名詞が否定のない節に出て、重みを置く語（目的、狙い、重要、まず、第一に など）と同じ文にあれば候補にする。
-# 試作（v200-development/addendum/proto_checks.py、prototype.md 3章、check.md の指摘2と3）を移した。拾えない形があってもよい。
-# diff の詰めの直し（step-c-fix/contrast-feeling.md。誤検出の反証 review-fp.md の F1・F2 と提案 P1・P2）で、重みの語がなくても
+# 試作を移した。拾えない形があってもよい。
+# diff の詰めの直し（反証で見つけた例）で、重みの語がなくても
 # A を並べて肯定する形（「Aだけでなく」「Aに加え」「AとB」）を拾い、比べて下げる形（「Aの代わりに」「Aを書く前に」「Aは後にする」
 # 「Aは見送る」など）と、原文の同じ文に A がもともと肯定で出る形を出さないようにした。
 
 # 否定対比の印（「Aではなく」「Aではない」「Aじゃない」「Aでもなく」「Aでなく」「Aではありません」と、diff の詰めの直しで
-# 足した「Aは使わず」「Aはせず」（review-fp の TB-bad07。正しい推敲の組で誤検出が増えないことを測って足した）
+# 足した「Aは使わず」「Aはせず」（反証で見つけた例。正しい推敲の組で誤検出が増えないことを測って足した）
 _CONTRAST = re.compile(r"(?:では|じゃ|でも)(?:なく(?:て)?|ない|なかっ|ありません)|でなく(?:て)?|は(?:使わ|せ)ずに?")
+# 「Aは使わず」「Aはせず」の印
+_ZU_MARK = re.compile(r"は(?:使わ|せ)ず")
 # 「Aだけでなく」「Aばかりではなく」「Aのみでなく」（A に加えて B も）。否定対比の印のすぐ前がこれなら、A を否定していない
 _NOT_ONLY = ("だけ", "ばかり", "のみ")
 # 反語と推量（「キャッシュではないか」「〜ではないでしょうか」）は否定にしない
@@ -3535,8 +3843,12 @@ _CLAUSE_BREAK = re.compile(r"[、。，,．！？!?「」『』（）()：:\n|�
 _TOPIC = re.compile(r"(?:(?<=[^ぁ-ゖ])|(?<=[のにとで]))は|は(?=[^ぁ-ゖ])")
 _OKURI_MID = "りきけしみえちびれげせじつ"
 _OKURI_TAIL = "りきけしみえちびれげせじ"
+# 否定対比の名詞では、平仮名の入る和語の名詞（見た目、使い方、締め切り、言い方）も取る（反証で見つけた例: 「見た目ではなく」を
+# 「見た目と」にした逆転を見逃していた。誤検出の組と合成の組で、正しい推敲への候補が増えないことを測って入れた）。硬化の名詞の
+# 数え方（_NOUN、_KANGO）は変えない
+_TOKEN_OKURI_MID = _OKURI_MID + "たいめわ"
 # 名詞（2字以上の漢字の並び、送り仮名を挟む漢字の語、2字以上の片仮名、英字の語）
-_TOKEN = re.compile("[" + _K + "]+(?:[" + _OKURI_MID + "][" + _K + "]+)*(?:[" + _OKURI_TAIL + "]|(?<=[" + _K + "])[さみ](?![ぁ-ゖ]))?"
+_TOKEN = re.compile("[" + _K + "]+(?:[" + _TOKEN_OKURI_MID + "][" + _K + "]+)*(?:[" + _OKURI_TAIL + "]|(?<=[" + _K + "])[さみ](?![ぁ-ゖ]))?"
                     "|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_.+#-]+")
 # 重みを置く語。追加文書 1.4 の5つに、似た働きの語を足したもの（試作で、5つだけでは逆転の30組中21組しか拾えなかった）
 CONTRAST_WEIGHTS = ("目的", "狙い", "重要", "まず", "第一に", "ねらい", "狙っ", "狙う", "主眼", "主目的", "主な", "最優先",
@@ -3547,9 +3859,9 @@ _STOP_TOKENS = frozenset(CONTRAST_WEIGHTS + ("場合", "部分", "程度", "意�
 # 名詞のあとから節の終わりまでに、これがあれば「否定のある節」とみなす（否定、除外、比べて下げる）。
 _NEG_AFTER = re.compile(r"(?:では|じゃ|でも)な|でな[くい]|ではありません|ない|なく|なかっ|ません"
                         r"|以外|を除|を除い|抜き|不要|二の次|後回し")
-# 語で否定した節（AとBは対象外、Aは非対応、Aは範囲外 など）も否定のある節にする（review1-fp.md の指摘4）。ただし、A と並べた
+# 語で否定した節（AとBは対象外、Aは非対応、Aは範囲外 など）も否定のある節にする（反証で見つけた例）。ただし、A と並べた
 # 別の名詞の句の語（「AとXの廃止」の「廃止」は X のもの。A のすぐあとが並べる語で、語の直前が「の」、間に「は」「も」「が」が
-# ない）は数えない（review2-fp.md の指摘2。「性能改善と古いAPIの廃止」）。_neg_after
+# ない）は数えない（反証で見つけた例。「性能改善と古いAPIの廃止」）。_neg_after
 _LEXICAL_NEG = re.compile(r"対象外|範囲外|適用外|非対応|未対応|無効|廃止|禁止|除外|据え置")
 _COORD_HEAD = re.compile(r"と|や|及び|および|並びに|ならびに|・")
 _TOPIC_MARKS = re.compile(r"[はもが]")
@@ -3563,21 +3875,28 @@ _ZU_NEXT = re.compile("[、。，．" + _K + "ァ-ヴA-Za-zＡ-Ｚａ-ｚ]|に")
 # 「前に」は動詞の終止形か「の」のあとだけにする（「Aを前に進める」「Aを前に出す」は A を進める形）。「後に」「後で」「あとに」
 # 「あとで」は「Aは後に」「Aを後で」「（Aはあと）」の形だけにする（「Aを出した後に」は A を先にする形）。「次回も」は A を続ける形
 # なので除く。
-# diff の詰めの直しのあとの反証（review1-fp.md の指摘1）で、動詞・名詞の下げる語の形を狭めた: 「止め」は複合動詞の「突き止め」
+# diff の詰めの直しのあとの反証（反証で見つけた例）で、動詞・名詞の下げる語の形を狭めた: 「止め」は複合動詞の「突き止め」
 # 「食い止め」「受け止め」「引き止め」と「歯止め」を除く。「やめ」は「はやめに」（早めに）を除く。「控え」は「来週に控え」（間近に
 # 迫る）を除く。「次回」は「次回から」（A を次回から始める）を除く。ただし「次回からにする」「次回からとする」（A を次回に回す）は
-# 下げる形のまま（review2-fp.md の指摘1）。「Aは後に」は「後にする」「後に回す」の形だけにする（副詞の「後に（のちに）」を除く）。
-# さらに _DEMOTE_ANCHORED の語は、下げたのが A でないと分かる形を除く（_demoted）
+# 下げる形のまま（反証で見つけた例）。「Aは後に」は「後にする」「後に回す」の形だけにする（副詞の「後に（のちに）」を除く）。
+# さらに _DEMOTE_ANCHORED の語は、下げたのが A でないと分かる形を除く（_demoted）。
+# 「Aは減らす」（打ち合わせは減らす）は、反証で見つけた例で足した。「Aを減らすことを最優先にする」の「を減ら」は、A が目的の
+# 主題なので下げた形にしない（「は減ら」だけにした）。「は減ら」は A のすぐあと（送り仮名2字まで）だけで見る（「Aを最優先にして
+# 文書は減らす」の「は減ら」は別の語のもの。反証で見つけた例）。「Aは減らすことを最優先にする」「Aは減らすことが目的だ」のように、
+# 同じ節の「は減ら」のあとに重みの語があれば、A を減らすことを主張しているので下げた形にしない（_demoted。反証で見つけた例）
+_DEMOTE_REDUCE = "は減ら"
 _DEMOTE = re.compile(r"(?<!に)より|の代わり|に代わ|に替え|から[^、。]{0,12}?(?:切り替|切替|移行|移し|乗り換|置き換)"
                      r"|(?:[うくぐすつぬぶむる]|の)前に|[はをも](?:後|あと)(?:に(?:し|す|回|まわ)|で|$)|後日|後回し"
                      r"|次回(?!も|から(?![にと]))|見送|保留|(?<!に)控え|避け|(?<!は)やめ|はやめ(?!に)"
-                     r"|(?<!突き)(?<!食い)(?<!受け)(?<!引き)(?<!歯)止め")
+                     r"|(?<!突き)(?<!食い)(?<!受け)(?<!引き)(?<!歯)止め|^(?:[ぁ-ゖ]{0,2}|の(?:数|回数|件数|時間|量|頻度|割合))は減ら")
+# 「Aは減らすこと」「Aは減らすのが」（A を減らすことそのものを言う形）。このときだけ、あとの重みの語を「減らす」の重みとみなす
+_REDUCE_ITSELF = re.compile(r"[ぁ-ゖ]{0,5}?(?:こと|の(?=[がはを]))")
 # 動詞・名詞の下げる語（見送る、保留、控える、避ける、やめる、止める、次回、後日、Aは後にする）。A と下げる語の間に、別の名詞に
-# 付いた「を」があれば、下げたのは A ではない（「移行で障害を避ける」「移行は障害を避ける」。review1-fp.md の指摘1）。A の句
+# 付いた「を」があれば、下げたのは A ではない（「移行で障害を避ける」「移行は障害を避ける」。反証で見つけた例）。A の句
 # （「Aの追加」「Aの〜」）のあとの最初の助詞より後ろの「を」だけを見る。「ことを」「のを」は A の句の続きなので見ない。
 # 1回目の直しでは、A の句に「を」「は」「も」と短い語が続く形に丸ごと当たるときだけ数えたが、「新機能は今回のリリースでは見送り」
 # 「契約社員への適用は見送る」「原因に関する調査は後日」「キャッシュを本番で使うのは避け」のように、A を下げたままの言い換えを
-# 逆転の候補にした（review2-fp.md の指摘1）ので、下げたのが A でないと分かる形だけを除く形にした（_other_object）。
+# 逆転の候補にした（反証で見つけた例）ので、下げたのが A でないと分かる形だけを除く形にした（_other_object）。
 # 「より」「の代わり」「に代わ」「に替え」「から〜切り替」「前に」は A のすぐあとに出る形なので、この条件をかけない
 _DEMOTE_ANCHORED = re.compile(r"見送|保留|控え|避け|やめ|止め|次回|後日|[はをも](?:後|あと)")
 _A_PHRASE = re.compile(r"の[^、。をはもがでにへと]{0,12}")
@@ -3586,7 +3905,7 @@ _OTHER_OBJECT = re.compile(r"(?<!こと)(?<!の)を")
 # 「を」「が」「から」があれば、下げた形とみなさない
 _SWITCH_TO = re.compile(r"に(?:替え|代わ)")
 _SWITCH_FROM = re.compile(r"[をが]|から")
-# 否定対比の逆転で文として数えない行の種類。硬化の数え方（_BODY_SKIP_KINDS）と違い、見出しと表の中も見る（review-spec の F9。
+# 否定対比の逆転で文として数えない行の種類。硬化の数え方（_BODY_SKIP_KINDS）と違い、見出しと表の中も見る（反証で見つけた例。
 # 技術記事やスライドの見出しの「AではなくB」。コーパス48組、keep の組、正しい推敲の組で誤検出が増えないことを測って入れた）
 _CONTRAST_SKIP_KINDS = _BODY_SKIP_KINDS - frozenset(("heading", "table"))
 # 推敲後で A のすぐあとがこれなら、A を B と並べて肯定している（重みの語がなくても候補にする。P1 の1）
@@ -3596,15 +3915,14 @@ _ALSO_AFTER = re.compile(r"(?:だけ|ばかり|のみ)(?:では|で|じゃ)な�
 _COORD_AFTER = re.compile(r"及び|および|並びに|ならびに|や|・"
                           r"|と(?!い[うっ]|して|しては|は|の|同|違|異|比|な[るりっれ]|す[るれ]|し[たてま]|呼|言|考|思|見|感|聞)")
 # 並べた2つを比べた・調べた・選んだ形（「AとBの両方を調べた」「AとBのうち」）。この節にあれば、並べる語の形では候補にしない。
-# 「試し」「試す」「試み」は review-fp の F1 の残る恐れ（AとBを並べて試した形）を見て、この段で足した。
-# 「確かめ」「確認」は、確かめた結果を言う「AとBだと確認」「AとBであることを確認」（結論の言い方）を除く（review1-fp.md の
-# 指摘7）。1回目の直しでは「を」「の」のすぐあとだけを比べた形にしたが、「AとBを順に確認し」「AとBを再確認した」「AとBも確認し」
-# 「AとBは確認済み」「AとBが正しいか確認し」を逆転の候補にした（review2-fp.md の指摘3）ので、結論の言い方のほうを除く形にした。
+# 「試し」「試す」「試み」は、反証で見つけた残る恐れ（AとBを並べて試した形）を見て、この段で足した。
+# 「確かめ」「確認」は、確かめた結果を言う「AとBだと確認」「AとBであることを確認」（結論の言い方）を除く（反証で見つけた例）。1回目の直しでは「を」「の」のすぐあとだけを比べた形にしたが、「AとBを順に確認し」「AとBを再確認した」「AとBも確認し」
+# 「AとBは確認済み」「AとBが正しいか確認し」を逆転の候補にした（反証で見つけた例）ので、結論の言い方のほうを除く形にした。
 # 「AとBについて確認」も比べた形になる（A を肯定していない文なので、逆転の候補にしない）。「だと再確認」は結論の言い方
 _COMPARE_CLAUSE = re.compile(r"のうち|から選|比べ|比較|両方|どちら|いずれ|調べ|(?<!と)(?<!ことを)(?<!ことが)(?<!ことも)(?<!再)再?(?:確かめ|確認)"
                              r"|検討|検証|候補|試[しすみ]")
 # 仮説の言い方（「キャッシュを疑ったが」「書き込みが遅いと考えていたが」）。名詞の節にあれば、肯定の主張とみなさない。
-# 障害報告で結論を言う決まった言い方の「〜と考えられます」「〜と考えられる」は仮説にしない（review1-fp.md の指摘7）
+# 障害報告で結論を言う決まった言い方の「〜と考えられます」「〜と考えられる」は仮説にしない（反証で見つけた例）
 _HYPOTHESIS = re.compile(r"疑|考え(?!られ(?:ます|る))|思っ|思い|予想|想定|見込|仮説|推測|睨")
 # 逆接で終わる節（「〜したが、」「〜だけど、」）
 _ADVERSATIVE_END = re.compile(r"(?:が|けど|けれど|けれども|ものの|のに|ても|でも)$")
@@ -3615,7 +3933,7 @@ _WEIGHT_PATTERN = re.compile("|".join(r"(?<![" + _K + r"])まず(?!い)" if word
 def _neg_after(after, token=""):
     """名詞 token のあと（after。節の終わりまで）が否定のある節か（_NEG_AFTER と、語で否定する語）。
     A のすぐあとの「外」（「対象外」の「対象」を A として取ったとき）は、A が「内」で終わる（国内外、社内外）なら数えない。
-    語で否定する語は、A と並べた別の名詞の句の語（「AとXの廃止」）なら数えない（review2-fp.md の指摘2）。"""
+    語で否定する語は、A と並べた別の名詞の句の語（「AとXの廃止」）なら数えない（反証で見つけた例）。"""
     if _NEG_AFTER.search(after):
         return True
     if after.startswith("外") and not token.endswith("内"):
@@ -3671,6 +3989,12 @@ def _is_token(token):
     return len(_STIFF_KANJI.findall(token)) >= 2
 
 
+# 漢字1字の形容詞と名詞（高い品質、長い説明、古い仕組み）。送り仮名に「い」を許したので1つの語として取る（_TOKEN_OKURI_MID）。
+# 送り仮名の「い」「た」「め」のあとに2字以上の漢字が続く語（支払い期限、見習い期間、立ち会い検査、得た知識、褒め言葉）も、
+# あとの名詞を見る（反証で見つけた例）
+_ADJ_NOUN = re.compile("^[" + _K + "]い([" + _K + "].*)$|^.*[いため]([" + _K + "]{2,}.*)$")
+
+
 def _negated_tokens(sentence):
     """1つの文の否定対比の節から名詞を取り出す。[(名詞, 否定の印, 印の終わりの位置)]。"""
     out = []
@@ -3695,7 +4019,38 @@ def _negated_tokens(sentence):
             tokens = [token for token in _TOKEN.findall(span[:topic_cut]) if _is_token(token)]
         for token in tokens:
             out.append((token, match.group(0), match.end()))
+            noun = _ADJ_NOUN.match(token)
+            noun_text = (noun.group(1) or noun.group(2)) if noun is not None else None
+            if noun_text is not None and _is_token(noun_text):
+                # 「高い品質」「支払い期限」の「品質」「期限」も否定された語として見る（推敲後に名詞だけを肯定した逆転を見逃さない。
+                # 反証で見つけた例）
+                out.append((noun_text, match.group(0), match.end()))
     return out
+
+
+# 否定対比の逆転の候補で示す語の送り仮名（取った語のすぐあとから否定の印までの平仮名1〜2字。助詞で始まるものと、2字の助詞
+# （など、まで、ほど、しか、さえ、こそ）は除く。ただし「も」「が」に送り仮名の字が続く2字（見積もり、出来上がり）は送り仮名。
+# どれも反証で見つけた例）
+_SHOWN_TAIL = re.compile("[ぁ-ゖ]{1,2}$")
+_SHOWN_TAIL_NOT_HEAD = frozenset("はがをのにとでもへやかよ")
+_SHOWN_TAIL_PARTICLES = frozenset(("など", "まで", "ほど", "しか", "さえ", "こそ"))
+_SHOWN_TAIL_MO_GA = frozenset("もが")
+
+
+def _shown_word(text, token, mark_start):
+    """候補で示す語。原文の否定の文（text）で、token のすぐあとから否定の印（mark_start）までが送り仮名なら足す
+    （「問い合わせ」を「問い合」、「見積もり」を「見積」と途中で切って示さない。「会議など」の「など」は足さない。反証で見つけた例）。
+    比べに使う語は token のまま。"""
+    head = text[:mark_start]
+    tail = _SHOWN_TAIL.search(head)
+    if tail is None or not head.endswith(token, 0, tail.start()):
+        return token
+    kana = tail.group(0)
+    if kana in _SHOWN_TAIL_PARTICLES:
+        return token
+    if kana[0] not in _SHOWN_TAIL_NOT_HEAD or (len(kana) == 2 and kana[0] in _SHOWN_TAIL_MO_GA and kana[1] in _OKURI_TAIL):
+        return token + kana
+    return token
 
 
 def _demoted(text, left, position, after):
@@ -3703,22 +4058,27 @@ def _demoted(text, left, position, after):
     for match in _DEMOTE.finditer(after):
         if match.start() == 0 and _SWITCH_TO.match(after) and _SWITCH_FROM.search(text, left, position):
             continue      # 「XをAに替える」: A は置き換えた先
+        if (match.group(0).endswith(_DEMOTE_REDUCE) and _REDUCE_ITSELF.match(after, match.end()) is not None
+                and _WEIGHT_PATTERN.search(after, match.end())):
+            continue      # 「Aは減らすことを最優先にする」: A を減らすことが主張（反証で見つけた例）
         if _DEMOTE_ANCHORED.search(match.group(0)) and _other_object(after[:match.start()]):
-            continue      # A と下げる語の間に別の目的語がある: 下げたのは A でない（review1-fp.md の指摘1）
+            continue      # A と下げる語の間に別の目的語がある: 下げたのは A でない（反証で見つけた例）
         return True
     return False
 
 
 def _other_object(segment):
     """A のあとから下げる語の前まで（segment）に、A の句のあとの最初の助詞より後ろで別の名詞に付いた「を」があれば真
-    （「移行で障害を避ける」「移行は障害を避ける」）。「については」「への適用は」「を本番で使うのは」は偽（review2-fp.md の指摘1）。"""
+    （「移行で障害を避ける」「移行は障害を避ける」）。「については」「への適用は」「を本番で使うのは」は偽（反証で見つけた例）。"""
     head = _A_PHRASE.match(segment)
     rest = segment[head.end():] if head else segment
     return _OTHER_OBJECT.search(rest, 1) is not None
 
 
-def _affirmed_with_weight(text, token):
-    """text の中で token が否定のない節に出ていて、重みの語と同じ文にあれば、その位置を返す。なければ None。"""
+def _affirmed_with_weight(text, token, clause_only=False):
+    """text の中で token が否定のない節に出ていて、重みの語と同じ文にあれば、その位置を返す。なければ None。
+    clause_only が真なら、重みの語が token の節そのものか、その節のすぐ前の主題の句（「最優先は、」「一番大事なのは、」。
+    節の前の区切りの直前が「は」）にあるときだけ（文のどこかの「まず」では数えない。主題の句は反証で見つけた例）。"""
     if not _WEIGHT_PATTERN.search(text):
         return None
     start = 0
@@ -3735,6 +4095,11 @@ def _affirmed_with_weight(text, token):
         if _demoted(text, left, position, after):
             continue      # 「Aより」「Aの代わりに」「Aは後にする」などは比べて下げた形
         clause_weight = bool(_WEIGHT_PATTERN.search(clause))
+        if clause_only and not clause_weight and left >= 2 and text[left - 2] == "は":
+            # 「最優先は、Aを使うことだ」: A の節のすぐ前の主題の句の重みの語も、A の節の重みとして見る
+            clause_weight = bool(_WEIGHT_PATTERN.search(text, _clause_bounds(text, left - 2)[0], left - 1))
+        if clause_only and not clause_weight:
+            continue
         if _HYPOTHESIS.search(clause):
             continue      # 「まずAを疑いましたが」: 検証で外れた仮説
         if not clause_weight and _ADVERSATIVE_END.search(clause):
@@ -3780,7 +4145,7 @@ def _original_affirms(text, token, mark_end, mark_start):
 
     B の側の同じ名詞が、どれも直後が「の」（「道具ではなく、道具の使い方」の「道具の」）なら、B の名詞を修飾しているだけで
     A そのものは否定されているので、B の側に出たことでは真にしない。そのときの「重みの語と一緒に肯定で出る」は、否定の節より
-    前の所だけで見る（B の側の「道具の使い方だ」と文頭の「大事」を結び付けない。review1-fp.md の指摘5）。"""
+    前の所だけで見る（B の側の「道具の使い方だ」と文頭の「大事」を結び付けない。反証で見つけた例）。"""
     rest = text[mark_end:]
     positions = [found.start() for found in re.finditer(re.escape(token), rest)]
     # B の側で、ほかの語に続く複合語の一部（「既存施設の長寿命化」の「施設」）か、直後が「の」でなければ、B の主な語として出る
@@ -3807,7 +4172,7 @@ def _continues_word(text, position, token):
 
 def _b_side_phrases(text, token, mark_end):
     """原文の否定の印より後ろ（B の側）の「Aの<名詞>」の句（道具の使い方 の「道具の使」）。推敲後の文でこの句を伏せてから
-    A を探す（推敲後も B の側の「道具の使い方」を主張しているだけの文を、A の逆転にしない。review1-fp.md の指摘5）。"""
+    A を探す（推敲後も B の側の「道具の使い方」を主張しているだけの文を、A の逆転にしない。反証で見つけた例）。"""
     out = []
     rest = text[mark_end:]
     start = 0
@@ -3824,7 +4189,7 @@ def _b_side_phrases(text, token, mark_end):
 def _head_clue(head):
     """B の側の「Aの<語>」の<語>の手がかり。「使い方」「淹れ方」のような「〜方」は頭の1字（使、淹）、ほかは語そのもの（質）。
     推敲後の文に「Aの<語>」が残っていなくても、手がかりがあれば B の句を言い換えたとみなす（「道具の使い方」→「道具をどう
-    使うか」、「データの質」→「質の高いデータ」。review2-fp.md の指摘4）。"""
+    使うか」、「データの質」→「質の高いデータ」。反証で見つけた例）。"""
     return head[0] if len(head) >= 2 and head.endswith("方") else head
 
 
@@ -3856,6 +4221,7 @@ def _contrast_risks(sides, groups):
             body = maskers[0].body(sentence)
             if body is None:
                 continue
+            heading = maskers[0].kind(sentence) == "heading"
             tokens = [item for item in _negated_tokens(body.text)
                       if not _original_affirms(body.text, item[0], item[2], item[2] - len(item[1]))]
             if not tokens:
@@ -3872,10 +4238,14 @@ def _contrast_risks(sides, groups):
                     probe = new_body.text
                     phrases = _b_side_phrases(body.text, token, mark_end)
                     if any(phrase not in probe and _head_clue(phrase[len(token) + 1:]) in probe for phrase in phrases):
-                        continue      # 「道具の使い方」→「道具をどう使うか」: B の句の言い換え（review2-fp.md の指摘4）
+                        continue      # 「道具の使い方」→「道具をどう使うか」: B の句の言い換え（反証で見つけた例）
                     for phrase in phrases:
                         probe = probe.replace(phrase, "\uff3f" * len(phrase))
-                    if _affirmed_with_weight(probe, token) is None and _affirmed_plain(probe, token, others) is None:
+                    # 見出しの行と「Aは使わず」「Aはせず」から取った名詞は、A の節そのものの重みの語だけを見る（文のどこかの
+                    # 「まず」では数えない。「## ツールではなく習慣から変える」→「## まず習慣、ツールはその次」。反証で見つけた例）
+                    narrow = heading or _ZU_MARK.match(mark) is not None
+                    if (_affirmed_with_weight(probe, token, narrow) is None
+                            and _affirmed_plain(probe, token, others) is None):
                         continue
                     paired = old_for_new.get(j)
                     if paired is not None and paired != i:
@@ -3888,12 +4258,12 @@ def _contrast_risks(sides, groups):
                     seen.add(key)
                     out.append((_group_index(group, new_sentence), order, _risk(
                         "contrast_reversal", None, body.line, new_body.line, body.raw, new_body.raw,
-                        {"word": token, "mark": mark})))
+                        {"word": _shown_word(body.text, token, mark_end - len(mark)), "mark": mark})))
                     order += 1
     return out
 
 
-# ---- 気持ちの創作（10.6 B2、GOALS の D-1。kind feeling）----
+# ---- 気持ちの創作（10.6 B2、目標の D-1。kind feeling）----
 # 元の文書のどこにもない気持ちの語（ほっとした、安堵した、うれしかった…）が、推敲後の変わった文に足されたら候補にする。
 # 一覧は references/lists/feelings.txt（語の家族ごとに「名前<TAB>正規表現」。3つ目の欄は原文の言い方で、原文にあればその家族の
 # 気持ちは原文にあるとみなす）。--fail-on=meaning-risk には数えない。
@@ -3956,7 +4326,7 @@ def _feeling_risks(sides, groups):
 # 原文と推敲後で、漢字の割合、平均の文の長さ、名詞化の言い回し、「の」の連続を比べ、推敲で硬くなった所を見直し候補にする。
 # 意味が変わる恐れには入れず、candidate_count、状態の行、--fail-on にも入れない（2.4）。どの条件も推敲で増えた分だけを見る
 # （原文がもともと硬いだけなら出さない）。文書の種類が formal（公用文、規程、契約書、仕様書。D-4）と incident（障害報告）なら
-# 参考（level info）。数値は試作で決め直した値（prototype.md 4.4、check.md の指摘1）。
+# 参考（level info）。数値は試作で決め直した値。
 
 STIFFNESS_THRESHOLDS = {
     "doc_kanji_pt": 3.0,        # 文書全体: 漢字の割合の増え（ポイント）。追加文書の最初の値は +5ポイントかつ平均の長さ +5字
@@ -3969,13 +4339,13 @@ STIFFNESS_THRESHOLDS = {
     "no_nouns": 3,              # 「の」の連続: つながる名詞の数の下限
     "no_kango": 3,              # 「の」の連続: つながる名詞のうち漢語（漢字2字以上）の数の下限
 }
-# 硬化の検査を参考（level info）としてだけ出す文書の種類（D-4）。incident は diff の詰めの直しで足した（review-spec.md の F3。
+# 硬化の検査を参考（level info）としてだけ出す文書の種類（D-4）。incident は diff の詰めの直しで足した（反証で見つけた例。
 # v1.1.2 の人間A/Bの好み「報告書では『障害が起きた朝』より『障害が発生した朝』が合う」と、SKILL.md の incident の行（発生、
-# 復旧などの報告の語の規則を当てない）に合わせる。step-c-fix/stiffness-tone-lint.md）。並びは DOC_TYPES の順
+# 復旧などの報告の語の規則を当てない）に合わせる）。並びは DOC_TYPES の順
 STIFFNESS_INFO_DOC_TYPES = ("incident", "formal")
 _HIRAGANA_CHARS = re.compile("[ぁ-ゖ]")
 # 「の」の連続の名詞（漢字・片仮名・英数字の並び。漢字の間の送り仮名を1字ずつ許す。助詞になりうる仮名は送り仮名にしない）。
-# 量指定子を入れ子にしない（入れ子にすると長い名詞の並びで後戻りが爆発する。prototype.md 6章）
+# 量指定子を入れ子にしない（入れ子にすると長い名詞の並びで後戻りが爆発する）
 _NOUN_CHARS = "[" + _K + "ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ]"
 _NOUN = (_NOUN_CHARS + "+(?:[" + _OKURI_MID + "](?=[" + _K + "])" + _NOUN_CHARS + "+)*"
          "(?:[" + _OKURI_TAIL + "](?=の))?")
@@ -4018,7 +4388,7 @@ def _nominal_hits(text, patterns):
 
 
 # 漢数字で始まる語（一日、一回、三つ）。「の」の連続の漢語に数えない（「工場の最後の一日」は普通の言い方。diff の詰めで、
-# R1 の比喩を直した推敲で測って足した。step-c-detectors/measure.md）
+# 評価用の文の比喩を直した推敲で測って足した）
 _NUMERAL_HEAD = re.compile("[〇一二三四五六七八九十百千万]")
 
 
@@ -4167,8 +4537,8 @@ def _stiffness(sides, full, groups, doc_type):
         out.append(_stiff_candidate("sentence_nominal", o.line, n.line, o.raw, n.raw,
                                     {"added_names": names, "old_kanji": ok, "new_kanji": nk}, level))
     # 文書全体: 漢字の割合 +3ポイント以上、かつ漢字 +2字以上。変わった文の組が2つ以上のときだけ出す（diff の詰めの直し。
-    # review-fp.md の F3 と提案 P3。組が1つなら文書全体の値はその1文の値と同じ向きに動くので、1文の条件より緩い1文の条件に
-    # なり、比喩を具体化した直しに出ていた。1文の書き換えは1文の条件と名詞化の条件で見る。step-c-fix/stiffness-tone-lint.md）
+    # 反証で見つけた例。組が1つなら文書全体の値はその1文の値と同じ向きに動くので、1文の条件より緩い1文の条件に
+    # なり、比喩を具体化した直しに出ていた。1文の書き換えは1文の条件と名詞化の条件で見る）
     if (len(pairs) >= 2
             and new_m["kanji_ratio"] - old_m["kanji_ratio"] >= limits["doc_kanji_pt"]
             and new_m["kanji"] - old_m["kanji"] >= limits["doc_kanji_up"]):
@@ -4214,7 +4584,7 @@ def _stiffness(sides, full, groups, doc_type):
                     continue
                 before = _no_chains(o.text)
                 # 連続の名詞がすべて組の原文の文にあれば出さない（補足カッコを外しただけの推敲。「営業部（東京本社）の今期の売上」→
-                # 「東京本社の営業部の今期の売上」。diff の詰めの直し、review-fp.md の F8 と提案 P7）。名詞は「の」を含まない
+                # 「東京本社の営業部の今期の売上」。diff の詰めの直し、反証で見つけた例）。名詞は「の」を含まない
                 fresh = [chain for chain in chains if chain not in before
                          and not all(part in o.text for part in chain.split("の"))]
                 if len(chains) <= len(before) or not fresh:
@@ -4235,14 +4605,14 @@ def _stiffness(sides, full, groups, doc_type):
 # 文書の種類によらず毎回行う。「！」「!」、「？」「?」、絵文字、強める語の数が原文より減ったら、減った行の前後を並べて候補にする。
 # 見出しの字数の合計が原文の7割未満になったら候補にする。コード、URL、表の中は数えない。candidate_count、状態の行、
 # --fail-on には入れない。技術文書、障害報告、ヘルプ、公用文に当たる種類（pr、article、incident、manual、formal）では参考。
-# diff の詰めの直し（step-c-fix/stiffness-tone-lint.md）で次を変えた。
+# diff の詰めの直しで次を変えた。
 # - 「！」が同じ段落に3つ以上あれば減っても数えない許しを外した（大賀さんの判断、2026-10-14 朝。紹介記事・宣伝文では「！」を
 #   3つ以上並べても減らさない。許しは種類によらず外した）。
-# - 種類を指定していて promo でないときは、絵文字と見出しの候補を参考にする（review-fp.md の F4 と提案 P4）。
-# - 「？」の減りは、組になった推敲後の文が間接の問い（「〜かとの質問」「〜かどうか」）なら数えない（review-fp.md の F9）。
-# - 候補の位置の抜き出しを印のまわり（前後20字）にし、2か所目からも行を並べる（review-spec.md の F11）。
-# - --doc-type promo のときは、番号つき項目の行と太字だけの行も見出しの字数に数える（review-spec.md の F2）。
-# 同じ強める語の繰り返しを減らした推敲を数えない案（review-fp.md の P6）は採らない（強める語を削らない、減らさないという
+# - 種類を指定していて promo でないときは、絵文字と見出しの候補を参考にする（反証で見つけた例）。
+# - 「？」の減りは、組になった推敲後の文が間接の問い（「〜かとの質問」「〜かどうか」）なら数えない（反証で見つけた例）。
+# - 候補の位置の抜き出しを印のまわり（前後20字）にし、2か所目からも行を並べる（反証で見つけた例）。
+# - --doc-type promo のときは、番号つき項目の行と太字だけの行も見出しの字数に数える（反証で見つけた例）。
+# 同じ強める語の繰り返しを減らした推敲を数えない案（反証で見つけた例）は採らない（強める語を削らない、減らさないという
 # 大賀さんの判断と食い違うため）。
 
 TONE_INFO_DOC_TYPES = ("pr", "article", "incident", "manual", "formal")
@@ -4252,12 +4622,12 @@ TONE_INFO_DOC_TYPES = ("pr", "article", "incident", "manual", "formal")
 TONE_TYPED_INFO_SUBKINDS = ("emoji", "heading")
 # TONE_TYPED_INFO_SUBKINDS の候補を参考にしない種類（候補ごと）。promo は絵文字も見出しも残す種類。minutes は推敲で見出しを
 # 変えない種類（大賀さんの判断 2026-10-13 15時台の4、domains/business.md 3章）なので、見出しの候補は見直し候補のまま
-# （diff の詰めの直しのあとの反証 review1-spec.md の S2）
+# （diff の詰めの直しのあとの反証で見つけた例）
 TONE_TYPED_REVIEW_DOC_TYPES = {"emoji": ("promo",), "heading": ("promo", "minutes")}
 # 参考の理由の文で、参考にした候補ごとに書く決まり（_detector_section）
 _TONE_TYPED_RULES = (("emoji", "絵文字を外し", "絵文字を外す"), ("heading", "見出しを短い項目名にし", "見出しを短い項目名にする"))
 # 参考の5種類（TONE_INFO_DOC_TYPES）の理由の文で、参考にした候補ごとに書く直し方（_detector_section。絵文字や見出しだけの候補に
-# 「「！」や強める語を減らす」と書かない。review2-spec.md の T3）
+# 「「！」や強める語を減らす」と書かない。反証で見つけた例）
 _TONE_INFO_RULES = ((("exclamation", "question", "intensifier"), "「！」や強める語を減らし", "「！」や強める語を減らす"),
                     (("emoji",), "絵文字を外し", "絵文字を外す"),
                     (("heading",), "見出しを短い項目名にし", "見出しを短い項目名にする"))
@@ -4266,9 +4636,9 @@ TONE_PLACES_SHOWN = 5           # 1つの候補で並べる位置の上限（超
 _TONE_EXCERPT_WIDTH = 20        # 位置の抜き出しの、印の前後の字数
 # 間接の問い（「予算が足りるかとの質問」「足りるかという声」「進めてよいかどうか」「足りるか否か」「直せるかと聞かれた」）。
 # 「ほかと」「確かと」「何かと」は問いではないので除く。推量の「〜かと思います」「〜かと考え」と、「わずかと」「まさかと」の
-# ような語の終わりの「か」に「と」が付いた形も問いではないので、「か」のあとの形を決まった言い方に限る（review1-fp.md の指摘11）。
+# ような語の終わりの「か」に「と」が付いた形も問いではないので、「か」のあとの形を決まった言い方に限る（反証で見つけた例）。
 # 「かと」と問う語の間には、句読点を除く6字までを許し（「かとお問い合わせ」「かとよく聞かれ」「かとご相談」）、問う語に「相談」
-# 「訊」を足す（review2-fp.md の指摘8）
+# 「訊」を足す（反証で見つけた例）
 _INDIRECT_QUESTION = re.compile(r"(?<![ほ確何])か(?:との|という|といった|どうか|否か"
                                 r"|と[^。、！？!?\n]{0,6}?(?:聞|尋|問|質問|相談|訊|たず|き[いか]))")
 _TONE_SKIP_KINDS = frozenset(("code", "frontmatter", "html_block", "table", "reference_definition", "thematic_break",
@@ -4334,9 +4704,8 @@ def _pseudo_heading(line, kind):
 def _tone_lines(sides, side, intensifiers, pseudo_headings=False):
     """行ごとの数 {行番号: {"exclamation", "question", "emoji", "intensifier", "words", "heading_chars", "text"}}。
     数えない行（コード、表など）は入れない。行の中のインラインのコード、URL、リンク先、画像、HTML のタグは伏せる。
-    pseudo_headings が真なら（--doc-type promo）、番号つき項目の行と太字だけの行も見出しの字数に数える（review-spec.md の
-    F2。種類なしとほかの種類では、コーパス48組の番号つきの一覧を文章にした推敲などで見出しの候補が4組に出たので数えない。
-    step-c-fix/stiffness-tone-lint.md）。"""
+    pseudo_headings が真なら（--doc-type promo）、番号つき項目の行と太字だけの行も見出しの字数に数える（反証で見つけた例。
+    種類なしとほかの種類では、コーパス48組の番号つきの一覧を文章にした推敲などで見出しの候補が4組に出たので数えない）。"""
     masker = _Masker(sides, side, skip_kinds=_TONE_SKIP_KINDS)
     finder = None
     out = OrderedDict()
@@ -4371,7 +4740,7 @@ def _tone_lines(sides, side, intensifiers, pseudo_headings=False):
 def _heading_chars(text):
     """見出しの字数（空白と絵文字を除く）。絵文字を外しただけの見出しを「見出しが短くなった」に数えない（絵文字の減りは絵文字の
     候補で出る。--doc-type minutes の見出しを見直し候補のままにした直しで、短い見出しの絵文字を外しただけの推敲が見出しの
-    見直し候補にならないようにした。step-c-fix/fix-round1.md）。"""
+    見直し候補にならないようにした）。"""
     if _MAYBE_EMOJI.search(text):
         for found in _emoji_finder()(text):
             text = text.replace(found, "", 1)
@@ -4408,7 +4777,7 @@ def _tone_excerpt(old, new, spans, width=_TONE_EXCERPT_WIDTH):
     """減った印のまわりの抜き出し（前後 width 字。切った側に「…」）。印は、変わった所に重なる最初のもの（なければ最初のもの）。
     推敲後の側は、同じ位置（変わった所の中なら、変わった所の長さの割合で対応させた位置）のまわり。前後 width 字の中で、
     印の前の文の終わり（。！？）のあとから始め、印のあとの最初の文の終わりで止める（印が「！」「？」なら印で止める）。
-    どちらも空にしない（行の後ろを消しただけの推敲で「→『』」と出していた。review-spec.md の F11）。"""
+    どちらも空にしない（行の後ろを消しただけの推敲で「→『』」と出していた。反証で見つけた例）。"""
     head, tail = _common_affix(old, new)
     old_end, new_end = len(old) - tail, len(new) - tail
     if spans:
@@ -4569,7 +4938,7 @@ def _tone_places(full, old_lines, new_lines, kind, intensifiers=None):
     return places
 
 
-# ---- 資料との照合（DESIGN-interfaces.md 3.3。yomiyasu_check.py がプロセスの中で呼ぶ）----
+# ---- 資料との照合（設計 3.3。yomiyasu_check.py がプロセスの中で呼ぶ）----
 # 照らすのは数値、名前、語、確度の語だけ。主張、条件、担当が資料どおりかは判定しない。
 
 # 名前（製品名や識別子）。NFKC のあとの英数字2字以上
@@ -4581,7 +4950,7 @@ _URL_SCHEME = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]{0,31}://")
 _GROUND_WORD = re.compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴー]{2,}")
 # 確度の語。「はず」は「はずれ」「はずす」の頭を除く
 _CERTAINTY_WORDS = ("未確認", "未定", "予定", "検討中", "調査中", "見込み", "可能性", "かもしれ", "はず", "確認済み", "確定", "暫定")
-# 「未定」は「未定義」を、「確定」は「確定する」「確定申告」を除く（確度の語ではない。questions.md 46）
+# 「未定」は「未定義」を、「確定」は「確定する」「確定申告」を除く（確度の語ではない）
 _CERTAINTY_NOT = {"はず": "(?![れさしすせ])", "未定": "(?!義)", "確定": "(?!する|申告)"}
 _CERTAINTY = re.compile("|".join(re.escape(word) + _CERTAINTY_NOT.get(word, "")
                                  for word in sorted(_CERTAINTY_WORDS, key=len, reverse=True)))
@@ -4663,7 +5032,7 @@ def _ground_items(doc):
     for match in _GROUND_WORD.finditer(masked):
         if match.group(0) in certainty:
             continue
-        # 数値として取った範囲（三日、十二月）に重なる語は、語として照らさない（数値で照らす。questions.md 46）
+        # 数値として取った範囲（三日、十二月）に重なる語は、語として照らさない（数値で照らす）
         index = bisect_right(starts, match.end() - 1) - 1
         if index >= 0 and numbers[index].end > match.start():
             continue
@@ -4672,7 +5041,7 @@ def _ground_items(doc):
 
 
 def _ground_names(masked):
-    """名前（英数字2字以上）。数字のすぐあとの英字（200ms の ms、8GiB の GiB）は単位なので名前にしない（questions.md 46）。"""
+    """名前（英数字2字以上）。数字のすぐあとの英字（200ms の ms、8GiB の GiB）は単位なので名前にしない。"""
     for match in _NAME.finditer(masked):
         if match.start() and masked[match.start() - 1].isdigit():
             continue
@@ -4700,7 +5069,7 @@ class _Source:
         if kind == "number":
             return self.has_number(key, final)
         if kind == "name":
-            # 名前は英数字の境目で照らす（Java を JavaScript の中に、SQL を PostgreSQL の中に見つけない。questions.md 46）
+            # 名前は英数字の境目で照らす（Java を JavaScript の中に、SQL を PostgreSQL の中に見つけない）
             if key in self.names:
                 return True
             return bool(re.search("(?<![A-Za-z0-9])" + re.escape(key) + "(?![A-Za-z0-9])", self.squashed))
@@ -4710,7 +5079,7 @@ class _Source:
         """最終稿の値 key が、この文にあるか。final は最終稿の (_KeySet, _notation_index の形)。
         同じ数の「単位なし」と「単位あり」は、diff の組の文と同じ条件でだけ表記の違いとみなす（16 GB と 16GB、3〜5日 と 3日から5日、
         2026-10-13 と 2026年10月13日、10:30 と 10時30分。「手順2」と「2週間」、「表3」と「3%」はみなさない。
-        questions.md 39、review-regress.md R2b）。"""
+        反証で見つけた例）。"""
         if key in self.numbers.keys:
             return True
         final_set, final_notation = final
@@ -4721,14 +5090,14 @@ class _Source:
 
 
 def ground(final, materials, original=None):
-    """資料との照合（DESIGN-interfaces.md 3.3、10.3 C1・C2）。final は最終稿、materials は資料の文字列の並び、
+    """資料との照合（設計 3.3、10.3 C1・C2）。final は最終稿、materials は資料の文字列の並び、
     original は原文（推敲のとき。なければ新規作成）。照合の JSON（attempt-<n>.materials.json の形）を返す。
 
     取る項目は数値（2.5.2 の取り出し方、(数, 単位) で比べる）、名前（英数字2字以上）、語（漢字2字以上と片仮名2字以上）、
     確度の語。名前と語と確度の語は、NFKC にして空白を除いた文字列の部分文字列かで「ある」とみなす。
     分類は in_original（原文にある）、from_materials（原文になく資料にある）、not_in_sources（どちらにもない）、
     dropped_certainty（資料にある確度の語が最終稿にない）、not_in_final（資料にある数値が最終稿にない。参考で、候補にしない。
-    final_lines は []。diff の詰めで足した。questions.md 38）。数値は、同じ数の「単位なし」と「単位あり」を表記の違いとみなす。
+    final_lines は []。diff の詰めで足した）。数値は、同じ数の「単位なし」と「単位あり」を表記の違いとみなす。
     名前は英数字の境目で照らす。
 
     意味が変わる恐れ（kind unsupported）に入れるもの: 新規作成で資料にない数値（subkind number）と、両方のモードで資料にない
@@ -4750,7 +5119,7 @@ def ground(final, materials, original=None):
     found = _ground_items(doc)
     final_found = doc.numbers(0)[0]
     final = (_KeySet(final_found), _notation_index(final_found))
-    # 数量を主張しない「一つ」（一つの、一つずつ、もう一つ）だけの値は、資料にない数値の候補にしない（review-regress.md R4）
+    # 数量を主張しない「一つ」（一つの、一つずつ、もう一つ）だけの値は、資料にない数値の候補にしない（反証で見つけた例）
     strong = set(number.key for number in final_found if not number.weak)
     for (kind, key), entry in sorted(found.items(), key=lambda pair: (_GROUND_KIND_ORDER[pair[0][0]], pair[1]["start"])):
         if original_source is not None and original_source.has(kind, key, final):
@@ -4781,8 +5150,8 @@ def ground(final, materials, original=None):
         items.append({"kind": "certainty", "text": word, "value": None, "unit": None, "final_lines": [],
                       "classification": "dropped_certainty"})
     # 資料にあって最終稿にない数値（参考。候補にしない）。資料で出てくる順に items の最後に入れ、記録の照合の JSON だけから
-    # 「参考: 資料にあって最終稿にない数値」の行を作り直せるようにする（questions.md 38）
-    # 「ある」の判定は照合と同じ条件（review-regress.md R2b。最終稿の「HTTP/2」の「2」は、資料の「2回」を最終稿にあるとしない）。
+    # 「参考: 資料にあって最終稿にない数値」の行を作り直せるようにする
+    # 「ある」の判定は照合と同じ条件（反証で見つけた例。最終稿の「HTTP/2」の「2」は、資料の「2回」を最終稿にあるとしない）。
     # 数量を主張しない「一つ」は入れない
     final_set, final_notation = final
     rest = OrderedDict()
@@ -4818,12 +5187,12 @@ def ground(final, materials, original=None):
 # ---- diff() ----
 
 def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_type=None, reader=None) -> dict:
-    """元の文と書き直した文を比べる（DESIGN-interfaces.md 2.8 の形式2）。
+    """元の文と書き直した文を比べる（設計 2.8 の形式2）。
 
     渡された文字列をそのまま使う（BOM を外したり、改行をそろえたりしない。CLI と check は読むときに decode_source で
     そろえ、違いを encoding_notes で渡す）。stance は STANCES の値（勧め、決まり、説明）か None。
     doc_type（文書の種類）と reader（読者）は context に入れるだけで、差分と意味が変わる恐れの判定は変えない
-    （G7。DESIGN-reader-doctype.md 9.4）。文体の硬化の検査（stiffness）と勢いの検査（tone）は、種類で level を決める
+    （G7。種類と読者の設計 9.4）。文体の硬化の検査（stiffness）と勢いの検査（tone）は、種類で level を決める
     （incident・formal の硬化、pr・article・incident・manual・formal の勢いは参考の info。promo 以外の種類を指定したときの
     勢いの絵文字と見出しも info）。値は中で正規化し、使えない値は ValueError。"""
     context = {"doc_type": normalize_doc_type(doc_type), "reader": normalize_reader(reader)}
@@ -4848,7 +5217,7 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
     out["stiffness"] = _stiffness(sides, full, groups, context["doc_type"])
     out["tone"] = _tone(sides, full, context["doc_type"], groups)
     # diff の詰めの直し: 気持ちの語（meaning_risks の kind feeling）の一覧の出どころ（stiffness.list、tone.list と同じ形。
-    # review-spec.md の F5、step-c-fix/check-infra-speed.md）
+    # 反証で見つけた例）
     out["feeling"] = _list_info("feelings")
     return out
 
@@ -4870,12 +5239,12 @@ def _rule_count(d, rewritten_only):
 
 
 
-# ---- 人が読む出力（v2.0.0。DESIGN-interfaces.md 2.4、2.7）----
+# ---- 人が読む出力（v2.0.0。設計 2.4、2.7）----
 
 _REPORT_FIRST_LINE = "差分の検査を実行しました。"
 _REPORT_DISCLAIMER = ("全文差分は変わった箇所を示すだけで、意味が同じだという証明ではありません。"
                       "この検査では、意味の保持と読者にとっての分かりやすさは判定していません。")
-# 種類か読者を指定したときに、断りの行のすぐあとに足す1行の後半（G7。DESIGN-reader-doctype.md 9.4）
+# 種類か読者を指定したときに、断りの行のすぐあとに足す1行の後半（G7。種類と読者の設計 9.4）
 _REPORT_CONTEXT_TAIL = "差分と意味が変わる恐れは、種類と読者によらず同じ規則で出しています。"
 
 
@@ -4890,9 +5259,9 @@ def detector_review_count(d):
     return count
 
 
-# 状態の行の末尾に足す文（diff の詰めの直し。review-spec.md の F1）。硬化と勢いの候補は candidate_count と状態に入れない
+# 状態の行の末尾に足す文（diff の詰めの直し。反証で見つけた例）。硬化と勢いの候補は candidate_count と状態に入れない
 # （2.4）ので、見直し候補（review）があるときだけ、節があることを添える（「候補はない」と「見直し候補 1件」が並ぶのを防ぐ）。
-# レポートの最後の状態の行では、節はその上にあるので「上の節」と書く（review1-spec.md の S7）
+# レポートの最後の状態の行では、節はその上にあるので「上の節」と書く（反証で見つけた例）
 _DETECTOR_STATUS_NOTE = "（文体の硬化と勢いの見直し候補 {}件は下の節）"
 _DETECTOR_STATUS_NOTE_ABOVE = "（文体の硬化と勢いの見直し候補 {}件は上の節）"
 
@@ -5219,7 +5588,7 @@ def _stiffness_line(candidate):
             detail["new_kanji"] - detail["old_kanji"], tail)
     if subkind == "document":
         # 平均の文の長さは、表示する値（整数に丸めた値）で増えたかを決める（17.5字 → 18.5字は、どちらも18字と表示するので
-        # 「増えました」と書かない。diff の詰めの直し、review-spec.md の F12）
+        # 「増えました」と書かない。diff の詰めの直し、反証で見つけた例）
         old_avg, new_avg = "{:.0f}".format(detail["old_avg_length"]), "{:.0f}".format(detail["new_avg_length"])
         if int(new_avg) > int(old_avg):
             text = "推敲後、漢字の割合が{:.0f}%から{:.0f}%に、平均の文の長さが{}字から{}字に増えました。".format(
@@ -5254,7 +5623,7 @@ def _tone_place(place):
 
 def _tone_more_places(candidate):
     """勢いの候補の2か所目からの行（TONE_PLACES_SHOWN か所まで。超えた分は「ほか N か所」）。diff の詰めの直しで、
-    硬化の節のように行を並べるようにした（review-spec.md の F11）。"""
+    硬化の節のように行を並べるようにした（反証で見つけた例）。"""
     places = (candidate.get("detail") or {}).get("places") or []
     rows = ["  " + _tone_place(place) for place in places[1:TONE_PLACES_SHOWN]]
     if len(places) > TONE_PLACES_SHOWN:
@@ -5278,7 +5647,7 @@ def _tone_line(candidate):
     return "原文の{}{}個が、推敲後は{}個になりました{}。{}".format(label, detail["old"], detail["new"], shown, tail)
 
 
-# 一覧のファイルを読めなかったときに、硬化と勢いの節に出す1行（diff の詰めの直し。review-spec.md の F5）。硬化の節には
+# 一覧のファイルを読めなかったときに、硬化と勢いの節に出す1行（diff の詰めの直し。反証で見つけた例）。硬化の節には
 # 名詞化の言い回しの一覧、勢いの節には強める語の一覧と気持ちの語の一覧（気持ちの語の検査には自分の節がないので、勢いの節に置く）
 _LIST_NOTE_LABELS = (("stiffness", "stiffness", "nominalization", "名詞化の言い回しの一覧"),
                      ("tone", "tone", "intensifiers", "強める語の一覧"),
@@ -5310,8 +5679,8 @@ def _detector_section(d, key):
     if not candidates:
         if not notes:
             return ""
-        # 一覧を読めなかったことは、候補がなくても知らせる（足し引きした語が黙って効かないのを防ぐ。review-spec.md の F5）。
-        # report() は「（候補なし）」を返さない（2.10）ので、節の見出しは一覧の注意だけを言う（review1-spec.md の S8）
+        # 一覧を読めなかったことは、候補がなくても知らせる（足し引きした語が黙って効かないのを防ぐ。反証で見つけた例）。
+        # report() は「（候補なし）」を返さない（2.10）ので、節の見出しは一覧の注意だけを言う（反証で見つけた例）
         return "\n".join(["■ {}（一覧の注意）".format("文体の硬化" if key == "stiffness" else "勢い")] + notes)
     infos = sum(1 for candidate in candidates if candidate.get("level") == "info")
     reviews = len(candidates) - infos
@@ -5324,14 +5693,14 @@ def _detector_section(d, key):
         name, render = "勢い", _tone_line
         review = "書き手の勢いを落としていないか確かめる"
         if doc_type in TONE_INFO_DOC_TYPES:
-            # 参考にした候補（「！」「？」と強める語、絵文字、見出し）の直し方だけを書く（review2-spec.md の T3）
+            # 参考にした候補（「！」「？」と強める語、絵文字、見出し）の直し方だけを書く（反証で見つけた例）
             shown = set(candidate.get("subkind") for candidate in candidates if candidate.get("level") == "info")
             rules = [rule for rule in _TONE_INFO_RULES if shown.intersection(rule[0])] or [_TONE_INFO_RULES[0]]
             reference = "文書の種類 {} では{}のが正しい直し方のことが多いので、参考として出しています".format(
                 doc_type, "、".join([rule[1] for rule in rules[:-1]] + [rules[-1][2]]))
         else:
             # 参考になった候補（絵文字、見出し）の決まりだけを書く（minutes の見出しのように見直し候補のままの候補の決まりは
-            # 書かない。review1-spec.md の S2）
+            # 書かない。反証で見つけた例）
             shown = set(candidate.get("subkind") for candidate in candidates if candidate.get("level") == "info")
             rules = [rule for rule in _TONE_TYPED_RULES if rule[0] in shown] or list(_TONE_TYPED_RULES)
             reference = "文書の種類 {} では{}のが決まりなので、参考として出しています".format(
@@ -5429,7 +5798,7 @@ def _join_doc_types(types):
 def _detector_level_help():
     """--doc-type のヘルプの、硬化と勢いの検査を参考（info）にする種類の文。STIFFNESS_INFO_DOC_TYPES、TONE_INFO_DOC_TYPES、
     TONE_TYPED_REVIEW_DOC_TYPES から作る（check run のヘルプにも同じ文を書き、tests/test_v200_check_infra.py が一致を見張る。
-    review-spec.md の F7）。promo の見出しの数え方も書く（review1-spec.md の S5）。"""
+    反証で見つけた例）。promo の見出しの数え方も書く（反証で見つけた例）。"""
     heading_kept = [doc_type for doc_type in TONE_TYPED_REVIEW_DOC_TYPES["heading"] if doc_type != "promo"]
     return ("文体の硬化の検査は {} のとき、勢いの検査は {} のとき、候補を参考として出します。"
             "promo 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として出し、{} 以外では見出しの候補も参考として出します。"
@@ -5478,7 +5847,7 @@ def _build_parser():
         epilog=_EXIT_CODES,
         formatter_class=_HelpFormatter,
         add_help=False,
-        # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる（DESIGN-interfaces.md 10.7）
+        # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる（設計 10.7）
         allow_abbrev=False,
     )
     arguments = parser.add_argument_group("引数")
@@ -5615,7 +5984,7 @@ def _run(argv):
         if args.fail_on:
             parser.error("--endings は --fail-on に対応していません")
         if args.doc_type is not None or args.reader is not None:
-            # 無視せずに使い方の誤りにする（--json、--fail-on と同じ。DESIGN-reader-doctype.md 9.1）
+            # 無視せずに使い方の誤りにする（--json、--fail-on と同じ。種類と読者の設計 9.1）
             parser.error("--endings は --doc-type と --reader に対応していません")
         if len(files) != 1:
             parser.error("--endings のときは、ファイルを1つだけ渡してください（渡されたのは{}つ）".format(len(files)))

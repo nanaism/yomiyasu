@@ -15,7 +15,7 @@ __version__ = "2.0.0-beta"
 import sys
 
 # lint と diff を読み込む前に、.pyc を書かないようにする（スキルのフォルダに __pycache__ を作らない。
-# DESIGN-interfaces.md 3.4）。子プロセスは -B で動かす。
+# 設計 3.4）。子プロセスは -B で動かす。
 sys.dont_write_bytecode = True
 
 import os  # noqa: E402
@@ -100,7 +100,7 @@ _HERE = os.path.dirname(os.path.realpath(__file__))
 _TOOL_NAMES = ("yomiyasu_check.py", "yomiyasu_lint.py", "yomiyasu_diff.py", "markdown_visibility.py")
 # 記録の tools に足す一覧のファイル（diff が scripts の隣の ../references/lists/<名前>.txt から読む。名前は yomiyasu_diff.py の
 # BUILTIN_LISTS と同じ）。ファイルがあるときだけ "references/lists/<名前>.txt" のキーで SHA-256 を入れ、verify で比べて、
-# 変わっていれば tool_changed にする（diff の詰めの直し。review-spec.md の F5、review-regress.md の R9）
+# 変わっていれば tool_changed にする（diff の詰めの直し。反証で見つけた例）
 _LIST_NAMES = ("nominalization", "intensifiers", "feelings")
 _LIST_KEYS = tuple("references/lists/{}.txt".format(name) for name in _LIST_NAMES)
 # ファイルがないとみなす誤り（yomiyasu_diff.py の _LIST_ABSENT と同じ）
@@ -137,7 +137,7 @@ _GITIGNORE = "# yomiyasu の検査記録。git に入れない。\n*\n"
 _DISCLAIMER = "この記録は検査を実行したことを示すだけで、意味が保たれたことや読みやすさの合格を示すものではありません。"
 _MATERIALS_DISCLAIMER = ("照らしたのは数値、名前、語、確度の語だけです。主張、条件、担当が資料どおりかは判定していません。"
                          "資料と読み比べてください。")
-# 記録を書かないときの4行目（記録がないので「この結果は」。step2-check/questions.md の59）
+# 記録を書かないときの4行目（記録がないので「この結果は」）
 _UNRECORDED_DISCLAIMER = "この結果は検査を実行したことを示すだけで、意味が保たれたことや読みやすさの合格を示すものではありません。"
 _SAME_FILE_ERROR = ("原文と最終稿が同じファイルです。書き直す前の原文を別のファイルに残し、最終稿を別のファイルに保存してから"
                     "実行してください。原文を上書きしてしまったときは、git などで元の版を取り出して --source に渡してください。"
@@ -149,29 +149,29 @@ _SAME_AS_FINAL_ERROR = ("資料と最終稿が同じ中身です。資料には�
 # 空の最終稿（10.8 C-47。空白だけの本文も同じ）
 _EMPTY_FINAL_ERROR = "最終稿が空です。書き終えた最終稿を渡してください。"
 # 1行目の {仕上げ}（3.5、10.4 S11）。--stdin と verify の executed は、本文だけを返す指定もあるので「完了報告を付けるときは」
-# （questions.md の56）。--no-record は「直さないなら」に続けて読めるように並べ替えた（59）
+# とする。--no-record は「直さないなら」に続けて読めるように並べ替えた
 _FINALIZE_FILE = "提出の直前に、本文を変えずに verify を1回実行してください。"
 _FINALIZE_STATE_DIR = "提出の直前に、本文を変えずに verify --state-dir {} を1回実行してください。"
 _FINALIZE_STDIN = "本文はこのままで返答し、完了報告を付けるときは、この出力の2行目を写してください。"
 _FINALIZE_NO_RECORD = ("完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください"
                        "（記録を残さない指定なので verify はできません）。")
 _FAILED_NAMES = {"timeout": "時間切れ", "error": "内部エラー"}
-# partial の1行目の最後（5.3。questions.md の42の1）
+# partial の1行目の最後（5.3）
 _PARTIAL_TAIL = "verify は実行せず、完了報告にこの出力の2行目を写してください。"
-# 検査の途中で最終稿が変わったとき。正しい次の行動は run のやり直し（questions.md の5の案と42の3）
+# 検査の途中で最終稿が変わったとき。正しい次の行動は run のやり直し
 _FINAL_CHANGED_LINE = "最終稿が検査の途中で変わりました。変え終えてから yomiyasu_check.py run をもう一度実行してください。"
 _FINAL_CHANGED_SUMMARY = "実行した検査: なし（途中で最終稿が変わったため）"
-# 原文から本文が変わっていないとき（questions.md の57と58）
+# 原文から本文が変わっていないとき
 _NO_CHANGE_LINE = "検査を実行しました。原文から変更はありません{}。書き直したのに変更なしと出たときは、原文を上書きしていないか確かめてください。"
 _TEXT_SAME_NOTE = "（改行コード、BOM、末尾の改行だけが違います）"
-# 原文が、前に最終稿として検査した本文と同じとき（questions.md の48の3。2にはしない）
+# 原文が、前に最終稿として検査した本文と同じとき（2にはしない）
 _SOURCE_WAS_FINAL_NOTE = ("原文が、前に最終稿として検査した本文と同じです。続けて直す依頼でなければ、原文を上書きしたか、"
                           "原文と最終稿を逆に渡していないか確かめてください。")
 # 10.8 C-44: 新規作成で、資料の1つが最終稿とよく似ているとき、その資料を原文とみなして diff も実行する。
 # 似かたは、NFKC にして空白を除いた文字列の2字組（隣り合う2文字）の重なり。重なった2字組の数を最終稿の2字組の数で割った値と、
 # 資料の2字組の数で割った値の小さいほう（片側だけで決めると、大きな資料に短い最終稿の2字組がほとんど含まれてしまう）。
 # しきい値は、tests/corpus の推敲の48組（最小 0.577）と、正しい新規作成の組（最大 0.495）で測って決めた
-# （v200-development/step2b/c44-threshold.md、tests/test_v200_check_harden.py）
+# （tests/test_v200_check_harden.py）
 _SIMILAR_TO_SOURCE = 0.53
 _TREATED_NOTE = "資料の1つが最終稿とよく似ているので、原文とみなして diff も実行しました。書き直す前の文章なら --source に渡してください。"
 # 同じ実行の前の回で原文とみなした資料を、この回も原文とみなしたとき（似かたがしきい値を下回っても、直しを重ねて diff が
@@ -186,7 +186,7 @@ _TREATED_INHERITED_PENDING_NOTE = ("前の回で原文とみなした資料を�
 # 記録の inputs.materials[].treated_by の値（似かたで決めたか、同じ実行の前の回から引き継いだか）
 _TREATED_BY = ("similarity", "previous_attempt")
 _SPACES = re.compile(r"\s+")
-# 外から渡す実行IDのうち、Windows で作れないか別の名前になるもの（末尾の「.」と予約された名前。questions.md の20と51）
+# 外から渡す実行IDのうち、Windows で作れないか別の名前になるもの（末尾の「.」と予約された名前）
 _WINDOWS_RESERVED = re.compile(r"^(?:con|prn|aux|nul|com[1-9]|lpt[1-9])$", re.I)
 _RUN_ID_ERROR = ("--run-id に使えない値です: {}。英数字で始まり、英数字と「.」「_」「-」だけの64字までにしてください。"
                  "末尾の「.」と、Windows で使えない名前（CON、NUL、COM1 など）は使えません。")
@@ -197,7 +197,7 @@ _MARKERS = OrderedDict(((b"<<<yomiyasu:original>>>", "source"), (b"<<<yomiyasu:m
 _STDIN_FORM = ("<<<yomiyasu:original>>>\n（書き直す前の原文）\n<<<yomiyasu:final>>>\n（最終稿）\n"
                "新規作成では <<<yomiyasu:original>>> の代わりに、資料ごとに <<<yomiyasu:material>>> の行と資料を書きます。")
 # 区切りの行の書き損じ（「<<<yomiyasu:」で始まるが、上の3つと一字一句同じでない行。前後の空白と大文字も書き損じに数える）。
-# 区切りと認めずに前の部分へ黙ってつなぐと、資料が原文に入る（v200-development/g15/design-tools.md 2.2 の P2）ので、2で止める
+# 区切りと認めずに前の部分へ黙ってつなぐと、資料が原文に入るので、2で止める
 _MARKER_HEAD = "<<<yomiyasu:"
 _MARKER_SHOWN = 60              # 案内に写す行の字数の上限
 _BAD_MARKER_KEY = "決まった区切りの行と一字一句同じではありません"
@@ -272,7 +272,7 @@ def _label(name):
 def _disk_path(path):
     """パスの比べと by-path のキーに使う綴り（3.6、3.12）。realpath のあと、macOS では開いたファイルの F_GETPATH で
     ディスク上の綴りを取る。大文字と小文字を区別しないファイルシステムで、大文字と小文字や NFC と NFD の違う綴りで同じファイルを
-    渡しても、同じ綴りになる（questions.md の50）。
+    渡しても、同じ綴りになる。
     macOS では、取った綴りを NFC にそろえ、大文字と小文字を区別しないファイルシステムでは casefold もする。ファイルを消して
     別の綴りで作り直すと（git restore、Finder で作った NFD の名前を NFC で打って作り直す）、ディスク上の綴りが変わり、
     前の回につながらなくなるため（反証レビュー compat 3）。"""
@@ -328,7 +328,7 @@ def _same_path(a, b):
 
 def _run_id_problem(run_id):
     """外から渡す実行IDの誤りの文（なければ None）。3.7 の形に加えて、Windows で作れないか別の名前になるもの（末尾の「.」、
-    CON、NUL、COM1 などの予約された名前。拡張子を付けても同じ）を断る（questions.md の20と51）。"""
+    CON、NUL、COM1 などの予約された名前。拡張子を付けても同じ）を断る。"""
     if (not _RUN_ID.match(run_id) or run_id.endswith(".")
             or _WINDOWS_RESERVED.match(run_id.split(".", 1)[0])):
         return _RUN_ID_ERROR.format(run_id if run_id.strip() else "（空）")
@@ -337,7 +337,7 @@ def _run_id_problem(run_id):
 
 def _run_id_case_problem(state, run_id):
     """runs/ に、大文字と小文字だけが違う実行IDのフォルダがあるときの誤りの文（なければ None）。大文字と小文字を区別しない
-    ファイルシステムでは同じフォルダに入ってしまう（questions.md の51）。"""
+    ファイルシステムでは同じフォルダに入ってしまう。"""
     try:
         names = os.listdir(os.path.join(state, "runs"))
     except OSError:
@@ -529,7 +529,7 @@ def _state_dir(option):
 
 
 def _state_dir_given(option):
-    """状態フォルダを --state-dir か環境変数 YOMIYASU_STATE_DIR で決めたか（_state_dir の1か2。questions.md の55）。"""
+    """状態フォルダを --state-dir か環境変数 YOMIYASU_STATE_DIR で決めたか（_state_dir の1か2）。"""
     if option:
         return True
     environment = os.environ.get("YOMIYASU_STATE_DIR")
@@ -547,7 +547,7 @@ def _status_line(state, via, run_id=None, attempt=None, final=None, expected=Non
                  meaning_risk=None, replay=None, failed=None, reason=None, doc_type=None, reader=None):
     """状態の行（3.10）。キーの順は固定で、値に空白を入れない。読む側の正規表現は
     ^yomiyasu-check: ([a-z_]+)((?: [a-z_]+=\\S+)*)$
-    doc_type と reader は mode の次に、付けたときだけ出す（G7。DESIGN-reader-doctype.md 9.5）。"""
+    doc_type と reader は mode の次に、付けたときだけ出す（G7。種類と読者の設計 9.5）。"""
     fields = [("via", via), ("run", run_id or "-"), ("attempt", str(attempt) if attempt else "-"), ("final", final or "-")]
     for key, value in (("expected", expected), ("mode", mode), ("doc_type", doc_type), ("reader", reader),
                        ("checks", checks), ("meaning_risk", meaning_risk),
@@ -932,7 +932,7 @@ def _same_inputs(recorded, current):
 
 def _same_origin(record, mode, source, materials):
     """同じモードで、同じ原文と同じ資料の集まり（新規作成では同じ資料の集まり）の記録か。推敲でも資料の集まりを比べる
-    （資料つきの run のあと、資料を外して run し直したときに同じ実行につながないため。questions.md の43の1）。"""
+    （資料つきの run のあと、資料を外して run し直したときに同じ実行につながないため）。"""
     inputs = record.get("inputs")
     if record.get("mode") != mode or not isinstance(inputs, dict):
         return False
@@ -983,7 +983,7 @@ def _by_path_entries(state, key):
 
 
 def _latest_by_path(state, key):
-    """index/by-path/<キー>/ の最新の記録。(実行ID, 記録) か None。最新の1件だけを見る（questions.md の19）。"""
+    """index/by-path/<キー>/ の最新の記録。(実行ID, 記録) か None。最新の1件だけを見る。"""
     entries = _by_path_entries(state, key)
     if not entries:
         return None
@@ -1034,7 +1034,7 @@ def _previous_treated(state, run_id, attempt):
 
 
 def _was_checked_final(state, source):
-    """原文の本文が、前に最終稿として検査した本文と同じか（index/by-text に読める記録がある。読むだけ。questions.md の48の3）。
+    """原文の本文が、前に最終稿として検査した本文と同じか（index/by-text に読める記録がある。読むだけ）。
     その記録の原文も同じ本文なら（原文から変えずに検査した回）、取り違えではないので数えない。"""
     for item in _index_found(state, "by-text", source.text_sha256):
         final = item.final()
@@ -1234,7 +1234,7 @@ def _materials_lines(diff_module, ctx):
         lines.append("- 資料にあった確度の語が最終稿にない: " + "、".join(dropped))
     if not rewrite:
         # 資料にあって最終稿にない数値は「参考」の1行（要約で省くのは正しいことが多いので候補にしない）。照合の items の
-        # not_in_final から作る（diff の詰め、step2-diff/questions.md 38。記録の照合の JSON だけから作り直せる）
+        # not_in_final から作る（diff の詰め。記録の照合の JSON だけから作り直せる）
         reference = [item["text"] for item in items if item.get("classification") == "not_in_final"]
         if reference:
             lines.append("- 参考: 資料にあって最終稿にない数値: " + "、".join(reference))
@@ -1274,8 +1274,8 @@ class _Context(object):
         self.fail_on = []
         self.fail_on_hits = []
         self.treated = None              # 原文とみなした資料（新規作成。10.8 C-44）
-        self.source_was_final = False    # 原文が、前に最終稿として検査した本文と同じ（questions.md の48の3）
-        self.state_dir_option = None     # --state-dir で決めた状態フォルダ（{仕上げ} に書く。questions.md の55）
+        self.source_was_final = False    # 原文が、前に最終稿として検査した本文と同じ
+        self.state_dir_option = None     # --state-dir で決めた状態フォルダ（{仕上げ} に書く）
         self.doc_type = None             # 文書の種類と読者（G7。正規化した値。lint と diff に渡し、記録と状態の行に残す）
         self.reader = None
 
@@ -1285,7 +1285,7 @@ class _Context(object):
         return self.source if self.source is not None else self.treated
 
     def text_unchanged(self):
-        """原文と最終稿の本文（text_sha256）が同じか（改行コード、BOM、末尾の改行だけが違うときも真。questions.md の57）。"""
+        """原文と最終稿の本文（text_sha256）が同じか（改行コード、BOM、末尾の改行だけが違うときも真）。"""
         return self.source is not None and self.source.text_sha256 == self.final.text_sha256
 
     @property
@@ -1301,8 +1301,7 @@ class _Context(object):
 
     def risks_complete(self):
         """意味が変わる恐れを出す検査（diff、資料との照合）がすべて最後まで動き、途中で最終稿が変わっていないか。そうでなければ、
-        件数は出さない（状態の行の meaning_risk= を0件と読ませない。agent 4。変わる前の版の件数を今の最終稿の件数と読ませない。
-        questions.md の42の3）。"""
+        件数は出さない（状態の行の meaning_risk= を0件と読ませない。agent 4。変わる前の版の件数を今の最終稿の件数と読ませない）。"""
         return not self.final_changed and all(
             self.entries[name]["status"] == "ran" for name in self.required if name in _RISK_CHECKS)
 
@@ -1316,7 +1315,7 @@ class _Context(object):
 
 
 def _context_arguments(doc_type, reader):
-    """子の lint と diff に渡す種類と読者の引数（付けたときだけ。G7。DESIGN-reader-doctype.md 9.5）。"""
+    """子の lint と diff に渡す種類と読者の引数（付けたときだけ。G7。種類と読者の設計 9.5）。"""
     arguments = []
     if doc_type is not None:
         arguments += ["--doc-type", doc_type]
@@ -1437,7 +1436,7 @@ def _run_checks(ctx, snapshots, stance, timeout):
                 ("hunk_count", len(parsed["full_diff"].get("hunks") or []))))
             # diff の詰め: 文体の硬化の検査と勢いの検査の件数と level（完了報告の確認の記録に写す値のもと）。
             # candidate_count は参考（level が info の候補）を含む数なので、見直し候補（level が review）の数も残す。記録だけを
-            # 読む使い方でも、見直し候補と参考が混ざった結果（「候補2件、参考1件」）が分かるようにする（review2-spec.md の T4）
+            # 読む使い方でも、見直し候補と参考が混ざった結果（「候補2件、参考1件」）が分かるようにする（反証で見つけた例）
             for key in ("stiffness", "tone"):
                 section = parsed.get(key)
                 if isinstance(section, dict):
@@ -1461,7 +1460,7 @@ def _run_checks(ctx, snapshots, stance, timeout):
 
 def _review_count(section):
     """diff の硬化の検査か勢いの検査の結果（section）の、見直し候補（level が review の候補）の数。候補の並びがなければ None
-    （review2-spec.md の T4。記録の summary と verify の照らしで使う）。"""
+    （反証で見つけた例。記録の summary と verify の照らしで使う）。"""
     candidates = section.get("candidates") if isinstance(section, dict) else None
     if not isinstance(candidates, list):
         return None
@@ -1489,7 +1488,7 @@ def _fail_on_hits(ctx, diff_module):
 
 def _finalize_text(ctx):
     """1行目の {仕上げ}（3.5、10.4 S11）。--state-dir か環境変数 YOMIYASU_STATE_DIR で状態フォルダを決めて記録したときは、
-    verify にも同じ状態フォルダを渡すよう書く（questions.md の55 の勧めどおり。呼び出しごとに環境変数が引き継がれないシェルで、
+    verify にも同じ状態フォルダを渡すよう書く（呼び出しごとに環境変数が引き継がれないシェルで、
     案内どおりの verify が別のフォルダを探さないように。反証レビュー spec 3）。"""
     if ctx.no_record:
         return _FINALIZE_NO_RECORD
@@ -1515,7 +1514,7 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
     failed = ctx.failed
     if ctx.final_changed:
         # 検査は読んだときの写しに対して動いたが、今の最終稿に対しては実行していない（3.4 の6）。正しい次の行動は、
-        # 変え終えてからの run のやり直し（questions.md の5の案と42の3）
+        # 変え終えてからの run のやり直し
         line, following = _FINAL_CHANGED_LINE, "rerun"
     elif failed:
         groups = OrderedDict()
@@ -1527,7 +1526,7 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
             groups.setdefault(_FAILED_NAMES[status], []).append(_label(name))
             items.append("{}（{}）".format(_label(name), _FAILED_NAMES[status]))
         clauses = ["{}が{}".format("、".join(names), reason) for reason, names in groups.items()]
-        # 5.3: partial のあとは verify をせず、run の2行目と止まった検査を完了報告に書く（questions.md の42の1）
+        # 5.3: partial のあとは verify をせず、run の2行目と止まった検査を完了報告に書く
         line = ("検査の一部を実行できませんでした（{}）。完了報告の「実行しなかった検査」に「{}」と書いてください。".format(
             "、".join(clauses), "、".join(items)) + _PARTIAL_TAIL)
         following = "report_partial"
@@ -1538,7 +1537,7 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
     else:
         if ctx.text_unchanged() or (ctx.source is not None and ctx.diff_result is not None
                                     and ctx.diff_result.get("status") == "no_change"):
-            # 本文（text_sha256）が原文と同じ。改行コード、BOM、末尾の改行だけが違うときはそう添える（questions.md の57と58）
+            # 本文（text_sha256）が原文と同じ。改行コード、BOM、末尾の改行だけが違うときはそう添える
             note = _TEXT_SAME_NOTE if ctx.source.sha256 != ctx.final.sha256 else ""
             line, following = _NO_CHANGE_LINE.format(note) + finalize, "finalize"
         elif same_as_previous:
@@ -1561,7 +1560,7 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
             following = "review"
         elif _detector_reviews(ctx):
             # 文体の硬化と勢いの見直し候補（level review）は1行目の「候補あり／なし」（10.3 B7）に数えないが、「候補はない」だけ
-            # だと節を見落とす（diff の詰めの直し。review-spec.md の F1）。参考（info）だけなら添えない
+            # だと節を見落とす（diff の詰めの直し。反証で見つけた例）。参考（info）だけなら添えない
             line = ("検査を実行しました（1回目）。規則に当たる候補はありませんが、文体の硬化と勢いの見直し候補が{}件あります。"
                     "その節を原文と照らし、全文差分で意図しない変更がないかを確かめ、直すなら1回まで、直さないなら".format(
                         _detector_reviews(ctx)) + finalize)
@@ -1578,7 +1577,7 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
         note = _treated_note(ctx)
         line = note + line if failed else line + note
     if ctx.source_was_final:
-        # questions.md の48の3: 原文を上書きしたか、原文と最終稿を逆に渡した恐れ（2にはしない）
+        # 原文を上書きしたか、原文と最終稿を逆に渡した恐れ（2にはしない）
         line = _SOURCE_WAS_FINAL_NOTE + line
     if ctx.fail_on_hits and not failed:
         line = "--fail-on={} の条件に当たりました（終了コード1）。".format(",".join(ctx.fail_on_hits)) + line
@@ -1588,7 +1587,7 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
         status = "executed" if recorded else "unrecorded"
     reason = None
     if not recorded:
-        # --no-record の理由は verify の状態の名前 no_record と重ならない語にする（questions.md の59）
+        # --no-record の理由は verify の状態の名前 no_record と重ならない語にする
         reason = "no_record_option" if ctx.no_record else "not_writable"
     token = _status_line(status, "run", run_id if recorded else None, attempt if recorded else None, ctx.final.token(),
                          mode=ctx.mode, doc_type=ctx.doc_type, reader=ctx.reader, checks=",".join(ctx.required),
@@ -1599,7 +1598,7 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
 
 def _unsupported_count(result, diff_risks=None, diff_module=None):
     """3.5 の3行目の q（資料にない数値・名前の数）。出力に示した候補と同じ条件で数える（1行目の候補あり・なし（10.3 B7）と
-    食い違わないため。review1-spec.md の S3、review1-regress.md の Q4）。
+    食い違わないため。反証で見つけた例）。
     - 名前と、新規作成の数値: 照合の意味が変わる恐れ（unsupported）の数。照合の items の not_in_sources の名前と、数量を
       主張しない「一つ」だけの値（R4）を除いた数値の数と同じ。新規作成では照合の meaning_risk_count と同じ数になる。
     - 推敲の数値（原文があるとき、資料を原文とみなしたとき）: 資料にない数値は diff の数値の候補の basis "none" で出し、照合の
@@ -1625,7 +1624,7 @@ def _unsupported_count(result, diff_risks=None, diff_module=None):
 def _summary_line(ctx, diff_module=None):
     """3行目（実行した検査の要約。完了報告の「実行した検査」に対応する）。最後まで動かなかった検査は並べない
     （1行目で「実行しなかった検査」に書くよう案内する。agent 4）。1つもなければ「なし」（5.2）。途中で最終稿が変わったときは、
-    今の最終稿に対して実行した検査はない（questions.md の42の3）。"""
+    今の最終稿に対して実行した検査はない。"""
     if ctx.final_changed:
         return _FINAL_CHANGED_SUMMARY
     parts = []
@@ -1773,8 +1772,8 @@ def _history(run_dir, attempt, final):
 
     previous は直前の読める回（状態によらない）。前回との比べと修正の回数は、最後まで動いた回（result.status が partial で
     ない回）だけで行う（10.8 C-41。partial の回は候補を出していないことがあるので、そのあとの回を「前回と同じ最終稿」にしない）。
-    最終稿は本文のハッシュ（text_sha256）で比べ、改行コード、BOM、末尾の改行だけの違いは修正に数えない（questions.md の43の2と
-    57）。fix_count は、最後まで動いた回と今の回を順に並べたとき、本文が1つ前の回と違った回の数（A → B → A は2）。"""
+    最終稿は本文のハッシュ（text_sha256）で比べ、改行コード、BOM、末尾の改行だけの違いは修正に数えない。
+    fix_count は、最後まで動いた回と今の回を順に並べたとき、本文が1つ前の回と違った回の数（A → B → A は2）。"""
     texts = []
     previous = None
     for number in _attempt_numbers(run_dir):
@@ -1940,7 +1939,7 @@ def _run(args, parser):
         _error(problem)
         return 2
     try:
-        # 種類と読者（G7。DESIGN-reader-doctype.md 9.1、9.5）。状態フォルダに何かを書く前に確かめる（10.3 C4）
+        # 種類と読者（G7。種類と読者の設計 9.1、9.5）。状態フォルダに何かを書く前に確かめる（10.3 C4）
         doc_type, reader = normalize_doc_type(args.doc_type), normalize_reader(args.reader)
     except ValueError as error:
         _error(str(error))
@@ -2085,7 +2084,7 @@ def _run(args, parser):
     complete = ctx.risks_complete()
     if status == "partial":
         # 0.4: 終了コード3のときは標準エラーにも出す（止まった検査と、子の標準エラーの先頭）。標準出力より先に書き、
-        # 2>&1 でまとめて読んだときも、パイプと端末のどちらでも最後の行が状態の行になるようにする（questions.md の54）
+        # 2>&1 でまとめて読んだときも、パイプと端末のどちらでも最後の行が状態の行になるようにする
         _error("yomiyasu_check.py: " + line)
         for name, entry in ctx.entries.items():
             if entry["status"] != "ran":
@@ -2119,7 +2118,7 @@ def _run(args, parser):
         else:
             record_line = "記録: なし（{}）".format("--no-record" if ctx.no_record else write_problem)
         sections = _sections(ctx, lint_module, diff_module)
-        # 記録を書かないときの4行目は「この結果は」（記録がないため。questions.md の59）
+        # 記録を書かないときの4行目は「この結果は」（記録がないため）
         disclaimer = _DISCLAIMER if recording else _UNRECORDED_DISCLAIMER
         text = "\n".join([line, token, _summary_line(ctx, diff_module), disclaimer, record_line]
                          + _detector_lines(ctx, diff_module)) + "\n\n"
@@ -2136,7 +2135,7 @@ def _run(args, parser):
 # ---- verify（3.9。読むだけで、何も書かない。--replay なしでは lint と diff を読み込まない）----
 
 _VERIFY_LINES = {
-    # 本文だけを返す指定では確認の記録を付けないので「完了報告を付けるときは」（questions.md の56）
+    # 本文だけを返す指定では確認の記録を付けないので「完了報告を付けるときは」
     "executed": "この最終稿に必要な検査（{}）を実行した記録があり、最終稿のハッシュが記録と合いました。"
                 "合格の判定ではありません。完了報告を付けるときは、この出力の2行目を写してください。",
     "no_record": "この最終稿の検査記録がありません。yomiyasu_check.py run を実行してください。"
@@ -2154,7 +2153,7 @@ _VERIFY_LINES = {
     "not_reproducible": "記録のレポートを今のスクリプトで作り直せません。yomiyasu_check.py run をもう一度実行してください。",
 }
 # 一覧のファイルが変わったときの tool_changed の1行目（diff の詰めの直し。スクリプトは変えていないのに「スクリプト」と言うと、
-# 原因を探しにくい。review-regress.md の R9）。{} は変わった一覧のパスを「、」でつないだもの
+# 原因を探しにくい。反証で見つけた例）。{} は変わった一覧のパスを「、」でつないだもの
 _LIST_CHANGED_LINE = "記録のあとで、検査に使う語の一覧（{}）が変わりました。yomiyasu_check.py run をもう一度実行してください。"
 _SCRIPT_AND_LIST_CHANGED_LINE = ("記録のあとで、検査スクリプトと、検査に使う語の一覧（{}）が変わりました。"
                                  "yomiyasu_check.py run をもう一度実行してください。")
@@ -2175,9 +2174,9 @@ def _tool_changed_line(problems):
 _REPLAY_TIMEOUT_LINE = ("記録のレポートを作り直す途中で時間切れになりました（{}）。--timeout を長くして verify --replay を"
                         "もう一度実行してください。")
 _LINE_ENDINGS_NOTE = "改行コードだけが違います（git の autocrlf やエディタの設定で変わることがあります）。"
-# 本文（text_sha256）は記録と同じで、BOM か末尾の改行も違うとき（questions.md の57。32 の only_line_endings_differ を広げた）
+# 本文（text_sha256）は記録と同じで、BOM か末尾の改行も違うとき（32 の only_line_endings_differ を広げた）
 _TEXT_SAME_VERIFY_NOTE = "本文は記録と同じで、改行コード、BOM、末尾の改行だけが違います。run をもう一度実行しても修正には数えません。"
-# 同じ最終稿に、原文は同じで資料の集まりが違う記録が複数あるとき（questions.md の43の1。--source では絞れない）
+# 同じ最終稿に、原文は同じで資料の集まりが違う記録が複数あるとき（--source では絞れない）
 _AMBIGUOUS_MATERIALS_LINE = ("同じ最終稿に、資料の集まりが違う記録が複数あります。どの検査の記録を使うかを決められないので、"
                              "--run-id を付けて verify を実行してください。")
 # 10.8 C-46: このパスの最新の記録と、ハッシュで見つけた記録の原文が違うとき（この最終稿の記録は1つでもある。
@@ -2186,17 +2185,17 @@ _AMBIGUOUS_PLACE_LINE = ("この最終稿の記録と、このパスで最後に
                          "決められないので、--run-id か --source を付けて verify を実行してください。")
 # C-46 で、記録の原文をさかのぼって調べる記録の数の上限（続けて直す依頼が何回も重なっても、verify を速く保つ）
 _LINEAGE_LIMIT = 20
-# 記録の検査が時間切れか内部エラーで終わっていたとき（questions.md の42の2。5.3 の partial の扱いに合わせる）
+# 記録の検査が時間切れか内部エラーで終わっていたとき（5.3 の partial の扱いに合わせる）
 _VERIFY_PARTIAL_LINE = ("記録の {}で終わっています。run をもう一度実行しても同じなら、完了報告に run の出力の2行目を写し、"
                         "「実行しなかった検査」に「{}」と書いてください。")
 # 空の最終稿（10.8 C-47。記録を探さずに no_record）
 _VERIFY_EMPTY_LINE = "最終稿が空です。書き終えた最終稿を渡してください。"
 _VERIFY_EMPTY_RECORD_LINE = "記録: なし（最終稿が空のため、探していません）"
-# no_record の3行目（questions.md の55）
+# no_record の3行目
 _NO_RECORD_LINE = "記録: なし（探した状態フォルダ: {}）"
-# 見つけた記録の実行に、あとで別の本文を検査した回があるとき（questions.md の48の1。状態は executed のまま）
+# 見つけた記録の実行に、あとで別の本文を検査した回があるとき（状態は executed のまま）
 _NEWER_ATTEMPT_NOTE = "この実行には、あとで検査した別の本文があります。直しが失われていないか確かめてください。"
-# --final に渡した本文が、記録では原文か資料として使われているとき（questions.md の48の2）
+# --final に渡した本文が、記録では原文か資料として使われているとき
 _RECORDED_SOURCE_NOTE = "渡した本文は、記録では原文か資料として使われています。--final には最終稿を渡してください。"
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _INDEX_ENTRY = re.compile(r"^(.+)\.([0-9]+)$")
@@ -2307,7 +2306,7 @@ class _Found(object):
 
 
 def _index_found(state, kind, key):
-    """index/by-final/<sha256>/ か index/by-text/<text_sha256>/ が指す記録（ファイルがないものは飛ばす。questions.md の15）。"""
+    """index/by-final/<sha256>/ か index/by-text/<text_sha256>/ が指す記録（ファイルがないものは飛ばす）。"""
     try:
         names = os.listdir(os.path.join(state, "index", kind, key))
     except OSError:
@@ -2325,7 +2324,7 @@ def _index_found(state, kind, key):
 
 def _origin(record):
     """記録の原文と資料の集まり（新規作成では資料の集まり）。曖昧さを決めるのに使う。形がわからなければ None。
-    推敲でも資料の集まりを含める（資料つきの記録と資料なしの記録のどちらの検査を使うかを決められないため。questions.md の43の1）。
+    推敲でも資料の集まりを含める（資料つきの記録と資料なしの記録のどちらの検査を使うかを決められないため）。
     (モード, 原文の本文のハッシュか None, 資料の本文のハッシュの並び)。"""
     if not isinstance(record, dict) or not isinstance(record.get("inputs"), dict):
         return None
@@ -2418,7 +2417,7 @@ def _same_final_place(final_record, final):
 
 def _ambiguity(items, kind=None):
     """ambiguous の値。(実行IDの並び（新しい順、重なりなし）, 曖昧さの種類)。種類は "materials"（原文は同じで資料の集まり
-    だけが違う。questions.md の43の1）、"source"（原文が違う。3.9）、"place"（10.8 C-46。kind で渡す）。"""
+    だけが違う）、"source"（原文が違う。3.9）、"place"（10.8 C-46。kind で渡す）。"""
     ordered = sorted(items, key=lambda item: item.order(), reverse=True)
     run_ids = []
     for item in ordered:
@@ -2816,7 +2815,7 @@ def _report_value(state, entry):
 
 
 def _summary_problems(state, record, required):
-    """questions.md の49。記録の件数（checks[].summary、materials_summary、result）を、ハッシュを確かめたレポートの件数と
+    """記録の件数（checks[].summary、materials_summary、result）を、ハッシュを確かめたレポートの件数と
     照らす（--replay なしでも。lint と diff は読み込まない）。食い違ったものの名前の並び。result の件数は、必要な検査
     （required）のレポートがすべて読めたときだけ照らす（欠けた検査は 3.9 の7 が incomplete にする）。"""
     wrong = []
@@ -2853,7 +2852,7 @@ def _summary_problems(state, record, required):
             for key in ("status", "candidate_count", "meaning_risk_count", "fail_on_meaning_risk_count"):
                 compare("diff." + key, summary.get(key), value.get(key))
             # 硬化の検査と勢いの検査（diff の詰めで足した。このキーを足す前の記録にはないので、あるときだけ照らす）。
-            # 見直し候補の数（review_count）は、2回目の反証の直し（review2-spec.md の T4）で足した
+            # 見直し候補の数（review_count）は、2回目の反証の直し（反証で見つけた例）で足した
             for key in ("stiffness", "tone"):
                 section = value.get(key) if isinstance(value.get(key), dict) else {}
                 for field in ("candidate_count", "level"):
@@ -3020,7 +3019,7 @@ def _newer_attempt(state, found, record):
 
 
 def _recorded_as_input(state, final):
-    """--final に渡した本文が、記録では原文か資料として使われているか（questions.md の48の2）。最終稿の記録が見つからなかった
+    """--final に渡した本文が、記録では原文か資料として使われているか。最終稿の記録が見つからなかった
     ときにだけ呼ぶ。inputs/ に写しがあり、読める記録の inputs.source か inputs.materials にこのハッシュがあるときだけ真。
     写しだけを見ると、記録を書けなかった run が置いた最終稿の写しで誤って案内する（反証レビュー spec 5）。"""
     if not os.path.isfile(os.path.join(state, "inputs", final.sha256 + ".bin")):
@@ -3096,7 +3095,7 @@ def _verify_record(state, found, final, source, since, replay, timeout):
                      _treated_label(again, again_by),
                      _treated_label(recorded_treated.get("index"), recorded_by) if recorded_treated is not None else "なし"))
         treated = again is not None
-    # questions.md の49: 記録の件数を、ハッシュを確かめたレポートの件数と照らす
+    # 記録の件数を、ハッシュを確かめたレポートの件数と照らす
     mismatched = _summary_problems(state, record, _required_for(record, treated=treated))
     if mismatched:
         fail("invalid_record", "summary_mismatch", "記録の件数がレポートと合いません: " + ", ".join(mismatched))
@@ -3119,7 +3118,7 @@ def _verify_record(state, found, final, source, since, replay, timeout):
             fail(None, "check_target", "{} の target が inputs と違います".format(name))
             missing.append(name)
     if missing:
-        # 記録の項目があり、時間切れか内部エラーで終わっていた検査だけなら、partial の記録（questions.md の42の2）
+        # 記録の項目があり、時間切れか内部エラーで終わっていた検査だけなら、partial の記録
         stopped = [(name, entries[name]["status"]) for name in missing
                    if name in entries and entries[name]["status"] in _FAILED_NAMES]
         if len(stopped) == len(missing):
@@ -3153,7 +3152,7 @@ def _verify_record(state, found, final, source, since, replay, timeout):
             if not ok:
                 fail("invalid_record", "report", "{} がないか、ハッシュが記録と合いません".format(expected))
     # 9. スクリプトと一覧のファイルと SKILL.md。一覧は、記録のときにあったか、今あるか、中身が同じかを比べる（diff の詰めの直し。
-    # 一覧は diff の結果を変える入力なので、変われば tool_changed。review-spec.md の F5、review-regress.md の R9）
+    # 一覧は diff の結果を変える入力なので、変われば tool_changed。反証で見つけた例）
     for name in _TOOL_NAMES:
         if current_tools[name]["sha256"] != record["tools"][name]["sha256"]:
             fail("tool_changed", "tool_changed", name)
@@ -3162,7 +3161,7 @@ def _verify_record(state, found, final, source, since, replay, timeout):
             fail("tool_changed", "tool_changed", key)
     if _skill_info()["skill_md_sha256"] != record["skill"]["skill_md_sha256"]:
         fail(None, "skill_changed", "SKILL.md のハッシュが記録と違います")
-    # questions.md の48の1: 同じ実行に、あとで別の本文を検査した回があれば知らせる（状態は変えない）
+    # 同じ実行に、あとで別の本文を検査した回があれば知らせる（状態は変えない）
     if trusted:
         newer = _newer_attempt(state, found, record)
         if newer is not None:
@@ -3220,7 +3219,7 @@ def _verify(args, parser):
     # 2. 状態フォルダがなければ no_record（フォルダは作らない）
     state = _state_dir(args.state_dir)
     if args.run_id is not None and os.path.isdir(state):
-        # 大文字と小文字だけが違う実行IDは、大文字と小文字を区別しないファイルシステムで同じフォルダになる（questions.md の51）
+        # 大文字と小文字だけが違う実行IDは、大文字と小文字を区別しないファイルシステムで同じフォルダになる
         problem = _run_id_case_problem(state, args.run_id)
         if problem:
             _error(problem)
@@ -3262,7 +3261,7 @@ def _verify(args, parser):
                 if _only_line_endings(state, found.final(), final):
                     problems.append(("only_line_endings_differ", "両方の改行を LF にそろえると同じです"))
                 elif final.text_sha256 is not None and found.final().get("text_sha256") == final.text_sha256:
-                    # 本文は同じで、BOM か末尾の改行も違う（questions.md の57。32 の範囲を広げた）
+                    # 本文は同じで、BOM か末尾の改行も違う（32 の範囲を広げた）
                     problems.append(("only_line_endings_differ", "本文（text_sha256）は記録と同じです"))
         else:
             found = value
@@ -3295,7 +3294,7 @@ def _verify(args, parser):
     if isinstance(status, tuple):
         reason, names = status
         if reason == "stopped":
-            # 記録の検査が時間切れか内部エラーで終わっていた（partial の記録。questions.md の42の2）
+            # 記録の検査が時間切れか内部エラーで終わっていた（partial の記録）
             groups = OrderedDict()
             for name, why in names:
                 groups.setdefault(_FAILED_NAMES[why], []).append(_label(name))
@@ -3342,7 +3341,7 @@ def _verify(args, parser):
     elif "empty_final" in codes:
         record_line = _VERIFY_EMPTY_RECORD_LINE
     else:
-        # 探した状態フォルダを書く（--state-dir で記録したのに付け忘れたときに気づけるように。questions.md の55）
+        # 探した状態フォルダを書く（--state-dir で記録したのに付け忘れたときに気づけるように）
         record_line = _NO_RECORD_LINE.format(state)
     if args.json:
         final_record = found.final() if found is not None else None
@@ -3463,7 +3462,7 @@ def _build_parser():
                               "候補にする規則を外します（yomiyasu_lint.py -h の一覧）。差分（意味が変わる恐れと規則の見直し候補）と"
                               "資料との照合の判定は変わりません。"
                               # yomiyasu_diff.py の _detector_level_help() と同じ文（diff を読み込まずにヘルプを出すため、ここに書く。
-                              # tests/test_v200_check_infra.py が一致を見張る。review-spec.md の F7、review1-spec.md の S2 と S5）
+                              # tests/test_v200_check_infra.py が一致を見張る。反証で見つけた例）
                               "文体の硬化の検査は incident と formal のとき、勢いの検査は pr、article、incident、manual、formal "
                               "のとき、候補を参考として出します。promo 以外の種類を指定すると、勢いの検査の絵文字の候補も参考として"
                               "出し、promo と minutes 以外では見出しの候補も参考として出します。promo では、番号つき項目の行と"

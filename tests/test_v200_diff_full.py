@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""v2.0.0: diff の全文差分、状態の3分け、レポートの形、引数、決定性、性能（DESIGN-interfaces.md 2章、6.3）。
+"""v2.0.0: diff の全文差分、状態の3分け、レポートの形、引数、決定性、性能（設計 2章、6.3）。
 
 v1.1.2 の diff() は9キーだけを返し、レポートは「（候補なし）」で終わるので、v2.0.0 の振る舞いを見る試験はすべて失敗する。
 docstring に「（v1.1.2 でも通る後戻り防止）」と書いた試験は v1.1.2 でも通り、v2.0.0 で壊さないことを見張る。
@@ -31,9 +31,9 @@ import yomiyasu_diff  # noqa: E402
 
 NINE_KEYS = ["markers", "new_words", "lost_words", "structure", "spans", "logic", "bold", "endings", "type_changes"]
 # 10.6 B1: --fail-on=meaning-risk が数える件数（fail_on_meaning_risk_count）を meaning_risk_count のすぐ後ろに足す
-# G7（DESIGN-reader-doctype.md 9.4、10.1）: not_judged の次に context を足す（キーを足すだけで、形式2のまま）
+# G7（種類と読者の設計 9.4、10.1）: not_judged の次に context を足す（キーを足すだけで、形式2のまま）
 # diff の詰め（追加文書 2.4、勢いの文書 3.3）: 文体の硬化の検査（stiffness）と勢いの検査（tone）を full_diff のあとに足す
-# diff の詰めの直し（step-c-fix/check-infra-speed.md。review-spec.md の F5）: 気持ちの語の一覧の出どころ（feeling）を最後に足す
+# diff の詰めの直し（反証で見つけた例）: 気持ちの語の一覧の出どころ（feeling）を最後に足す
 TOP_KEYS = (["format", "format_version", "tool_version", "status", "changed", "candidate_count", "meaning_risk_count",
              "fail_on_meaning_risk_count", "not_judged", "context", "meaning_risks"] + NINE_KEYS
             + ["full_diff", "stiffness", "tone", "feeling"])
@@ -391,7 +391,7 @@ class DiffCase(unittest.TestCase):
 
     def v2(self, result):
         for key in ("status", "candidate_count", "meaning_risks", "full_diff"):
-            self.assertTrue(key in result, "v2.0.0 の diff() は %s を返す（DESIGN-interfaces.md 2.8）。今のキー: %s"
+            self.assertTrue(key in result, "v2.0.0 の diff() は %s を返す（設計 2.8）。今のキー: %s"
                             % (key, list(result)))
         return result
 
@@ -409,7 +409,7 @@ class DiffCase(unittest.TestCase):
 
     def need_function(self, name):
         self.assertTrue(callable(getattr(yomiyasu_diff, name, None)),
-                        "v2.0.0 の yomiyasu_diff は %s() を公開する（DESIGN-interfaces.md 2.10）" % name)
+                        "v2.0.0 の yomiyasu_diff は %s() を公開する（設計 2.10）" % name)
         return getattr(yomiyasu_diff, name)
 
     def time_in_child(self, run, pairs, limit):
@@ -696,7 +696,7 @@ class TestPresentation(DiffCase):
 
 
 class TestFailOnScope(DiffCase):
-    """10.6 B1（GOALS-v2.0.0.md の D-2）: --fail-on=meaning-risk が数えるのは、kind が number、negation、swap、
+    """10.6 B1（目標の D-2）: --fail-on=meaning-risk が数えるのは、kind が number、negation、swap、
     sentence_type（marks と question）の意味が変わる恐れだけ。変えない箇所（protected）は意味が変わる恐れの節に出すが、
     条件には数えない。JSON の fail_on_meaning_risk_count は数える種類の件数、meaning_risk_count は今までどおり全件。"""
 
@@ -941,7 +941,7 @@ class TestBudget(DiffCase):
                  "古い値は消さず、変えた理由を横に書く。")
 
     def test_budget_is_applied_and_completeness_is_kept(self):
-        """diff の詰め（step2-diff/questions.md 36 の (a)）で、塊をそのまま文字で対応させる上限を2,000字から500字にした
+        """diff の詰めで、塊をそのまま文字で対応させる上限を2,000字から500字にした
         （_BLOCK_ALIGN_LIMIT。500字を超える塊は文の断片に分け、変わった断片だけを対応させる）。前の入力（1,000字の段落120個）は
         変わった断片だけでは予算に届かなくなったので、500字以下の段落を250個にした（予算の仕組みと完全さを見る狙いは同じ）。"""
         full_diff = self.need_function("full_diff")
@@ -971,7 +971,7 @@ class TestBudget(DiffCase):
         """10.4 S6: 予算は「文字の対応にかける文字列（行をつないだもの）の長さの、両側の合計」で数え、200,000字まで（ちょうどは含む）。
         1行が500字の段落の1字を変えた hunk（1つ1,000字）を201個並べると、200個目まではちょうど200,000字で対応を取り、
         201個目は予算を超えるので segments が null、segments_omitted が budget になる。予算を超えた hunk のあとも完全さは保つ。
-        diff の詰め（questions.md 36 の (a)）で、塊をそのまま文字で対応させる上限を500字にしたので、前の入力（1,000字の行を
+        diff の詰めで、塊をそのまま文字で対応させる上限を500字にしたので、前の入力（1,000字の行を
         101個）から、500字の行を201個に変えた（数え方を見る狙いは同じ）。"""
         full_diff = self.need_function("full_diff")
         old_blocks, new_blocks = [], []
@@ -1276,7 +1276,7 @@ class TestPerformanceEdges(DiffCase):
 DIFF_HELP_DESCRIPTION = ("元の文と書き直した文を比べ、変わった箇所をすべて出し、意味が変わる恐れと規則の見直し候補を挙げます。"
                          "全文差分は意味が同じだという証明ではありません。意味が同じかどうかは判定しません。")
 # 10.6 B1: 数える種類を書く。変えない箇所（コード、URL、引用など）は数えない
-# diff の詰めの直し（step-c-fix/check-infra-speed.md。review-spec.md の F6）: 否定対比の主張の逆転と気持ちの語も数えないことを足した
+# diff の詰めの直し（反証で見つけた例）: 否定対比の主張の逆転と気持ちの語も数えないことを足した
 DIFF_HELP_FAIL_ON = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の変化が"
                      "1件でもあれば、終了コード1で終わります。コード・URL・引用など変えない箇所の変化は、意味が変わる恐れとして出しますが、"
                      "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。"

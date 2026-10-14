@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """v2.0.0: lint の人が読む出力、JSON（形式2）、--strict と --fail-on、終了コード、入力の読み方。
 
-期待値は DESIGN-interfaces.md の 1.1〜1.6 と 6.2 の表に従う（例1・例2の出力は一字一句）。
+期待値は設計の 1.1〜1.6 と 6.2 の表に従う（例1・例2の出力は一字一句）。
 v1.1.2 では、v2.0.0 の振る舞いを確かめる試験はすべて失敗する。
 v1.1.2 でも通る試験は、docstring に「（v1.1.2 でも通る後戻り防止）」と書いて分けた。
 """
@@ -71,7 +71,7 @@ EXAMPLE2_STRICT_TAIL = [
 ]
 
 # 1.3 のキーと順
-# G7（DESIGN-reader-doctype.md 9.3、10.1）: not_judged の次に context を足す（キーを足すだけで、形式2のまま）
+# G7（種類と読者の設計 9.3、10.1）: not_judged の次に context を足す（キーを足すだけで、形式2のまま）
 JSON_KEYS = [
     "format", "format_version", "tool_version", "candidate_count", "counts",
     "no_rule_findings", "rule_penalty_score", "not_judged", "context", "metrics", "findings",
@@ -921,7 +921,7 @@ class TestHelpAndVersion(LintCase):
 
 
 class TestMainDecisions(LintCase):
-    """DESIGN-interfaces.md 10.5（step2-lint で主担当が決めたこと）。"""
+    """設計 10.5（lint の段で決めたこと）。"""
 
     def test_argparse_errors_end_with_a_japanese_hint(self):
         """argparse の使い方の誤りは、英語の行のあとに日本語の案内を1行足し、終了コード2。"""

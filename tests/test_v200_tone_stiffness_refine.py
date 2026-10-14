@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """v2.0.0（diff の詰めの直し）: 文体の硬化の検査（stiffness）、勢いの検査（tone）、lint の種類 promo。
 
-仕様の反証レビュー（v200-development/step-c-detectors/review-spec.md の F2、F3、F11、F12、F14 の一部）と、誤検出の反証
-レビュー（review-fp.md の F3、F4、F7、F8、F9 と提案 P3、P4、P7）、大賀さんの判断（2026-10-14 朝。紹介記事・宣伝文では「！」を
+仕様の反証レビュー（反証で見つけた例の一部）と、誤検出の反証
+レビュー（反証で見つけた例）、大賀さんの判断（2026-10-14 朝。紹介記事・宣伝文では「！」を
 同じ段落に3つ以上並べても減らさず、評価の語を短く重ねる型「安い。うまい。早い。」も残す）の直し。文はすべて合成の文
-（レビューの組 cases_fp.json の文と、それを言い換えた文、この段で足した文。R1-043 は大賀さんが判定した R1 の文）。
+（レビューの組の文と、それを言い換えた文、この段で足した文）。
 実在の会社や商品の名前は使わない。
 
 - 勢い: 「！」が3つ以上あれば減っても数えない許しを、種類によらず外した。紹介記事で3つの「！」を1つにした推敲も候補になる
@@ -74,7 +74,7 @@ def section_lines(result, key):
 # ---- 大賀さんの判断 1: 「！」の3つ以上の許しを外す ----
 THREE_ONE_LINE = ("安い！うまい！早い！", "安くてうまくて早い！")
 THREE_LINES = ("安い！\nうまい！\n早い！", "安くて\nうまくて\n早い！")
-# step-c-detectors/cases/promo_cases.json の many の3組と同じ形（同じ段落の3つの「！」を減らした推敲）
+# 紹介記事の組の many の3組と同じ形（同じ段落の3つの「！」を減らした推敲）
 PROMO_MANY = (
     ("新作が出ました！ どれもおいしい！ 今すぐ来てください！", "新作が出ました！ どれもおいしいので、ぜひ来てください。"),
     ("安い！ うまい！ 早い！ 三拍子そろったお店です。", "安くて、うまくて、早い！ 三拍子そろったお店です。"),
@@ -146,7 +146,7 @@ class LintPromoFragmentTest(unittest.TestCase):
 
 # ---- 大賀さんの判断 3: 強める語の繰り返しを減らした推敲は promo でも候補のまま（fp の P6 を採らない）----
 REPEATED_INTENSIFIERS = (
-    # review-fp の PR-ok03、PR-ok04、PR-ok09
+    # 反証で見つけた例
     ("とても安くて、とてもおいしくて、とても量が多い！ 学生に大人気の定食屋です。",
      "安くておいしく、量もとても多い！ 学生に大人気の定食屋です。", ["とても"]),
     ("本当に本当においしいので、ぜひ食べてみてください！", "本当においしいので、ぜひ食べてみてください！", ["本当に"]),
@@ -198,11 +198,11 @@ class IncidentStiffnessTest(unittest.TestCase):
 
 # ---- fp の P3: 文書全体の候補は、変わった文の組が2つ以上のときだけ ----
 ONE_PAIR_REWRITES = (
-    # FI-ok03（R1 で大賀さんが「柄を握る手のほうが自然」とした直し方）
-    ("握りしめた刀の、柄のほうが先に力を失っていく。", "握りしめた刀の、柄を握る手のほうが先に力を失っていく。", "essay"),
-    # R1-043（大賀さんが「直す」とした文と、直した案）
-    ("速さは、道筋を変えずに歩き方を変えて手に入れたものです。",
-     "処理の速さは、計算の手順と結果を変えずに、データの読み込み方と書き込み方を変えて得たものです。", None),
+    # 意味の取れない比喩の主語を、持つ手に直した（1文だけの直し。合成の文）
+    ("握った綱の、端のほうが先に力を失っていく。", "握った綱の、端を握る手のほうが先に力を失っていく。", "essay"),
+    # 比喩で隠した中身を具体的に書いた（1文だけの直し。合成の文）
+    ("軽さは、形を変えずに選び方を変えて手に入れたものです。",
+     "製品の軽さは、外形の寸法と強度を変えずに、素材の選び方と加工の方法を変えて得たものです。", None),
     # IC-ok14（2段落のうち1文だけを直した）
     ("ジョブが悲鳴を上げていた。\n\n夜間のバッチ処理が、予定の三倍の時間をかけても終わらなかった。",
      "夜間のバッチ処理が遅れていた。\n\n夜間のバッチ処理が、予定の三倍の時間をかけても終わらなかった。", "incident"),
@@ -293,7 +293,7 @@ class TypedEmojiHeadingTest(unittest.TestCase):
                                        (ESSAY_EMOJI[0], ESSAY_EMOJI[1], "emoji")):
             for doc_type in TYPED_NOT_PROMO:
                 if subkind == "heading" and doc_type == "minutes":
-                    # 議事録の推敲では見出しを変えないので、見出しの候補は見直し候補のまま（review1-spec.md の S2。
+                    # 議事録の推敲では見出しを変えないので、見出しの候補は見直し候補のまま（反証で見つけた例。
                     # tests/test_v200_fix_round1.py の MinutesHeadingTest）
                     continue
                 with self.subTest(subkind=subkind, doc_type=doc_type):
@@ -313,7 +313,7 @@ class TypedEmojiHeadingTest(unittest.TestCase):
     def test_report_for_typed_info_only(self):
         result = result_of(*EMOJI_SLIDE, doc_type="slides")
         lines = section_lines(result, "tone")
-        # 参考の理由の文は、参考になった候補（ここでは絵文字だけ）の決まりだけを書く（review1-spec.md の S2）
+        # 参考の理由の文は、参考になった候補（ここでは絵文字だけ）の決まりだけを書く（反証で見つけた例）
         self.assertEqual(lines[0], "■ 勢い（参考 1件。文書の種類 slides では絵文字を外すのが決まりなので、参考として出しています）")
         self.assertTrue(lines[1].startswith("- （参考）原文の絵文字2個が、推敲後は0個になりました"), lines[1])
         self.assertEqual(yomiyasu_diff.detector_summary(result, "tone"), "参考1件")
@@ -337,7 +337,7 @@ class TypedEmojiHeadingTest(unittest.TestCase):
         result = result_of(*EMOJI_AND_EXCLAMATION, doc_type="incident")
         self.assertEqual(levels(result["tone"]), [("exclamation", "info"), ("emoji", "info")])
         lines = section_lines(result, "tone")
-        # 2回目の反証の直し（step-c-fix/fix-round2.md。review2-spec.md の T3）: 理由の文は参考にした候補（「！」と絵文字）に合わせる
+        # 2回目の反証の直し（反証で見つけた例）: 理由の文は参考にした候補（「！」と絵文字）に合わせる
         self.assertEqual(lines[0], "■ 勢い（参考 2件。文書の種類 incident では「！」や強める語を減らし、絵文字を外すのが正しい直し方の"
                                    "ことが多いので、参考として出しています）")
         self.assertEqual(yomiyasu_diff.detector_summary(result, "tone"), "参考2件")
@@ -440,7 +440,7 @@ BOLD_LABELS = ("# 障害報告書\n\n**原因**\n\n設定の誤りでした。\n
 class PseudoHeadingTest(unittest.TestCase):
     """紹介記事・宣伝文（--doc-type promo）では、番号つき項目の行（「1. …」）と太字だけの行（「**…**」）も見出しに数える。
     種類なしとほかの種類では数えない（コーパス48組の、番号つきの一覧を文章にした推敲と太字のラベルを外した推敲で、
-    見出しの候補が4組に出たため。step-c-fix/stiffness-tone-lint.md）。"""
+    見出しの候補が4組に出たため）。"""
 
     def test_promo_counts_numbered_and_bold_lines(self):
         for name, before, after in PSEUDO_HEADING_PAIRS:
@@ -547,7 +547,7 @@ def corpus_pairs():
 
 
 class CorpusDetectorWatchTest(unittest.TestCase):
-    """コーパス48組は yomiyasu の正しい推敲なので、硬化と勢いの候補は0件（GOALS 3.6 の1と2の根拠の値）。増えたら誤検出が
+    """コーパス48組は yomiyasu の正しい推敲なので、硬化と勢いの候補は0件（目標 3.6 の1と2の根拠の値）。増えたら誤検出が
     増えたことになる。"""
 
     def test_corpus_48_pairs_have_no_stiffness_or_tone_candidate(self):

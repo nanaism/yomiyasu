@@ -81,7 +81,7 @@ class RecordTest(CheckCase):
         self.assertEqual(verify.returncode, 0, verify.stdout + verify.stderr)
 
     def test_changed_summary_is_invalid(self):
-        """記録の件数を書き換えて digest を作り直しても、レポートの件数と照らして見つける（questions.md の49 と同じ）。"""
+        """記録の件数を書き換えて digest を作り直しても、レポートの件数と照らして見つける。"""
         import importlib.util
         a, b, lines = self.run_pair(*STIFF)
         path, record = self.record_from(lines)

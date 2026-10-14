@@ -24,7 +24,7 @@ DIFF = SCRIPTS_DIR / "yomiyasu_diff.py"
 CHECK = SCRIPTS_DIR / "yomiyasu_check.py"
 
 SAMPLE = "本記事では、手触りのある設計の本質に迫ります。いかがでしたでしょうか。\n"
-# yomiyasu_check.py run --stdin の区切り（DESIGN-interfaces.md 3.11）。cp932 で表せない文字を含める
+# yomiyasu_check.py run --stdin の区切り（設計 3.11）。cp932 で表せない文字を含める
 CHECK_STDIN = "<<<yomiyasu:original>>>\n設定を更新します。\n<<<yomiyasu:final>>>\n設定を🚀更新しました。再起動してください。\n"
 
 
