@@ -457,6 +457,7 @@ yomiyasu-check: executed via=verify run=20261014T124830Z-6b5d53f8 attempt=1 fina
 
 - 端末で `python3 -B /path/to/yomiyasu/scripts/yomiyasu_check.py start --source docs/draft.md` を実行します。最終稿を別のファイルに書くときは `--final docs/final.md` を足します。
 - Claude Code では、プロジェクトに置いたスキルを `/yomiyasu docs/draft.md を読みやすくして` のように呼び、原稿のファイルを書くと、フックが登録します。登録するのは、依頼の文で最初に出てくるファイル1つだけです。2つ以上の原稿は、端末で1つずつ `start` してください。
+- Codex では、`$yomiyasu:yomiyasu docs/draft.md を読みやすくして` のように依頼の文にスキルの名前を書くと、フックが登録します。`$yomiyasu` と書いても登録します。登録するのは、Claude Code と同じく最初に出てくるファイル1つだけです。試した置き方では Codex がスキルを `yomiyasu:yomiyasu` という名前で一覧に載せたので、`$yomiyasu` と書いた回ではスキルの指示が読み込まれませんでした。
 
 #### 入れ方
 
@@ -464,14 +465,20 @@ yomiyasu-check: executed via=verify run=20261014T124830Z-6b5d53f8 attempt=1 fina
 2. 出た JSON を、管理したいプロジェクトの `.claude/settings.json` か `.claude/settings.local.json` に貼ります。`~/.claude/settings.json` に貼るとすべてのプロジェクトで動き、Bash と MCP のツールを呼ぶたびに python が起動します。
 3. プラグインを更新するとスクリプトのパスが変わります。更新したら、設定の例を出し直して貼り直してください。
 
-`--print-config codex` で Codex の `<repo>/.codex/hooks.json` の例も出せますが、Codex での動きは確かめていません。
+Codex では次のように入れます。
+
+1. `python3 /path/to/yomiyasu/scripts/yomiyasu_hook.py --print-config codex` で設定の例を出します。
+2. 出た JSON を、管理したいプロジェクトの `.codex/hooks.json` に置きます。
+3. Codex は、信頼していない hooks.json を、何も知らせずに飛ばします。試したのは、`codex exec` に `--dangerously-bypass-hook-trust` を付けて信頼の確かめを飛ばした形だけです。`/hooks` で信頼する手順は試していません。
+4. `codex exec` に `--ignore-user-config` を付けると、プロジェクトの `.codex/hooks.json` も読まれず、フックは1つも動きません（1回確かめました）。
 
 #### 動き
 
 - 返答を終えるたびに、登録した原稿の最終稿が検査記録と合うかを確かめます。合わなければ、理由を渡して作業を続けさせます。続けさせるのは2回まで、登録から30分まで、run は3回までです。超えたら「未確認」として1回知らせ、それ以上は続けさせません。自動で書き直したり投稿したりはしません。上限は `start` の `--max-stop-blocks`、`--max-runs`、`--deadline-min` で変えられます。
 - Claude Code は、フックが作業を続けさせたときに「Stop hook error occurred」と表示し、投稿を止めたときに「PreToolUse:Bash hook error:」に続けて理由を表示します。どちらも、フックの判断を知らせる表示です。
+- Codex の `codex exec` では、続けさせる理由が利用者の入力としてエージェントに届きます。投稿を止めたときは「Command blocked by PreToolUse hook:」に続けて理由が出ます。
 - 投稿には、`yomiyasu_check.py export --final 最終稿` で書き出した写しを使ってください（例 `gh pr create --body-file <写し>`）。写しは `.yomiyasu/exports/` にでき、検査した最終稿と同じバイト列です。照合が合わないときは写しを作りません。写しができても、合格の判定ではありません。
-- 補助として、登録した原稿に関係する `gh` の投稿（pr、issue、release の本文と、api の本文の欄）と MCP の投稿で、本文が検査記録と照合できないときは止めます。`--body "$(cat 最終稿)"` のように本文を取り出せない投稿は、利用者に確かめます（Claude Code の `-p` では実行されません）。登録と関係ない投稿は止めません。
+- 補助として、登録した原稿に関係する `gh` の投稿（pr、issue、release の本文と、api の本文の欄）と MCP の投稿で、本文が検査記録と照合できないときは止めます。`--body "$(cat 最終稿)"` のように本文を取り出せない投稿は、利用者に確かめます（Claude Code の `-p` では実行されません）。Codex には利用者に確かめる仕組みがないので、止めます。登録と関係ない投稿は止めません。
 - `yomiyasu_check.py end --source docs/draft.md` で登録を終えられます。セッションが終わったときも終わります。Claude Code の `-p` では1回ごとにセッションが終わるので、端末で登録した原稿が効くのは `-p` の1回分です。`--resume` で続けても、前の回の登録は引き継がれません。
 - 登録のある原稿の run は、上限を超えると検査せずに `unverified` と終了コード1を返します。登録の無い原稿の run と verify は、フックを入れる前と同じです。
 
@@ -479,6 +486,8 @@ yomiyasu-check: executed via=verify run=20261014T124830Z-6b5d53f8 attempt=1 fina
 
 - フックは補助で、確かめていない原稿の公開を完全には止められません。フックの時間切れや失敗、一覧にないコマンド（`gh` 以外）、本文を取り出せずパスも書いていない投稿、本文を少し変えた投稿、利用者が自分で行う投稿は止まりません。
 - 返答の中だけで推敲し、ファイルに書かなかったときは、フックでは見つけられません。
+- Codex の `codex exec` では、「未確認」の知らせが利用者に表示されません（JSON の出力で2回、人向けの出力で1回確かめました）。フックは知らせを出していますが、Codex が表示しません。上限で止まったときは、エージェントの完了報告の「実行しなかった検査」を見て、投稿の前に `yomiyasu_check.py verify` で確かめてください。
+- 試した Codex では、エージェントのコマンドはコード実行のツール（`exec_command`）を通り、`Bash` としてフックに届きました。ほかの経路でコマンドを実行したときにフックが見るかは、確かめていません。
 - 同じプロジェクトで2つのセッションを同時に動かすと、端末で登録した原稿は、先に動いたセッションのものになります。取り違えを避けたいときは、`start --session` でセッションを指定します。
 - 登録、記録、写しは `.yomiyasu/` にあり、エージェントと同じ権限で書き換えられます。改ざんの防止や人の承認の証明にはなりません。フックはネットワークを使わず、本文を外へ送りません。フックの出力と登録のファイルにも、本文は入れません。
 
@@ -487,8 +496,11 @@ yomiyasu-check: executed via=verify run=20261014T124830Z-6b5d53f8 attempt=1 fina
 | ホスト | 版 | 入れ方 | 試したこと |
 |---|---|---|---|
 | Claude Code | 2.1.296（macOS） | プロジェクトの `.claude/settings.json`、`claude -p`、プロジェクトに置いたスキルの `/yomiyasu` | 端末の start と `/yomiyasu` での登録、検査のあとの書き換えで続けさせること、上限での未確認、関係ない作業を止めないこと、export の写しでの投稿、照合の合わない投稿を止めること、本文がフックの出力に出ないこと |
+| Codex | codex-cli 0.162.1（macOS） | プロジェクトの `.codex/hooks.json`（`--print-config codex` の出力そのまま）、`codex exec`、`--dangerously-bypass-hook-trust`、サンドボックスは workspace-write、承認は never、作業場所の `.agents/skills/` に置いたスキル | 端末の start と `$yomiyasu`・`$yomiyasu:yomiyasu` での登録、上限まで続けさせて止まること（「未確認」の知らせは表示されない）、export の写しでの投稿、照合の合わない投稿と本文を取り出せない投稿を止めること、登録と関係ない投稿を止めないこと、セッションの終わりで登録を終えること、空白を含むパスでフックが動くこと、本文がフックの出力に出ないこと |
 
-ここにない形は確かめていません。Codex（設定の例はあります）、Claude Code の対話モード、プラグインで入れたときの `/yomiyasu:yomiyasu`、`.claude/settings.local.json` と `~/.claude/settings.json` に置く形、Windows、Cursor、Claude.ai では試していません。
+Codex は、プラグイン、アプリ、メモリ、複数のエージェント、ログインシェル、利用者のルールとスキルを切って試しました。ふだんの設定では、コマンドの形やツールの名前が変わるおそれがあります。
+
+ここにない形は確かめていません。Claude Code の対話モード、Claude Code にプラグインで入れたときの `/yomiyasu:yomiyasu`、`.claude/settings.local.json` と `~/.claude/settings.json` に置く形、Codex の対話の画面、`/hooks` での信頼、`~/.codex/hooks.json` に置く形、会話の途中でエージェントが start したときの結び付け、MCP の投稿（どちらのホストでも）、Windows、Cursor、Claude.ai では試していません。
 
 ## 限界
 

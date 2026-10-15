@@ -68,7 +68,7 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
 - `scripts/yomiyasu_hook.py` を足しました（`skills/yomiyasu/scripts/` にも同じものを置きます）。利用者が Claude Code や Codex の設定ファイルに貼ったときだけ動きます。プラグインとスキルにはフックを入れていません。`--print-config` は設定の例を出すだけで、設定ファイルには書き込みません。
 - フックは、登録した原稿だけを見ます。返答の終わりに最終稿が検査記録と合うかを確かめ、合わなければ2回まで作業を続けさせ、上限を超えたら「未確認」として1回知らせます。登録した原稿に関係する `gh` と MCP の投稿で、本文が照合できないときは止めます。ネットワークを使わず、フックの出力と登録のファイルに本文を入れません。
 - フックを入れない人にも見える変化は、ヘルプだけです。全体のヘルプに start、export、end の3行が増え、説明の列が広がります。`run --help` と `verify --help` の終了コードの表に、start、export、end と、登録の上限（`unverified`）の説明が足されます。
-- 試したホストと版: Claude Code 2.1.296（macOS）を、プロジェクトの `.claude/settings.json` と `claude -p` で試しました。Codex、Claude Code の対話モード、プラグインで入れたときの `/yomiyasu:yomiyasu`、Windows では確かめていません。
+- 試したホストと版: Claude Code 2.1.296（macOS）を、プロジェクトの `.claude/settings.json` と `claude -p` で試しました。Codex は codex-cli 0.162.1（macOS）を、プロジェクトの `.codex/hooks.json` と `codex exec`（`--dangerously-bypass-hook-trust` を付けた形）で試しました。Codex の `codex exec` では「未確認」の知らせが利用者に表示されず、`--ignore-user-config` を付けるとフックは動きません。Claude Code の対話モード、Codex の対話の画面、Claude Code にプラグインで入れたときの `/yomiyasu:yomiyasu`、Windows では確かめていません。
 
 ### 変更
 
