@@ -507,7 +507,7 @@ def _ensure_state(state):
         raise
 
 
-def _state_dir(option):
+def state_dir_for(cwd, option=None):
     """状態フォルダの決め方（run、verify、フックで同じ規則）。
 
     1 --state-dir、2 環境変数 YOMIYASU_STATE_DIR、3 作業ディレクトリから上へたどり、.git（フォルダでもファイルでもよい）が
@@ -515,11 +515,11 @@ def _state_dir(option):
     環境変数が空白だけのときと、展開されなかった ${…} を含むときは、ないものとして3と4に進む（--session の ${ と同じ扱い。
     作業フォルダに「${CLAUDE_PROJECT_DIR}」のようなフォルダを作らない。反証で見つけた例）。"""
     if option:
-        return _abspath(option)
+        return os.path.abspath(os.path.join(cwd, option))
     environment = os.environ.get("YOMIYASU_STATE_DIR")
     if environment and environment.strip() and "${" not in environment:
-        return _abspath(environment)
-    cwd = _getcwd()
+        return os.path.abspath(os.path.join(cwd, environment))
+    cwd = os.path.abspath(cwd)
     current = cwd
     while True:
         if os.path.exists(os.path.join(current, ".git")):
@@ -528,6 +528,15 @@ def _state_dir(option):
         if parent == current:
             return os.path.join(cwd, ".yomiyasu")
         current = parent
+
+
+def _state_dir(option):
+    # Absolute overrides must still work when the process cwd has disappeared.
+    environment = os.environ.get("YOMIYASU_STATE_DIR")
+    selected = option or (environment if environment and environment.strip() and "${" not in environment else None)
+    if selected and os.path.isabs(selected):
+        return os.path.normpath(selected)
+    return state_dir_for(_getcwd(), option)
 
 
 def _state_dir_given(option):
@@ -1006,6 +1015,10 @@ def _link(state, run_id, new_run, mode, source, materials, final, moment, cwd):
         numbers = _attempt_numbers(run_dir)
         return {"run_id": run_id, "attempt": (numbers[-1] + 1) if numbers else 1}, None
     if not new_run:
+        armed = _armed_for_source(state, source)
+        if armed is not None:
+            numbers = _attempt_numbers(os.path.join(runs, armed["run_id"]))
+            return {"run_id": armed["run_id"], "attempt": numbers[-1] + 1 if numbers else 1}, None
         found = _latest_by_path(state, _path_key(final, source, materials))
         if found is not None:
             found_id, record = found
@@ -1838,7 +1851,7 @@ def _save(state, ctx, link, moment, cwd, host, tools, options, path_key, lint_mo
     書けなければ OSError を出す（確保した回のファイルは消す）。"""
     run_id = link["run_id"]
     run_dir = _ensure_dir(state, "runs", run_id)
-    attempt, record_path = _reserve_attempt(run_dir, link["attempt"])
+    attempt, record_path = link.get("reserved") or _reserve_attempt(run_dir, link["attempt"])
     created = []
     try:
         previous, fix_count, same = _history(run_dir, attempt, ctx.final)
@@ -1931,6 +1944,22 @@ def _timeout(raw):
 
 
 def _run(args, parser):
+    # Managed runs reserve their attempt under the armed lock before any checks.
+    # Remove an unfinished reservation on every exception/signal/early return.
+    args._armed_reservation = None
+    try:
+        return _run_impl(args, parser)
+    finally:
+        reservation = args._armed_reservation
+        if reservation is not None:
+            try:
+                if os.path.getsize(reservation[1]) == 0:
+                    os.unlink(reservation[1])
+            except FileNotFoundError:
+                pass
+
+
+def _run_impl(args, parser):
     # 1. 引数を確かめる。ここから入力を読み終えるまで、状態フォルダには何も書かない
     if args.stdin and (args.final or args.source or args.materials):
         parser.error("--stdin のときは --final、--source、--material を使えません"
@@ -1979,11 +2008,23 @@ def _run(args, parser):
             shown = args.stance if args.stance.strip() else "（空）"
             _error("--stance に使えない値です: {}。使えるのは {} です。".format(shown, "、".join(diff_module.STANCES)))
             return 2
+    original_snapshot = None
+    snapshot_id = None
     if (not args.stdin and args.source and "-" not in (args.source[0], args.final[0])
             and _same_file(args.source[0], args.final[0])):
-        # start（原文の写しを先に取る任意のコマンド）はフックを作るときに足す。今は同じファイルなら必ず2
-        _error(_SAME_FILE_ERROR)
-        return 2
+        state_for_start = _state_dir(args.state_dir)
+        if (not args.new_run and not args.no_record
+                and os.path.isdir(os.path.join(state_for_start, "armed"))):
+            current_source, source_problem = _read_named("source", 0, args.source[0], None)
+            if source_problem:
+                _error(source_problem)
+                return 2
+            armed = _armed_for_source(state_for_start, current_source, args.run_id)
+            snapshot_id, original_snapshot = _start_snapshot(
+                state_for_start, args.source[0], args.run_id or (armed["run_id"] if armed else None), cwd)
+        if original_snapshot is None:
+            _error(_SAME_FILE_ERROR)
+            return 2
     loaded, problem = _read_inputs(args)
     if problem:
         _error(problem)
@@ -1991,6 +2032,8 @@ def _run(args, parser):
 
     ctx = _Context()
     ctx.source, ctx.materials, ctx.final = loaded
+    if original_snapshot is not None:
+        ctx.source = original_snapshot
     ctx.doc_type, ctx.reader = doc_type, reader
     if not ctx.final.text.strip():
         # 空の最終稿（空白と改行だけの本文も同じ）は検査しない
@@ -2033,11 +2076,18 @@ def _run(args, parser):
     if state is not None:
         problem = _run_id_case_problem(state, args.run_id) if args.run_id is not None else None
         if problem is None:
-            link, problem = _link(state, args.run_id, args.new_run, ctx.mode, ctx.source, ctx.materials, ctx.final,
+            link, problem = _link(state, args.run_id or snapshot_id, args.new_run, ctx.mode, ctx.source, ctx.materials, ctx.final,
                                   moment, cwd)
         if problem:
             _error(problem)
             return 2
+        managed = _armed_for_source(state, ctx.source, args.run_id, args.new_run)
+        if managed is not None and managed["run_id"] == link["run_id"]:
+            if _managed_limit(state, managed, ctx, args, link):
+                return 1
+            host["armed_by"] = "armed/" + managed["run_id"] + ".json"
+            if host["session"] is None:
+                host["session"] = managed["session_id"]
         if _state_dir_given(args.state_dir):
             ctx.state_dir_option = state
         ctx.source_was_final = ctx.source is not None and _was_checked_final(state, ctx.source)
@@ -3201,7 +3251,7 @@ def _verify_record(state, found, final, source, since, replay, timeout):
     return states[0], problems, replayed, trusted
 
 
-def _verify(args, parser):
+def _verify(args, parser, _final=None, _return=False):
     # 1. 引数を確かめ、最終稿のハッシュを先に計算する。誤りなら2で、何も書かない
     if args.state_dir is not None and not args.state_dir.strip():
         parser.error("--state-dir に空の値は使えません")
@@ -3220,12 +3270,12 @@ def _verify(args, parser):
         _error(problem)
         return 2
     stdin_data = None
-    if "-" in (args.final, args.source):
+    if _final is None and "-" in (args.final, args.source):
         stdin_data, problem = _read_stdin_bytes()
         if problem:
             _error(problem)
             return 2
-    final, problem = _read_target(args.final, stdin_data)
+    final, problem = (_final, None) if _final is not None else _read_target(args.final, stdin_data)
     if problem:
         _error(problem)
         return 2
@@ -3363,7 +3413,7 @@ def _verify(args, parser):
     else:
         # 探した状態フォルダを書く（--state-dir で記録したのに付け忘れたときに気づけるように）
         record_line = _NO_RECORD_LINE.format(state)
-    if args.json:
+    if args.json or _return:
         final_record = found.final() if found is not None else None
         recorded_sha = final_record.get("sha256") if isinstance(final_record, dict) else None
         checks = None
@@ -3382,10 +3432,464 @@ def _verify(args, parser):
             ("required_checks", required), ("checks", checks),
             ("meaning_risk_count", meaning), ("replay", replayed),
             ("problems", [OrderedDict((("code", code), ("detail", detail))) for code, detail in problems])))
+        if _return:
+            result["_record_line"] = record_line
+            return result
         print(json.dumps(result, ensure_ascii=True, indent=1))
     else:
         print("\n".join([line, token, record_line]))
     return 0 if status == "executed" else 1
+
+
+# ---- 任意の登録。start を使わない限り armed/ は作らない ----
+
+_ARMED_STATUSES = ("active", "checked", "unverified", "ended")
+_DEFAULT_LIMITS = {"max_stop_blocks": 2, "max_runs": 3, "deadline_min": 30}
+_MANAGED_BYTES = 2 * 1024 * 1024
+
+
+def _armed_place(path):
+    return os.path.normcase(os.path.realpath(path))
+
+
+def _armed_valid(entry, run_id):
+    try:
+        return (entry["format"] == "yomiyasu-armed" and type(entry["format_version"]) is int
+                and entry["format_version"] == 1 and entry["run_id"] == run_id
+                and _run_id_problem(run_id) is None and entry["status"] in _ARMED_STATUSES
+                and _parse_iso(entry["created_at"]) is not None and _parse_iso(entry["deadline"]) is not None
+                and isinstance(entry["targets"]["source"]["path"], str)
+                and all(isinstance(entry["targets"]["source"][key], str) for key in ("sha256", "text_sha256", "snapshot"))
+                and (entry["targets"]["final"] is None or isinstance(entry["targets"]["final"], str))
+                and all(type(entry["limits"][key]) is int for key in _DEFAULT_LIMITS)
+                and type(entry["counters"]["stop_blocks"]) is int and isinstance(entry["log"], list))
+    except (KeyError, TypeError):
+        return False
+
+
+def armed_entries(state):
+    """読める登録だけ返す。壊れたファイルは飛ばす。フォルダは作らない。"""
+    folder = os.path.join(state, "armed")
+    try:
+        names = sorted(os.listdir(folder))
+    except FileNotFoundError:
+        return []
+    entries = []
+    for name in names:
+        if not name.endswith(".json") or _run_id_problem(name[:-5]):
+            continue
+        entry = _read_record(os.path.join(folder, name))
+        if entry is not None and _armed_valid(entry, name[:-5]):
+            entries.append(entry)
+    return entries
+
+
+_ARMED_STALE = 10          # これより古いロックは、落ちたプロセスの残りとみなして取り直す（秒）
+_ARMED_WAIT_HOOK = 2.0     # フックが待つ上限（秒。フックの予算の中で）
+_ARMED_WAIT_CLI = _ARMED_STALE + 2.0   # check の start、run、end が待つ上限。残ったロックを取り直せるように古さの上限より長くする
+
+
+class _ArmedLock(object):
+    """budget は time.monotonic() による締切（フック。2秒まで待つ）。None は check のコマンドで、12秒まで待つ。"""
+    def __init__(self, state, run_id, budget=None, source=False):
+        if _run_id_problem(run_id):
+            raise ValueError("run_id")
+        self.path = os.path.join(state, "armed", (".source-" if source else "") + run_id + ".lock")
+        self.deadline = (min(time.monotonic() + _ARMED_WAIT_HOOK, budget) if budget is not None
+                         else time.monotonic() + _ARMED_WAIT_CLI)
+        self.identity = None
+
+    def __enter__(self):
+        while time.monotonic() < self.deadline:
+            try:
+                fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
+                try:
+                    info = os.fstat(fd)
+                    self.identity = (info.st_dev, info.st_ino)
+                    os.close(fd)
+                except BaseException:
+                    # 作った直後に止められても（フックの時間切れなど）、ロックを残さない
+                    try:
+                        os.close(fd)
+                    except OSError:
+                        pass
+                    try:
+                        os.unlink(self.path)
+                    except OSError:
+                        pass
+                    raise
+                return self
+            except FileExistsError:
+                try:
+                    if time.time() - os.stat(self.path).st_mtime > _ARMED_STALE:
+                        os.unlink(self.path)
+                        continue
+                except FileNotFoundError:
+                    continue
+                time.sleep(min(0.02, max(0, self.deadline - time.monotonic())))
+        raise TimeoutError("armed_lock")
+
+    def __exit__(self, *unused):
+        try:
+            info = os.stat(self.path)
+            if (info.st_dev, info.st_ino) == self.identity:
+                os.unlink(self.path)
+        except FileNotFoundError:
+            pass
+
+
+def _armed_write(state, entry):
+    entry["log"] = entry["log"][-50:]
+    _write_atomic(os.path.join(state, "armed", entry["run_id"] + ".json"),
+                  (json.dumps(entry, ensure_ascii=True, indent=1) + "\n").encode("ascii"))
+
+
+def _armed_log(entry, event, result, ms=0):
+    entry["log"].append({"at": _iso(_utc_now()), "event": event, "result": result, "ms": ms})
+    entry["log"] = entry["log"][-50:]
+
+
+def armed_update(state, run_id, change, budget=None):
+    """ロック内で読み直す。change が False を返したら書かない。"""
+    with _ArmedLock(state, run_id, budget):
+        entry = _read_record(os.path.join(state, "armed", run_id + ".json"))
+        if entry is None or not _armed_valid(entry, run_id):
+            raise ValueError("armed_record")
+        if change(entry) is not False:
+            if budget is not None and time.monotonic() >= budget:
+                raise TimeoutError("armed_budget")
+            _armed_write(state, entry)
+        return entry
+
+
+def _managed_input(path):
+    if path == "-" or not os.path.isfile(path):
+        raise ValueError("通常の原文ファイルを渡してください（標準入力は使えません）。")
+    with open(path, "rb") as stream:
+        data = stream.read(_MANAGED_BYTES + 1)
+    if len(data) > _MANAGED_BYTES:
+        raise ValueError("原文は2 MiBまでです。")
+    return _Input("source", 0, os.path.abspath(path), data)
+
+
+def start_run(state, source_path, final_path=None, run_id=None, session=None, host=None, by="start",
+              limits=None, cwd=None, moment=None):
+    """入力の確認をすべて済ませてから、写し・start の記録・登録を書く。"""
+    started = time.monotonic()
+    cwd = cwd or _getcwd()
+    moment = moment or _utc_now()
+    limits = dict(_DEFAULT_LIMITS if limits is None else limits)
+    for key, low, high in (("max_stop_blocks", 0, 5), ("max_runs", 1, 10), ("deadline_min", 1, 240)):
+        if type(limits.get(key)) is not int or not low <= limits[key] <= high:
+            raise ValueError("{} は{}〜{}です。".format(key, low, high))
+    source = _managed_input(os.path.join(cwd, source_path) if source_path != "-" else "-")
+    if final_path == "-":
+        raise ValueError("--final に標準入力は使えません。")
+    final_path = os.path.abspath(os.path.join(cwd, final_path)) if final_path is not None else None
+    run_id = run_id or _new_run_id(state, moment)
+    problem = _run_id_problem(run_id) or _run_id_case_problem(state, run_id)
+    if problem:
+        raise ValueError(problem)
+    if os.path.lexists(os.path.join(state, "runs", run_id)) or os.path.lexists(os.path.join(state, "armed", run_id + ".json")):
+        raise ValueError("すでにある実行IDです。")
+    session = _host_value(session)
+    entry = {"format": "yomiyasu-armed", "format_version": 1, "run_id": run_id,
+             "created_at": _iso(moment), "deadline": _iso(moment + datetime.timedelta(minutes=limits["deadline_min"])),
+             "by": by, "host": host, "session_id": session, "bound_at": _iso(moment) if session and host else None,
+             "cwd": cwd, "targets": {"source": {key: source.record()[key] for key in
+                                                   ("path", "sha256", "text_sha256", "snapshot")}, "final": final_path},
+             "limits": limits, "counters": {"stop_blocks": 0}, "status": "active", "status_reason": None,
+             "verified": None, "notified": False, "log": []}
+    record = {"format": "yomiyasu-check-start", "format_version": 1, "run_id": run_id,
+              "created_at": _iso(moment), "cwd": cwd, "mode": "rewrite",
+              "inputs": {"source": source.record(), "materials": []}}
+    record["record_digest"] = _record_digest(record)
+    _ensure_state(state)
+    _ensure_dir(state, "armed")
+    # 同じ原文の start を直列にする。登録用のロックも同じ方式で取得する。
+    source_lock = _sha256(_armed_place(source.path).encode("utf-8"))
+    with _ArmedLock(state, source_lock, source=True):
+        with _ArmedLock(state, run_id):
+            if os.path.lexists(os.path.join(state, "runs", run_id)) or os.path.lexists(os.path.join(state, "armed", run_id + ".json")):
+                raise ValueError("すでにある実行IDです。")
+            folder = _ensure_dir(state, "runs")
+            run_dir = os.path.join(folder, run_id)
+            os.mkdir(run_dir, 0o700)
+            _put_snapshots(_ensure_dir(state, "inputs"), [source])
+            _write_atomic(os.path.join(run_dir, "start.json"),
+                          (json.dumps(record, ensure_ascii=True, indent=1) + "\n").encode("ascii"))
+            key = _sha256(_place(source.path).encode("utf-8", "surrogateescape"))
+            _touch(_ensure_dir(state, "index", "starts", key), _stamp(moment) + "." + run_id)
+            for old in armed_entries(state):
+                if old["status"] != "ended" and _armed_place(old["targets"]["source"]["path"]) == _armed_place(source.path):
+                    def end_old(current):
+                        if current["status"] == "ended":
+                            return False
+                        current["status"], current["status_reason"] = "ended", "superseded"
+                        _armed_log(current, "start", "ended:superseded")
+                    armed_update(state, old["run_id"], end_old)
+            _armed_log(entry, "start", "started", int((time.monotonic() - started) * 1000))
+            _armed_write(state, entry)
+    return entry
+
+
+def _armed_for_source(state, source, run_id=None, new_run=False):
+    if new_run or source is None or not state or not os.path.isdir(os.path.join(state, "armed")):
+        return None
+    candidates = []
+    for entry in armed_entries(state):
+        if entry["status"] == "ended":
+            continue
+        if run_id is not None:
+            matches = entry["run_id"] == run_id
+        else:
+            target = entry["targets"]["source"]
+            matches = ((source.path and _armed_place(source.path) == _armed_place(target["path"]))
+                       or source.sha256 == target["sha256"])
+        if matches:
+            candidates.append(entry)
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def _start_snapshot(state, source_path, run_id=None, cwd=None):
+    """同じファイルを直すときの原文。start の digest と写しも照らす。"""
+    ids = [run_id] if run_id else []
+    if not run_id:
+        key = _sha256(_place(source_path).encode("utf-8", "surrogateescape"))
+        folder = os.path.join(state, "index", "starts", key)
+        try:
+            names = sorted(os.listdir(folder), reverse=True)
+        except OSError:
+            names = []
+        ids = [name.split(".", 1)[1] for name in names if "." in name]
+    for candidate in ids:
+        if _run_id_problem(candidate):
+            continue
+        record = _read_record(os.path.join(state, "runs", candidate, "start.json"))
+        if not record or record.get("format") != "yomiyasu-check-start" or record.get("record_digest") != _record_digest(record):
+            continue
+        created = _parse_iso(record.get("created_at"))
+        if not run_id and (created is None or (_utc_now() - created).total_seconds() > _LINK_SECONDS
+                           or not _same_path(record.get("cwd", ""), cwd)):
+            continue
+        item = record.get("inputs", {}).get("source")
+        if not isinstance(item, dict) or not _same_path(item.get("path", ""), source_path):
+            continue
+        digest = item.get("sha256", "")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            continue
+        try:
+            with open(os.path.join(state, "inputs", digest + ".bin"), "rb") as stream:
+                data = stream.read(_MANAGED_BYTES + 1)
+            if _sha256(data) == digest:
+                return candidate, _Input("source", 0, _abspath(source_path), data)
+        except OSError:
+            continue
+    return None, None
+
+
+def _limit_label(entry):
+    return {"deadline": "期限{}分".format(entry["limits"]["deadline_min"]),
+            "run_limit": "run {}回まで".format(entry["limits"]["max_runs"])}.get(
+                entry["status_reason"], "続けさせる回数の上限")
+
+
+_RESERVATION_SECONDS = 600   # 中身の無い予約を「検査の途中」とみなす時間（秒。--timeout の既定90秒より十分長い）
+
+
+def _managed_run_count(run_dir):
+    """登録の run の回数。書き終えた記録と、10分以内の中身の無い予約（ほかの run が検査の途中）を数える。
+
+    止められて finally を通らなかった run の空の予約が、いつまでも回数を使い切らないようにする。"""
+    count = 0
+    now = time.time()
+    for number in _attempt_numbers(run_dir):
+        try:
+            info = os.stat(os.path.join(run_dir, "attempt-{}.json".format(number)))
+        except OSError:
+            continue
+        if info.st_size > 0 or now - info.st_mtime < _RESERVATION_SECONDS:
+            count += 1
+    return count
+
+
+def _managed_limit(state, entry, ctx, args, link):
+    final = ctx.final
+    def check(current):
+        reason = current["status_reason"] if current["status"] == "unverified" else None
+        if current["status"] == "ended":
+            return False
+        if reason is None and _utc_now() > _parse_iso(current["deadline"]):
+            reason = "deadline"
+        if reason is None and _managed_run_count(os.path.join(state, "runs", current["run_id"])) >= current["limits"]["max_runs"]:
+            reason = "run_limit"
+        if reason is None:
+            folder = _ensure_dir(state, "runs", current["run_id"])
+            reservation = _reserve_attempt(folder, link["attempt"])
+            args._armed_reservation = reservation
+            link["reserved"] = reservation
+            return False
+        current["status"], current["status_reason"] = "unverified", reason
+        _armed_log(current, "run", "unverified:" + reason)
+    entry = armed_update(state, entry["run_id"], check)
+    if entry["status"] != "unverified":
+        return False
+    message = ("この原稿の管理の上限を超えたので、検査を実行しませんでした（{}）。本文はもう変えず、"
+               "完了報告の「実行しなかった検査」に「最終稿の照合（管理の上限）」と書いてください。"
+               "利用者から新しい依頼があれば、start で登録し直せます。").format(_limit_label(entry))
+    token = _status_line("unverified", "run", entry["run_id"], final=final.token(), reason=entry["status_reason"])
+    path = os.path.join(state, "armed", entry["run_id"] + ".json")
+    result = {"format": "yomiyasu-check-result", "format_version": 1, "tool_version": __version__, "command": "run",
+              "status": "unverified", "status_line": token, "message": message, "run_id": entry["run_id"],
+              "attempt": None, "record_path": None, "reason": entry["status_reason"], "armed_path": path,
+              "next": "report_unverified", "fix_count": None, "mode": ctx.mode,
+              "context": {"doc_type": ctx.doc_type, "reader": ctx.reader}, "fail_on_hit": False,
+              "meaning_risk_count": None, "fail_on_meaning_risk_count": None,
+              "lint": None, "diff": None, "materials": None,
+              "stiffness_check": None, "tone_check": None, "hedges_check": None,
+              "immutable_check": None, "politeness_check": None}
+    print(json.dumps(result, ensure_ascii=True, indent=1) if args.json else "\n".join((message, token, "登録: " + path)))
+    return True
+
+
+def text_sha256_of(data):
+    return _text_sha256(decode_source(data)[0])
+
+
+def run_known_texts(state, run_id):
+    if _run_id_problem(run_id):
+        raise ValueError("run_id")
+    texts, paths = set(), set()
+    folder = os.path.join(state, "runs", run_id)
+    names = ["start.json"] + ["attempt-{}.json".format(n) for n in _attempt_numbers(folder)]
+    for name in names:
+        record = _read_record(os.path.join(folder, name))
+        if record is None or not isinstance(record.get("inputs"), dict):
+            continue
+        for role in ("source", "final"):
+            item = record["inputs"].get(role)
+            if isinstance(item, dict):
+                digest = item.get("text_sha256")
+                if isinstance(digest, str):
+                    texts.add(digest)
+                if role == "final" and isinstance(item.get("path"), str):
+                    paths.add(item["path"])
+    return texts, paths
+
+
+def latest_final_path(state, run_id):
+    if _run_id_problem(run_id):
+        raise ValueError("run_id")
+    record = _latest_record(os.path.join(state, "runs", run_id))
+    if record is not None:
+        item = record.get("inputs", {}).get("final")
+        if isinstance(item, dict) and isinstance(item.get("path"), str):
+            return item["path"]
+    return None
+
+
+def _verification(state, final, run_id=None, since=None, source=None):
+    args = argparse.Namespace(state_dir=state, final=final.path or "-", source=source,
+                              run_id=run_id, since=since, timeout=None, replay=False, json=True)
+    return _verify(args, _ArgumentParser(allow_abbrev=False), _final=final, _return=True)
+
+
+def verify_quick(state, final_path=None, final_bytes=None, run_id=None, since=None):
+    """verify の同じ処理を出力なしで使う。lint と diff は import しない。"""
+    if final_bytes is None:
+        with open(final_path, "rb") as stream:
+            final_bytes = stream.read()
+    target = _Target(_abspath(final_path) if final_path is not None else None, final_bytes)
+    result = _verification(state, target, run_id, since)
+    return {"status": result["status"], "attempt": result["attempt"], "final_sha256": target.sha256,
+            "text_sha256": target.text_sha256, "problems": result["problems"],
+            "record_path": result["record_path"], "message": result["message"]}
+
+
+def _management(command, args, parser):
+    if args.state_dir is not None and not args.state_dir.strip():
+        parser.error("--state-dir に空の値は使えません")
+    if args.run_id is not None and _run_id_problem(args.run_id):
+        parser.error(_run_id_problem(args.run_id))
+    if args.source == "-" or getattr(args, "final", None) == "-":
+        parser.error("標準入力（-）は使えません")
+    state = _state_dir(args.state_dir)
+    if command == "start":
+        limits = {key: getattr(args, key) for key in _DEFAULT_LIMITS}
+        # 読む失敗は入力の誤り。書く失敗は main の内部エラー（3）。
+        try:
+            _managed_input(args.source)
+        except (OSError, ValueError) as error:
+            parser.error(str(error))
+        try:
+            entry = start_run(state, args.source, args.final, args.run_id,
+                              args.session if args.session is not None else os.environ.get("YOMIYASU_SESSION"),
+                              args.host, "start", limits, _getcwd(), _utc_now())
+        except ValueError as error:
+            parser.error(str(error))
+        run_id = entry["run_id"]
+        message = ("原稿を登録しました（上限: 続けさせる{max_stop_blocks}回、run {max_runs}回、{deadline_min}分）。"
+                   "この原稿で run と verify を実行すると、記録がこの登録につながります。").format(**limits)
+        token = "yomiyasu-check: started via=start run={} attempt=- source=sha256:{}".format(
+            run_id, entry["targets"]["source"]["sha256"][:12])
+        path = os.path.join(state, "armed", run_id + ".json")
+        result = {"format": "yomiyasu-check-result", "format_version": 1, "tool_version": __version__,
+                  "command": "start", "status": "started", "status_line": token, "message": message,
+                  "run_id": run_id, "armed_path": path, "start_path": os.path.join(state, "runs", run_id, "start.json"),
+                  "source": {key: entry["targets"]["source"][key] for key in ("path", "sha256", "text_sha256")},
+                  "final_path": args.final and entry["targets"]["final"], "limits": limits, "deadline": entry["deadline"]}
+        print(json.dumps(result, ensure_ascii=True, indent=1) if args.json else "\n".join((message, token, "登録: " + path)))
+        return 0
+    if command == "end":
+        count = 0
+        for entry in armed_entries(state):
+            if entry["status"] == "ended":
+                continue
+            if not (entry["run_id"] == args.run_id if args.run_id is not None else
+                    _armed_place(entry["targets"]["source"]["path"]) == _armed_place(args.source)):
+                continue
+            def finish(current):
+                if current["status"] == "ended":
+                    return False
+                current["status"], current["status_reason"] = "ended", "end_command"
+                _armed_log(current, "end", "ended:end_command")
+            armed_update(state, entry["run_id"], finish)
+            count += 1
+        message = "登録を終えました（{}件）。この原稿のフックによる照合と投稿の確かめは行いません。".format(count) if count else "登録が見つかりません。"
+        token = "yomiyasu-check: ended via=end run={} count={}".format(args.run_id or "-", count)
+        result = {"format": "yomiyasu-check-result", "format_version": 1, "tool_version": __version__, "command": "end",
+                  "status": "ended", "message": message, "status_line": token, "run_id": args.run_id, "count": count}
+        print(json.dumps(result, ensure_ascii=True, indent=1) if args.json else message + "\n" + token)
+        return 0 if count else 1
+    final, problem = _read_target(args.final, None)
+    if problem:
+        parser.error(problem)
+    result = _verification(state, final, args.run_id, source=args.source)
+    if not isinstance(result, dict):
+        return result
+    result["command"], result["export_path"] = "export", None
+    result["status_line"] = result["status_line"].replace("via=verify", "via=export", 1)
+    record_line = result.pop("_record_line")
+    if result["status"] == "executed":
+        extension = os.path.splitext(args.final)[1]
+        if not re.fullmatch(r"\.[A-Za-z0-9]{1,10}", extension):
+            extension = ".txt"
+        folder = _ensure_dir(state, "exports", result["run_id"])
+        path = os.path.join(folder, "attempt-{}-{}{}".format(result["attempt"], final.sha256[:12], extension))
+        if not os.path.isfile(path) or _file_sha256(path) != final.sha256:
+            _write_atomic(path, final.data)
+        _chmod(path, 0o444)
+        if _file_sha256(path) != final.sha256:
+            os.unlink(path)
+            raise OSError("export_hash")
+        result["status"], result["export_path"] = "exported", path
+        result["status_line"] = result["status_line"].replace("executed via=", "exported via=", 1)
+        result["message"] = ("検査した最終稿と同じ内容の写しを書き出しました。投稿や送信には、この写しのパスを渡してください"
+                             "（例 gh pr create --body-file <写し>）。合格の判定ではありません。")
+        record_line = "写し: " + path
+    print(json.dumps(result, ensure_ascii=True, indent=1) if args.json else
+          "\n".join((result["message"], result["status_line"], record_line)))
+    return 0 if result["status"] == "exported" else 1
 
 
 # ---- CLI ----
@@ -3395,13 +3899,16 @@ _DESCRIPTION = ("最終稿に lint、原文と最終稿に diff（新規作成�
 _RECORD_NOTE = ("記録はこのコマンドだけが作ります。同じ権限で原稿と記録の両方を書き換えられる環境では、記録は実行漏れを"
                 "見つけるためのもので、改ざんの防止や人の承認の証明にはなりません。")
 _EXIT_CODES = """終了コード:
-  0  run: 検査を最後まで実行し、--fail-on の条件に当たらなかった（状態 executed か unrecorded。候補の有無によらない）。verify: 記録と照合が合った（executed）。-h と --version も0
-  1  run: --fail-on の条件に当たった（記録は残す）。verify: 記録がない、または記録と合わない（理由は2行目の状態の行と --json の problems）
+  0  run: 検査を最後まで実行し、--fail-on の条件に当たらなかった（状態 executed か unrecorded。候補の有無によらない）。verify: 記録と照合が合った（executed）。-h と --version も0。start: 登録した（started）。export: 写しを書いた（exported）。end: 登録を終えた（ended）
+  1  run: --fail-on の条件に当たった（記録は残す）。verify: 記録がない、または記録と合わない（理由は2行目の状態の行と --json の problems）。run: 登録の上限で実行しなかった（unverified）。export: 照合が合わない。end: 登録がない
   2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、区切りの誤り、使えない値、原文と最終稿が同じファイル、資料と最終稿が同じ中身、空の最終稿、別の原文の実行ID）。何も書かない（状態 not_run）
   3  検査の一部を実行できなかった（lint か diff が内部の誤りか時間切れで終わらなかった、途中で最終稿が変わった。状態 partial）か、check の予期しない内部の誤り、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_check.py run --final 最終稿 (--source 原文 | --material 資料) [オプション]\n"
           "       yomiyasu_check.py run --stdin [オプション]\n"
           "       yomiyasu_check.py verify --final 最終稿|- [オプション]\n"
+          "       yomiyasu_check.py start --source 原文 [オプション]\n"
+          "       yomiyasu_check.py export --final 最終稿 [オプション]\n"
+          "       yomiyasu_check.py end (--run-id ID | --source 原文) [オプション]\n"
           "       yomiyasu_check.py --version")
 _RUN_USAGE = ("yomiyasu_check.py run --final 最終稿 (--source 原文 | --material 資料) [--material 資料 …]\n"
               "           [--stance 立場] [--doc-type 種類] [--reader 読者] [--fail-on meaning-risk|warn|error …] [--timeout 秒]\n"
@@ -3453,7 +3960,7 @@ def _build_parser():
     top = parser.add_argument_group("オプション")
     top.add_argument("-h", "--help", action="help", help="このヘルプを表示して終わります。")
     top.add_argument("--version", action="store_true", help="版を表示して終わります。")
-    commands = parser.add_subparsers(dest="command", title="サブコマンド（省くと run）", metavar="{run,verify}")
+    commands = parser.add_subparsers(dest="command", title="サブコマンド（省くと run）", metavar="{run,verify,start,export,end}")
 
     run = commands.add_parser(
         "run", prog="yomiyasu_check.py run", usage=_RUN_USAGE, epilog=_EXIT_CODES, formatter_class=_HelpFormatter,
@@ -3534,6 +4041,55 @@ def _build_parser():
     options.add_argument("--timeout", metavar="秒", help="--replay で lint と diff を並べて動かす時間の上限（秒）。既定は90。")
     options.add_argument("--state-dir", metavar="DIR", help="記録を探す状態フォルダ（run と同じ決め方）。")
     options.add_argument("--json", action="store_true", help="結果をJSON（結果の形式1）で出します。")
+    additions = {}
+    usages = {
+        "start": "yomiyasu_check.py start --source 原文 [--final 最終稿] [--run-id ID] [--session ID] [--host claude-code|codex]\n"
+                 "                        [--max-stop-blocks N] [--max-runs N] [--deadline-min N] [--state-dir DIR] [--json]",
+        "export": "yomiyasu_check.py export --final 最終稿 [--run-id ID] [--source 原文] [--state-dir DIR] [--json]",
+        "end": "yomiyasu_check.py end (--run-id ID | --source 原文) [--state-dir DIR] [--json]",
+    }
+    descriptions = {
+        "start": "書き直す前の原文の写しを取り、フックで照合する原稿を登録します。",
+        "export": "照合が合った最終稿と同じバイト列の写しを、状態フォルダの exports/（既定は .yomiyasu/exports/）に読み取り専用で書き出します。"
+                  "投稿そのものは行わず、合格の判定ではありません。",
+        "end": "原稿の登録を終え、フックによる照合と投稿の確かめを終了します。--run-id か --source のどちらか1つを指定してください。",
+    }
+    for name, help_text in (("start", "原文の写しを取り、原稿を登録します。"),
+                            ("export", "照合の合う最終稿の写しを書き出します。"),
+                            ("end", "原稿の登録を終えます。")):
+        sub = commands.add_parser(name, prog="yomiyasu_check.py " + name, usage=usages[name],
+                                  add_help=False, allow_abbrev=False, help=help_text, description=descriptions[name],
+                                  epilog=_EXIT_CODES, formatter_class=_HelpFormatter)
+        inputs = sub.add_argument_group("入力")
+        options = sub.add_argument_group("オプション")
+        options.add_argument("-h", "--help", action="help", help="このヘルプを表示して終わります。")
+        options.add_argument("--state-dir", metavar="DIR", help="登録や記録を置く状態フォルダ（run と同じ決め方）。")
+        options.add_argument("--json", action="store_true", help="結果をJSON（結果の形式1）で出します。")
+        if name == "end":
+            group = inputs.add_mutually_exclusive_group(required=True)
+            group.add_argument("--run-id", metavar="ID", help="この実行IDの登録を終えます（--source とどちらか1つ）。")
+            group.add_argument("--source", metavar="原文", help="この原文のパスの登録を終えます（--run-id とどちらか1つ）。")
+        else:
+            options.add_argument("--run-id", metavar="ID", help=("登録に使う新しい実行ID。" if name == "start" else
+                                                                  "この実行IDの記録だけを照らします。"))
+            inputs.add_argument("--source", required=name == "start", metavar="原文",
+                                help=("書き直す前の原文のファイル（UTF-8、2 MiBまで。標準入力は使えません）。" if name == "start" else
+                                      "記録の原文がこのファイルかも確かめます。"))
+            inputs.add_argument("--final", required=name == "export", metavar="最終稿",
+                                help=("最終稿を書くファイルのパス。まだ存在しなくても指定できます。" if name == "start" else
+                                      "照らして写しを書き出す最終稿のファイル（標準入力は使えません）。"))
+        if name == "start":
+            options.add_argument("--session", metavar="ID", help="結び付けるセッションの識別子。省くと環境変数 YOMIYASU_SESSION。")
+            options.add_argument("--host", choices=("claude-code", "codex"), metavar="ホスト",
+                                 help="結び付けるホスト。値: claude-code、codex。")
+            options.add_argument("--max-stop-blocks", type=int, default=2, metavar="回数",
+                                 help="Stop で続けさせる回数の上限（既定2、0〜5）。")
+            options.add_argument("--max-runs", type=int, default=3, metavar="回数",
+                                 help="run の回数の上限（既定3、1〜10）。")
+            options.add_argument("--deadline-min", type=int, default=30, metavar="分",
+                                 help="登録からの期限（既定30分、1〜240）。")
+        additions[name] = sub
+    parser._hook_commands = additions
     return parser, run, verify
 
 
@@ -3581,16 +4137,19 @@ def _error(message):
 def _run_cli(argv):
     argv = list(sys.argv[1:] if argv is None else argv)
     # サブコマンドを省くと run とみなす（yomiyasu_check.py --source a --final b も動く）
-    if not argv or argv[0] not in ("run", "verify", "-h", "--help", "--version"):
+    if not argv or argv[0] not in ("run", "verify", "start", "export", "end", "-h", "--help", "--version"):
         argv.insert(0, "run")
     parser, run, verify = _build_parser()
     # サブコマンドの引数は、そのサブコマンドの parser で読む（知らない引数の誤りを「yomiyasu_check.py run: error:」の形で出す）
-    if argv[0] in ("run", "verify"):
+    if argv[0] in ("run", "verify", "start", "export", "end"):
         try:
             if argv[0] == "run":
                 code = _run(run.parse_args(argv[1:]), run)
-            else:
+            elif argv[0] == "verify":
                 code = _verify(verify.parse_args(argv[1:]), verify)
+            else:
+                sub = parser._hook_commands[argv[0]]
+                code = _management(argv[0], sub.parse_args(argv[1:]), sub)
         except _NoWorkingDirectory as error:
             # 作業ディレクトリが消えている（run は何も書く前に確かめる）。入力の誤りとして2（反証で見つけた例）
             _error(str(error))
