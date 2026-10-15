@@ -42,6 +42,12 @@ def _project_state(cwd):
         current = parent
 
 
+def _state_given(option):
+    """The first state folder came from --state-dir or YOMIYASU_STATE_DIR (same test as _states and check)."""
+    env = os.environ.get("YOMIYASU_STATE_DIR", "")
+    return bool(option) or bool(env.strip() and "${" not in env)
+
+
 def _states(cwd, host, option):
     candidates = []
     env = os.environ.get("YOMIYASU_STATE_DIR", "")
@@ -134,6 +140,10 @@ def _error_log(states, event, error):
     for state in states:
         if not os.path.isdir(state):
             continue
+        # A folder without .gitignore and state.json was not set up by check (for example a .yomiyasu/
+        # made by an agent before run). Writing the log there would show it in git status.
+        if not any(os.path.lexists(os.path.join(state, name)) for name in ('.gitignore', 'state.json')):
+            return
         try:
             frames = traceback.extract_tb(error.__traceback__)
             location = "yomiyasu_hook.py:0"
@@ -596,7 +606,7 @@ def _pretool(check, state, entry, bodies, host, session, cwd, started, budget):
     return response
 
 
-def _process(check, states, invocation, data, host, event, cwd, started, budget, processing):
+def _process(check, states, invocation, data, host, event, cwd, started, budget, processing, default_place=False):
     import time
     session = data['session_id']
     registrations, combined = [], {}
@@ -610,9 +620,10 @@ def _process(check, states, invocation, data, host, event, cwd, started, budget,
                         if _mine(e, host, session) and _place(e['targets']['source']['path']) == _place(path)]
             if existing:
                 continue
-            # First candidate follows --state-dir, environment, project priority.
+            # First candidate follows --state-dir, environment, project priority. A project .yomiyasu/
+            # that already exists gets the same .gitignore and state.json as run (check._ensure_state).
             entry = check.start_run(states[0], path, session=session, host=host,
-                                    by='hook:' + host + ':' + event, cwd=cwd)
+                                    by='hook:' + host + ':' + event, cwd=cwd, default_place=default_place)
             registrations.append(("yomiyasu の管理: 原稿 {} を登録しました（実行ID {}。上限: 続けさせる2回、run 3回、30分）。"
                                   "この原稿を yomiyasu_check.py run の --source に渡すと、記録がこの登録につながります。"
                                   "返答を終えるときに、最終稿が検査記録と合うかをフックが確かめます。").format(
@@ -741,7 +752,8 @@ def main(argv=None):
                 check = importlib.util.module_from_spec(spec)
                 with contextlib.redirect_stdout(_SilentStream()), contextlib.redirect_stderr(_SilentStream()):
                     spec.loader.exec_module(check)
-                    output = _process(check, states, invocation, data, host, event, cwd, started, budget, processing)
+                    output = _process(check, states, invocation, data, host, event, cwd, started, budget, processing,
+                                      default_place=not _state_given(options.get('--state-dir')))
             finally:
                 if timer and previous is not None:
                     signal.setitimer(signal.ITIMER_REAL, 0)

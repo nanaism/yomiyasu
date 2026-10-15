@@ -2460,7 +2460,8 @@ class TestReviewFixes(CheckCase):
     # --- spec F8: 試験のなかった決まり ---
 
     def test_existing_state_folder_is_left_as_it_is(self):
-        """10.3 B2: すでにある状態フォルダには .gitignore と state.json を足さない（中身を書き換えない）。"""
+        """10.3 B2: YOMIYASU_STATE_DIR で決めたすでにある状態フォルダには .gitignore と state.json を足さない（中身を書き換え
+        ない）。既定の規則（.yomiyasu/）で決めたフォルダの扱いは test_v200_state_gitignore.py で見る。"""
         self.state.mkdir()
         note = self.state / "note.txt"
         note.write_bytes("利用者のメモです。\n".encode("utf-8"))
@@ -2598,15 +2599,21 @@ class TestReviewFixes(CheckCase):
         """3.6、K36: 状態フォルダを作る途中で .gitignore を書けなかったら、作りかけのフォルダを残さない（次の run が
         「すでにあるフォルダ」として .gitignore なしで書き続けないように。robust R3）。"""
         a, b = self.pair()
-        real_replace = os.replace
+        real_link, real_open = os.link, os.open
 
+        # .gitignore は一時ファイルから os.link で置く（リンクを作れなければ O_EXCL の os.open で作る）ので、両方を断る
         def refuse_gitignore(src, dst, *args, **kwargs):
             if os.path.basename(os.fspath(dst)) == ".gitignore":
                 raise PermissionError(13, "試験で起こした共有違反", os.fspath(dst))
-            return real_replace(src, dst, *args, **kwargs)
+            return real_link(src, dst, *args, **kwargs)
+
+        def refuse_gitignore_open(path, flags, *args, **kwargs):
+            if os.path.basename(os.fspath(path)) == ".gitignore":
+                raise PermissionError(13, "試験で起こした共有違反", os.fspath(path))
+            return real_open(path, flags, *args, **kwargs)
 
         code, out, err = self.run_in_process(["run", "--source", a, "--final", b],
-                                             patches=[(os, "replace", refuse_gitignore)])
+                                             patches=[(os, "link", refuse_gitignore), (os, "open", refuse_gitignore_open)])
         self.assertEqual(code, 0, out + err)
         self.assertEqual(self.status(split_lines(out)[1])[0], "unrecorded")
         self.assertFalse(self.state.exists(), "作りかけの状態フォルダが残った")

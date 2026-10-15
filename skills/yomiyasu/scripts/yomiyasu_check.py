@@ -470,12 +470,100 @@ def _ensure_dir(base, *parts):
     return path
 
 
-def _ensure_state(state):
-    """状態フォルダを用意する。作ったときだけ .gitignore と state.json を書く。すでにあるフォルダには足さない。
+def _still_placed(path, info):
+    """path が、info（os.fstat の結果）と同じファイルのままか。"""
+    try:
+        now = os.lstat(path)
+    except OSError:
+        return False
+    return (now.st_dev, now.st_ino) == (info.st_dev, info.st_ino)
 
-    .gitignore と state.json を書けなかったときは、作りかけのフォルダを消す。残すと次の run が「すでにあるフォルダ」として
-    .gitignore なしで書き続け、git status に出る（反証で見つけた例）。"""
+
+def _place_new_file(path, data):
+    """data を書いたファイルを path に置く。path にすでに何か（壊れたリンクを含む）があれば、置かずに False を返す
+    （上書きしない）。同じフォルダの一時ファイルに書いてから os.link で置くので、読む側は書きかけを見ない。
+    ハードリンクを作れないファイルシステムでは、O_EXCL で作ってから書く。書けなかったときは、ここで作ったファイル
+    だけを消して例外を出す（ほかのプロセスが同じ名前に置き直したファイルは消さない）。"""
+    handle, temporary = tempfile.mkstemp(prefix=".tmp-", dir=os.path.dirname(path))
+    try:
+        with os.fdopen(handle, "wb") as stream:
+            stream.write(data)
+        _chmod(temporary, 0o600)
+        try:
+            os.link(temporary, path)
+            return True
+        except FileExistsError:
+            return False
+        except OSError:
+            pass  # ハードリンクを作れない（FAT など）。下の O_EXCL に進む
+    finally:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0) | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        handle = os.open(path, flags, 0o600)
+    except FileExistsError:
+        return False
+    info = None
+    try:
+        info = os.fstat(handle)
+        with os.fdopen(handle, "wb") as stream:
+            handle = None
+            stream.write(data)
+        _chmod(path, 0o600)
+    except BaseException:
+        if handle is not None:
+            try:
+                os.close(handle)
+            except OSError:
+                pass
+        if info is not None and _still_placed(path, info):
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        raise
+    return True
+
+
+def _write_state_files(state):
+    """状態フォルダに .gitignore を置き、そのあと state.json を置く。どちらも、その名前にまだ何もないときだけ置く。
+
+    .gitignore の名前にすでに何かあれば、並列の run か利用者が先に置いたものとして、state.json も置かずに戻る。
+    書けなかったときは例外を出す。置けた .gitignore は、あとの state.json を書けなくても消さない（無視の規則だけの
+    ファイルで、残せば、並列の run がそのあいだにこのフォルダに書いた写しも git status に出ない。反証で見つけた例）。"""
+    if not _place_new_file(os.path.join(state, ".gitignore"), _GITIGNORE.encode("utf-8")):
+        return
+    state_json = json.dumps({"format": "yomiyasu-state", "format_version": 1}, ensure_ascii=True) + "\n"
+    _place_new_file(os.path.join(state, "state.json"), state_json.encode("ascii"))
+
+
+def _add_state_files(state, default_place):
+    """すでにある状態フォルダに、作ったときと同じ2つを足すか決めて足す。
+
+    足すのは、default_place が真（--state-dir と環境変数 YOMIYASU_STATE_DIR のどちらでも決めず、state_dir_for の3か4で
+    決めた .yomiyasu/）で、フォルダそのものがリンクでなく、state.json も .gitignore もない（壊れたリンクもない）ときだけ。
+    モデルなどが先に mkdir した .yomiyasu/ に .gitignore なしで原文の全文の写しを書くと、git status に出てコミットされる
+    おそれがあるため（反証で見つけた例）。ほかのファイルとフォルダの権限には触れず、書けなかったときもフォルダは消さない。
+    state.json だけ、.gitignore だけがあるフォルダ（利用者が消したか書いたのかもしれない）、リンクの先のフォルダ（ほかの
+    場所に書くことになる）、--state-dir や環境変数で決めたフォルダは今のまま。"""
+    if not default_place or os.path.islink(state):
+        return
+    if os.path.lexists(os.path.join(state, ".gitignore")) or os.path.lexists(os.path.join(state, "state.json")):
+        return
+    _write_state_files(state)
+
+
+def _ensure_state(state, default_place=False):
+    """状態フォルダを用意する。作ったときは .gitignore と state.json を書く。すでにあるフォルダは _add_state_files の
+    決まりのときだけ2つを足す。
+
+    作ったフォルダに .gitignore を書けなかったときは、作りかけのフォルダを消す。残すと次の run が「すでにある
+    フォルダ」として .gitignore なしで書き続け、git status に出る（反証で見つけた例）。"""
     if os.path.isdir(state):
+        _add_state_files(state, default_place)
         return
     parent = os.path.dirname(state)
     if parent and not os.path.isdir(parent):
@@ -484,24 +572,17 @@ def _ensure_state(state):
         os.mkdir(state, 0o700)
     except FileExistsError:
         if os.path.isdir(state):
+            # 並列の run が作ったばかりのフォルダ。その run が .gitignore を置く前に写しを書かないよう、
+            # すでにあるフォルダと同じ決まりで、自分でも2つを置きにいく（先に置かれていれば何もしない）
+            _add_state_files(state, default_place)
             return
         raise
-    written = []
     try:
         _chmod(state, 0o700)
-        state_json = json.dumps({"format": "yomiyasu-state", "format_version": 1}, ensure_ascii=True) + "\n"
-        for name, data in ((".gitignore", _GITIGNORE.encode("utf-8")), ("state.json", state_json.encode("ascii"))):
-            path = os.path.join(state, name)
-            written.append(path)
-            _write_atomic(path, data)
+        _write_state_files(state)
     except BaseException:
-        for path in written:
-            try:
-                os.unlink(path)
-            except OSError:
-                pass
         try:
-            os.rmdir(state)  # 並列の run が中に書き始めていれば空でないので消えない（そのまま使われる）
+            os.rmdir(state)  # 中に何かあれば（置けた .gitignore、並列の run の写し）空でないので消えない
         except OSError:
             pass
         raise
@@ -2113,7 +2194,7 @@ def _run_impl(args, parser):
         snapshots = None
         if recording:
             try:
-                _ensure_state(state)
+                _ensure_state(state, default_place=not _state_dir_given(args.state_dir))
                 snapshots = _put_snapshots(_ensure_dir(state, "inputs"), inputs)
             except OSError as error:
                 recording, write_problem = False, _write_problem(state, error)
@@ -3573,8 +3654,9 @@ def _managed_input(path):
 
 
 def start_run(state, source_path, final_path=None, run_id=None, session=None, host=None, by="start",
-              limits=None, cwd=None, moment=None):
-    """入力の確認をすべて済ませてから、写し・start の記録・登録を書く。"""
+              limits=None, cwd=None, moment=None, default_place=False):
+    """入力の確認をすべて済ませてから、写し・start の記録・登録を書く。default_place は _ensure_state と同じ
+    （state を --state-dir と環境変数で決めず、既定の規則で決めたときに真）。"""
     started = time.monotonic()
     cwd = cwd or _getcwd()
     moment = moment or _utc_now()
@@ -3604,7 +3686,7 @@ def start_run(state, source_path, final_path=None, run_id=None, session=None, ho
               "created_at": _iso(moment), "cwd": cwd, "mode": "rewrite",
               "inputs": {"source": source.record(), "materials": []}}
     record["record_digest"] = _record_digest(record)
-    _ensure_state(state)
+    _ensure_state(state, default_place)
     _ensure_dir(state, "armed")
     # 同じ原文の start を直列にする。登録用のロックも同じ方式で取得する。
     source_lock = _sha256(_armed_place(source.path).encode("utf-8"))
@@ -3824,7 +3906,8 @@ def _management(command, args, parser):
         try:
             entry = start_run(state, args.source, args.final, args.run_id,
                               args.session if args.session is not None else os.environ.get("YOMIYASU_SESSION"),
-                              args.host, "start", limits, _getcwd(), _utc_now())
+                              args.host, "start", limits, _getcwd(), _utc_now(),
+                              default_place=not _state_dir_given(args.state_dir))
         except ValueError as error:
             parser.error(str(error))
         run_id = entry["run_id"]
