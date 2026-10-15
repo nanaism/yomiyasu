@@ -167,6 +167,7 @@ another:
                                                "no_rule_findings", "rule_penalty_score", "not_judged", "context",
                                                "metrics", "findings"})
                 self.assertFalse(result["no_rule_findings"])
+                # 地の文1,000字未満、warn 1件の重み2で95。
                 self.assertEqual(result["rule_penalty_score"], 95)
                 self.assertEqual(len(result["findings"]), 1)
                 finding = result["findings"][0]

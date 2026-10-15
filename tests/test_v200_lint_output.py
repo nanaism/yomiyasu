@@ -137,7 +137,7 @@ HELP_TEXTS = {
                   "点数は条件に使えません。meaning-risk は2つの文章を比べないと判定できないので、"
                   "yomiyasu_diff.py か yomiyasu_check.py に付けてください。"),
     "--json": ("結果をJSON（形式2）で出します。日本語は \\uXXXX の形で出します。"
-               "rule_penalty_score は目安で、合否には使わないでください。"),
+               "rule_penalty_score は、候補の多さを地の文の長さで割った目安です（下の式）。合否には使わないでください。"),
     "--version": "版を表示して終わります。",
 }
 
@@ -374,6 +374,7 @@ class TestJsonFormat2(LintCase):
     def test_example2_score_and_counts(self):
         """例2の入力で rule_penalty_score 83、candidate_count 4、counts、no_rule_findings は偽。"""
         result = self.lint_json([], stdin=EXAMPLE2_INPUT)
+        # 地の文56字、error 1件・warn 2件・info 1件の重み8で83。
         self.assertEqual(result.get("rule_penalty_score"), 83)
         self.assertEqual(result.get("candidate_count"), 4)
         self.assertEqual(result.get("counts"), {"error": 1, "warn": 2, "info": 1})

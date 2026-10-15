@@ -35,6 +35,7 @@ class TestSpacingPolicy(unittest.TestCase):
         self.assertEqual([f["rule"] for f in result["findings"]], ["trailing_colon"])
         self.assertEqual(result["findings"][0]["line"], 2)
         self.assertEqual(result["findings"][0]["snippet"], "補足：")
+        # 地の文1,000字未満、warn 1件の重み2で95。
         self.assertEqual(result["rule_penalty_score"], 95)
         self.assertFalse(result["no_rule_findings"])
 

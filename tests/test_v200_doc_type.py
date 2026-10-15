@@ -516,8 +516,17 @@ class LintSkipTest(DocTypeCase):
                 self.assertEqual(result["counts"], counts, value)
                 self.assertEqual(result["candidate_count"], len(findings), value)
                 self.assertEqual(result["no_rule_findings"], not findings, value)
-                penalty = sum(5 if finding["severity"] in ("warn", "error") else 2 for finding in findings)
-                self.assertEqual(result["rule_penalty_score"], max(0, 100 - penalty), value)
+                # 全例が地の文1,000字未満。行の重み3/2/1、文書の重み2/2/1を独立に計算。
+                self.assertLessEqual(plain["metrics"]["char_count"], 1000)
+                documents = {"excess_bold": 2, "excess_list": 2, "bold_label_list": 1}
+                weights = {"error": 3, "warn": 2, "info": 1}
+                line_weight = sum(weights[f["severity"]] for f in findings
+                                  if f["rule"] not in documents and f["rule"] != "negative_parallelism_density")
+                document_weight = sum(documents.get(f["rule"], 0) for f in findings)
+                num = 4000 * 1000
+                den = (40 + document_weight + line_weight) * 1000
+                expected = max(1, min(99, (2 * num + den) // (2 * den))) if findings else 100
+                self.assertEqual(result["rule_penalty_score"], expected, value)
                 self.assertEqual(result["metrics"], plain["metrics"], value)
 
     def test_b4_strict_uses_the_kept_findings(self):
@@ -668,7 +677,9 @@ class TableTest(unittest.TestCase):
         self.assertEqual("\n".join(built), LINT_HELP_LIST)
         code, out, _ = call(yomiyasu_lint.main, ["--help"])
         self.assertEqual(code, 0)
-        self.assertIn(LINT_HELP_LIST + "\n\n終了コード:", out)
+        # 種類の表と終了コードの表の間に、点数の式の説明を置く。
+        self.assertIn(LINT_HELP_LIST + "\n\nrule_penalty_score（--json の目安）:", out)
+        self.assertLess(out.index("rule_penalty_score（--json の目安）:"), out.index("終了コード:"))
 
     def test_help_texts(self):
         """9.6 のヘルプの文。check は run だけが受け、verify は受けない。"""

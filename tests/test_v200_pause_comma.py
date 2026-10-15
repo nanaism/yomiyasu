@@ -273,7 +273,10 @@ class PauseCommaTest(unittest.TestCase):
             text = "\n".join([REMOVE[3][0]] * count)
             result = lint.lint_text(text, doc_type="article")
             self.assertEqual([f["severity"] for f in result["findings"]], ["info"] * count)
-            self.assertEqual(result["rule_penalty_score"], 100 - 2 * count)
+            # 地の文1,000字未満、info の重みは count。1件98、2件95。
+            num, den = 4000 * 1000, (40 + count) * 1000
+            expected = max(1, min(99, (2 * num + den) // (2 * den)))
+            self.assertEqual(result["rule_penalty_score"], expected)
             for flags in ([], ["--strict"], ["--fail-on=warn"], ["--fail-on=error"]):
                 self.assertEqual(call(lint.main, ["-", "--doc-type", "article"] + flags, text)[0], 0)
         with tempfile.TemporaryDirectory() as tmp:

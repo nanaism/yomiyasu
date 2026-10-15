@@ -60,7 +60,7 @@
       "plain": "16993b74c2ed521c",
       "strict": "685c76b8a348830d",
       "fail_error": "16993b74c2ed521c",
-      "json": "77b07ff27f4ab935",
+      "json": "c20339cd60c2f18a",
       "stdin": "16993b74c2ed521c",
       "diff_endings": "802a47dedc071dc7"
     },
@@ -68,7 +68,7 @@
       "plain": "e26f1306eaa63a0c",
       "strict": "16fb02ac71625d60",
       "fail_error": "e26f1306eaa63a0c",
-      "json": "dd5944304d762666",
+      "json": "8710b342c487989f",
       "stdin": "e26f1306eaa63a0c",
       "diff_endings": "e6dd887f36647083"
     },
@@ -84,7 +84,7 @@
       "plain": "bff67ed41431bcf8",
       "strict": "ef2c428e631b009c",
       "fail_error": "bff67ed41431bcf8",
-      "json": "e085136066648d1a",
+      "json": "2f1e36925c0c82c2",
       "stdin": "bff67ed41431bcf8",
       "diff_endings": "acedcfe6d6dc3b8e"
     },
@@ -92,7 +92,7 @@
       "plain": "141be463502a9579",
       "strict": "f09feefee0c655b5",
       "fail_error": "141be463502a9579",
-      "json": "206621ca316b1c3e",
+      "json": "4f269f5c1e108609",
       "stdin": "141be463502a9579",
       "diff_endings": "3ca0b03286e8f1d2"
     },
@@ -188,7 +188,7 @@
       "plain": "f3a4da10474745fc",
       "strict": "66bb6a5212ac3a68",
       "fail_error": "f3a4da10474745fc",
-      "json": "16d7d175bd1fa6ac",
+      "json": "f247a246834e9c1e",
       "stdin": "f3a4da10474745fc",
       "diff_endings": "683c5592fb6aece5"
     },
@@ -740,7 +740,7 @@
       "plain": "f7c8935e94b33865",
       "strict": "f7c8935e94b33865",
       "fail_error": "f7c8935e94b33865",
-      "json": "c8b4c3a4361c54b2",
+      "json": "a043c3becc40a6df",
       "stdin": "f7c8935e94b33865",
       "diff_endings": "74d4f4a04b52389a"
     },
@@ -780,7 +780,7 @@
       "plain": "bbceb47bca893767",
       "strict": "9e9de933ff5017f4",
       "fail_error": "bbceb47bca893767",
-      "json": "e105b86a3e87a0a2",
+      "json": "692564296510afdc",
       "stdin": "bbceb47bca893767",
       "diff_endings": "0c9a03a033fed56f"
     },
@@ -804,7 +804,7 @@
       "plain": "04a4bb4838edadd9",
       "strict": "adf90a0997abd8bd",
       "fail_error": "04a4bb4838edadd9",
-      "json": "cac55841a61edf88",
+      "json": "25e35fcc256bdb19",
       "stdin": "04a4bb4838edadd9",
       "diff_endings": "2ff8305344a0b72b"
     },
@@ -940,7 +940,7 @@
       "plain": "c41bf8a3c02ef466",
       "strict": "394686897073024b",
       "fail_error": "c41bf8a3c02ef466",
-      "json": "b24ec34a6ed92fdc",
+      "json": "da073c3b9a9b6f17",
       "stdin": "c41bf8a3c02ef466",
       "diff_endings": "75c95f096d5b18ce"
     },
@@ -948,7 +948,7 @@
       "plain": "81b0b88c8f87d092",
       "strict": "dc2e8aa3884050cc",
       "fail_error": "81b0b88c8f87d092",
-      "json": "a721b95139d97c0d",
+      "json": "8367c843d5816b6c",
       "stdin": "81b0b88c8f87d092",
       "diff_endings": "f6fc8298961b9c5d"
     },
@@ -972,7 +972,7 @@
       "plain": "bed631333e76ca48",
       "strict": "96a3fd5305ab3af7",
       "fail_error": "bed631333e76ca48",
-      "json": "b47399760f0d1600",
+      "json": "54a4237bec8b8cea",
       "stdin": "bed631333e76ca48",
       "diff_endings": "06b0a217db792e64"
     },
@@ -1004,7 +1004,7 @@
       "plain": "7a29f019fc320bec",
       "strict": "99dd0a5ebc9fe06a",
       "fail_error": "7a29f019fc320bec",
-      "json": "ad0fe7f732c4dc57",
+      "json": "781845c6245b3c54",
       "stdin": "7a29f019fc320bec",
       "diff_endings": "888582bbaf9dc9be"
     },
@@ -1020,7 +1020,7 @@
       "plain": "0e7f46f0c26e2961",
       "strict": "165ef1fe159ddff2",
       "fail_error": "0e7f46f0c26e2961",
-      "json": "9bcb883c96108758",
+      "json": "a4f6e3e17de66d6d",
       "stdin": "0e7f46f0c26e2961",
       "diff_endings": "8ffcb14b0e9503cf"
     },
@@ -1060,7 +1060,7 @@
       "plain": "054a256b190889b8",
       "strict": "9f14a321347a75b1",
       "fail_error": "054a256b190889b8",
-      "json": "c7187606549487f9",
+      "json": "c00c03133aaf62ae",
       "stdin": "054a256b190889b8",
       "diff_endings": "5816b1cf682cc2ed"
     },
@@ -1068,7 +1068,7 @@
       "plain": "5dceb5defbe2f9a2",
       "strict": "9d1db0d4988c6e71",
       "fail_error": "5dceb5defbe2f9a2",
-      "json": "a4bc7a01285fc204",
+      "json": "760b0c543b7c68fa",
       "stdin": "5dceb5defbe2f9a2",
       "diff_endings": "2ff8305344a0b72b"
     },
@@ -1076,7 +1076,7 @@
       "plain": "53a5f60e77f060f8",
       "strict": "1740679fa575fdcb",
       "fail_error": "53a5f60e77f060f8",
-      "json": "1e0430c537232288",
+      "json": "3887078c06d06f99",
       "stdin": "53a5f60e77f060f8",
       "diff_endings": "ebacceec125e31fd"
     },
@@ -1084,7 +1084,7 @@
       "plain": "4ddb96bbf1e8f999",
       "strict": "16e9533de44a656d",
       "fail_error": "4ddb96bbf1e8f999",
-      "json": "22ed7ab835f16063",
+      "json": "74b0f5804e36eb8e",
       "stdin": "4ddb96bbf1e8f999",
       "diff_endings": "3b72c1b82b68a5e8"
     },
@@ -1244,7 +1244,7 @@
       "plain": "cc07d5081a6f2f34",
       "strict": "49f48c529d34573c",
       "fail_error": "cc07d5081a6f2f34",
-      "json": "45d8c614f8fd6b1d",
+      "json": "55215cec38a9d866",
       "stdin": "cc07d5081a6f2f34",
       "diff_endings": "e1206597aafabb1b"
     },
@@ -1268,7 +1268,7 @@
       "plain": "87d896c37807b4cd",
       "strict": "81d6e7a62470cb3b",
       "fail_error": "87d896c37807b4cd",
-      "json": "dc1da79a021de89a",
+      "json": "dd9a2d9dab3c84bd",
       "stdin": "87d896c37807b4cd",
       "diff_endings": "1b2c51be62bef521"
     },
@@ -2323,7 +2323,7 @@
       "stdin": "e1344484eba33a30",
       "fail_on": "d58d14adadc7b61c",
       "no_record": "a4becd2acacf2e7a",
-      "json": "c130f6450e46ca83"
+      "json": "a29cd704749a4e4c"
     },
     "blacklist_ai/01_tech_arch_sonnet_default.md|yomiyasu_rewritten/01_tech_arch_sonnet_default_bl.md": {
       "run": "941547ddc46f8de3",
@@ -2367,7 +2367,7 @@
       "stdin": "f060d0798390480d",
       "fail_on": "dc772678f63b2796",
       "no_record": "74b9a8abebc9ed58",
-      "json": "da3c7296c9ccad76"
+      "json": "3d178b154c84d9b3"
     },
     "blacklist_ai/02_incident_report_sonnet_casual.md|yomiyasu_rewritten/02_incident_report_sonnet_casual_bl.md": {
       "run": "32e33e7c969d56f6",
@@ -2389,7 +2389,7 @@
       "stdin": "92e63d38acaf1529",
       "fail_on": "1e02a7f9af090dca",
       "no_record": "206d7472f0f7bdfe",
-      "json": "9e7b51cd04d56ac3"
+      "json": "f9953731776e39a8"
     },
     "blacklist_ai/02_incident_report_sonnet_default.md|yomiyasu_rewritten/02_incident_report_sonnet_default_bl.md": {
       "run": "588846c7a1bfa3d0",
@@ -2444,7 +2444,7 @@
       "stdin": "c9f42b5cb5e2ed84",
       "fail_on": "354868681ffcf29f",
       "no_record": "0832f681d66770d0",
-      "json": "8fcb28070294d013"
+      "json": "991ad7a52f20c5f4"
     },
     "raw_ai/03_pr_description_sonnet_default.md|yomiyasu_rewritten/03_pr_description_sonnet_default.md": {
       "run": "b44327d59e256023",
@@ -2455,7 +2455,7 @@
       "stdin": "058b5039c7c81cbb",
       "fail_on": "b3a4242c4d2f2696",
       "no_record": "5c3560f539d8bf44",
-      "json": "dde038b60bb0bc5c"
+      "json": "5ad94aa9284c3914"
     },
     "blacklist_ai/03_pr_description_sonnet_default.md|yomiyasu_rewritten/03_pr_description_sonnet_default_bl.md": {
       "run": "9b5a2422b8dabbe7",
@@ -2466,7 +2466,7 @@
       "stdin": "0873364353b7da42",
       "fail_on": "080428938e38841d",
       "no_record": "c1ffac611551bcbd",
-      "json": "0efdf4dba75eb043"
+      "json": "ab0b450612157d73"
     },
     "raw_ai/03_pr_description_sonnet_formal.md|yomiyasu_rewritten/03_pr_description_sonnet_formal.md": {
       "run": "f557bb53f1c62bf7",
@@ -2477,7 +2477,7 @@
       "stdin": "9e580e73ec53dc86",
       "fail_on": "3abea0e8edfced2e",
       "no_record": "a618b08966048919",
-      "json": "4fbf9fca8dba5d08"
+      "json": "17c8c3cff82ffe01"
     },
     "blacklist_ai/03_pr_description_sonnet_formal.md|yomiyasu_rewritten/03_pr_description_sonnet_formal_bl.md": {
       "run": "6887a6a7bdd38b98",
@@ -2697,7 +2697,7 @@
       "stdin": "6858134c76349a9f",
       "fail_on": "1605bebf7ff7355d",
       "no_record": "8ddc2a62a3c6191d",
-      "json": "9c6e2e3f6514af04"
+      "json": "8dd7314c6a5b35e2"
     },
     "blacklist_ai/07_code_review_sonnet_casual.md|yomiyasu_rewritten/07_code_review_sonnet_casual_bl.md": {
       "run": "8144e138abacf283",
@@ -2730,7 +2730,7 @@
       "stdin": "76d864a66fe11dc9",
       "fail_on": "dfd4f587ecb95ec8",
       "no_record": "5df56df8bfc9aae6",
-      "json": "8791676b3964a8e7"
+      "json": "c5b9e041fb802630"
     },
     "raw_ai/07_code_review_sonnet_formal.md|yomiyasu_rewritten/07_code_review_sonnet_formal.md": {
       "run": "b938c6219ba5ae1c",
@@ -3194,6 +3194,22 @@
     "2026-10-15 因果のほかの claim（評価の足し evaluation と、一般化・勧めの足し general）の検出を外した（語の表では目安に届かなかったため）。state、promise、promise_review、claim/causal の作りは変えていない。diff と check の行を作り直した（diff 26 組、check 26 組の値が変わった。どれも評価か一般化・勧めの候補が消えた組で、推敲の48組のうち3組を含む）。この検出を足す前の出力と比べて値が違う組は diff、check とも 35 組（raw_ai 14、edge_cases 11、human 10）で、推敲の48組は0組になった。--fail-on を付けないとき、付けたときとも、終了コードはこの検出を足す前と同じ。source_sha256 の diff と check は今のスクリプトの値にした。",
     "2026-10-16 check の出力に見直し候補の行と直した箇所の節、run の JSON に candidate_counts と changed_places、verify に4行目と final_candidate_count・changed_place_count を追加した。unchanged_check() で check の行だけを作り直した。lint と diff の行は保持した。全組で追加部分を除いた出力と標準エラーが変更前と一致し、終了コードが変わった組は0組。",
     "2026-10-16 replace の前後表示は、片側でも60字を超えたら両側を同じ開始位置から切るようにした。unchanged_check() で check の行だけを作り直した（4組、24件）。変化は直した箇所の節だけで、終了コードが変わった組は0組。lint と diff の行は保持し、現在の出力と一致することを確認した。",
-    "2026-10-16 見直し候補の行の添え書きを、増えても減っても読みやすさの良し悪しを示さないと言う字句に改めた。直した箇所の節で、片側が相手の頭そのものの組（段落の最後の文を足した・消した）は短い側の最後の文から見せ、つないだ形が同じになる組は元と後を並べず全文差分へ案内し、元と後で行の数が違う組があれば案内の1行にその注意を足し、切り方の説明を「変わり始めの少し前からおよそ60字」に改めた。unchanged_check() で check の行だけを作り直した（136組、376件）。lint と diff の行は保持した。終了コードが変わった組は0組。"
+    "2026-10-16 見直し候補の行の添え書きを、増えても減っても読みやすさの良し悪しを示さないと言う字句に改めた。直した箇所の節で、片側が相手の頭そのものの組（段落の最後の文を足した・消した）は短い側の最後の文から見せ、つないだ形が同じになる組は元と後を並べず全文差分へ案内し、元と後で行の数が違う組があれば案内の1行にその注意を足し、切り方の説明を「変わり始めの少し前からおよそ60字」に改めた。unchanged_check() で check の行だけを作り直した（136組、376件）。lint と diff の行は保持した。終了コードが変わった組は0組。",
+    {
+      "reason": "rule_penalty_score の式を変えた",
+      "regenerated": "unchanged_lint() と unchanged_check() で lint と check の json だけを作り直した。ほかの値は同じことを確かめ、作り直していない。",
+      "counts": {
+        "lint": {
+          "regenerated": 163,
+          "changed": 19,
+          "untouched_equal": 815
+        },
+        "check": {
+          "regenerated": 48,
+          "changed": 9,
+          "untouched_equal": 560
+        }
+      }
+    }
   ]
 }

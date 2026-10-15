@@ -82,6 +82,7 @@ class TestLintPerformanceRegressions(unittest.TestCase):
             with self.subTest(table=name), patch.object(yomiyasu_lint, name, iter(values)):
                 result = yomiyasu_lint.lint_text(text)
             self.assertEqual([(item["rule"], item["line"]) for item in result["findings"]], [(rule, 1)])
+            # 地の文1,000字未満、warn 1件の重み2で95。
             self.assertEqual(result["rule_penalty_score"], 95)
 
     def test_malformed_lexical_rows_are_not_inspected_without_visible_prose(self):
@@ -127,6 +128,7 @@ class TestLintPerformanceRegressions(unittest.TestCase):
                      for item in result["findings"]],
                     [("negative_parallelism", "info", line, snippet)],
                 )
+                # 地の文1,000字未満、info 1件の重み1で98。
                 self.assertEqual(result["rule_penalty_score"], 98)
                 self.assertGreater(recording.scanned_characters, 0)
                 self.assertGreater(recording.matches, 0)
@@ -143,7 +145,8 @@ class TestLintPerformanceRegressions(unittest.TestCase):
             self.assertTrue(message.startswith(f"AI頻出語彙「{word}」"), message)
         self.assertIn("「版」（version）", messages[5])
         self.assertIn("「回帰」（regression）", messages[6])
-        self.assertEqual(result["rule_penalty_score"], 65)
+        # 地の文1,000字未満、warn 7件の重み14で74。
+        self.assertEqual(result["rule_penalty_score"], 74)
 
     def test_new_pattern_after_warmup_keeps_full_search_fallback(self):
         text = "追加候補について説明します。"
@@ -160,6 +163,7 @@ class TestLintPerformanceRegressions(unittest.TestCase):
         )
         self.assertIn("追加した見直し候補", result["findings"][0]["message"])
         self.assertEqual(result["findings"][1]["message"], "追加した説明")
+        # 地の文1,000字未満、warn 1件と info 1件の重み3で93。
         self.assertEqual(result["rule_penalty_score"], 93)
         self.assertEqual(yomiyasu_lint.lint_text(text)["findings"], [])
 

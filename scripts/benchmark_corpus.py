@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-保存済みコーパスに対し、単純な正規表現とyomiyasu_lint.pyの検出件数・スコア（規則の減点の目安）を集計する。
+保存済みコーパスに対し、単純な正規表現とyomiyasu_lint.pyの検出件数・スコア（規則に当たった候補の密度の目安）を集計する。
 スコアは lint の rule_penalty_score で、文章の品質の点数ではない。
 検出件数の比は精度や誤検出率ではない。実行するとbenchmark_results.jsonを上書きする。
 
@@ -133,7 +133,7 @@ def benchmark_corpus():
         json.dump(out_data, fp, ensure_ascii=False, indent=2)
 
     print("\n" + "="*70)
-    print(f"コーパスの検出件数とスコア（規則の減点の目安） (対象ファイル数: {total_files}本)")
+    print(f"コーパスの検出件数とスコア（規則に当たった候補の密度の目安） (対象ファイル数: {total_files}本)")
     print("="*70)
     print(f"{'グループ':<20} | {'本数':<5} | {'平均点':<6} | {'単純一致件数':<10} | {'リンター指摘件数':<14} | {'件数減少率':<10}")
     print("-" * 75)

@@ -229,6 +229,7 @@ class TestSentenceEndRepetition(unittest.TestCase):
         self.assertEqual(finding["line"], 3)
         self.assertEqual(finding["snippet"], "画面を確認します。")
         self.assertEqual(set(finding), {"rule", "line", "severity", "message", "snippet"})
+        # 地の文1,000字未満、warn 1件の重み2で95。
         self.assertEqual(report["rule_penalty_score"], 95)
         self.assertFalse(report["no_rule_findings"])
 

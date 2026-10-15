@@ -89,6 +89,7 @@ else:
 
 # --json の出力の形の版。キーを足すだけなら上げない。キーの意味や型を変えたときに上げる。
 # v1.1.2 までの形（score、is_clean、metrics、findings）を1とみなす。
+# 公開前の形式2の中の変更（2.0.0 の rule_penalty_score の式）では上げない。
 LINT_FORMAT_VERSION = 2
 
 # 文書の種類ごとに外す規則（種類ごとに決めた組。formal と promo はあとから足した）。
@@ -789,6 +790,7 @@ def _mask_route_dashes(text):
 # ダッシュで補足や言い換えを挟む形（「今日——正確には昨日——連絡しました。」）
 _DASH_INSERTION = re.compile("[" + DASH_CHARS + "]{1,2}[^" + DASH_CHARS + "。\n]{1,40}[" + DASH_CHARS + "]{1,2}")
 # 小説などで、同じ文書に同じ指摘を出しすぎないよう、ダッシュの指摘は1文書あたりこの件数までにする。
+# 上限は種類で外した候補を除いたあとに当て、点数には上限の前の数（当たった行の数）を使う。
 DASH_FINDING_LIMIT = 3
 
 # 「」『』の中は会話文や記号への言及、リンクの文字列は引用した題名として扱う。
@@ -1385,8 +1387,9 @@ def _metrics_from_analysis(analysis):
 
 
 def _metrics_and_list_gate(analysis):
-    """metrics と、箇条書きの比率の判定に使う地の文の字数（<details> の中の箇条書きの行の字数を除く）を返す。"""
+    """metrics、箇条書きの判定用字数（<details> 内の箇条書きを除く）、点数用の地の文字数を返す。"""
     plain_rows = []
+    prose_chars = 0
     for row in analysis["lines"]:
         stripped = row["raw"].strip()
         if row["kind"] in ("code", "frontmatter", "html_block", "reference_definition"):
@@ -1403,6 +1406,8 @@ def _metrics_and_list_gate(analysis):
             continue
         if stripped:
             plain_rows.append((row, visible))
+            if row["kind"] not in ("heading", "heading_underline", "thematic_break"):
+                prose_chars += len("".join(visible.split()))
     total_lines = len(plain_rows)
     # <details> の中の箇条書きは、箇条書きの比率に数えず、details_list_lines に別に数える（畳んだ根拠の一覧などで
     # excess_list を出さないため）。total_lines と、字数と太字は今までどおり中も数える。比率の分母は、全体の非空行から
@@ -1435,7 +1440,7 @@ def _metrics_and_list_gate(analysis):
         metrics["details_list_lines"] = details_list_lines
     # 箇条書きの比率の判定の門（地の文が300字を超える）も、比率と同じく <details> の中の箇条書きを数えない。外が短く、根拠の
     # 箇条書きを畳んだ文書で、畳んだ字数で門を通って excess_list が出ないため（反証で見つけた例）。<details> がなければ char_count と同じ
-    return metrics, char_count - details_list_chars
+    return metrics, char_count - details_list_chars, prose_chars
 
 
 def analyze_markdown_metrics(text: str) -> Dict[str, Any]:
@@ -2321,6 +2326,36 @@ def _pause_comma_line_hits(analysis):
     return out
 
 
+_PENALTY_WEIGHTS = {"error": 3, "warn": 2, "info": 1}
+_PENALTY_FLOOR = 1000
+_PENALTY_HALF = 40
+_DOCUMENT_RULE_WEIGHTS = {"excess_bold": 2, "excess_list": 2, "bold_label_list": 1}
+_SUMMARY_RULES = ("negative_parallelism_density",)
+_DASH_RULES = ("dash_decoration", "dash_insertion", "dash_list_ending")
+
+
+def _rule_penalty_score(findings, prose_chars, dash_hits):
+    """行の候補の密度と文書単位の候補から、整数だけで目安を計算する。"""
+    if not findings:
+        return 100
+    line_weight = 0
+    document_weight = 0
+    dash_found = 0
+    for finding in findings:
+        rule = finding["rule"]
+        if rule in _DASH_RULES:
+            dash_found += 1
+        if rule in _DOCUMENT_RULE_WEIGHTS:
+            document_weight += _DOCUMENT_RULE_WEIGHTS[rule]
+        elif rule not in _SUMMARY_RULES:
+            line_weight += _PENALTY_WEIGHTS[finding["severity"]]
+    line_weight += max(0, dash_hits - dash_found) * _PENALTY_WEIGHTS["warn"]
+    m = max(prose_chars, _PENALTY_FLOOR)
+    num = 100 * _PENALTY_HALF * m
+    den = (_PENALTY_HALF + document_weight) * m + 1000 * line_weight
+    return max(1, min(99, (2 * num + den) // (2 * den)))
+
+
 def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
     """文章全体を総合検査する。
 
@@ -2331,7 +2366,7 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
     analysis = analyze_markdown(text)
     rule9_context = _rule9_context(analysis)
     extra_negation_lines = _extra_negation_line_numbers(analysis)
-    metrics, list_gate_chars = _metrics_and_list_gate(analysis)
+    metrics, list_gate_chars, prose_chars = _metrics_and_list_gate(analysis)
     sentence_records = _plain_sentence_records(analysis)
     sentences = [(line, visible) for line, visible, _, _ in sentence_records]
     source_sentences = [(line, source) for line, _, source, _ in sentence_records]
@@ -2346,7 +2381,6 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
                                   for pattern, rule, message in INFO_SENTENCE_PATTERNS]
     else:
         slop_words, slop_patterns, metaphor_patterns, translated_patterns, filler_patterns, info_sentence_patterns = narrowed
-    dash_count = 0
     dash_possible = (_dash_finding is not _DASH_FINDING_DEFAULT or _DASH_RUN is not _DASH_RUN_DEFAULT
                      or any(char in text for char in "—―─━"))
     previous_sentence = ""
@@ -2487,9 +2521,9 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
         # A dash in a table cell often means "not applicable", so tables are skipped.
         if row["kind"] != "table" and dash_possible:
             dash = _dash_finding(plain_text, line_no, stripped)
-            if dash and dash_count < DASH_FINDING_LIMIT:
+            if dash:
+                # 1文書の件数の上限は、種類で外した候補を除いたあとに当てる
                 findings.append(dash)
-                dash_count += 1
         if row["kind"] == "heading":
             if re.search(r"とは[：:]", scan_text):
                 findings.append({
@@ -2684,10 +2718,19 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
             elif rule not in DOC_TYPE_ONLY_RULES or doc_type in DOC_TYPE_ONLY_RULES[rule]:
                 kept.append(finding)
         findings = kept
+    # ダッシュの候補は、外したあとに残ったものの初めから DASH_FINDING_LIMIT 件だけを出し、点数には全部を数える
+    dash_hits = 0
+    shown = []
+    for finding in findings:
+        if finding["rule"] in _DASH_RULES:
+            dash_hits += 1
+            if dash_hits > DASH_FINDING_LIMIT:
+                continue
+        shown.append(finding)
+    findings = shown
 
-    # 規則に当たった件数から計算した目安。文章の品質の点数ではない。error と warn は5、info は2を引く。
-    penalty = sum(5 if f["severity"] in ("warn", "error") else 2 for f in findings)
-    rule_penalty_score = max(0, 100 - penalty)
+    # 候補の重みを地の文1,000字あたりに直した x から、100 × 40 ÷ (40 + x) を丸める目安。品質の点数ではない。
+    rule_penalty_score = _rule_penalty_score(findings, prose_chars, dash_hits)
     counts = {"error": 0, "warn": 0, "info": 0}
     for finding in findings:
         if finding["severity"] in counts:
@@ -2844,12 +2887,22 @@ class _HelpFormatter(argparse.RawDescriptionHelpFormatter):
         return super().add_usage(usage, actions, groups, prefix)
 
 
+_PENALTY_HELP = """rule_penalty_score（--json の目安）:
+  候補が0件なら100。候補があれば 100 × 40 ÷ (40 + x) を四捨五入し、1〜99に収めます。
+  x は、行ごとの候補の重み（error 3、warn 2、info 1）を地の文1,000字あたりに直した数です。
+  地の文はコード、表、引用、見出し、URL を除いた字数で、1,000字に満たなければ1,000字として割ります。
+  excess_bold と excess_list は1件で2、bold_label_list は1を x に足し、
+  negative_parallelism_density は数えません。ダッシュの規則に当たった行は、候補に出さない4行目からも数えます。
+  --doc-type で候補が変わると、点数も変わります。CI では --fail-on か counts を使ってください。
+"""
+
+
 def _build_parser():
     parser = _ArgumentParser(
         prog="yomiyasu_lint.py",
         description=("日本語の表現とMarkdownの書式を、決まった規則で点検します。結果は見直し候補です。"
                      "候補の数や点数は、文章の品質、意味の保持、読者にとっての分かりやすさの合否ではありません。"),
-        epilog=_doc_type_table() + "\n\n" + _EXIT_CODES,
+        epilog=_doc_type_table() + "\n\n" + _PENALTY_HELP + "\n" + _EXIT_CODES,
         formatter_class=_HelpFormatter,
         add_help=False,
         # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる
@@ -2862,7 +2915,7 @@ def _build_parser():
     options.add_argument("-h", "--help", action="help", help="このヘルプを表示して終わります。")
     options.add_argument("--json", action="store_true",
                          help="結果をJSON（形式2）で出します。日本語は \\uXXXX の形で出します。"
-                              "rule_penalty_score は目安で、合否には使わないでください。")
+                              "rule_penalty_score は、候補の多さを地の文の長さで割った目安です（下の式）。合否には使わないでください。")
     options.add_argument("--strict", action=_ConditionAction, nargs=0, dest="conditions",
                          help="warn か error の候補が1件でもあれば、終了コード1で終わります。"
                               "info の候補と点数は使いません（--fail-on=warn と同じです）。")
