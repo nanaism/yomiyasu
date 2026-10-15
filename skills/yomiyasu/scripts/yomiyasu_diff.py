@@ -1833,12 +1833,12 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
                      "frontmatter": "先頭の設定", "html": "HTML", "quote": "引用"}
 # 同じ塊の中で並べる順
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
-               "feeling": 6}
-# --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の印の変化）。
+               "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9}
+# --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の印の変化、確度の強まり）。
 # 変えない箇所（protected）は意味が変わる恐れの節に出すが数えない。check は資料にない数値（unsupported/number）も数える。
 # diff の詰めで足した否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）も数えない（どちらも
 # 見直しの候補を出すだけで、点数や合否には使わない）
-FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation")
+FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty")
 
 
 def fail_on_count(risks):
@@ -3767,7 +3767,11 @@ def _meaning_risks(sides, full, type_changes, groups=None):
     # 足した候補は既存の候補の後ろに、行の順で並べる（既存の並びは変えない。反証で見つけた例）
     citations.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                                   r["new_line"] if r["new_line"] is not None else 0))
-    return risks + citations
+    risks += citations
+    added = _certainty_risks(sides, groups, risks) + _quote_risks(sides, groups)
+    added.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
+                              r["new_line"] if r["new_line"] is not None else 0))
+    return risks + added
 
 
 # ---- 一覧のファイル（diff の詰め）----
@@ -5563,13 +5567,463 @@ def ground(final, materials, original=None):
             "not_judged": list(_GROUND_NOT_JUDGED)}
 
 
+# ---- 確度・かぎかっこ・文体の切り替え ----
+
+_CERTAINTY_VERB = "[るうくすつぬぶむぐたい]"
+# 予定・見込みは、文の確かさを言う述語のときだけ数える（「予定表」「見込み客」「会議の予定を調整」「売上の見込みを立てる」の
+# ような名詞は数えない。反証で見つけた例）。述語は、あとが「です」「だ」「となる」や文の終わりの形か、動詞の使い方（予定して、
+# 見込まれる）。「の」と「で、」が続く形は、前がサ変の名詞か動詞の終わりのとき（リリース予定の機能、修正する予定で、）と、
+# 「〜までの予定で、」だけ。
+_PREDICATE_END = r"(?=です|だ(?!け)|である|でした|だった|でござ|と(?:な|して|され)|に(?:な|し)|[。）)」』]|$)"
+_PREDICATE_STEM = "(?<=[ァ-ヴー一-龥])"
+_PREDICATE_BEFORE = "(?<=[るうくすつぬぶむぐたいァ-ヴー一-龥])"
+_YOTEI = (r"予定(?=して(?:い|お)|しま|する(?=[。、]|$)|され)"
+          r"|予定(?!外|より|通り|どおり)" + _PREDICATE_END
+          + r"|" + _PREDICATE_STEM + r"予定(?=の)|" + _PREDICATE_BEFORE + r"予定(?=で(?!は)|、)|(?<=の)予定(?=で、)")
+_MIKOMI = (r"見込(?:ま(?:れ|せ)|んで|む(?=[。、]|$)|め(?:る|ま)|み(?=ます))"
+           r"|見込み" + _PREDICATE_END
+           + r"|" + _PREDICATE_STEM + r"見込み(?=の)|" + _PREDICATE_BEFORE + r"見込み(?=で(?!は)|、)|(?<=の)見込み(?=で、)"
+           + r"|見込み(?=(?:が|も|は)(?:高|大き|強|あ|立|薄|低|な))")
+# 様態の「そう」と、推量の「よう」「らしい」「みたい」（今の文の種類の印の推量と同じ語をそろえた。反証で見つけた例）
+_APPEARANCE = (r"(?<=[きしちにひみりぎじびぴえけせてねへめれげぜべぺさ])そう(?:です|だ|な|に|で(?!す)|でした|だった)"
+               r"|(?<=[るうくすつぬぶむぐいた])よう(?:だ|です|でした|だった|である)(?=[。、！!よね]|$)"
+               r"|(?<=[るうくすつぬぶむぐた])らし(?:い|かった)(?=[。、！!よね]|です|$)"
+               r"|(?<=[るうくすつぬぶむぐいた])みたい(?:だ|です|でした|だった)(?=[。、！!よね]|$)")
+_CERTAINTY_TABLE = [
+    # (強さ, 名前, 正規表現, core)。core でない語（頻度や傾向の言い方、検討、意見）だけが動いた強めは --fail-on に数えない。
+    # 表の順に当て、前の語と重なった位置はあとの語に数えない（「可能性が高い」を「可能性」より先に置く）。
+    (2, "可能性が高い", r"可能性(?:が|は|も)?(?:高|大き|十分)", True),
+    # 1 可能性
+    (1, "かもしれない", r"かも(?:しれ|知れ)(?:ない|ません|ず|なかった|なけれ)", True),
+    (1, "可能性", r"可能性(?:が|も|は)?(?:あ|ござ|考え|残|存在|否定でき|捨てきれ|拭え)", True),
+    (1, "おそれ", r"(?:おそれ|恐れ|虞)(?=が|も|は|あ)", True),
+    (1, "リスク", r"リスク(?:が|も)(?:あ|高|伴|残)", True),
+    (1, "懸念", r"懸念(?:が|も)?(?:あ|され|残)", True),
+    (1, "得る", r"(?<=[しりきちびみいえけせれべ])(?:得る|得ます|うる)", True),
+    (1, "かねない", r"(?<=[しりきちびみいえけせれべ])かね(?:ない|ません|ず)", True),
+    (1, "必ずしも", r"必ずしも|とは限(?:らない|らず|りません|らなかった)", True),
+    (1, "ことがある", r"(?<![たっだ])こと(?:が|も)(?:ある|あり|あっ)|(?:ケース|とき)(?:が|も)(?:ある|あり|あっ|出)", False),
+    (1, "場合がある", r"場合(?:が|も)(?:ある|あり|あっ)", False),
+    (1, "検討", r"検討(?:中|して(?:い|お)|を(?:進め|続け|始め))", False),
+    # 2 見込み・推量
+    (2, "と思われる", r"と(?:思|おも)われ", True),
+    (2, "と考えられる", r"と考えられ", True),
+    (2, "と見られる", r"と(?:見|み)られ", True),
+    (2, "と見ている", r"と(?:見|み)て(?:いる|います|おり)", True),
+    (2, "見込み", _MIKOMI, True),
+    (2, "予想", r"予(?:想|測)(?:され|して(?:い|お)|します|する(?=[。、]|$)|です|だ(?=[。、]|$)|であ|では)", True),
+    (2, "想定", r"想定(?:され|して(?:い|お)|します|する(?=[。、]|$)|です|だ(?=[。、]|$)|であ|では)", True),
+    (2, "見通し", r"見通し(?:です|だ|で|が)", True),
+    (2, "推測される", r"推(?:測|定|察)(?:され|して(?:い|お)|します|する(?=[。、]|$)|です|だ(?=[。、]|$))", True),
+    (2, "公算", r"公算(?:が|は|も)?(?:大き|高|強)", True),
+    (2, "でしょう", r"でしょう(?!か)|だろう(?!か)|であろう", True),
+    (2, "はず", r"はず(?:だ|です|で|でした|だった|の)", True),
+    (2, "おそらく", r"おそらく|恐らく|たぶん|多分", True),
+    (2, "示唆", r"示唆(?:する|され|して|し)", True),
+    (2, "そう・よう", _APPEARANCE, True),
+    (2, "傾向", r"傾向(?:が|に)(?:ある|あり|見られ)", False),
+    (2, "期待できる", r"期待(?:でき|され|して(?:い|お)|します|する(?=[。、]|$))", False),
+    (2, "と思う", r"と(?:思|考え)(?:います|う|る|ます|ている|ています|ており|ております|ていました)|と(?:思|おも)って(?:い|お)"
+                r"|思うのは", False),
+    # 3 予定
+    (3, "予定", _YOTEI, True),
+    (3, "計画", r"(?<=" + _CERTAINTY_VERB + ")計画(?:です|だ|で|である|が(?=あ)|も(?=あ))|計画(?:して(?:い|お)|中)", True),
+    (3, "方針", r"(?<=" + _CERTAINTY_VERB + ")方針(?:です|だ|で|である)", True),
+    (3, "方向", r"(?<=" + _CERTAINTY_VERB + ")方向(?:です|だ|で|である)", True),
+    (3, "つもり", r"つもり(?:です|だ|で)", True),
+    # 5 確実・必ず
+    (5, "確実", r"(?<!ほぼ)(?<!ほとんど)確実(?:に|だ|です|で|な)", True),
+    (5, "必ず", r"必ず(?!しも)", True),
+    (5, "間違いなく", r"(?<!ほぼ)間違いなく|間違いありません|間違いない", True),
+    (5, "確定", r"確定(?:です|だ|である|済|して(?:いる|います|おり)|しました|した(?!ら))", True),
+    (5, "絶対に", r"絶対に", True),
+]
+_CERT = [(lv, name, re.compile(p), core) for lv, name, p, core in _CERTAINTY_TABLE]
+# --fail-on に数えるのは、強さ1と2（可能性、見込み・推量）の core の語が、より強い語か断定に替わったときだけ。
+# 予定（強さ3）から断定への言い切り（「見直す予定です」→「見直します」）は、書き手の予定を言い切る正しい書き換えでも
+# 起きる（SKILL.md の例）ので、見直し候補にとどめる（反証で見つけた例）。
+_COUNTED_FROM = (1, 2)
+_CERTAINTY_NEG_AFTER = re.compile(r"^[^、。]{0,4}?(?:は|が|も)?(?:な[いくかし]|ありません|ございません|低|小さ|少な|薄)")
+_CERTAINTY_NEG_FORMS = re.compile(r"可能性(?:は|が|も)?(?:低|小さ|少な|な[いく]|ほぼな|ありません)|見込(?:み|め)(?:は|が)?(?:な[いく]|薄|低|ありません)"
+                        r"|予定(?:は|が)?(?:な[いく]|ありません)|はず(?:が|は)(?:な|ありません)|(?:おそれ|恐れ)(?:は|が)?(?:な[いく]|ありません)"
+                        r"|リスク(?:は|が)?(?:な[いく]|低|小さ|少な|ありません)|懸念(?:は|が)?(?:な[いく]|ありません)"
+                        r"|(?:あり|起こり|なり|し)(?:得|え)(?:ない|ません)")
+
+_CERTAINTY_QUESTION = re.compile(r"でしょうか[。？?]?[」』）)]*$")
+_CERTAINTY_LEVELS = {1: "可能性", 2: "見込み・推量", 3: "予定", 4: "断定", 5: "確実"}
+# 会話の行（行の頭に8字以内の話し手の名前があってもよい）。「」と『』、閉じのあとの句点も見る（反証で見つけた例）
+_DIALOGUE = re.compile(r"^[^「」『』、。\s]{0,8}[「『].*[」』][。．]?$")
+_QUOTE_CLOSE = {"「": "」", "『": "』"}
+# 書き方だけの違いとして外す字。長音の「ー」は語の一部なので外さない（「ビール」と「ビル」。反証で見つけた例）
+_QUOTE_DROP = re.compile(r"[\s、。，．,.!！…‥・〜~－-]|\.\.\.")
+
+
+def _certainty_words(text):
+    """表の順に重なりを除く。(強さ, 名前, 位置, 否定つき, core) を位置の順で返す。"""
+    found, taken = [], []
+    for level, name, regex, core in _CERT:
+        for match in regex.finditer(text):
+            if any(left < match.end() and match.start() < right for left, right in taken):
+                continue
+            taken.append(match.span())
+            negative = name != "必ずしも" and bool(_CERTAINTY_NEG_AFTER.search(text[match.end():match.end() + 10]))
+            found.append((level, name, match.start(), negative, core))
+    return sorted(found, key=lambda word: word[2])
+
+
+def _certainty_negations(text, words):
+    """確度を否定する形（否定のついた表の語と、表にない否定の形の頭の2字）の数。"""
+    found = Counter(word[1] for word in words if word[3])
+    for match in _CERTAINTY_NEG_FORMS.finditer(text):
+        found[match.group(0)[:2]] += 1
+    return found
+
+
+def _cancel_same_level(before, after):
+    """同じ強さの語を打ち消し、残った語を返す。同じ名前の語から先に打ち消す（残る語の core を、打ち消した語から借りない。
+    「可能性があり、点検することがある」→「可能性があり、点検する予定です」は、ことがある → 予定 として残る。反証で見つけた例）。"""
+    rest_old, rest_new = list(before), list(after)
+    for same_name in (True, False):
+        for word in list(rest_old):
+            for other in rest_new:
+                if other[0] == word[0] and (not same_name or other[1] == word[1]):
+                    rest_old.remove(word)
+                    rest_new.remove(other)
+                    break
+    return rest_old, rest_new
+
+
+def _cancel_with_context(rest, pools):
+    """隣の組にならなかった文の語で打ち消す。使った語は pools から取り除き、2つの組で使い回さない（反証で見つけた例）。"""
+    kept = []
+    for word in rest:
+        for pool in pools:
+            other = next((w for w in pool if w[0] == word[0]), None)
+            if other is not None:
+                pool.remove(other)
+                break
+        else:
+            kept.append(word)
+    return kept
+
+
+def _certainty_change(old, new, old_context=(), new_context=()):
+    """強さで打ち消して比べる。old_context と new_context は、隣の組にならなかった文の語のリストの並び（打ち消しだけに使い、
+    新しい段にはしない。使った語は取り除く）。確度を否定する形は、両側で同じなら外して残りを比べ、違えば比べない。"""
+    if any(_is_question(text) or _CERTAINTY_QUESTION.search(text.rstrip()) for text in (old, new)):
+        return None
+    before, after = _certainty_words(old), _certainty_words(new)
+    if _certainty_negations(old, before) != _certainty_negations(new, after):
+        return None
+    before = [word for word in before if not word[3]]
+    after = [word for word in after if not word[3]]
+    rest_old, rest_new = _cancel_same_level(before, after)
+    rest_old = _cancel_with_context(rest_old, new_context)
+    rest_new = _cancel_with_context(rest_new, old_context)
+    old_base = min([w[0] for w in before] + [4])
+    new_base = min([w[0] for w in after] + [4])
+    rest_old.sort(key=lambda w: (w[0], w[2]))
+    rest_new.sort(key=lambda w: (w[0], w[2]))
+    paired = min(len(rest_old), len(rest_new))
+    transitions = list(zip(rest_old[:paired], rest_new[:paired]))
+    transitions.extend((w, None) for w in rest_old[paired:] if (w[0] < 4 and new_base > w[0]) or w[0] == 5)
+    transitions.extend((None, w) for w in rest_new[paired:] if (w[0] < 4 and w[0] < old_base) or w[0] == 5)
+    steps = []
+    for a, b in transitions:
+        from_level, to_level = (a[0] if a else 4), (b[0] if b else 4)
+        if from_level == to_level:
+            continue
+        steps.append({"from": a[1] if a else "断定", "to": b[1] if b else "断定",
+                      "from_level": from_level, "to_level": to_level,
+                      "counted": a is not None and a[4] and from_level in _COUNTED_FROM and to_level > from_level})
+    if not steps:
+        return None
+    up = any(s["to_level"] > s["from_level"] for s in steps)
+    down = any(s["to_level"] < s["from_level"] for s in steps)
+    return ("certainty" if any(s["counted"] for s in steps) else "certainty_review",
+            "strengthened" if up else "weakened",
+            {"old_words": [w[1] for w in before], "new_words": [w[1] for w in after],
+             "steps": steps, "mixed": up and down})
+
+
+def _same_review_sentence(body, risk):
+    """hedges と確度で共通の、原文の文の照らし方。"""
+    if risk["old_line"] is not None and risk["old_line"] != body.line:
+        return False
+    text, other = normalize(body.raw).strip(), normalize(risk["old"] or "").strip()
+    return text in other or other in text
+
+
+def _unpaired_neighbors(count, index, paired):
+    """組の文 index のすぐ前とすぐあとに続く、組にならなかった文の番号（_with_unpaired_text と同じ範囲）。"""
+    first = index
+    while first > 0 and first - 1 not in paired:
+        first -= 1
+    last = index
+    while last + 1 < count and last + 1 not in paired:
+        last += 1
+    return [k for k in range(first, last + 1) if k != index]
+
+
+def _certainty_risks(sides, groups, risks):
+    masks = (_Masker(sides, 0), _Masker(sides, 1))
+    marks = [r for r in risks if (r["kind"], r["subkind"]) == ("sentence_type", "marks")]
+    out = []
+    for group in groups:
+        # 塊ごとに一度だけ伏せる。全文書き換えでも組ごとに全文を走査しない。
+        bodies = [[masks[side].body(s) or _Body("", s.text, s.line, s.start) for s in group[key]]
+                  for side, key in enumerate(("old", "new"))]
+        paired = [set(pair[side] for pair in group["pairs"]) for side in (0, 1)]
+        pools = [{}, {}]
+
+        def pool(side, index):
+            if index not in pools[side]:
+                pools[side][index] = [w for w in _certainty_words(bodies[side][index].text) if not w[3]]
+            return pools[side][index]
+
+        for i, j in group["pairs"]:
+            old, new = bodies[0][i], bodies[1][j]
+            if not old.text or not new.text or old.text == new.text:
+                continue
+            contexts = [[pool(side, k) for k in _unpaired_neighbors(len(bodies[side]), index, paired[side])]
+                        for side, index in ((0, i), (1, j))]
+            change = _certainty_change(old.text, new.text, *contexts)
+            if change is None:
+                continue
+            kind, direction, detail = change
+            key = "lost" if direction == "strengthened" else "added"
+            if any(_same_review_sentence(old, risk)
+                   and any(m["kind"] in ("推量", "意見") for m in risk["detail"].get(key, [])) for risk in marks):
+                continue
+            out.append(_risk(kind, direction, old.line, new.line, old.raw, new.raw, detail))
+    return out
+
+
+def _quote_normalize(text):
+    return _QUOTE_DROP.sub("", unicodedata.normalize("NFKC", text).replace("?", "？"))
+
+
+def _line_quotes(text):
+    """1行のかぎかっこ（「」『』）を、かっこの対応を追って取る。入れ子は外側（中身に内側のかっこを含む）と内側の両方。
+    文の句点をまたぐ会話（「うん。うん。そう。」）も1つとして取る（反証で見つけた例）。閉じないかっこは見ない。
+    (開きの位置, かっこ, 中身) と、いちばん外側のかっこの範囲の並びを返す。"""
+    stack, found, tops = [], [], []
+    for position, char in enumerate(text):
+        if char in _QUOTE_CLOSE:
+            stack.append((position, char))
+        elif char in "」』":
+            depth = len(stack) - 1
+            while depth >= 0 and _QUOTE_CLOSE[stack[depth][1]] != char:
+                depth -= 1
+            if depth < 0:
+                continue
+            start, opener = stack[depth]
+            del stack[depth:]
+            found.append((start, opener + char, text[start + 1:position]))
+            if not stack:
+                tops.append((start, position + 1))
+    found.sort()
+    return found, tops
+
+
+def _blank_masked(masker, text, start):
+    """伏せる範囲（インラインのコード、URL など）を同じ長さの \\x00 にした文字列（位置を保つ）。"""
+    end = start + len(text)
+    first = max(0, bisect_right(masker.lefts, start) - 1)
+    chars = None
+    for left, right in masker.spans[first:]:
+        if left >= end:
+            break
+        if right <= start:
+            continue
+        if chars is None:
+            chars = list(text)
+        for k in range(max(left, start), min(right, end)):
+            chars[k - start] = "\x00"
+    return text if chars is None else "".join(chars)
+
+
+class _QuoteSide:
+    """1つの側のかぎかっこ。quotes は文の位置から [(比べ用の形, かっこ, 中身, 文)]、outside は文の位置から、かぎかっこの
+    外の文字を比べ用の形にしたもの、count は文書全体の比べ用の形の数。"""
+
+    def __init__(self, sides, side, masker):
+        rows = sides.analyses[side]["lines"]
+        self.quotes, self.outside, self.count = {}, {}, Counter()
+        by_line = OrderedDict()
+        for sentence in _line_sentences(sides, side, 0, len(sides.lines[side])):
+            by_line.setdefault(sentence.line, []).append(sentence)
+        for line_no, sentences in by_line.items():
+            row = rows[line_no - 1] if line_no - 1 < len(rows) else None
+            if row is None or row["kind"] in masker.skip_kinds or _is_quote_row(row):
+                continue
+            line_start = sides.starts[side][line_no - 1]
+            text = _blank_masked(masker, sides.lines[side][line_no - 1], line_start)
+            found, tops = _line_quotes(text)
+            starts = [s.start - line_start for s in sentences]
+            for position, bracket, content in found:
+                sentence = sentences[max(0, bisect_right(starts, position) - 1)]
+                key = _quote_normalize(content)
+                self.quotes.setdefault(sentence.start, []).append((key, bracket, content, sentence))
+                self.count[key] += 1
+            outside = list(text)
+            for left, right in tops:
+                outside[left:right] = "\x01" * (right - left)
+            outside = "".join(outside)
+            for sentence, offset in zip(sentences, starts):
+                self.outside[sentence.start] = _quote_normalize(outside[offset:offset + len(sentence.text)])
+
+
+def _quote_risks(sides, groups):
+    """かぎかっこの中の言葉の書き換え。原文の変わった文のかぎかっこを、推敲後の対応する文とすぐ隣の組にならなかった文
+    （組がなければ同じ塊の近い位置の文）だけと照らす。文書全体のどこかに同じ言葉があるだけでは残ったとしない
+    （「はい」→「いいえ」、「必要」→「不必要」。反証で見つけた例）。かっこを外しただけ（照らす文のかっこの外に同じ言葉がある）と、
+    同じかぎかっこを別の場所に動かしただけ（文書全体の同じ形の数が減っていない）は出さない。"""
+    masks = (_Masker(sides, 0), _Masker(sides, 1))
+    old_side, new_side = _QuoteSide(sides, 0, masks[0]), _QuoteSide(sides, 1, masks[1])
+    out = []
+    for group in groups:
+        pairs = dict(group["pairs"])
+        paired_new = set(pairs.values())
+        order = sorted(pairs.items())
+        old_count, new_count = len(group["old"]), len(group["new"])
+        for i, sentence in enumerate(group["old"]):
+            quotes = old_side.quotes.get(sentence.start)
+            if not quotes:
+                continue
+            j = pairs.get(i)
+            if j is not None:
+                region = [group["new"][j]] + [group["new"][k] for k in _unpaired_neighbors(new_count, j, paired_new)]
+            elif new_count:
+                # 組にならなかった文は、前後の組の推敲後の文のあいだ（最大6文）と照らす
+                earlier = [b for a, b in order if a < i]
+                later = [b for a, b in order if a > i]
+                low = earlier[-1] if earlier else 0
+                high = later[0] if later else new_count - 1
+                if high - low > 5:
+                    middle = min(new_count - 1, i * new_count // max(1, old_count))
+                    low, high = max(low, middle - 2), min(high, middle + 3)
+                region = group["new"][low:high + 1]
+            else:
+                region = []
+            region_quotes = [q for s in region for q in new_side.quotes.get(s.start, [])]
+            region_keys = set(q[0] for q in region_quotes)
+            outside = "\x01".join(new_side.outside.get(s.start, "") for s in region)
+            partner_quotes = new_side.quotes.get(group["new"][j].start, []) if j is not None else []
+            for index, (key, bracket, content, _) in enumerate(quotes):
+                if len(key) < 2 or key in region_keys or key in outside:
+                    continue
+                if new_side.count[key] >= old_side.count[key]:
+                    continue
+                best, ratio = None, 0.0
+                for candidate in region_quotes:
+                    similarity = difflib.SequenceMatcher(None, key, candidate[0], autojunk=False).ratio()
+                    if similarity > ratio:
+                        best, ratio = candidate, similarity
+                if ratio < 0.4 and len(partner_quotes) == len(quotes):
+                    # 同じ数のかぎかっこを持つ組の文では、同じ順の言葉を書き換えた先とみなす（「行く」→「行かない」）
+                    best, ratio = partner_quotes[index], 1.0
+                changed = best is not None and ratio >= 0.4
+                if not changed and new_side.count[key]:
+                    # 同じ言葉のかぎかっこが推敲後の文書のほかの所に残っていて、この文からは消えただけ（くり返しの名前を
+                    # 1か所省いた）なら出さない。言葉を別の言葉に替えた形は上の changed で出る
+                    continue
+                target = best[3] if changed else (group["new"][j] if j is not None else None)
+                out.append(_risk("quote", "changed" if changed else "lost", sentence.line,
+                                 target.line if target else None, sentence.text, target.text if target else None,
+                                 {"old_quote": content, "new_quote": best[2] if changed else None, "bracket": bracket,
+                                  "dialogue": bool(_DIALOGUE.fullmatch(sides.lines[0][sentence.line - 1].strip()))}))
+    return out
+
+
+def _outside_quote(sides, side, body):
+    return not _is_quote_row(sides.analyses[side]["lines"][body.line - 1])
+
+
+def _register_of(text):
+    """register() と同じ判定。漢字の「下さい」は仮名の「ください」と同じに読む（register() は9キーの判定なので変えない。
+    「実行して下さい」→「実行してください」を常体→敬体と取り違えない。反証で見つけた例）。"""
+    return register(text.replace("下さい", "ください"))
+
+
+def _contained(short, long):
+    """short の字のうち long に同じ並びで残る割合。"""
+    if not short:
+        return 0.0
+    blocks = difflib.SequenceMatcher(None, short, long, autojunk=False).get_matching_blocks()
+    return sum(block.size for block in blocks) / len(short)
+
+
+def _register_changes(sides, groups, politeness):
+    threshold = {"min_sentences": 3, "min_ratio": 0.5}
+    if any(c["subkind"] == "polite_ratio" for c in politeness.get("candidates", [])):
+        return _review_section([], threshold=threshold, skipped_by="politeness")
+    masks = (_Masker(sides, 0), _Masker(sides, 1))
+
+    def eligible(side, body):
+        return (body is not None and body.text.strip() and _outside_quote(sides, side, body)
+                and not _DIALOGUE.fullmatch(sides.lines[side][body.line - 1].strip()))
+
+    counts = []
+    for side in (0, 1):
+        found = Counter(_register_of(b.text) for b in _all_bodies(sides, side, masks[side]) if eligible(side, b))
+        counts.append({"plain": found["常体"], "polite": found["敬体"]})
+    changes = {"to_polite": [], "to_plain": []}
+    kinds = {("常体", "敬体"): "to_polite", ("敬体", "常体"): "to_plain"}
+    for group in groups:
+        olds = [masks[0].body(s) for s in group["old"]]
+        news = [masks[1].body(s) for s in group["new"]]
+        new_registers = [_register_of(b.text) if eligible(1, b) else "" for b in news]
+        order = sorted(group["pairs"])
+        paired_old = set(i for i, _ in order)
+        found = []
+        for i, j in order:
+            if not eligible(0, olds[i]) or not new_registers[j]:
+                continue
+            kind = kinds.get((_register_of(olds[i].text), new_registers[j]))
+            if kind:
+                found.append((i, kind, olds[i], news[j]))
+        # 文を合わせた推敲（「設定を開く。保存を押す。」→「設定を開き、保存を押します。」）: 組にならなかった原文の文も、
+        # 前後の組の推敲後の文のあいだ（最大6文）に中身の6割以上が残り、その文の文体が切り替わっていれば数える（反証で見つけた例）
+        for i, old in enumerate(olds):
+            if i in paired_old or not eligible(0, old) or len(old.text) < 4:
+                continue
+            source = _register_of(old.text)
+            if not source:
+                continue
+            earlier = [b for a, b in order if a < i]
+            later = [b for a, b in order if a > i]
+            low = earlier[-1] if earlier else 0
+            high = later[0] if later else len(news) - 1
+            if high - low > 5:
+                middle = min(len(news) - 1, i * len(news) // max(1, len(olds)))
+                low, high = max(low, middle - 2), min(high, middle + 3)
+            for k in range(max(0, low), min(len(news), high + 1)):
+                kind = kinds.get((source, new_registers[k]))
+                if kind and _contained(old.text, news[k].text) >= 0.6:
+                    found.append((i, kind, old, news[k]))
+                    break
+        for _, kind, old, new in sorted(found, key=lambda item: item[0]):
+            changes[kind].append((old, new))
+    out = []
+    for kind, source, target in (("to_polite", "plain", "polite"), ("to_plain", "polite", "plain")):
+        pairs = changes[kind]
+        if len(pairs) < threshold["min_sentences"] or len(pairs) < threshold["min_ratio"] * max(1, counts[0][source]):
+            continue
+        out.append(_review_candidate(kind, pairs[0][0], pairs[0][1],
+                   {"pattern": "unified" if counts[0][target] > counts[0][source] else "switched",
+                    "switched": len(pairs), "old_counts": counts[0], "new_counts": counts[1],
+                    "lines": [[old.line, new.line] for old, new in pairs[:5]]}))
+    return _review_section(out, threshold=threshold, skipped_by=None)
+
+
 # ---- diff() ----
 
 # ---- 慎重表現・動かしてはいけない値・敬語（mail / paper） ----
 # 既存の9キーと推量印の判定は変更しない。慎重表現は独立した節にして、既存の推量印の候補と
 # 文単位で重ねない。引用の新しい候補だけは meaning_risks に加える（fail-on の対象）。
-NEW_REVIEW_SECTIONS = ("hedges", "immutable", "politeness")
-_NEW_SECTION_NAMES = {"hedges": "慎重な言い方", "immutable": "動かしてはいけない値", "politeness": "敬語の度合い"}
+NEW_REVIEW_SECTIONS = ("hedges", "immutable", "politeness", "register")
+_NEW_SECTION_NAMES = {"hedges": "慎重な言い方", "immutable": "動かしてはいけない値", "politeness": "敬語の度合い", "register": "文体の切り替え"}
 
 
 def _review_section(candidates, **fields):
@@ -5586,13 +6040,15 @@ def _review_candidate(subkind, old, new, detail):
 
 def _hedges(sides, groups, risks):
     """一覧の語の出現総数が減った文。文の分割先も数え、移動しただけの文は除く。
-    同じ文に既存の sentence_type/marks の推量減少があれば独立の候補を出さない。
+    同じ文に sentence_type/marks の推量減少か確度の強まりがあれば、独立の候補を出さない。
     既存の候補は元のまま残すため、その場合の --fail-on は既存の推量印の扱いに従う。"""
     words, _ = _load_list("hedges")
     regex = re.compile("|".join(re.escape(w) for w in sorted(set(words), key=len, reverse=True))) if words else None
     masks = (_Masker(sides, 0), _Masker(sides, 1))
     marks = [r for r in risks if r["kind"] == "sentence_type" and r["subkind"] == "marks"
              and any(m["kind"] == "推量" for m in r["detail"].get("lost", []))]
+    marks += [r for r in risks if r["kind"] == "certainty"
+              or (r["kind"], r["subkind"]) == ("certainty_review", "strengthened")]
     out = []
     for group in groups:
         pairs = dict(group["pairs"])
@@ -5616,10 +6072,7 @@ def _hedges(sides, groups, risks):
             after = regex.findall(after_text)
             if len(before) <= len(after):
                 continue
-            normalized = normalize(old.raw).strip()
-            if any((r["old_line"] is None or r["old_line"] == old.line)
-                   and (normalized in normalize(r["old"]) or normalize(r["old"]).strip() in normalized)
-                   for r in marks):
+            if any(_same_review_sentence(old, r) for r in marks):
                 continue
             out.append(_review_candidate("decreased", old, new,
                        {"old_count": len(before), "new_count": len(after),
@@ -5907,6 +6360,20 @@ def _new_review_section(d, key):
         elif key == "immutable":
             text = "{}が変わりました{}: {} → {}".format("宛名" if item["subkind"] == "addressee" else "メールアドレス", where,
                        "、".join(detail["removed"]) or "なし", "、".join(detail["added"]) or "なし")
+        elif key == "register":
+            to_polite = item["subkind"] == "to_polite"
+            source, target = ("常体", "敬体") if to_polite else ("敬体", "常体")
+            old_counts, new_counts = detail["old_counts"], detail["new_counts"]
+            if detail["pattern"] == "unified":
+                text = ("原文で揺れていた文末を{}にそろえました（{}{}文 → {}。原文: 常体{}文・敬体{}文）。"
+                        "多いほうにそろえたなら残してよいですが、意図した変更か確かめてください。".format(
+                            target, source, detail["switched"], target, old_counts["plain"], old_counts["polite"]))
+            else:
+                text = ("{}の文を{}に変えました（{}文中{}文。原文: 常体{}文・敬体{}文 → 推敲後: 常体{}文・敬体{}文）。"
+                        "原文の文体を保つのが基本です。意図した切り替えでなければ、原文の文末に戻してください。".format(
+                            source, target, old_counts["plain" if to_polite else "polite"], detail["switched"],
+                            old_counts["plain"], old_counts["polite"], new_counts["plain"], new_counts["polite"]))
+            text += "読み手に合わせて意図して変えたなら残し、「変えたところ」に書いてください。"
         else:
             text = "{}が変わりました: {:.1%} → {:.1%}。相手への敬語の度合いを確かめてください。".format(
                 "1文あたりの敬語の数" if item["subkind"] == "honorific_rate" else "です・ますの割合",
@@ -5915,6 +6382,8 @@ def _new_review_section(d, key):
         for field, label in (("old", "元"), ("new", "後")):
             if item.get(field) is not None:
                 lines.append("  {}: {}".format(label, item[field]))
+        if key == "register" and len(detail["lines"]) > 1:
+            lines.append("  ほか: " + "、".join("元{}行目 → 後{}行目".format(a, b) for a, b in detail["lines"][1:]))
     return "\n".join(lines)
 
 
@@ -5953,6 +6422,7 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
     out["hedges"] = _hedges(sides, groups, risks)
     out["immutable"] = sides.immutable
     out["politeness"] = _politeness(sides, context["doc_type"])
+    out["register"] = _register_changes(sides, groups, out["politeness"])
     return out
 
 
@@ -6017,7 +6487,10 @@ def _status_line(d, note=_DETECTOR_STATUS_NOTE):
     line = line + note.format(reviews) if reviews else line
     extra = sum((d.get(key) or {}).get("candidate_count", 0) for key in NEW_REVIEW_SECTIONS)
     if extra:
-        line += "（慎重表現・値・敬語の見直し候補 {}件は{}の節）".format(extra, "上" if note == _DETECTOR_STATUS_NOTE_ABOVE else "下")
+        label = "慎重表現・値・敬語"
+        if (d.get("register") or {}).get("candidate_count", 0):
+            label += "・文体の切り替え"
+        line += "（{}の見直し候補 {}件は{}の節）".format(label, extra, "上" if note == _DETECTOR_STATUS_NOTE_ABOVE else "下")
     return line
 
 
@@ -6036,6 +6509,29 @@ def _risk_line(risk):
     kind, subkind, detail = risk["kind"], risk.get("subkind"), risk.get("detail") or {}
     old_line, new_line = risk.get("old_line"), risk.get("new_line")
     where = _where(old_line, new_line)
+    if kind in ("certainty", "certainty_review"):
+        if kind == "certainty":
+            label = "確度が強まった"
+        elif subkind == "strengthened":
+            label = "確度が強まった恐れ（数えない変化）"
+        else:
+            label = "確度が弱まった"
+        steps = []
+        for step in detail["steps"]:
+            target = "なし（断定）" if step["to"] == "断定" else step["to"]
+            steps.append("{} → {}（{} → {}）".format(step["from"], target,
+                         _CERTAINTY_LEVELS[step["from_level"]], _CERTAINTY_LEVELS[step["to_level"]]))
+        advice = ("原文にない慎重さを足していないか確かめてください。" if subkind == "weakened"
+                  else "原文の確かさに戻すか確かめてください。")
+        return "{}{}: {}。{}".format(label, where, "、".join(steps), advice)
+    if kind == "quote":
+        prefix = "会話の" if detail["dialogue"] else ""
+        bracket = detail["bracket"]
+        old_quote = bracket[0] + detail["old_quote"] + bracket[1]
+        if subkind == "lost":
+            return "{}かぎかっこの中の言葉が推敲後にない{}: {}".format(prefix, _where(old_line, None), old_quote)
+        return "{}かぎかっこの中の言葉が変わった{}: {} → {}{}{}".format(
+            prefix, where, old_quote, bracket[0], detail["new_quote"], bracket[1])
     if kind == "number":
         if subkind == "lost":
             text = "消えた数値{}: {}".format(_where(old_line, None) if old_line is not None else where,
@@ -6467,7 +6963,7 @@ def _detector_section(d, key):
 
 def detector_summary(d, key):
     """完了報告の確認の記録に写す値（「候補なし」「候補{n}件」、参考だけなら「参考{n}件」、見直し候補と参考が混ざれば
-    「候補{n}件、参考{m}件」）。key は stiffness、tone、hedges、immutable、politeness。d にその検査の結果がなければ None。"""
+    「候補{n}件、参考{m}件」）。key は stiffness、tone、hedges、immutable、politeness、register。d にその検査の結果がなければ None。"""
     section = d.get(key) if isinstance(d, dict) else None
     if not isinstance(section, dict) or section.get("applicable") is False:
         return None
@@ -6504,7 +7000,7 @@ def report(d: dict) -> str:
     status = _status_line(d)
     parts = report_parts(d)
     body = [part for part in (parts["risks"], parts["rules"], parts["stiffness"], parts["tone"],
-                             parts["hedges"], parts["immutable"], parts["politeness"], parts["full_diff"]) if part]
+                             parts["hedges"], parts["immutable"], parts["politeness"], parts["register"], parts["full_diff"]) if part]
     head = [_REPORT_FIRST_LINE, status, _REPORT_DISCLAIMER]
     context = d.get("context") or {}
     if context.get("doc_type") is not None or context.get("reader") is not None:
@@ -6521,15 +7017,17 @@ def read_text(path):
 
 _EXIT_CODES = """終了コード:
   0  比べ終わり、--fail-on の条件に当たらなかった（候補の有無によらない）。--endings の正常終了、-h と --version も0
-  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印の恐れが1件以上）
+  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印・確度の恐れが1件以上）
   2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk] 元の文 書き直した文\n"
           "       yomiyasu_diff.py --endings ファイル [--stance 立場]\n"
           "       yomiyasu_diff.py --version")
-_FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化が"
+_FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化、"
+                 "確度を強めた書き換え（見込み → 予定、と思われる → 断定など）が"
                  "1件でもあれば、終了コード1で終わります。コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
-                 "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。"
+                 "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、"
+                 "数えない語だけの確度の変化、予定の言い切り（する予定です → します）、かぎかっこの中の言葉の変化も数えません。"
                  "候補は確かめる場所で、意味が変わったという判定ではありません。"
                  "条件に当たらなくても、意味が同じだという証明にはなりません。")
 
@@ -6662,12 +7160,13 @@ def _fail_on(values):
     return hit, None
 
 
-def _fail_on_line(total, counted):
+def _fail_on_line(total, counted, risks=()):
     """--fail-on=meaning-risk に当たったときの最後の行。数えない種類（変えない箇所）が混ざるときは、全件と数えた件数を書く。"""
     if total == counted:
         return "終了コード1: --fail-on=meaning-risk の条件に当たりました（意味が変わる恐れ {}件）。".format(counted)
     return ("終了コード1: --fail-on=meaning-risk の条件に当たりました"
-            "（意味が変わる恐れ {}件のうち、数値・否定・入れ替え・文の種類 {}件）。".format(total, counted))
+            "（意味が変わる恐れ {}件のうち、数値・否定・入れ替え・文の種類{} {}件）。".format(
+                total, "・確度" if any(r["kind"] == "certainty" for r in risks) else "", counted))
 
 
 def _read_input(path):
@@ -6781,7 +7280,7 @@ def _run(argv):
             print(report(result))
             if hit:
                 print()
-                print(_fail_on_line(result["meaning_risk_count"], counted))
+                print(_fail_on_line(result["meaning_risk_count"], counted, result["meaning_risks"]))
         code = 1 if hit else 0
     # 書き出しの失敗（読む側が先に閉じたなど）を、ここで BrokenPipeError として受けられるようにする。
     if sys.stdout is not None:

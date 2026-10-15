@@ -364,7 +364,7 @@ class JsonAndReportTest(unittest.TestCase):
         """新しい出力は追加の項目。既存のキーの順は変えず、full_diff のあとに stiffness と tone を足す。
         diff の詰めの直し（反証で見つけた例）で、気持ちの語の一覧の出どころ（feeling）を最後に足した。"""
         keys = list(diff(*DETECT))
-        self.assertEqual(keys[-7:], ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness"])
+        self.assertEqual(keys[-8:], ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register"])
 
     def test_report_sections_only_when_there_are_candidates(self):
         report = yomiyasu_diff.report(diff("保存期間は3日です。", "保存期間は30日です。"))

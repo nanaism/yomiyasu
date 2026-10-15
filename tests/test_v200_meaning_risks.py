@@ -24,11 +24,14 @@ RISK_KEYS = {"kind", "subkind", "old_line", "new_line", "old", "new", "detail", 
 SUBKINDS = {
     "number": {"replaced", "added", "lost", "order"},
     "sentence_type": {"marks", "question"},
+    "certainty": {"strengthened"},
+    "certainty_review": {"strengthened", "weakened"},
+    "quote": {"changed", "lost"},
     "protected": {"code", "inline_code", "url", "link", "frontmatter", "html", "quote"},
 }
 # diff の詰め（10.7、追加文書 1.4）: 否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）を足した。
 # どちらも意味が変わる恐れの節に出すが、--fail-on=meaning-risk には数えない
-KINDS = {"number", "negation", "swap", "sentence_type", "protected", "contrast_reversal", "feeling"}
+KINDS = {"number", "negation", "swap", "sentence_type", "protected", "contrast_reversal", "feeling", "certainty", "certainty_review", "quote"}
 
 # 2.8 の meaning_risks の要素の例（入力は 2.7 の例A）
 EXAMPLE_A_RISK = {"kind": "number", "subkind": "replaced", "old_line": 1, "new_line": 1,
@@ -589,7 +592,8 @@ class TestMeaningRisksFunction(RiskCase):
                 with self.subTest(type_changes=value):
                     risks = meaning_risks(self.BEFORE, self.AFTER, type_changes=value)
                     self.assertNotIn(("sentence_type", "marks"), self.kinds(risks))
-            self.assertEqual(meaning_risks(self.BEFORE, self.AFTER), [])
+            # 印を渡さなければ重複抑制の相手がないので、独立した確度の候補が出る。
+            self.assertEqual(self.kinds(meaning_risks(self.BEFORE, self.AFTER)), [("certainty", "strengthened")])
 
     def test_type_changes_given_become_marks(self):
         """10.4 S5: diff() は自分で求めた type_changes を渡す。渡せば項目ごとに sentence_type/marks になる（2.5.6）。"""
@@ -695,6 +699,9 @@ class TestCorpusWatch(RiskCase):
         counts = {}
         for before, after, name in corpus_pairs():
             for risk in yomiyasu_diff.diff(before, after)["meaning_risks"]:
+                # 既存の種類の上限は据え置く。新しい見直し候補は専用の試験で確かめる。
+                if risk["kind"] in ("certainty_review", "quote"):
+                    continue
                 key = risk["kind"] + ("/" + risk["subkind"] if risk["subkind"] else "")
                 counts[key] = counts.get(key, 0) + 1
         for key in sorted(set(counts) | set(self.MEASURED)):

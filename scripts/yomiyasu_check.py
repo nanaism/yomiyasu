@@ -1543,7 +1543,7 @@ def _run_checks(ctx, snapshots, stance, timeout):
             # diff の詰め: 文体の硬化の検査と勢いの検査の件数と level（完了報告の確認の記録に写す値のもと）。
             # candidate_count は参考（level が info の候補）を含む数なので、見直し候補（level が review）の数も残す。記録だけを
             # 読む使い方でも、見直し候補と参考が混ざった結果（「候補2件、参考1件」）が分かるようにする（反証で見つけた例）
-            for key in ("stiffness", "tone", "hedges", "immutable", "politeness"):
+            for key in ("stiffness", "tone", "hedges", "immutable", "politeness", "register"):
                 section = parsed.get(key)
                 if isinstance(section, dict):
                     entry["summary"][key + "_candidate_count"] = section.get("candidate_count")
@@ -1574,7 +1574,7 @@ def _review_count(section):
 
 
 def _fail_on_hits(ctx, diff_module):
-    """--fail-on に当たった値（指定した順）。meaning-risk は数値・否定・入れ替え・文の種類・引用の印と資料にない数値、
+    """--fail-on に当たった値（指定した順）。meaning-risk は数値・否定・入れ替え・文の種類・引用の印・確度の強まりと資料にない数値、
     warn と error は lint の候補で決める。"""
     hits = []
     counts = (ctx.lint_result or {}).get("counts") or {}
@@ -1676,8 +1676,11 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
                     "直すなら1回まで、直さないなら" + finalize)
             following = "review"
         if ctx.diff_result and any((ctx.diff_result.get(key) or {}).get("candidate_count", 0)
-                                   for key in ("hedges", "immutable", "politeness")):
-            line = line.replace("文体の硬化と勢いの見直し候補", "文体の硬化・勢い・慎重表現・値・敬語の見直し候補")
+                                   for key in ("hedges", "immutable", "politeness", "register")):
+            label = "文体の硬化・勢い・慎重表現・値・敬語"
+            if (ctx.diff_result.get("register") or {}).get("candidate_count", 0):
+                label += "・文体の切り替え"
+            line = line.replace("文体の硬化と勢いの見直し候補", label + "の見直し候補")
         if ctx.no_record:
             following = "report_unrecorded"
     if ctx.treated is not None and not ctx.final_changed:
@@ -1780,7 +1783,7 @@ def _detector_reviews(ctx):
     if ctx.entries.get("diff", {}).get("status") != "ran":
         return 0
     count = 0
-    for key in ("stiffness", "tone", "hedges", "immutable", "politeness"):
+    for key in ("stiffness", "tone", "hedges", "immutable", "politeness", "register"):
         section = ctx.diff_result.get(key)
         if isinstance(section, dict) and isinstance(section.get("candidates"), list):
             count += sum(1 for candidate in section["candidates"]
@@ -1794,7 +1797,10 @@ def _detector_lines(ctx, diff_module):
     入れた引用の印と数値の補いの候補も数える。diff を実行しなかったときは出さない。"""
     lines = []
     for key, label in (("stiffness", "硬化の検査"), ("tone", "勢いの検査"),
-                       ("hedges", "慎重表現の検査"), ("immutable", "値の検査"), ("politeness", "敬語の検査")):
+                       ("hedges", "慎重表現の検査"), ("immutable", "値の検査"), ("politeness", "敬語の検査"),
+                       ("register", "文体の検査")):
+        if key == "register" and not (ctx.diff_result or {}).get("register", {}).get("candidate_count", 0):
+            continue
         value = _detector_value(ctx, diff_module, key)
         if value is not None:
             lines.append("{}: {}".format(label, value))
@@ -1812,7 +1818,7 @@ def _sections(ctx, lint_module, diff_module):
         rules = parts["rules"]
         sections.append(rules.replace("■ 規則の見直し候補（", "■ 差分の見直し候補（diff、", 1))
     # diff の詰め: 文体の硬化の検査と勢いの検査の節（候補があるときだけ）
-    for key in ("stiffness", "tone", "hedges", "immutable", "politeness"):
+    for key in ("stiffness", "tone", "hedges", "immutable", "politeness", "register"):
         if parts is not None and parts.get(key):
             sections.append(parts[key])
     if ctx.lint_result is not None and ctx.lint_result.get("candidate_count"):
@@ -3004,7 +3010,7 @@ def _summary_problems(state, record, required):
                 compare("diff." + key, summary.get(key), value.get(key))
             # 硬化の検査と勢いの検査（diff の詰めで足した。このキーを足す前の記録にはないので、あるときだけ照らす）。
             # 見直し候補の数（review_count）は、2回目の反証の直し（反証で見つけた例）で足した
-            for key in ("stiffness", "tone", "hedges", "immutable", "politeness"):
+            for key in ("stiffness", "tone", "hedges", "immutable", "politeness", "register"):
                 section = value.get(key) if isinstance(value.get(key), dict) else {}
                 for field in ("candidate_count", "level"):
                     name = "{}_{}".format(key, field)
@@ -4001,8 +4007,9 @@ _VERIFY_USAGE = ("yomiyasu_check.py verify --final 最終稿|- [--run-id ID] [--
                  "           [--replay] [--timeout 秒] [--state-dir DIR] [--json]")
 _FAIL_ON_HELP = ("指定した条件に当たれば、記録を残したうえで終了コード1で終わります。何度でも、カンマ区切りでも指定できます。"
                  "meaning-risk: 意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の"
-                 "変化、引用の印と、資料にない数値。コード・URL・引用ブロックなど変えない箇所の変化と、資料にない名前は数えません。"
-                 "否定対比の主張の逆転と、元にない気持ちの語も数えません。"
+                 "変化、引用の印、確度を強めた書き換え（見込み → 予定、と思われる → 断定など）と、資料にない数値。コード・URL・引用ブロックなど変えない箇所の変化と、資料にない名前は数えません。"
+                 "否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、数えない語だけの確度の変化、予定の言い切り（する予定です → します）、"
+                 "かぎかっこの中の言葉の変化も数えません。"
                  "warn: lint の warn か error の候補。error: lint の error の候補。"
                  "条件に当たらなくても、意味が同じだという証明にはなりません。")
 

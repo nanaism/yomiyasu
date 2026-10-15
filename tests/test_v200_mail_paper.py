@@ -113,17 +113,20 @@ class DocTypes(unittest.TestCase):
 class Hedges(unittest.TestCase):
     def test_new_hedge_and_fail_on(self):
         result = diff.diff('結果は関連を示唆する。', '結果は関連を示す。')
-        self.assertEqual(result['hedges']['candidate_count'], 1)
-        item = result['hedges']['candidates'][0]
+        self.assertEqual(result['hedges']['candidate_count'], 0)
+        item = next(r for r in result['meaning_risks'] if r['kind'] == 'certainty')
         self.assertEqual((item['old_line'], item['new_line']), (1, 1))
-        self.assertEqual(item['detail']['removed'], ['示唆する'])
-        self.assertEqual(result['fail_on_meaning_risk_count'], 0)
-        self.assertIn('■ 慎重な言い方', diff.report(result))
+        self.assertEqual(item['detail']['steps'][0]['from'], '示唆')
+        self.assertEqual(result['fail_on_meaning_risk_count'], 1)
+        self.assertIn('確度が強まった', diff.report(result))
 
     def test_same_line_distinct_sentences(self):
         result = diff.diff('関係があると考えられる。結果は関連を示唆する。', '関係がある。結果は関連を示す。')
-        self.assertEqual(result['hedges']['candidate_count'], 1)
-        self.assertIn('示唆する', result['hedges']['candidates'][0]['old'])
+        self.assertEqual(result['hedges']['candidate_count'], 0)
+        certainty = [r for r in result['meaning_risks'] if r['kind'] == 'certainty']
+        self.assertEqual(len(certainty), 1)
+        self.assertIn('示唆する', certainty[0]['old'])
+        self.assertEqual(len([r for r in result['meaning_risks'] if r['kind'] == 'sentence_type']), 1)
 
     def test_split_moved_deleted_and_protected(self):
         for old, new in [('対象を調べ、この結果は関連を示唆する。', '対象を調べた。この結果は関連を示唆する。'),
@@ -289,22 +292,25 @@ class CheckIntegration(unittest.TestCase):
             code,out,err=call(check.main,['run','--source',old,'--final',new,'--state-dir',state,'--doc-type','mail','--json'])
             self.assertEqual((code,err),(0,''),out)
             data=json.loads(out)
-            for key in diff.NEW_REVIEW_SECTIONS:
+            for key in ('hedges', 'immutable', 'politeness'):
                 self.assertIn(key+'_check',data)
+            self.assertNotIn('register_check', data)
             records=list(state.rglob('attempt-*.json'))
             record=next(json.loads(p.read_text()) for p in records if 'checks' in json.loads(p.read_text()))
             self.assertIn('references/lists/hedges.txt', record['tools'])
             summary=next(e['summary'] for e in record['checks'] if e['name']=='diff')
-            for key in diff.NEW_REVIEW_SECTIONS:
+            for key in ('immutable', 'politeness'):
                 self.assertGreater(summary[key+'_candidate_count'],0)
+            self.assertEqual(summary['hedges_candidate_count'], 0)  # 確度に任せる
+            self.assertEqual(summary['register_candidate_count'], 0)
             code,out,err=call(check.main,['verify','--final',new,'--source',old,'--state-dir',state,'--replay','--json'])
             self.assertEqual((code,err),(0,''),out)
 
-    def test_fail_on_citation_only(self):
+    def test_fail_on_citation_and_certainty(self):
         with tempfile.TemporaryDirectory() as folder:
             old,new=Path(folder)/'old.md',Path(folder)/'new.md'
             for a,b,expected in [('既報 (山田 2020)。','既報 (佐藤 2020)。',1),
-                                 ('関連を示唆する。','関連を示す。',0),('田中様','佐藤さん',0)]:
+                                 ('関連を示唆する。','関連を示す。',1),('田中様','佐藤さん',0)]:
                 old.write_text(a,encoding='utf-8');new.write_text(b,encoding='utf-8')
                 for main,args in [(diff.main,[old,new]),(check.main,['run','--source',old,'--final',new,'--no-record'])]:
                     code,out,err=call(main,args+['--fail-on','meaning-risk'])

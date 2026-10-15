@@ -384,7 +384,7 @@ class TestOutputShape(unittest.TestCase):
                                         "candidate_count", "meaning_risk_count", "fail_on_meaning_risk_count",
                                         "not_judged", "context", "meaning_risks",
                                         "markers", "new_words", "lost_words", "structure", "spans", "logic", "bold",
-                                        "endings", "type_changes", "full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness"])
+                                        "endings", "type_changes", "full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register"])
         self.assertEqual(set(result["type_changes"][0]), {"orig", "rewrite", "lost", "added"})
 
     def test_report_has_the_new_heading_only_when_needed(self):

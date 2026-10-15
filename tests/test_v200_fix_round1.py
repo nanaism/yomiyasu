@@ -190,7 +190,7 @@ class UnsupportedCountTest(CheckCase):
         self.assertEqual(self.third_line_count(split_lines(process.stdout)), 1)
 
     def test_corpus_compose_count_matches_the_candidates(self):
-        """反証で見つけたコーパスの5組（Q4）: 新規作成の3行目の数と、状態の行の meaning_risk が同じ。"""
+        """反証で見つけたコーパスの5組（Q4）: 新規作成の資料照合と diff の数の合計が、状態の行の meaning_risk と同じ。"""
         pairs = (("blacklist_ai/01_tech_arch_sonnet_default.md", "yomiyasu_rewritten/01_tech_arch_sonnet_default_bl.md"),
                  ("human/human_oga_07.md", "human/human_oga_08.md"),
                  ("raw_ai/06_spec_draft_sonnet_formal.md", "raw_ai/07_code_review_sonnet_casual.md"),
@@ -201,9 +201,11 @@ class UnsupportedCountTest(CheckCase):
                 process = self.check("run", "--material", CORPUS / material, "--final", CORPUS / final, "--no-record")
                 self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
                 lines = split_lines(process.stdout)
-                # 1組目は資料が最終稿とよく似ているので、資料を原文とみなして diff も動く（10.8 C-44）。この組の diff の候補は
-                # 資料にない数値だけなので、どの組でも3行目の数と meaning_risk が同じになる
-                self.assertEqual(self.third_line_count(lines), int(RISK.search(lines[1]).group(1)), lines[:3])
+                # 1組目は資料を原文とみなした diff にも確度の見直し候補が出る。
+                # 資料にない数値・名前と、diff の意味が変わる恐れをそれぞれ数える。
+                diff_count = re.search(r"うち意味が変わる恐れ(\d+)件", lines[2])
+                total = self.third_line_count(lines) + (int(diff_count.group(1)) if diff_count else 0)
+                self.assertEqual(total, int(RISK.search(lines[1]).group(1)), lines[:3])
 
 
 # ---- S5: promo の見出しの数え方（ヘルプと文書） ----
