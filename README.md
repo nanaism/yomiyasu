@@ -257,6 +257,21 @@ Claudeのカスタムスキル登録機能（Web版など）には、登録専�
    ダウンロードした `yomiyasu.zip` を解凍せず、Claudeのスキル登録画面にそのままアップロードしてください。
 
 
+### 6. Codex で、使うリポジトリに置く（Codex Cloud など）
+
+Codex は作業するリポジトリの `.agents/skills/` の下に置いたスキルを読みます。上の入れ方を使わない場合や、Codex Cloud でリポジトリを開いて使う場合は、このリポジトリの `skills/yomiyasu/` フォルダを、中身ごと使うリポジトリの `.agents/skills/yomiyasu/` に写してください。
+
+```bash
+# 使うリポジトリの直下で実行
+git clone --depth 1 https://github.com/nanaism/yomiyasu /tmp/yomiyasu
+mkdir -p .agents/skills
+cp -R /tmp/yomiyasu/skills/yomiyasu .agents/skills/yomiyasu
+```
+
+この置き方では、Codex がスキルを `yomiyasu:yomiyasu` という名前で一覧に載せます（フォルダの中にプラグインの設定 `.claude-plugin` があるためです）。名前で呼ぶときは `$yomiyasu:yomiyasu` と書くか、「/yomiyasu」とだけ送るか、依頼の文に「yomiyasu で」と書いてください。試した Codex では、`$yomiyasu` と書いた回はスキルの指示が読み込まれませんでした。
+
+このバージョンで確かめたのは、macOS の codex-cli 0.162.1 で、作業場所の `.agents/skills/yomiyasu/` に置いたスキルを読んで推敲したことだけです（[確かめた範囲](#確かめた範囲)）。Codex Cloud、利用者のスキルの置き場所（`~/.agents/skills/`）に置く形、Windows では確かめていません。写したフォルダは自動では新しくならないので、更新するときは同じ手順で写し直してください。
+
 ### 他の日本語校正スキルとの干渉について
 
 他の日本語校正スキルと併用すると、指示が食い違う場合があります。出力が乱れる場合は、類似スキルを一時的に無効にして使用してください。
