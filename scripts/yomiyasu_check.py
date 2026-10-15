@@ -1368,6 +1368,8 @@ class _Context(object):
         self.entries = OrderedDict()
         self.outputs = {}            # 子の標準出力のバイト列（lint、diff）
         self.lint_result = None
+        self.source_lint_result = None  # 表示用だけ。必要な検査と記録には入れない
+        self.source_lint_status = None
         self.diff_result = None      # 子の JSON そのもの
         self.materials_result = None
         self.risks = []              # 意味が変わる恐れ（diff の basis 入りの写しと、照合の unsupported）
@@ -1457,6 +1459,9 @@ def _run_checks(ctx, snapshots, stance, timeout):
         if stance is not None:
             command += ["--stance", stance]
         commands["diff"] = command + context + [snapshots[id(ctx.diff_source)], final_snapshot]
+    if ctx.diff_source is not None:
+        commands["source_lint"] = ([sys.executable, "-B", os.path.join(_HERE, "yomiyasu_lint.py"), "--json"]
+                                   + context + [snapshots[id(ctx.diff_source)]])
     targets = {"lint": OrderedDict((("final", ctx.final.sha256),))}
     if ctx.diff_source is not None:
         targets["diff"] = OrderedDict((("source", ctx.diff_source.sha256), ("final", ctx.final.sha256)))
@@ -1495,6 +1500,17 @@ def _run_checks(ctx, snapshots, stance, timeout):
         raise
 
     versions = {"lint": lint_module.LINT_FORMAT_VERSION, "diff": diff_module.DIFF_FORMAT_VERSION}
+    if "source_lint" in commands:
+        status, code, stdout, stderr, elapsed, error = results["source_lint"]
+        ctx.source_lint_status = status
+        if status == "ran":
+            parsed, problem = _parse_report(stdout, "lint", versions["lint"])
+            if parsed is not None:
+                problem = _context_problem(parsed, ctx.doc_type, ctx.reader)
+            if problem is None:
+                ctx.source_lint_result = parsed
+            else:
+                ctx.source_lint_status = "error"
     for name in ("lint", "diff"):
         if name not in commands:
             continue
@@ -1805,6 +1821,135 @@ def _detector_lines(ctx, diff_module):
         if value is not None:
             lines.append("{}: {}".format(label, value))
     return lines
+
+
+_CHANGED_WINDOW = 60
+_CHANGED_CONTEXT = 30
+_CHANGED_LIMIT = 10
+# 件数を点数のように読ませない添え書き。増えても同じでも悪くなった印ではない（反証で見つけた例）
+_COUNT_NOTE = "lint の規則に当たった数で、点数ではありません。増えても減っても読みやすさの良し悪しは示しません"
+_COMPOSE_COUNT_NOTE = "新規作成なので原文の件数はありません。lint の規則に当たった数で、点数ではありません"
+
+
+def _candidate_counts(ctx):
+    source = ctx.source_lint_result if not ctx.final_changed else None
+    return OrderedDict((
+        ("basis", "lint"), ("source", source["candidate_count"] if source is not None else None),
+        ("final", ctx.lint_result["candidate_count"] if ctx.lint_result is not None else None),
+        ("source_kind", "original" if ctx.source is not None else "material" if ctx.treated is not None else None),
+        ("source_index", ctx.diff_source.index if ctx.diff_source is not None else None),
+        ("source_status", ctx.source_lint_status if not ctx.final_changed else None),
+        ("source_counts", source["counts"] if source is not None else None)))
+
+
+def _candidate_lines(ctx, counts):
+    if ctx.final_changed or counts["final"] is None:
+        return []
+    if counts["source_kind"] is None:
+        return ["見直し候補: 最終稿 {}件（{}）".format(counts["final"], _COMPOSE_COUNT_NOTE)]
+    label = "原文" if counts["source_kind"] == "original" else "資料{}（原文とみなした資料）".format(counts["source_index"])
+    number = ("{}件".format(counts["source"]) if counts["source"] is not None
+              else "数えられず（{}）".format(_FAILED_NAMES[counts["source_status"]]))
+    return ["見直し候補: {} {} → 最終稿 {}件（{}）".format(label, number, counts["final"], _COUNT_NOTE)]
+
+
+def _joined_lines(lines):
+    return "〔改行〕".join(line for line in lines if line.strip()) or "〔空行〕"
+
+
+def _change_window_start(old, new):
+    """共通の頭から、変わり始めた文の頭（遠ければ読点か30字前）へ戻る。"""
+    prefix = 0
+    for before, after in zip(old, new):
+        if before != after:
+            break
+        prefix += 1
+    # 片側が相手の頭そのもの（段落の最後の文を足した・消した）なら、短い側の最後の文から見せる。
+    # 共通の頭の終わりまで進めると、短い側が「…」だけになる（反証で見つけた例）
+    shorter = min(len(old), len(new))
+    if shorter and prefix >= shorter:
+        prefix = shorter - 1
+    start = 0
+    for boundary in re.finditer(r"[。！？!?]|〔改行〕", old[:prefix]):
+        start = boundary.end()
+    if prefix - start > _CHANGED_CONTEXT:
+        comma = old.rfind("、", prefix - _CHANGED_CONTEXT, prefix)
+        start = comma + 1 if comma >= 0 else prefix - _CHANGED_CONTEXT
+    return start
+
+
+def _window_text(text, start, other=""):
+    end = min(len(text), start + _CHANGED_WINDOW)
+    # 表示用の印は分断しない。開始位置を戻すときは相手側にもそろえる。
+    # 拡張前の末尾は保ち、広げた分は60字を超えてよい。
+    starts = list(re.finditer(r"〔(?:改行|空行)〕", text))
+    starts.extend(re.finditer(r"〔(?:改行|空行)〕", other))
+    while True:
+        expanded = min([start] + [marker.start() for marker in starts
+                                 if marker.start() < start < marker.end()])
+        if expanded == start:
+            break
+        start = expanded
+    for marker in re.finditer(r"〔(?:改行|空行)〕", text):
+        if marker.start() < end < marker.end():
+            end = marker.end()
+    clipped = start > 0 or end < len(text)
+    return ("…" if start else "") + text[start:end] + ("…" if end < len(text) else ""), clipped
+
+
+def _changed_places(ctx, diff_module, recorded):
+    """全文差分と同じ組の短い表示と、JSON 用の件数を返す。"""
+    if ctx.final_changed or "diff" not in ctx.required or ctx.diff_result is None:
+        return [], None
+    full = ctx.diff_result["full_diff"]
+    hunks = full["hunks"]
+    count = len(hunks)
+    shown = min(count, _CHANGED_LIMIT)
+    summary = OrderedDict((("count", count), ("shown", shown), ("omitted", count - shown), ("clipped", False)))
+    lines = ["■ 直した箇所（{}か所。元と後）".format(count)]
+    uneven = False
+    if not hunks:
+        newline = full["final_newline"]
+        if full.get("encoding_notes") or newline["old"] != newline["new"]:
+            lines.append("- 行の中身は変わっていません。改行コード、BOM、末尾の改行のどれかだけが違います（下の「■ 全文差分」）。")
+        else:
+            lines.append("- 原文から変わった箇所はありません。")
+        return ["\n".join(lines)], summary
+    for hunk in hunks[:_CHANGED_LIMIT]:
+        lines.append(diff_module._hunk_heading(hunk))
+        tag = hunk["tag"]
+        if tag == "replace" and hunk["whitespace_only"]:
+            lines.append("  （空白だけの変更。下の「■ 全文差分」の「差:」で見られます）")
+            continue
+        old, new = _joined_lines(hunk["old_lines"]), _joined_lines(hunk["new_lines"])
+        if tag == "replace" and old == new:
+            # 空行の数や、本文の「〔改行〕」の字だけが違うと、つないだ形が同じになる（反証で見つけた例）
+            lines.append("  （この形では元と後が同じに見えます。空行や「〔改行〕」の字の違いは、下の「■ 全文差分」で見られます）")
+            continue
+        if tag == "replace" and (sum(1 for line in hunk["old_lines"] if line.strip())
+                                 != sum(1 for line in hunk["new_lines"] if line.strip())):
+            uneven = True
+        windowed_replace = tag == "replace" and max(len(old), len(new)) > _CHANGED_WINDOW
+        start = _change_window_start(old, new) if windowed_replace else 0
+        for label, value, other, present in (("元", old, new, tag != "insert"),
+                                             ("後", new, old, tag != "delete")):
+            if present:
+                excerpt, clipped = _window_text(value, start, other if windowed_replace else "")
+                summary["clipped"] = summary["clipped"] or clipped
+                lines.append("  {}: {}".format(label, excerpt))
+    guide = ""
+    if summary["clipped"]:
+        guide += "長い所は、変わり始めの少し前からおよそ60字だけを出しています（「…」は省いた所）。"
+    if uneven:
+        # 全文差分は空行を手がかりに行を組むので、見出しを足すなどで段落の数が変わると別の段落どうしが並ぶ
+        guide += "元と後で行の数が違う所は、別の段落どうしが並んでいることがあります。"
+    if summary["omitted"]:
+        guide += "初めの10か所だけを出しました（ほか{}か所）。".format(summary["omitted"])
+    guide += "省いていない元と後は下の「■ 全文差分」"
+    if recorded:
+        guide += "と、記録と同じフォルダの {} ".format(ctx.entries["diff"]["text"].split("/")[-1])
+    lines.append("- " + guide + "にあります。")
+    return ["\n".join(lines)], summary
 
 
 def _sections(ctx, lint_module, diff_module):
@@ -2236,6 +2381,8 @@ def _run_impl(args, parser):
 
     # 6. 出力する。意味が変わる恐れを出す検査が最後まで動かなかったときは、件数を null にする（反証で見つけた例）
     complete = ctx.risks_complete()
+    candidate_counts = _candidate_counts(ctx)
+    changed_sections, changed_places = _changed_places(ctx, diff_module, recording)
     if status == "partial":
         # 終了コード3のときは標準エラーにも出す（止まった検査と、子の標準エラーの先頭）。標準出力より先に書き、
         # 2>&1 でまとめて読んだときも、パイプと端末のどちらでも最後の行が状態の行になるようにする
@@ -2267,18 +2414,19 @@ def _run_impl(args, parser):
             ("hedges_check", _detector_value(ctx, diff_module, "hedges")),
             ("immutable_check", _detector_value(ctx, diff_module, "immutable")),
             ("politeness_check", _detector_value(ctx, diff_module, "politeness")),
-            ("lint", ctx.lint_result), ("diff", diff_result), ("materials", ctx.materials_result)))
+            ("lint", ctx.lint_result), ("diff", diff_result), ("materials", ctx.materials_result),
+            ("candidate_counts", candidate_counts), ("changed_places", changed_places)))
         print(json.dumps(result, ensure_ascii=True, indent=1))
     else:
         if recording:
             record_line = "記録: " + record_path
         else:
             record_line = "記録: なし（{}）".format("--no-record" if ctx.no_record else write_problem)
-        sections = _sections(ctx, lint_module, diff_module)
+        sections = changed_sections + _sections(ctx, lint_module, diff_module)
         # 記録を書かないときの4行目は「この結果は」（記録がないため）
         disclaimer = _DISCLAIMER if recording else _UNRECORDED_DISCLAIMER
         text = "\n".join([line, token, _summary_line(ctx, diff_module), disclaimer, record_line]
-                         + _detector_lines(ctx, diff_module)) + "\n\n"
+                         + _detector_lines(ctx, diff_module) + _candidate_lines(ctx, candidate_counts)) + "\n\n"
         if sections:
             text += "\n\n".join(sections) + "\n\n"
         print(text + line + "\n" + token)
@@ -3338,6 +3486,24 @@ def _verify_record(state, found, final, source, since, replay, timeout):
     return states[0], problems, replayed, trusted
 
 
+def _record_summary_count(record, name, key):
+    if record is not None:
+        for entry in record["checks"]:
+            if entry["name"] == name:
+                value = (entry.get("summary") or {}).get(key)
+                return value if type(value) is int else None
+    return None
+
+
+def _verified_contents_line(final_count, changed_count, required):
+    final = "{}件".format(final_count) if final_count is not None else "不明"
+    line = "記録の中身: 見直し候補 最終稿 " + final
+    if "diff" in required:
+        changed = "{}か所".format(changed_count) if changed_count is not None else "不明"
+        return line + "、直した箇所 " + changed + "（原文の件数と元と後は run の出力にあります）"
+    return line + "（新規作成）"
+
+
 def _verify(args, parser, _final=None, _return=False):
     # 1. 引数を確かめ、最終稿のハッシュを先に計算する。誤りなら2で、何も書かない
     if args.state_dir is not None and not args.state_dir.strip():
@@ -3436,7 +3602,7 @@ def _verify(args, parser, _final=None, _return=False):
                 if recorded is not None and not _same_path(recorded, final.path):
                     problems.append(("final_path_differs", "記録の最終稿のパス: " + recorded))
 
-    # 4. 出力する（3行。1行目に次の行動、2行目に状態の行、3行目に記録のパス）
+    # 4. 出力する（1行目に次の行動、2行目に状態の行、3行目に記録のパス。executed だけ4行目に件数）
     # 記録の mode、checks、meaning_risk を出すのは、記録の形と digest を確かめられたときだけ。
     # meaning_risk は、意味が変わる恐れを出す検査（diff、資料との照合）がすべて ran のときだけ出す（0件と読ませない。反証で見つけた例）
     # 人が読む1行目の検査名は完了報告の語にする（materials は「資料との照合」。反証で見つけた例）
@@ -3500,6 +3666,8 @@ def _verify(args, parser, _final=None, _return=False):
     else:
         # 探した状態フォルダを書く（--state-dir で記録したのに付け忘れたときに気づけるように）
         record_line = _NO_RECORD_LINE.format(state)
+    final_count = _record_summary_count(record if shown else None, "lint", "candidate_count")
+    changed_count = _record_summary_count(record if shown else None, "diff", "hunk_count")
     if args.json or _return:
         final_record = found.final() if found is not None else None
         recorded_sha = final_record.get("sha256") if isinstance(final_record, dict) else None
@@ -3518,13 +3686,17 @@ def _verify(args, parser, _final=None, _return=False):
             ("context", OrderedDict((("doc_type", doc_type), ("reader", reader))) if shown else None),
             ("required_checks", required), ("checks", checks),
             ("meaning_risk_count", meaning), ("replay", replayed),
-            ("problems", [OrderedDict((("code", code), ("detail", detail))) for code, detail in problems])))
+            ("problems", [OrderedDict((("code", code), ("detail", detail))) for code, detail in problems]),
+            ("final_candidate_count", final_count), ("changed_place_count", changed_count)))
         if _return:
             result["_record_line"] = record_line
             return result
         print(json.dumps(result, ensure_ascii=True, indent=1))
     else:
-        print("\n".join([line, token, record_line]))
+        lines = [line, token, record_line]
+        if status == "executed":
+            lines.append(_verified_contents_line(final_count, changed_count, required))
+        print("\n".join(lines))
     return 0 if status == "executed" else 1
 
 

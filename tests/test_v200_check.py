@@ -127,7 +127,7 @@ RUN_JSON_KEYS = ("format", "format_version", "tool_version", "command", "status"
                  "materials")
 VERIFY_JSON_KEYS = ("format", "format_version", "tool_version", "command", "status", "status_line", "message",
                     "run_id", "attempt", "record_path", "final", "record_final_sha256", "mode", "context", "required_checks",
-                    "checks", "meaning_risk_count", "replay", "problems")
+                    "checks", "meaning_risk_count", "replay", "problems", "final_candidate_count", "changed_place_count")
 FILE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # 指示書2.2の3組（合成の文）
@@ -443,7 +443,16 @@ class CheckCase(unittest.TestCase):
         if code in (0, 1):
             self.assertEqual(process.stderr, "")
         lines = split_lines(process.stdout)
-        self.assertEqual(len(lines), 3, lines)
+        self.assertEqual(len(lines), 4 if state == "executed" else 3, lines)
+        if state == "executed":
+            record = json.loads(Path(lines[2][len("記録: "):]).read_text(encoding="utf-8"))
+            summaries = {entry["name"]: entry["summary"] for entry in record["checks"]}
+            expected = "記録の中身: 見直し候補 最終稿 {}件".format(summaries["lint"]["candidate_count"])
+            if "diff" in record["required_checks"]:
+                expected += "、直した箇所 {}か所（原文の件数と元と後は run の出力にあります）".format(summaries["diff"]["hunk_count"])
+            else:
+                expected += "（新規作成）"
+            self.assertEqual(lines[3], expected)
         status, fields = self.status(lines[1])
         self.assertEqual(status, state, lines)
         self.assertEqual(fields["via"], "verify")
@@ -473,6 +482,13 @@ class TestK1RecordAndOutput(CheckCase):
             "勢いの検査: 候補なし",
             "慎重表現の検査: 候補なし",
             "値の検査: 候補なし",
+            "見直し候補: 原文 0件 → 最終稿 0件（lint の規則に当たった数で、点数ではありません。増えても減っても読みやすさの良し悪しは示しません）",
+            "",
+            "■ 直した箇所（1か所。元と後）",
+            "@ 元1行目 → 後1行目（本文）",
+            "  元: 保存期間は3日です。",
+            "  後: 保存期間は30日です。",
+            "- 省いていない元と後は下の「■ 全文差分」と、記録と同じフォルダの attempt-1.diff.txt にあります。",
             "",
             "■ 意味が変わる恐れ（1件。原文と資料に照らして確かめる）",
             "- 数値が変わった（1行目）: 3日 → 30日",
@@ -680,7 +696,8 @@ class TestRunThenVerify(CheckCase):
                   "checks=lint,diff meaning_risk=1 replay=").format(fields["run"], sha256_file(b)[:12])
         verify_lines, _ = self.assert_verify(self.check("verify", "--final", b), "executed", code=0)
         self.assertEqual(verify_lines, [VERIFY_LINE1["executed"].format(checks="lint、diff"),
-                                        common + "skipped", lines[4]])
+                                        common + "skipped", lines[4],
+                                        "記録の中身: 見直し候補 最終稿 0件、直した箇所 1か所（原文の件数と元と後は run の出力にあります）"])
         verify_lines, _ = self.assert_verify(self.check("verify", "--final", b, "--replay"), "executed", code=0)
         self.assertEqual(verify_lines[1], common + "ok")
 
@@ -787,6 +804,13 @@ class TestRunThenVerify(CheckCase):
             "勢いの検査: 候補なし",
             "慎重表現の検査: 候補なし",
             "値の検査: 候補なし",
+            "見直し候補: 原文 0件 → 最終稿 0件（lint の規則に当たった数で、点数ではありません。増えても減っても読みやすさの良し悪しは示しません）",
+            "",
+            "■ 直した箇所（1か所。元と後）",
+            "@ 元1行目 → 後1行目（本文）",
+            "  元: 保存期間は3日です。",
+            "  後: データの保存期間は3日です。",
+            "- 省いていない元と後は下の「■ 全文差分」と、記録と同じフォルダの attempt-2.diff.txt にあります。",
             "",
             "■ 差分の見直し候補（diff、1件）",
             "■ 元の文にない語: データ",
@@ -806,6 +830,7 @@ class TestRunThenVerify(CheckCase):
             ("yomiyasu-check: executed via=verify run={} attempt=2 final=sha256:{} mode=rewrite checks=lint,diff "
              "meaning_risk=0 replay=skipped").format(run_id, sha256_file(b)[:12]),
             "記録: " + str(record),
+            "記録の中身: 見直し候補 最終稿 0件、直した箇所 1か所（原文の件数と元と後は run の出力にあります）",
         ])
 
     def test_k8_only_line_endings_changed(self):
@@ -1394,6 +1419,7 @@ class TestComposeAndMaterials(CheckCase):
             "実行した検査: lint（最終稿）候補0件、資料との照合（資料2件→最終稿）資料にない数値・名前1件",
             RUN_DISCLAIMER,
             "記録: " + str(self.state / "runs" / run_id / "attempt-1.json"),
+            "見直し候補: 最終稿 0件（新規作成なので原文の件数はありません。lint の規則に当たった数で、点数ではありません）",
             "",
             "■ 意味が変わる恐れ（1件。原文と資料に照らして確かめる）",
             "- 資料にない数値（後4行目）: 3回",

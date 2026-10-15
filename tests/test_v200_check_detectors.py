@@ -36,7 +36,8 @@ class RunLinesTest(CheckCase):
         a, b, lines = self.run_pair(*PLAIN)
         self.assertEqual(lines[3], RUN_DISCLAIMER)
         self.assertEqual(self.detector_lines(lines), ["硬化の検査: 候補なし", "勢いの検査: 候補なし"])
-        self.assertEqual(lines[7:10], ["慎重表現の検査: 候補なし", "値の検査: 候補なし", ""])
+        self.assertEqual(lines[7:11], ["慎重表現の検査: 候補なし", "値の検査: 候補なし",
+                                      "見直し候補: 原文 0件 → 最終稿 0件（lint の規則に当たった数で、点数ではありません。増えても減っても読みやすさの良し悪しは示しません）", ""])
 
     def test_stiffness_candidate(self):
         a, b, lines = self.run_pair(*STIFF)
@@ -66,7 +67,8 @@ class RunLinesTest(CheckCase):
         final = self.write("final.md", COMPOSED)
         process, lines = self.check_ok("run", "--material", material, "--final", final)
         self.assertTrue(lines[4].startswith("記録: "))
-        self.assertEqual(lines[5], "")
+        self.assertEqual(lines[5], "見直し候補: 最終稿 0件（新規作成なので原文の件数はありません。lint の規則に当たった数で、点数ではありません）")
+        self.assertEqual(lines[6], "")
         self.assertFalse([line for line in lines if line.startswith(("硬化の検査:", "勢いの検査:"))])
 
 
