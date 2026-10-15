@@ -118,6 +118,7 @@ LINT_HELP_LIST = "\n".join([
     "  mail      emoji_prohibited",
     "  paper     なし",
     "mail は meta_filler の返信・結びの5型だけも外します（ご質問ありがとうございます、必要なら次に〜します、いかがでしたでしょうか、ぜひ〜してみてください、参考になれば幸いです等）。宛名・挨拶・署名を削る専用規則はありません。paper は慎重表現を削る規則がないため除外なし。",
+    "種類を指定したときだけ当てる規則: pause_comma（promo を除く11種類。種類を指定しないときは出しません）",
     "外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。",
 ])
 # diff の詰め: 文体の硬化の検査と勢いの検査は、種類で参考（info）にするかが決まるので、その文を足した。diff の詰めの直し
@@ -474,14 +475,14 @@ class DefaultsTest(DocTypeCase):
 
 class LintSkipTest(DocTypeCase):
     def test_b1_findings_with_a_type_are_the_plain_findings_minus_the_table(self):
-        """B1: コーパスの全ファイルと10の種類で、種類つきの候補は、種類なしの候補から表の規則を除いたもの（順も同じ）。"""
+        """B1: コーパスの全ファイルと10の種類で、種類つきの候補から pause_comma を除けば、種類なしの候補から表の規則を除いたもの（順も同じ）。"""
         for relative in corpus_files():
             text = (CORPUS / relative).read_text(encoding="utf-8")
             plain = yomiyasu_lint.lint_text(text)["findings"]
             for value in DOC_TYPE_VALUES:
                 result = yomiyasu_lint.lint_text(text, doc_type=value)
                 kept = [finding for finding in plain if finding["rule"] not in SKIP_RULES[value]]
-                self.assertEqual(result["findings"], kept, (relative, value))
+                self.assertEqual([f for f in result["findings"] if f["rule"] != "pause_comma"], kept, (relative, value))
                 skipped = result["context"]["skipped_by_doc_type"]
                 self.assertEqual(list(skipped), list(SKIP_RULES[value]), (relative, value))
                 self.assertEqual(sum(skipped.values()), len(plain) - len(kept), (relative, value))
@@ -590,7 +591,9 @@ class LintSkipTest(DocTypeCase):
 
     def test_b8_type_only_rules(self):
         """B8: DOC_TYPE_ONLY_RULES の規則は、種類なしとほかの種類では除かれ、指定した種類でだけ残る。"""
-        self.assertEqual(yomiyasu_lint.DOC_TYPE_ONLY_RULES, {})
+        self.assertEqual(yomiyasu_lint.DOC_TYPE_ONLY_RULES, {
+            "pause_comma": ("pr", "article", "incident", "proposal", "minutes", "manual", "slides", "essay", "formal", "mail", "paper"),
+        })
         text = COUNT_DECLARATION_ONLY
         with mock.patch.object(yomiyasu_lint, "DOC_TYPE_ONLY_RULES", {"count_declaration": ("article",)}):
             self.assertEqual(yomiyasu_lint.lint_text(text)["findings"], [])
@@ -650,11 +653,15 @@ class TableTest(unittest.TestCase):
                 self.assertNotIn(rule, rules, value)
 
     def test_c6_lint_help_lists_the_table(self):
-        """C6: lint の --help の一覧が、DOC_TYPE_SKIP_RULES から作った文と同じ（終了コードの表の前）。"""
+        """C6: lint の --help の一覧が、DOC_TYPE_SKIP_RULES と DOC_TYPE_ONLY_RULES から作った文と同じ（終了コードの表の前）。"""
         built = ["文書の種類ごとに外す規則（--doc-type）:"]
         for value, rules in yomiyasu_lint.DOC_TYPE_SKIP_RULES.items():
             built.append("  {:<10}{}".format(value, "、".join(rules) if rules else "なし"))
-        built.append(LINT_HELP_LIST.split("\n")[-2])
+        built.append(LINT_HELP_LIST.split("\n")[-3])
+        for rule, allowed in yomiyasu_lint.DOC_TYPE_ONLY_RULES.items():
+            excluded = [row[0] for row in yomiyasu_lint.DOC_TYPES if row[0] not in allowed]
+            scope = "{} を除く{}種類".format("、".join(excluded), len(allowed)) if excluded else "全{}種類".format(len(allowed))
+            built.append("種類を指定したときだけ当てる規則: {}（{}。種類を指定しないときは出しません）".format(rule, scope))
         built.append("外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。")
         self.assertEqual("\n".join(built), LINT_HELP_LIST)
         code, out, _ = call(yomiyasu_lint.main, ["--help"])
