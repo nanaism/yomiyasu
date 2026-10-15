@@ -128,9 +128,10 @@ class DiffStatusLineTest(unittest.TestCase):
         result = diff_of(*STIFF_AND_TONE)
         reviews = [c for key in ("stiffness", "tone") for c in result[key]["candidates"] if c["level"] == "review"]
         self.assertEqual(len(reviews), 2)
-        self.assertEqual(result["candidate_count"], 3)
+        self.assertEqual(result["candidate_count"], 4)
+        self.assertEqual([(r["kind"], r["subkind"]) for r in result["meaning_risks"]], [("claim", "causal")])
         self.assertEqual(report_lines(result)[1],
-                         "状態: 変更あり（1か所）。見直し候補 3件、うち意味が変わる恐れ 0件" + DETECTOR_NOTE.format(2))
+                         "状態: 変更あり（1か所）。見直し候補 4件、うち意味が変わる恐れ 1件" + DETECTOR_NOTE.format(2))
 
     def test_status_with_rule_candidates_also_gets_the_note(self):
         result = diff_of(*NUMBER_AND_TONE)

@@ -217,7 +217,7 @@ class KnownLimitsRound5ReviewTest(unittest.TestCase):
                 self.assertEqual(number_risks(before, after), [("lost", ["一つ"], [])])
 
     def test_added_actor_is_not_a_meaning_risk(self):
-        """原文にない担当者や動作主を主語や通知先に足した推敲は、意味が変わる恐れに出ない（新しく出た語には出る）。"""
+        """原文にない担当者や動作主を主語や通知先に足した推敲は、担当者だけでは意味が変わる恐れに出ない。因果の足しは見直し候補に出る。"""
         cases = (
             ("倉庫の棚に札を足し、在庫は台帳から数える。", "物流チームは倉庫の棚に札を足し、在庫を台帳から数える。", "チーム"),
             ("回線の帯域を一時的に広げ、再接続して戻した。", "夜間の担当者が回線の帯域を一時的に広げ、再接続して戻した。", "担当者"),
@@ -227,7 +227,11 @@ class KnownLimitsRound5ReviewTest(unittest.TestCase):
         for before, after, word in cases:
             with self.subTest(after=after):
                 result = result_of(before, after)
-                self.assertEqual(result["meaning_risks"], [])
+                expected = [("claim", "causal")] if "ため" in after else []
+                self.assertEqual([(r["kind"], r["subkind"]) for r in result["meaning_risks"]], expected)
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+                if expected:
+                    self.assertEqual(result["meaning_risks"][0]["detail"]["reason"], "new_content")
                 self.assertIn(word, result["new_words"])
 
     def test_modality_evaluation_scope_and_role(self):

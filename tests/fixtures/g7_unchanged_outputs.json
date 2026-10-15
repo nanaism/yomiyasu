@@ -2,13 +2,13 @@
   "description": "指定しない（--doc-type と --reader を付けない）ときの lint、diff、check の出力の要約。tests/test_v200_doc_type.py の UnchangedOutputTest が今の出力と照らす（種類と読者を指定しない利用者の出力を、知らないうちに変えないための見張り）。行ごとに出どころが違う。lint の行は種類と読者のオプション（--doc-type と --reader）を入れる前の作業ツリー（45a5885 に check の固めを入れたもの）の出力で、作り直していない（指定しないときの lint の出力が、そのオプションを入れる前と1字も違わないことを見る）。diff と check の行は、diff の詰め（文体の硬化、勢い、否定対比の逆転、気持ちの語の検査と、意味が変わる恐れの判定の詰め）とその直し（反証で見つけた例の直しを3回と、そのあとの数値と否定対比の判定の直し）のあとの作業ツリーの出力で作り直した。オプションを入れる前の出力とは違い、そのあとの変更で出力が変わらないことを見る（オプションを入れる前からの変化と、終了コードが変わった組は updates）。行ごとの出どころは generated_by、source_commit、source_sha256 の lint、diff、check。値は、終了コード、標準出力、標準エラー（check は一時の状態フォルダと実行IDを伏せたもの、JSON は context を除いたもの）をつないだ SHA-256 の先頭16字。今の版の文字列（2.0.0-beta）は tool_version の値に読み替えてから数える。",
   "generated_by": {
     "lint": "種類と読者のオプション（--doc-type と --reader）を入れる前に tests/test_v200_doc_type.py の unchanged_lint() で作った値。作り直していない（作り直すたびに、今の unchanged_lint() と1字も違わないことを確かめる）",
-    "diff": "tests/test_v200_doc_type.py の unchanged_diff()。確度・かぎかっこ・文体の切り替えの追加に合わせて再計測。lint の要約は旧版のまま。",
-    "check": "tests/test_v200_doc_type.py の unchanged_check()。確度・かぎかっこ・文体の切り替えの追加に合わせて再計測。lint の要約は旧版のまま。"
+    "diff": "tests/test_v200_doc_type.py の unchanged_diff()。状態の語の消えと約束・因果の検出追加に合わせて再計測（評価と一般化の足しの検出は外した）。lint の要約は旧版のまま。",
+    "check": "tests/test_v200_doc_type.py の unchanged_check()。状態の語の消えと約束・因果の検出追加に合わせて再計測（評価と一般化の足しの検出は外した）。lint の要約は旧版のまま。"
   },
   "source_commit": {
     "lint": "45a5885（scripts に未コミットの変更あり: check の固め）",
-    "diff": "確度・かぎかっこ・文体の切り替えの検出を追加した作業ツリー（既存9キーと既存候補は変更なし）。",
-    "check": "確度・かぎかっこ・文体の切り替えの検出を追加した作業ツリー（既存9キーと既存候補は変更なし）。"
+    "diff": "作業ツリー（状態の語の消えと書き足しの検出を追加）",
+    "check": "作業ツリー（状態の語の消えと書き足しの検出を追加）"
   },
   "source_sha256": {
     "lint": {
@@ -18,9 +18,9 @@
       "markdown_visibility.py": "c0e89e684694d9602d8ff0da5ee0ecfad23f7390fa61c326cc201870613df691"
     },
     "diff": {
-      "yomiyasu_lint.py": "cf2227191bd9a07064ae4d4b47d7372cf1eade673f647a2dd1ac1084bfc84e43",
-      "yomiyasu_diff.py": "b62ebc18d4564c5e6a85e18281b59e47a896f5e6643629e70d3fe16f823f9b60",
-      "yomiyasu_check.py": "2c5ed62bbcef7951f09e038f0002cb82ceaba3b498bf92a18b28096d1a89440b",
+      "yomiyasu_lint.py": "73c370d607399b4408368c53785c9f9bebc5234180a4c4c1e5d4006365c3aa23",
+      "yomiyasu_diff.py": "10dab29e68ed0b3cec5c30460031d074e918f0e31215fb2bc2e4f06b880de3db",
+      "yomiyasu_check.py": "624e07bf22b10e0e893a7d49846f5beb24a13594d19a986fde2f320a41cbe729",
       "markdown_visibility.py": "4d296be7fc1c1cb6b908cd16cf3de51449d7902db9bc1888f095fc7a65ae843c",
       "references/lists/feelings.txt": "5f71a66f5e2679de04ecd30395ab74ca61962297c22ef3f4efa5c8e625446166",
       "references/lists/hedges.txt": "ed666036f63f4705d2c129d3fd30e971018d50732bbef2c18081412a61ccd771",
@@ -28,9 +28,9 @@
       "references/lists/nominalization.txt": "2f685bbcd7dfc5ea871ff5655368195d471cea6ac4ff57e75a0648aadd466048"
     },
     "check": {
-      "yomiyasu_lint.py": "cf2227191bd9a07064ae4d4b47d7372cf1eade673f647a2dd1ac1084bfc84e43",
-      "yomiyasu_diff.py": "b62ebc18d4564c5e6a85e18281b59e47a896f5e6643629e70d3fe16f823f9b60",
-      "yomiyasu_check.py": "2c5ed62bbcef7951f09e038f0002cb82ceaba3b498bf92a18b28096d1a89440b",
+      "yomiyasu_lint.py": "73c370d607399b4408368c53785c9f9bebc5234180a4c4c1e5d4006365c3aa23",
+      "yomiyasu_diff.py": "10dab29e68ed0b3cec5c30460031d074e918f0e31215fb2bc2e4f06b880de3db",
+      "yomiyasu_check.py": "624e07bf22b10e0e893a7d49846f5beb24a13594d19a986fde2f320a41cbe729",
       "markdown_visibility.py": "4d296be7fc1c1cb6b908cd16cf3de51449d7902db9bc1888f095fc7a65ae843c",
       "references/lists/feelings.txt": "5f71a66f5e2679de04ecd30395ab74ca61962297c22ef3f4efa5c8e625446166",
       "references/lists/hedges.txt": "ed666036f63f4705d2c129d3fd30e971018d50732bbef2c18081412a61ccd771",
@@ -1705,11 +1705,11 @@
       "stdin": "743b98a745d2c176"
     },
     "edge_cases/edge_kowareru_38.md|edge_cases/edge_kowareru_39.md": {
-      "plain": "8b3937bb86bf7729",
-      "stance": "8b3937bb86bf7729",
-      "fail_on": "8b3937bb86bf7729",
-      "json": "3e4a24f30d3f1c66",
-      "stdin": "8b3937bb86bf7729"
+      "plain": "69a23b697ff3c330",
+      "stance": "69a23b697ff3c330",
+      "fail_on": "69a23b697ff3c330",
+      "json": "e7a174dd63088f9f",
+      "stdin": "69a23b697ff3c330"
     },
     "edge_cases/edge_kowareru_39.md|edge_cases/edge_kowareru_40.md": {
       "plain": "58fa946679e250fe",
@@ -1719,11 +1719,11 @@
       "stdin": "58fa946679e250fe"
     },
     "edge_cases/edge_kowareru_40.md|edge_cases/edge_kowareru_41.md": {
-      "plain": "bd4186f9e02aa0a5",
-      "stance": "bd4186f9e02aa0a5",
-      "fail_on": "bd4186f9e02aa0a5",
-      "json": "9e55881164c47ce7",
-      "stdin": "bd4186f9e02aa0a5"
+      "plain": "75895a3745c027c3",
+      "stance": "75895a3745c027c3",
+      "fail_on": "75895a3745c027c3",
+      "json": "c35e556af052a108",
+      "stdin": "75895a3745c027c3"
     },
     "edge_cases/edge_kowareru_41.md|edge_cases/edge_kowareru_42.md": {
       "plain": "4a6660bda95dda97",
@@ -1775,11 +1775,11 @@
       "stdin": "53bb6681b5f794eb"
     },
     "edge_cases/edge_nigiru_04.md|edge_cases/edge_nigiru_05.md": {
-      "plain": "5f6d9836b0f0a903",
-      "stance": "5f6d9836b0f0a903",
-      "fail_on": "5f6d9836b0f0a903",
-      "json": "8a2ac87bb27c58df",
-      "stdin": "5f6d9836b0f0a903"
+      "plain": "5577dfc3da8f9f9f",
+      "stance": "5577dfc3da8f9f9f",
+      "fail_on": "5577dfc3da8f9f9f",
+      "json": "fe56e3281aeccb4a",
+      "stdin": "5577dfc3da8f9f9f"
     },
     "edge_cases/edge_nigiru_05.md|edge_cases/edge_nigiru_06.md": {
       "plain": "4d0cd4c3eee81f54",
@@ -1824,11 +1824,11 @@
       "stdin": "c90439bf25753826"
     },
     "edge_cases/edge_taosu_11.md|edge_cases/edge_taosu_12.md": {
-      "plain": "2172857906f928e0",
-      "stance": "2172857906f928e0",
-      "fail_on": "2172857906f928e0",
-      "json": "5b64f1bab45fb0ba",
-      "stdin": "2172857906f928e0"
+      "plain": "1961f8626459c7de",
+      "stance": "1961f8626459c7de",
+      "fail_on": "1961f8626459c7de",
+      "json": "9feedf3fb2660745",
+      "stdin": "1961f8626459c7de"
     },
     "edge_cases/edge_taosu_12.md|edge_cases/edge_taosu_13.md": {
       "plain": "3d29072ab22673b3",
@@ -1873,11 +1873,11 @@
       "stdin": "f7969a00289cc7cd"
     },
     "edge_cases/edge_taosu_18.md|edge_cases/edge_taosu_19.md": {
-      "plain": "458a3edd9b5a332d",
-      "stance": "458a3edd9b5a332d",
-      "fail_on": "458a3edd9b5a332d",
-      "json": "e68db3eef1825a56",
-      "stdin": "458a3edd9b5a332d"
+      "plain": "b86a77578ad9f430",
+      "stance": "b86a77578ad9f430",
+      "fail_on": "b86a77578ad9f430",
+      "json": "b983a9f9d7760045",
+      "stdin": "b86a77578ad9f430"
     },
     "edge_cases/edge_taosu_19.md|edge_cases/edge_taosu_20.md": {
       "plain": "0551f676783d5655",
@@ -1887,11 +1887,11 @@
       "stdin": "0551f676783d5655"
     },
     "edge_cases/edge_taosu_20.md|edge_cases/edge_tokasu_21.md": {
-      "plain": "e9cf476ba0136c85",
-      "stance": "e9cf476ba0136c85",
-      "fail_on": "e9cf476ba0136c85",
-      "json": "186edf17537c88d6",
-      "stdin": "e9cf476ba0136c85"
+      "plain": "84978d8df15cbcf0",
+      "stance": "84978d8df15cbcf0",
+      "fail_on": "84978d8df15cbcf0",
+      "json": "0a4f1078eeec5301",
+      "stdin": "84978d8df15cbcf0"
     },
     "edge_cases/edge_tokasu_21.md|edge_cases/edge_tokasu_22.md": {
       "plain": "b7ed34f62ca2e9a6",
@@ -1908,11 +1908,11 @@
       "stdin": "037cffdb07078a57"
     },
     "edge_cases/edge_tokasu_23.md|edge_cases/edge_tokasu_24.md": {
-      "plain": "c0f0f170275ebccc",
-      "stance": "c0f0f170275ebccc",
-      "fail_on": "c0f0f170275ebccc",
-      "json": "8db77a92496a99ee",
-      "stdin": "c0f0f170275ebccc"
+      "plain": "d9d6ac182f014cba",
+      "stance": "d9d6ac182f014cba",
+      "fail_on": "d9d6ac182f014cba",
+      "json": "87768e5cf0320a5e",
+      "stdin": "d9d6ac182f014cba"
     },
     "edge_cases/edge_tokasu_24.md|edge_cases/edge_tokasu_25.md": {
       "plain": "ec50f3d400f22bd2",
@@ -1922,18 +1922,18 @@
       "stdin": "ec50f3d400f22bd2"
     },
     "edge_cases/edge_tokasu_25.md|edge_cases/edge_tokasu_26.md": {
-      "plain": "73d52b9a25f36b2f",
-      "stance": "73d52b9a25f36b2f",
-      "fail_on": "73d52b9a25f36b2f",
-      "json": "39b582028738e9dc",
-      "stdin": "73d52b9a25f36b2f"
+      "plain": "5dc89679897965ac",
+      "stance": "5dc89679897965ac",
+      "fail_on": "5dc89679897965ac",
+      "json": "f26a1a1d0aaa0a99",
+      "stdin": "5dc89679897965ac"
     },
     "edge_cases/edge_tokasu_26.md|edge_cases/edge_tokasu_27.md": {
-      "plain": "e0cf5c82994f1e8c",
-      "stance": "e0cf5c82994f1e8c",
-      "fail_on": "e0cf5c82994f1e8c",
-      "json": "5ce1a4fa5d74d26d",
-      "stdin": "e0cf5c82994f1e8c"
+      "plain": "ca22f5e7ffe22031",
+      "stance": "ca22f5e7ffe22031",
+      "fail_on": "ca22f5e7ffe22031",
+      "json": "e7a3b9312745a8fe",
+      "stdin": "ca22f5e7ffe22031"
     },
     "edge_cases/edge_tokasu_27.md|edge_cases/edge_tokasu_28.md": {
       "plain": "19d2a544d36c6e54",
@@ -1943,11 +1943,11 @@
       "stdin": "19d2a544d36c6e54"
     },
     "edge_cases/edge_tokasu_28.md|edge_cases/edge_v111_keep_01.md": {
-      "plain": "91a893b8909578fb",
-      "stance": "2956b669af67fe09",
-      "fail_on": "dfce7148765074d8",
-      "json": "3efef1cced920606",
-      "stdin": "91a893b8909578fb"
+      "plain": "82854010338e4d2b",
+      "stance": "e27f4a9f287f0bab",
+      "fail_on": "b507efdb375dd0af",
+      "json": "08d85c2651cf7d2f",
+      "stdin": "82854010338e4d2b"
     },
     "edge_cases/edge_v111_keep_01.md|edge_cases/edge_waru_29.md": {
       "plain": "0329bdcc74b940ee",
@@ -1957,11 +1957,11 @@
       "stdin": "0329bdcc74b940ee"
     },
     "edge_cases/edge_waru_29.md|edge_cases/edge_waru_30.md": {
-      "plain": "68090f1ec11881aa",
-      "stance": "68090f1ec11881aa",
-      "fail_on": "68090f1ec11881aa",
-      "json": "c417cdad5de4429a",
-      "stdin": "68090f1ec11881aa"
+      "plain": "5ab066ca2e6f82c8",
+      "stance": "5ab066ca2e6f82c8",
+      "fail_on": "5ab066ca2e6f82c8",
+      "json": "899619297a98e4a7",
+      "stdin": "5ab066ca2e6f82c8"
     },
     "edge_cases/edge_waru_30.md|edge_cases/edge_waru_31.md": {
       "plain": "2a513bd843d9ef96",
@@ -2027,25 +2027,25 @@
       "stdin": "4e8b3d59ed7847cd"
     },
     "human/human_doc_10.md|human/human_doc_11.md": {
-      "plain": "7d11c3fdaddb1cd5",
-      "stance": "7d11c3fdaddb1cd5",
-      "fail_on": "7b119fd5b6490075",
-      "json": "4a4853ee6b87ba41",
-      "stdin": "7d11c3fdaddb1cd5"
+      "plain": "427d4812ac3fef3f",
+      "stance": "427d4812ac3fef3f",
+      "fail_on": "ed3b4fd696302e95",
+      "json": "5fd7af8b329b026c",
+      "stdin": "427d4812ac3fef3f"
     },
     "human/human_doc_11.md|human/human_doc_12.md": {
-      "plain": "8d10b853687e9665",
-      "stance": "0887b85d8bd04506",
-      "fail_on": "25a92b08c132d021",
-      "json": "985117554a1e56b6",
-      "stdin": "8d10b853687e9665"
+      "plain": "e9df5675cebe4767",
+      "stance": "44c64c727b0ba1a6",
+      "fail_on": "ad03ec5704a29561",
+      "json": "1987d43a0f914da8",
+      "stdin": "e9df5675cebe4767"
     },
     "human/human_doc_12.md|human/human_doc_13.md": {
-      "plain": "dfe0b828f60bb06f",
-      "stance": "dfe0b828f60bb06f",
-      "fail_on": "dbe75a28c52c6bf9",
-      "json": "ac71639bab3d23e0",
-      "stdin": "dfe0b828f60bb06f"
+      "plain": "9d184e5ec1bdf589",
+      "stance": "9d184e5ec1bdf589",
+      "fail_on": "4ac1970f5dc9496c",
+      "json": "4c5db7d42b131ae1",
+      "stdin": "9d184e5ec1bdf589"
     },
     "human/human_doc_13.md|human/human_doc_14.md": {
       "plain": "5e368c4f3ef0fa21",
@@ -2055,18 +2055,18 @@
       "stdin": "5e368c4f3ef0fa21"
     },
     "human/human_doc_14.md|human/human_doc_15.md": {
-      "plain": "a0dfa98f5e124eaa",
-      "stance": "813b145957ef1885",
-      "fail_on": "68bae96cc33a8e5c",
-      "json": "fc1a8dffa3966480",
-      "stdin": "a0dfa98f5e124eaa"
+      "plain": "fac1d3f186fbdaf4",
+      "stance": "ceb2dcbdccdc49f2",
+      "fail_on": "99db48a24c750884",
+      "json": "c30b4bd2c0258c65",
+      "stdin": "fac1d3f186fbdaf4"
     },
     "human/human_doc_15.md|human/human_doc_16.md": {
-      "plain": "c273d086025e3d9c",
-      "stance": "c273d086025e3d9c",
-      "fail_on": "c8e84cb60ce638b4",
-      "json": "6e5010417f4dcdb7",
-      "stdin": "c273d086025e3d9c"
+      "plain": "d25ad4db0476b01b",
+      "stance": "d25ad4db0476b01b",
+      "fail_on": "cab9c617ab9176f9",
+      "json": "94d403aa15dcd321",
+      "stdin": "d25ad4db0476b01b"
     },
     "human/human_doc_16.md|human/human_oga_01.md": {
       "plain": "5e232ed439e9b556",
@@ -2076,11 +2076,11 @@
       "stdin": "5e232ed439e9b556"
     },
     "human/human_oga_01.md|human/human_oga_02.md": {
-      "plain": "31e287dae2471536",
-      "stance": "31e287dae2471536",
-      "fail_on": "335700187f51f34c",
-      "json": "7f20fadb5a7115df",
-      "stdin": "31e287dae2471536"
+      "plain": "62ebc29c2ad7832b",
+      "stance": "62ebc29c2ad7832b",
+      "fail_on": "1a5752d7feb82196",
+      "json": "96f8ed4ef76b2a52",
+      "stdin": "62ebc29c2ad7832b"
     },
     "human/human_oga_02.md|human/human_oga_03.md": {
       "plain": "496d0b3a27b0c51b",
@@ -2090,18 +2090,18 @@
       "stdin": "496d0b3a27b0c51b"
     },
     "human/human_oga_03.md|human/human_oga_04.md": {
-      "plain": "8de399b0b22e2031",
-      "stance": "2b6d56809d7cb5f3",
-      "fail_on": "ce39e34bb30732a9",
-      "json": "d12f93bd3ad4d84e",
-      "stdin": "8de399b0b22e2031"
+      "plain": "d3ecbf819eec00f7",
+      "stance": "34703586122c06ad",
+      "fail_on": "070d3c1835481ea6",
+      "json": "b0ebeb74730c4e69",
+      "stdin": "d3ecbf819eec00f7"
     },
     "human/human_oga_04.md|human/human_oga_05.md": {
-      "plain": "1440df4204abf14c",
-      "stance": "506d231879e32a22",
-      "fail_on": "9422a86d1038c946",
-      "json": "005ca89086ec0f0b",
-      "stdin": "1440df4204abf14c"
+      "plain": "83027d21d0ee7b79",
+      "stance": "65ae6782d5cb8e9f",
+      "fail_on": "a9869eddf8bd9a63",
+      "json": "0a6389e3f62cca26",
+      "stdin": "83027d21d0ee7b79"
     },
     "human/human_oga_05.md|human/human_oga_06.md": {
       "plain": "5d092ca95a45bbd0",
@@ -2111,18 +2111,18 @@
       "stdin": "5d092ca95a45bbd0"
     },
     "human/human_oga_06.md|human/human_oga_07.md": {
-      "plain": "d8d3a32243f3fbf5",
-      "stance": "5d7ffeb81ceec5a9",
-      "fail_on": "78022fb3ae09e235",
-      "json": "1c39db2ac04bd05d",
-      "stdin": "d8d3a32243f3fbf5"
+      "plain": "d38a84891df1f194",
+      "stance": "8a7849e19b306521",
+      "fail_on": "c92e4408f549708a",
+      "json": "1a1f97228f871f94",
+      "stdin": "d38a84891df1f194"
     },
     "human/human_oga_07.md|human/human_oga_08.md": {
-      "plain": "d7bf570712bd2fe3",
-      "stance": "8ae3a01bbd8ad929",
-      "fail_on": "b1804c80316f4bbf",
-      "json": "2709634c77e83186",
-      "stdin": "d7bf570712bd2fe3"
+      "plain": "374984e09f4ac353",
+      "stance": "e527064d4af57c32",
+      "fail_on": "d84f95703ae7eb5a",
+      "json": "87a02dc0e2e239b7",
+      "stdin": "374984e09f4ac353"
     },
     "raw_ai/01_tech_arch_sonnet_casual.md|raw_ai/01_tech_arch_sonnet_default.md": {
       "plain": "e46a4828b3391d06",
@@ -2146,11 +2146,11 @@
       "stdin": "2bb050e2bc173732"
     },
     "raw_ai/02_incident_report_sonnet_casual.md|raw_ai/02_incident_report_sonnet_default.md": {
-      "plain": "6a1544195f1aaf1b",
-      "stance": "6a1544195f1aaf1b",
-      "fail_on": "51d446a85b1cdd1f",
-      "json": "98b636de8a35bdb5",
-      "stdin": "6a1544195f1aaf1b"
+      "plain": "ef6d8dd0093e528c",
+      "stance": "ef6d8dd0093e528c",
+      "fail_on": "1cc6131767f77f4e",
+      "json": "5bafa773308263e3",
+      "stdin": "ef6d8dd0093e528c"
     },
     "raw_ai/02_incident_report_sonnet_default.md|raw_ai/02_incident_report_sonnet_formal.md": {
       "plain": "a2f0e5ff9c7016fb",
@@ -2167,11 +2167,11 @@
       "stdin": "039edaad3218479f"
     },
     "raw_ai/03_pr_description_sonnet_casual.md|raw_ai/03_pr_description_sonnet_default.md": {
-      "plain": "eb3c6c774016a442",
-      "stance": "eb3c6c774016a442",
-      "fail_on": "affd18f12232db61",
-      "json": "6a666fb70fabd8c1",
-      "stdin": "eb3c6c774016a442"
+      "plain": "ad1e21ce28fcbfcc",
+      "stance": "ad1e21ce28fcbfcc",
+      "fail_on": "0a6f79bc8efba893",
+      "json": "f68dc6017de6acf3",
+      "stdin": "ad1e21ce28fcbfcc"
     },
     "raw_ai/03_pr_description_sonnet_default.md|raw_ai/03_pr_description_sonnet_formal.md": {
       "plain": "d472c210226304a5",
@@ -2181,25 +2181,25 @@
       "stdin": "d472c210226304a5"
     },
     "raw_ai/03_pr_description_sonnet_formal.md|raw_ai/04_slack_announce_sonnet_casual.md": {
-      "plain": "677151c17986d31f",
-      "stance": "15ed76b953678d56",
-      "fail_on": "01354f1bae249dfc",
-      "json": "f5159a51a07e5510",
-      "stdin": "677151c17986d31f"
+      "plain": "de64bcf6c90acf7a",
+      "stance": "85d7a5504941b2f5",
+      "fail_on": "854fb21e0e173352",
+      "json": "e50edc9a02c2db59",
+      "stdin": "de64bcf6c90acf7a"
     },
     "raw_ai/04_slack_announce_sonnet_casual.md|raw_ai/04_slack_announce_sonnet_default.md": {
-      "plain": "9367e0426408f565",
-      "stance": "d5e4747ec95af6cb",
-      "fail_on": "2f5d32f4bd4be25a",
-      "json": "54a7d42719b3522c",
-      "stdin": "9367e0426408f565"
+      "plain": "b9448bf4effeb737",
+      "stance": "b1817266d1a75874",
+      "fail_on": "b6ad0953bf13d627",
+      "json": "82f20efc5e2f22ad",
+      "stdin": "b9448bf4effeb737"
     },
     "raw_ai/04_slack_announce_sonnet_default.md|raw_ai/04_slack_announce_sonnet_formal.md": {
-      "plain": "a5c14b7c310f0dbb",
-      "stance": "4bd9fd99e7f636ca",
-      "fail_on": "619b10672db6f978",
-      "json": "90db6001074bb24d",
-      "stdin": "a5c14b7c310f0dbb"
+      "plain": "74b9361b5a2641a0",
+      "stance": "453e5b499ccf157c",
+      "fail_on": "c1d2029681a4efb3",
+      "json": "8f31e81b7a801ad8",
+      "stdin": "74b9361b5a2641a0"
     },
     "raw_ai/04_slack_announce_sonnet_formal.md|raw_ai/05_comparison_sonnet_casual.md": {
       "plain": "8233177d926ef940",
@@ -2209,11 +2209,11 @@
       "stdin": "8233177d926ef940"
     },
     "raw_ai/05_comparison_sonnet_casual.md|raw_ai/05_comparison_sonnet_default.md": {
-      "plain": "2dfbee3a4e4bcf7f",
-      "stance": "2dfbee3a4e4bcf7f",
-      "fail_on": "4a59353010e43cfb",
-      "json": "1f320fb25a7b486d",
-      "stdin": "2dfbee3a4e4bcf7f"
+      "plain": "3c56d69c05234505",
+      "stance": "3c56d69c05234505",
+      "fail_on": "f2e3770b03d49559",
+      "json": "a1f1abd9320aa182",
+      "stdin": "3c56d69c05234505"
     },
     "raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md": {
       "plain": "3e08602666baa0e4",
@@ -2223,39 +2223,39 @@
       "stdin": "3e08602666baa0e4"
     },
     "raw_ai/05_comparison_sonnet_formal.md|raw_ai/06_spec_draft_sonnet_casual.md": {
-      "plain": "9a2da1bb400ccb5c",
-      "stance": "9a2da1bb400ccb5c",
-      "fail_on": "dd7e7955af88f8bd",
-      "json": "8fffd3c345205679",
-      "stdin": "9a2da1bb400ccb5c"
+      "plain": "c0b0af7e087056a9",
+      "stance": "c0b0af7e087056a9",
+      "fail_on": "229589e378e6b2b3",
+      "json": "2fc00354f74ea33d",
+      "stdin": "c0b0af7e087056a9"
     },
     "raw_ai/06_spec_draft_sonnet_casual.md|raw_ai/06_spec_draft_sonnet_default.md": {
-      "plain": "cf5e2b5362ceea69",
-      "stance": "cf5e2b5362ceea69",
-      "fail_on": "646b8f3d5ee95fcb",
-      "json": "759c8697c72b91c6",
-      "stdin": "cf5e2b5362ceea69"
+      "plain": "a7dc1cde43a4336c",
+      "stance": "a7dc1cde43a4336c",
+      "fail_on": "1af11d02cd0bfb10",
+      "json": "379454e14866f7da",
+      "stdin": "a7dc1cde43a4336c"
     },
     "raw_ai/06_spec_draft_sonnet_default.md|raw_ai/06_spec_draft_sonnet_formal.md": {
-      "plain": "c0364bff923ceab9",
-      "stance": "c0364bff923ceab9",
-      "fail_on": "69bf5c5e4b28febc",
-      "json": "6fc81bd505152149",
-      "stdin": "c0364bff923ceab9"
+      "plain": "b3cebcd001ba6f19",
+      "stance": "b3cebcd001ba6f19",
+      "fail_on": "6b5d303909e77a3d",
+      "json": "9ef68ad3dc953056",
+      "stdin": "b3cebcd001ba6f19"
     },
     "raw_ai/06_spec_draft_sonnet_formal.md|raw_ai/07_code_review_sonnet_casual.md": {
-      "plain": "9ac25bb3aef955a7",
-      "stance": "9ac25bb3aef955a7",
-      "fail_on": "dce14c34ac62dc44",
-      "json": "d782887b5f93da9d",
-      "stdin": "9ac25bb3aef955a7"
+      "plain": "50999c114f4d1497",
+      "stance": "50999c114f4d1497",
+      "fail_on": "e7464954e982e235",
+      "json": "5726ffe3a95fd788",
+      "stdin": "50999c114f4d1497"
     },
     "raw_ai/07_code_review_sonnet_casual.md|raw_ai/07_code_review_sonnet_default.md": {
-      "plain": "c8fd241c5d17d246",
-      "stance": "d14e574405941eb0",
-      "fail_on": "25bd41e8d67d3f1c",
-      "json": "f195caf6a99269e5",
-      "stdin": "c8fd241c5d17d246"
+      "plain": "40544d019985ef44",
+      "stance": "ff84f0acfaef3fce",
+      "fail_on": "6c6c835edbdc93fd",
+      "json": "0d3318c16af75344",
+      "stdin": "40544d019985ef44"
     },
     "raw_ai/07_code_review_sonnet_default.md|raw_ai/07_code_review_sonnet_formal.md": {
       "plain": "f820b7c154db7369",
@@ -2265,18 +2265,18 @@
       "stdin": "f820b7c154db7369"
     },
     "raw_ai/07_code_review_sonnet_formal.md|raw_ai/08_essay_retrospective_sonnet_casual.md": {
-      "plain": "de87ea8d1abde304",
-      "stance": "de87ea8d1abde304",
-      "fail_on": "42e847f642f968cd",
-      "json": "751f0e1b5d7d12a8",
-      "stdin": "de87ea8d1abde304"
+      "plain": "e27ebf7a83837009",
+      "stance": "e27ebf7a83837009",
+      "fail_on": "dbd5fcc4af60833d",
+      "json": "32bb60dadaa364e8",
+      "stdin": "e27ebf7a83837009"
     },
     "raw_ai/08_essay_retrospective_sonnet_casual.md|raw_ai/08_essay_retrospective_sonnet_default.md": {
-      "plain": "72e56a964d8e3edd",
-      "stance": "72e56a964d8e3edd",
-      "fail_on": "43459223663d5a90",
-      "json": "b7f45e8edad0e565",
-      "stdin": "72e56a964d8e3edd"
+      "plain": "d7c5b3dd4a160a96",
+      "stance": "d7c5b3dd4a160a96",
+      "fail_on": "4a4ca537e9173116",
+      "json": "43202b39dec1413b",
+      "stdin": "d7c5b3dd4a160a96"
     },
     "raw_ai/08_essay_retrospective_sonnet_default.md|raw_ai/08_essay_retrospective_sonnet_formal.md": {
       "plain": "f6520af0a377e3bf",
@@ -2286,11 +2286,11 @@
       "stdin": "f6520af0a377e3bf"
     },
     "raw_ai/08_essay_retrospective_sonnet_formal.md|raw_ai/09_listicle_patterns.md": {
-      "plain": "7b39abc547f253a1",
-      "stance": "42152071922bdec1",
-      "fail_on": "1461b1fa86508b2f",
-      "json": "ca9cd905a5f0b966",
-      "stdin": "7b39abc547f253a1"
+      "plain": "13e20a3bc6559c2d",
+      "stance": "2b7bbd6362899e9f",
+      "fail_on": "cd054fb01007d463",
+      "json": "3f2f312f78f145ef",
+      "stdin": "13e20a3bc6559c2d"
     },
     "raw_ai/09_listicle_patterns.md|raw_ai/10_essay_fragments.md": {
       "plain": "94e447449395b594",
@@ -2842,16 +2842,16 @@
       "verify": "6b8b0a1d8a4912d8"
     },
     "edge_cases/edge_kowareru_38.md|edge_cases/edge_kowareru_39.md": {
-      "run": "28eaafbf0fcd38a7",
-      "verify": "99c36996a73711e3"
+      "run": "755a9551f22c8f21",
+      "verify": "a6b0d6dc44e72ad1"
     },
     "edge_cases/edge_kowareru_39.md|edge_cases/edge_kowareru_40.md": {
       "run": "5f6541e250102876",
       "verify": "968ebec2eeda88b6"
     },
     "edge_cases/edge_kowareru_40.md|edge_cases/edge_kowareru_41.md": {
-      "run": "81da570815a9994e",
-      "verify": "5aff3b930ebbbadd"
+      "run": "3144e265291a285c",
+      "verify": "47fdd18171f6ea14"
     },
     "edge_cases/edge_kowareru_41.md|edge_cases/edge_kowareru_42.md": {
       "run": "5dc4e20005240590",
@@ -2882,8 +2882,8 @@
       "verify": "06bab146c4c01932"
     },
     "edge_cases/edge_nigiru_04.md|edge_cases/edge_nigiru_05.md": {
-      "run": "02327a5bba895f98",
-      "verify": "6862c9ae2690f601"
+      "run": "038ab751f7f1bd74",
+      "verify": "fffdd3c6f79f9bb9"
     },
     "edge_cases/edge_nigiru_05.md|edge_cases/edge_nigiru_06.md": {
       "run": "39dedd0f916c614f",
@@ -2910,8 +2910,8 @@
       "verify": "da48d7654ad90645"
     },
     "edge_cases/edge_taosu_11.md|edge_cases/edge_taosu_12.md": {
-      "run": "1fefa2b0f6b0428c",
-      "verify": "780f59a92f3e14db"
+      "run": "67d81e3eb41ece69",
+      "verify": "56d29d1941cd4f87"
     },
     "edge_cases/edge_taosu_12.md|edge_cases/edge_taosu_13.md": {
       "run": "d53d2815211f776d",
@@ -2938,16 +2938,16 @@
       "verify": "2d2d273119b0c72a"
     },
     "edge_cases/edge_taosu_18.md|edge_cases/edge_taosu_19.md": {
-      "run": "a147ca27b7a13503",
-      "verify": "5d2bd2409728c148"
+      "run": "fe73e24681d4e160",
+      "verify": "ec1eff1025745fe9"
     },
     "edge_cases/edge_taosu_19.md|edge_cases/edge_taosu_20.md": {
       "run": "8f42293b6e246865",
       "verify": "f9a081728e2540bd"
     },
     "edge_cases/edge_taosu_20.md|edge_cases/edge_tokasu_21.md": {
-      "run": "d06069d3c565bbf4",
-      "verify": "cafed7e624f040ec"
+      "run": "6fe27300d8df7cc4",
+      "verify": "b2c5902dfe83abd7"
     },
     "edge_cases/edge_tokasu_21.md|edge_cases/edge_tokasu_22.md": {
       "run": "de2c611d8d683b70",
@@ -2958,36 +2958,36 @@
       "verify": "bdec54a5662f5c02"
     },
     "edge_cases/edge_tokasu_23.md|edge_cases/edge_tokasu_24.md": {
-      "run": "a78721ff7d8ca955",
-      "verify": "5238fbe1a0253d19"
+      "run": "130f6d6e2ebfd57e",
+      "verify": "4b681c062e4d17c0"
     },
     "edge_cases/edge_tokasu_24.md|edge_cases/edge_tokasu_25.md": {
       "run": "3ae53f5a95a4e09f",
       "verify": "44891e9ed013f575"
     },
     "edge_cases/edge_tokasu_25.md|edge_cases/edge_tokasu_26.md": {
-      "run": "90997eb268aedbfd",
-      "verify": "0f2c9cfde7ce7c1e"
+      "run": "3e23e03e3b16fd9d",
+      "verify": "82115386d671aff6"
     },
     "edge_cases/edge_tokasu_26.md|edge_cases/edge_tokasu_27.md": {
-      "run": "29cb1c4ca797e59c",
-      "verify": "9daff7bd72b6d90f"
+      "run": "b20371950df90a7c",
+      "verify": "331eb1aa401f81f8"
     },
     "edge_cases/edge_tokasu_27.md|edge_cases/edge_tokasu_28.md": {
       "run": "dc6f1174171aa8c6",
       "verify": "42e18d50d25312b1"
     },
     "edge_cases/edge_tokasu_28.md|edge_cases/edge_v111_keep_01.md": {
-      "run": "04d57bc01f3fb5a0",
-      "verify": "81609837c0572c21"
+      "run": "0f2cb39e200c93a6",
+      "verify": "d142cf94182c515f"
     },
     "edge_cases/edge_v111_keep_01.md|edge_cases/edge_waru_29.md": {
       "run": "4fa0c3476d4a7198",
       "verify": "f9dc685541fd0033"
     },
     "edge_cases/edge_waru_29.md|edge_cases/edge_waru_30.md": {
-      "run": "ae39c2da6fe8feb1",
-      "verify": "23b8c02b335fdfcb"
+      "run": "eab8e849599d5f90",
+      "verify": "c039373256609a0d"
     },
     "edge_cases/edge_waru_30.md|edge_cases/edge_waru_31.md": {
       "run": "c2699f97857d7cb9",
@@ -3026,60 +3026,60 @@
       "verify": "2441099ca6494572"
     },
     "human/human_doc_10.md|human/human_doc_11.md": {
-      "run": "6934495e376f1468",
-      "verify": "d2ac1d16392e66f5"
+      "run": "c1efdba886811aab",
+      "verify": "8edecaaed7175172"
     },
     "human/human_doc_11.md|human/human_doc_12.md": {
-      "run": "3ed975c28d3de511",
-      "verify": "94ffbaf40da7caed"
+      "run": "cad243bce36dd0d4",
+      "verify": "868ffea5dce471db"
     },
     "human/human_doc_12.md|human/human_doc_13.md": {
-      "run": "a1637f8e7c170cef",
-      "verify": "7d2d583a25c3ec1c"
+      "run": "6656a79e60f813f6",
+      "verify": "844e8369e3156b0f"
     },
     "human/human_doc_13.md|human/human_doc_14.md": {
       "run": "75cee6a9c3e7d779",
       "verify": "4e27da3527a5a350"
     },
     "human/human_doc_14.md|human/human_doc_15.md": {
-      "run": "6ab97e71a1b9b2bd",
-      "verify": "b08fbf7fa4e6e595"
+      "run": "ed81947e3fb507e5",
+      "verify": "a66095f32a2ae35e"
     },
     "human/human_doc_15.md|human/human_doc_16.md": {
-      "run": "4bfe18229f11cc7a",
-      "verify": "9a772b631405fc6b"
+      "run": "bfe25fa4baf3702f",
+      "verify": "4e2d5cb2b5cc21b7"
     },
     "human/human_doc_16.md|human/human_oga_01.md": {
       "run": "3e267f72117a672c",
       "verify": "1464ae46fd89dcb4"
     },
     "human/human_oga_01.md|human/human_oga_02.md": {
-      "run": "637aa6236d9c99c9",
-      "verify": "0c6227bce73e5100"
+      "run": "82111e6be57614e7",
+      "verify": "d60b6a54eea9b24f"
     },
     "human/human_oga_02.md|human/human_oga_03.md": {
       "run": "94a886b0c383d117",
       "verify": "be49173a1bfb7538"
     },
     "human/human_oga_03.md|human/human_oga_04.md": {
-      "run": "19eb27e251a38a81",
-      "verify": "846ecb2703322716"
+      "run": "a391254159a10bfe",
+      "verify": "989021174a1c81c6"
     },
     "human/human_oga_04.md|human/human_oga_05.md": {
-      "run": "69dd0859de858696",
-      "verify": "5bd64b14e13c9b34"
+      "run": "3b88b773882aee94",
+      "verify": "ef0f5a5ac6591a55"
     },
     "human/human_oga_05.md|human/human_oga_06.md": {
       "run": "4dc05fcb7c52f303",
       "verify": "a6503e17b94583be"
     },
     "human/human_oga_06.md|human/human_oga_07.md": {
-      "run": "46c5c3ca3cd9aa76",
-      "verify": "e0fec7997d2c019d"
+      "run": "e22fbbec81a9adf4",
+      "verify": "ea83b6633386d3b8"
     },
     "human/human_oga_07.md|human/human_oga_08.md": {
-      "run": "4f30fd1670b8ec15",
-      "verify": "ecc39d9db1de33b5"
+      "run": "950eb2e78edb9fb8",
+      "verify": "d203c3ddbc945f71"
     },
     "raw_ai/01_tech_arch_sonnet_casual.md|raw_ai/01_tech_arch_sonnet_default.md": {
       "run": "7959f69b2a2e7a57",
@@ -3094,8 +3094,8 @@
       "verify": "94729c971d9de159"
     },
     "raw_ai/02_incident_report_sonnet_casual.md|raw_ai/02_incident_report_sonnet_default.md": {
-      "run": "6d29c60e655f1cac",
-      "verify": "a8ae3be7126e30b1"
+      "run": "72b4b7602aff6da8",
+      "verify": "9d180af454f4d917"
     },
     "raw_ai/02_incident_report_sonnet_default.md|raw_ai/02_incident_report_sonnet_formal.md": {
       "run": "9aa9d6e505f4f31a",
@@ -3106,76 +3106,76 @@
       "verify": "c54c9ee0e65a944b"
     },
     "raw_ai/03_pr_description_sonnet_casual.md|raw_ai/03_pr_description_sonnet_default.md": {
-      "run": "692312355c735e79",
-      "verify": "6182a13bfa8f8acd"
+      "run": "35aeda60fc309b0b",
+      "verify": "1c1532e44bfe1592"
     },
     "raw_ai/03_pr_description_sonnet_default.md|raw_ai/03_pr_description_sonnet_formal.md": {
       "run": "5e86dff24848f147",
       "verify": "c8f2bc5e5101748d"
     },
     "raw_ai/03_pr_description_sonnet_formal.md|raw_ai/04_slack_announce_sonnet_casual.md": {
-      "run": "37dd3639dbd5f611",
-      "verify": "8c06f233f17fd705"
+      "run": "d2f78700add332f9",
+      "verify": "50e222765e0245b6"
     },
     "raw_ai/04_slack_announce_sonnet_casual.md|raw_ai/04_slack_announce_sonnet_default.md": {
-      "run": "b2867b069ff002cf",
-      "verify": "9acb64f41999871b"
+      "run": "e87f06d9b2b5908a",
+      "verify": "65a834ca16b10c3c"
     },
     "raw_ai/04_slack_announce_sonnet_default.md|raw_ai/04_slack_announce_sonnet_formal.md": {
-      "run": "00f89205b2285c9f",
-      "verify": "24be6d607901cd78"
+      "run": "c2cbe23b742fcad5",
+      "verify": "b24488855a60bbbf"
     },
     "raw_ai/04_slack_announce_sonnet_formal.md|raw_ai/05_comparison_sonnet_casual.md": {
       "run": "4b500b33d9cc3a5c",
       "verify": "731d53d1864fe3bb"
     },
     "raw_ai/05_comparison_sonnet_casual.md|raw_ai/05_comparison_sonnet_default.md": {
-      "run": "e1d7020a8c702edf",
-      "verify": "8620740408284929"
+      "run": "2a6a1b0aef057884",
+      "verify": "784e5e3f8975f1e8"
     },
     "raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md": {
       "run": "2385360d6c807c84",
       "verify": "7ad83812b253847c"
     },
     "raw_ai/05_comparison_sonnet_formal.md|raw_ai/06_spec_draft_sonnet_casual.md": {
-      "run": "9ea61b3682596149",
-      "verify": "67323c9e0baf3721"
+      "run": "113e1a4147585a2d",
+      "verify": "ffbb26991c540dc2"
     },
     "raw_ai/06_spec_draft_sonnet_casual.md|raw_ai/06_spec_draft_sonnet_default.md": {
-      "run": "ed9bd721020c96f0",
-      "verify": "ad8b7df8c8e80d8e"
+      "run": "dca506955bb134c5",
+      "verify": "11b953e5daff5196"
     },
     "raw_ai/06_spec_draft_sonnet_default.md|raw_ai/06_spec_draft_sonnet_formal.md": {
-      "run": "6eb7834e09b339a2",
-      "verify": "496056168ef90212"
+      "run": "2d129fe443528972",
+      "verify": "d4d1f6e848c48b2e"
     },
     "raw_ai/06_spec_draft_sonnet_formal.md|raw_ai/07_code_review_sonnet_casual.md": {
-      "run": "ebe2bb39debc8ae9",
-      "verify": "1c8ec2f88dd26898"
+      "run": "1a33e0fda38030e5",
+      "verify": "aa158ec2622ef09f"
     },
     "raw_ai/07_code_review_sonnet_casual.md|raw_ai/07_code_review_sonnet_default.md": {
-      "run": "50eeaeb6225b2a60",
-      "verify": "b4bf3910de7523be"
+      "run": "f06a68622afb27f9",
+      "verify": "de1840d6ad9b2084"
     },
     "raw_ai/07_code_review_sonnet_default.md|raw_ai/07_code_review_sonnet_formal.md": {
       "run": "b20efc1a13ff719a",
       "verify": "f09161593fbdec9b"
     },
     "raw_ai/07_code_review_sonnet_formal.md|raw_ai/08_essay_retrospective_sonnet_casual.md": {
-      "run": "a9ab327529e2b595",
-      "verify": "ea55beb5d62e6bf8"
+      "run": "2e1c24734a7536d2",
+      "verify": "904fea827816d414"
     },
     "raw_ai/08_essay_retrospective_sonnet_casual.md|raw_ai/08_essay_retrospective_sonnet_default.md": {
-      "run": "c836ce5c484279e7",
-      "verify": "479aa0564f9fbc88"
+      "run": "507fa4dbab2603be",
+      "verify": "fbfc92e68c8082c1"
     },
     "raw_ai/08_essay_retrospective_sonnet_default.md|raw_ai/08_essay_retrospective_sonnet_formal.md": {
       "run": "1204334ba8ac1f21",
       "verify": "f05c34bfcbe7628e"
     },
     "raw_ai/08_essay_retrospective_sonnet_formal.md|raw_ai/09_listicle_patterns.md": {
-      "run": "c78a1e5052247f5f",
-      "verify": "8d38a18fb5416379"
+      "run": "c4bb1aca32020510",
+      "verify": "fbadd4a829d771e9"
     },
     "raw_ai/09_listicle_patterns.md|raw_ai/10_essay_fragments.md": {
       "run": "3371ed3743e6238b",
@@ -3197,6 +3197,9 @@
     "mail/paper: hedges・immutable・politeness のJSONとcheck件数を追加。human_oga_02→03 と03→04の引用[1]の追加・削除が各1件増えた。136組の既存9キー・lint結果は不変。--fail-on指定なしの終了コードは不変。",
     "mail/paper の反証の直し: 値の検査の節（immutable）に meaning_risk_count を足し、check の「値の検査」の行で意味が変わる恐れに入れた引用の印と数値の補いの候補も数えるようにした。diff の JSON の行（136組）と check の JSON の行（48組）は、このキーが増えた分だけ変わった。check の run の行は human_oga_02→03 と 03→04 の2組で「値の検査: 候補なし」が「値の検査: 意味が変わる恐れ 1件」になった。diff の人が読む出力、check のほかの使い方、終了コード、lint の行は1字も変わらなかった。",
     "2026-10-15 確度・かぎかっこ・文体の切り替え: meaning_risks に certainty、certainty_review、quote を既存候補の後ろに追加し、JSON の最後に register を追加。check は文体の候補があるときだけ行と節を出す。確度の強まりと hedges は同じ文で重ねない。差分の状態・件数と check の記録も追加候補を反映する。コーパス136組では --fail-on の有無によらず終了コードの変化は0組。lint の値は更新せず照合した。",
-    "2026-10-15 確度・かぎかっこ・文体の切り替えの反証の直し: 予定・見込みは述語のときだけ数え、表にない慎重な言い方（そう、よう、らしい、みたい、かねない、予測、推定している、期待している、考えております、公算、可能性が高い ほか）を足し、予定の言い切り（予定 → 断定）を数えない見直し候補にした。かぎかっこは行の単位で対応を追い、推敲後の対応する文の近くだけと照らし、長音を書き方の違いとしない。文体の切り替えは「下さい」を「ください」と同じに読み、「」『』だけの行を会話として除き、合わせた文も数える。diff と check の行を作り直した（diff 7 組、check 7 組の値が変わった）。変わった組はどれも新しい種類（確度・かぎかっこ・文体の切り替え）の候補が変わった組で、既存の9キーと既存の候補、--fail-on の有無による終了コードは変わらない。source_sha256 の diff と check は今のスクリプトと一覧の値にした。"
+    "2026-10-15 確度・かぎかっこ・文体の切り替えの反証の直し: 予定・見込みは述語のときだけ数え、表にない慎重な言い方（そう、よう、らしい、みたい、かねない、予測、推定している、期待している、考えております、公算、可能性が高い ほか）を足し、予定の言い切り（予定 → 断定）を数えない見直し候補にした。かぎかっこは行の単位で対応を追い、推敲後の対応する文の近くだけと照らし、長音を書き方の違いとしない。文体の切り替えは「下さい」を「ください」と同じに読み、「」『』だけの行を会話として除き、合わせた文も数える。diff と check の行を作り直した（diff 7 組、check 7 組の値が変わった）。変わった組はどれも新しい種類（確度・かぎかっこ・文体の切り替え）の候補が変わった組で、既存の9キーと既存の候補、--fail-on の有無による終了コードは変わらない。source_sha256 の diff と check は今のスクリプトと一覧の値にした。",
+    "2026-10-15 状態の語の消え（state）、約束・保証・再発防止の誓い（promise）、因果・評価・一般化の足し（claim）を追加し、diff と check の要約を更新。diff は136組のうち48組（5通りで240件）、check は48組（124件）の出力が変わった。正しい推敲48組の変化は評価の候補を足した5組で、新しく fail_on となる組は0。既存候補と既存9キーは保持し、状態と重なる certainty_review だけを state の detail に統合。候補行・件数・状態行と、それに伴う終了コード以外の変化は0。diff の --fail-on で0から1になるのは edge_cases/edge_nigiru_04.md → edge_nigiru_05.md、edge_cases/edge_tokasu_23.md → edge_tokasu_24.md、edge_cases/edge_tokasu_26.md → edge_tokasu_27.md の3組（約束の足し）。付けないときの終了コードの変化は0。lint の要約は更新せず、現在の出力と一致することを確認。",
+    "2026-10-15 状態の語の消えと書き足しの検出の反証の直し: 「〜中です → 〜しています」「おりません」「お待ちしております」を同じ状態の言い換えとして残ったとみなし、状態そのものを打ち消す言い方と人を見送る「見送り」を状態の語から外し、別の項目の状態の語や済んだと言い切った文の否定では残ったとみなさないようにした。約束は、書き手の印（謙譲の形、未来の印、書き手の主語）のない普通の「〜します」を数えない候補（promise_review）に分け、再発防止の名詞にはこれからの述語を求め、「お客様に」を主語の印から外し、隣の文の述語で打ち消すのは同じ行為を言えるときだけにした。因果は「〜時に」を原因の言い方にした形を足し、「調べた結果」を外した。diff と check の行を作り直した（diff 20 組、check 20 組の値が変わった）。変わった組はどれも新しい種類（state、promise、promise_review、claim）の候補が変わった組で、既存の9キーと既存の候補、--fail-on を付けないときの終了コードは変わらない。edge_cases の3組（nigiru_04→05、tokasu_23→24、tokasu_26→27）の説明の「〜します」は数えない候補になり、--fail-on の終了コードは直す前（この検出を足す前）の値に戻った。source_sha256 の diff と check は今のスクリプトの値にした。",
+    "2026-10-15 因果のほかの claim（評価の足し evaluation と、一般化・勧めの足し general）の検出を外した（語の表では目安に届かなかったため）。state、promise、promise_review、claim/causal の作りは変えていない。diff と check の行を作り直した（diff 26 組、check 26 組の値が変わった。どれも評価か一般化・勧めの候補が消えた組で、推敲の48組のうち3組を含む）。この検出を足す前の出力と比べて値が違う組は diff、check とも 35 組（raw_ai 14、edge_cases 11、human 10）で、推敲の48組は0組になった。--fail-on を付けないとき、付けたときとも、終了コードはこの検出を足す前と同じ。source_sha256 の diff と check は今のスクリプトの値にした。"
   ]
 }

@@ -1833,12 +1833,15 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
                      "frontmatter": "先頭の設定", "html": "HTML", "quote": "引用"}
 # 同じ塊の中で並べる順
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
-               "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9}
+               "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
+               "promise_review": 13}
+# 状態の語の消え（state）と約束の足し（promise）も数える。因果の足し（claim）と、書き手の印のない
+# 「〜します」の足し（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の印の変化、確度の強まり）。
 # 変えない箇所（protected）は意味が変わる恐れの節に出すが数えない。check は資料にない数値（unsupported/number）も数える。
 # diff の詰めで足した否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）も数えない（どちらも
 # 見直しの候補を出すだけで、点数や合否には使わない）
-FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty")
+FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty", "state", "promise")
 
 
 def fail_on_count(risks):
@@ -3768,10 +3771,19 @@ def _meaning_risks(sides, full, type_changes, groups=None):
     citations.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                                   r["new_line"] if r["new_line"] is not None else 0))
     risks += citations
-    added = _certainty_risks(sides, groups, risks) + _quote_risks(sides, groups)
+    masks = (_Masker(sides, 0), _Masker(sides, 1))
+    added = _certainty_risks(sides, groups, risks, masks) + _quote_risks(sides, groups, masks)
     added.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                               r["new_line"] if r["new_line"] is not None else 0))
-    return risks + added
+    risks += added
+    additions = _addition_risks(sides, groups, risks, masks)
+    # 状態の候補に写した確度の見直しだけを取り除く。数える確度は残す。
+    lost = [_Body('', r['old'], r['old_line'], 0) for r in additions if r['kind'] == 'state']
+    risks = [r for r in risks if r['kind'] != 'certainty_review'
+             or not any(_same_review_sentence(body, r) for body in lost)]
+    additions.sort(key=lambda r: (r['old_line'] if r['old_line'] is not None else r['new_line'] or 0,
+                                  r['new_line'] if r['new_line'] is not None else 0))
+    return risks + additions
 
 
 # ---- 一覧のファイル（diff の詰め）----
@@ -5765,8 +5777,8 @@ def _unpaired_neighbors(count, index, paired):
     return [k for k in range(first, last + 1) if k != index]
 
 
-def _certainty_risks(sides, groups, risks):
-    masks = (_Masker(sides, 0), _Masker(sides, 1))
+def _certainty_risks(sides, groups, risks, masks=None):
+    masks = masks or (_Masker(sides, 0), _Masker(sides, 1))
     marks = [r for r in risks if (r["kind"], r["subkind"]) == ("sentence_type", "marks")]
     out = []
     for group in groups:
@@ -5796,6 +5808,760 @@ def _certainty_risks(sides, groups, risks):
                    and any(m["kind"] in ("推量", "意見") for m in risk["detail"].get(key, [])) for risk in marks):
                 continue
             out.append(_risk(kind, direction, old.line, new.line, old.raw, new.raw, detail))
+    return out
+
+
+# ---- 状態の語の消え・書き手の約束・因果 ----
+# 状態・約束・主張の語の表。漢字の範囲も、この検出専用に保つ。
+
+_ADD_K = "一-龥々〆ヵヶ"
+
+_ADD_NEG = r"(?:ない|なく|ません|ず(?![つ])|なかった|ませんでした|おらず)"
+
+_ADD_PERF_NEG = r"(?:て|で)(?:い|お)り?(?:ない|ません|らず|なかった)"
+
+_ADD_CHU = r"(?=です|だ|でし|で、|であ|。|$|のため|とな|につき|の(?:ため|案件|項目|もの|件|状態))"
+
+# 「〜中、」は、同じ節に「は」「が」の主題があるときだけ状態とみなす（「日程は検討中、会場は本社」）。
+
+_ADD_CHU_COMMA = r"(?=、)"
+
+# 原文の状態。先に見つけた語と重なる位置は数えない。
+
+_ADD_STATE = [
+    ("unknown", "未確認", r"未確認"),
+    ("unknown", "不明", r"(?<!ご)不明(?!瞭|点|な点)"),
+    ("unknown", "未判明", r"未(?:判明|解明)"),
+    ("unknown", "分からない", r"(?:分か|わか|判)(?:ら(?:ない|ず|なかった|なく)|りません|りかね)(?!(?:点|ところ|こと(?:が|は)?(?:あれ|あった)))"),
+    ("unknown", "分かっていない", r"(?:分かっ|わかっ|判明し|把握し|特定し|特定でき|把握でき|確認でき|確認が取れ|確認がとれ|はっきりし|明らかになっ|つかめ|掴め)" + _ADD_PERF_NEG),
+    ("unknown", "特定できない", r"(?:特定|把握|確認)(?:でき|が(?:でき|取れ|とれ))(?:ない|ません|ず|なかった)"),
+    ("undecided", "未定", r"未(?:定(?!義)|決定|確定|決(?!済))"),
+    ("undecided", "決まっていない", r"(?:決まっ|決め|決定し|確定し)" + _ADD_PERF_NEG + r"|決まら(?:ない|ず)|白紙"),
+    ("undecided", "目処が立っていない", r"(?:目処|目途|めど|メド|見通し)(?:は|が|も)?(?:まだ)?(?:立っ" + _ADD_PERF_NEG + r"|立た(?:ない|ず)|立ちません|つい" + _ADD_PERF_NEG + r"|つか(?:ない|ず)|つきません)"),
+    ("undecided", "判断できない", r"(?:判断|決定|決断)(?:が|は)?(?:でき|つか)(?:ない|ず|ません)"),
+    ("investigating", "調査中", r"(?:調査|確認|照会|問い合わせ|問合せ|究明|精査)中" + _ADD_CHU),
+    ("investigating", "調査中（読点）", r"(?:調査|確認|照会|問い合わせ|問合せ|究明|精査)中" + _ADD_CHU_COMMA),
+    ("investigating", "調べている", r"(?:調べ|調査し|問い合わせ|照会し|精査し)(?:て|で)(?:い|お)(?:る|ます|ります|り(?=、))(?!た)"),
+    ("considering", "検討中", r"(?:検討|調整|協議|相談|審議)中" + _ADD_CHU),
+    ("considering", "検討中（読点）", r"(?:検討|調整|協議|相談|審議)中" + _ADD_CHU_COMMA),
+    ("considering", "検討している", r"(?:検討し|調整し|協議し)(?:て|で)(?:い|お)(?:る|ます|ります|り(?=、))(?!た)"),
+    ("considering", "次回話し合う", r"次回(?:に|まで(?:に)?)?(?:改めて)?(?:話し合|検討|決め|協議|相談)"),
+    ("pending", "保留", r"保留|持ち越"),
+    ("pending", "見送り", r"(?<!お)見送(?:り|る|ります|って|っている)"),
+    ("awaiting", "待っている", r"(?:回答|返事|返信|返答|判断|連絡|承認|結果|決定|確定|入荷|許可|審査|結論|入金|納品)(?:を|の)?待(?:ち|って|つ(?=[。、]|$)|っております)"),
+    ("awaiting", "待っている", r"待って(?:い|お)(?:る|ます|ります)"),
+    ("not_done", "未着手", r"未(?:着手|対応|実施|完了|計測|検証|回答|提出|承認|解決|実装|反映|入金|払い?|納|発送|登録|処理|作成|公開|導入|返信|連絡|受領|到着|修正|適用|整備|返却|清算|精算)"),
+    ("not_done", "まだ〜ない", r"まだ[^。、]{0,24}?(?:" + _ADD_NEG + r"|" + _ADD_PERF_NEG + r")"),
+    ("not_done", "済んでいない", r"(?:済ん|終わっ|終え|手を(?:つけ|付け)|着手し|完了し)" + _ADD_PERF_NEG),
+    ("not_done", "至っていない", r"(?:確認|特定|判明|解決|決定|合意|把握|実施|完了|発表|結論|実現|導入)(?:に|には)(?:まだ)?至(?:っ" + _ADD_PERF_NEG + r"|ら(?:ない|ず)|りません)"),
+    ("no_plan", "予定はない", r"予定(?:は|が|も)?(?:ない|なく|ありません|ございません|なし)|予定し" + _ADD_PERF_NEG + r"|計画(?:は|が)(?:ない|ありません)"),
+    ("in_progress", "対応中", r"(?:対応|作業|進行|準備|作成|修正|開発|移行|実施|実装|改修|復旧|集計|手配)中" + _ADD_CHU + r"|途中(?=です|だ|でし|。|$)"),
+    ("in_progress", "対応中（読点）", r"(?:対応|作業|進行|準備|作成|修正|開発|移行|実施|実装|改修|復旧|集計|手配)中" + _ADD_CHU_COMMA),
+]
+
+_ADD_STATE_RX = [(fam, name, re.compile(p)) for fam, name, p in _ADD_STATE]
+# 当たる語のない文は、家族ごとの走査を省く（語の表は同じ）。
+_ADD_STATE_ANY = re.compile("|".join("(?:" + p + ")" for _, _, p in _ADD_STATE))
+
+# 推敲後に同じ状態が残ったとみなす言い方。
+
+_ADD_KEEP_EXTRA = {
+    "unknown": [r"(?:明確|明らか|定か|確か)(?:で|に)?(?:は)?(?:ない|なく|ありません|なっていない|なっておりません)", r"不明確|不透明|未知数|はっきりしない|見えていない|見えておりません",
+                r"存じ(?:上げ)?ません"],
+    "undecided": [r"(?:決まり|決定し|確定し)(?:次第|ましたら|たら)|決まったら", r"未定"],
+    "investigating": [r"(?:確認|調査)を(?:進め|続け)", r"(?:確認|調査)(?:して|を進めて)いるところ", r"現在[^。]{0,12}(?:調べ|確認し|調査し)"],
+    "considering": [r"(?:検討|調整|協議)を(?:進め|続け)", r"次回(?:に|まで(?:に)?)?(?:改めて)?(?:話し合|検討|決め|協議|相談)"],
+    "pending": [r"判断を待", r"いったん[^。]{0,10}?(?:保留|止め|停止|見合わせ|見送|預か|置い|置き|待)"],
+    "awaiting": [r"届(?:いて|き)(?:い|お)?(?:ない|ません|らず)", r"届き次第", r"届きましたら", r"お待ち(?:し|いたし)て(?:い|お)", r"待って(?:い|お)"],
+    "not_done": [r"(?:ない|ず|ぬ)まま", r"(?:されて|して|れて)(?:い|お)り?(?:ない|ません|らず)"],
+    "no_plan": [],
+    "in_progress": [r"進めて(?:い|お)", r"最中", r"(?:て|で)(?:いる|おる)ところ"],
+}
+
+# 近い家族への言い換えも残ったとみなす。
+
+_ADD_KEEP_CROSS = {  # ほかの家族の語でも残ったとみなす
+    "undecided": ("considering", "pending"),
+    "investigating": ("unknown", "not_done", "in_progress"),
+    "considering": ("undecided", "pending"),
+    "pending": ("undecided", "considering", "awaiting"),
+    "awaiting": ("not_done",),
+    "not_done": ("in_progress", "awaiting"),
+    "in_progress": ("not_done", "investigating"),
+    "unknown": (),  # 分からない → 確認を進めています は消えたとする
+    "no_plan": (),
+}
+
+_ADD_KEEP_EXTRA_RX = dict((k, [re.compile(p) for p in v]) for k, v in _ADD_KEEP_EXTRA.items())
+
+# 条件の中の語は、状態の主張にしない。
+
+_ADD_COND = re.compile(r"[^。、]{0,12}?(?:場合|なら|とき|時(?:は|に)|うちは|(?<=[けれ])ば|たら)")
+
+# 状態そのものを打ち消す言い方（「未確認の項目はありません」「原因不明ではありません」）は、状態の主張にしない。
+
+_ADD_STATE_DENIED = re.compile(r"(?:では|じゃ)(?:ない|なく|ありません|ございません)|(?:の|な)[^。、]{1,10}?(?:は|が|も)(?:ありません|ない(?=[。、]|$)|ございません|なし|ゼロ|0件|０件)")
+
+# 「見送り」は、見送る中身（導入、実施など）が同じ節にあるか、名詞の言い切りのときだけ保留とみなす（人を見送る、を除く）。
+
+_ADD_SEND_OFF_OBJECT = re.compile(r"導入|実施|採用|開催|参加|発売|公開|リリース|購入|変更|対応|提出|出店|契約|発注|申請|更新|移行|延長|追加|掲載|配布|出荷|発表|決定|判断|今回|今年|今期|今月|計画|案|予定|検討|見直し|改定|値上げ")
+
+# 推敲後に済んだ・決まったと言い切っていれば、否定の形だけでは状態が残ったとみなさない。
+
+_ADD_DONE = re.compile(r"済み|済ませ|完了し(?:た|ました)|判明し(?:た|ました)|特定(?:し|でき)(?:た|ました)|決まり?ました|決まった|決定し(?:た|ました)|確定し(?:た|ました)|終わ(?:った|りました)|解決し(?:た|ました)")
+
+# 「〜中」を「〜している」と言い換えた形は、同じ途中の状態とみなす。
+
+_ADD_PROGRESSIVE = r"(?:を|に|の)?(?:進め|続け)?(?:し|させていただい|させて|いたし)?(?:て|で)(?:い|お)(?:る|ます(?!た)|ります|り(?=、)|られ)"
+
+_ADD_TOPIC_STOP = ("現在", "現時点", "時点", "今回", "本日", "当日", "以下", "下記", "件")
+
+_ADD_APOLOGY = re.compile(r"申し訳(?:ありません|ございません|ない)|すみません|かまいません|構いません")
+
+_ADD_ANY_NEG = re.compile(r"(?:て|で)(?:い|お)り?(?:ない|ません|らず|なかった)|でき(?:ない|ず|ません|なかった)|(?:ない|ず)まま|困難|不能|不可能|難し|(?:分か|わか)ら|知らない|まだ|いまだ")
+
+# 依頼・あいさつ・名乗り、自動詞や状態の述語を除く。
+
+_ADD_PERFORMATIVE = re.compile(r"お願い|お詫び|おわび|感謝|お礼|御礼|失礼|恐縮|承知|了解|存じ|拝見|申し上げ|お祈り|祈念|歓迎")
+
+_ADD_REPORT = re.compile(r"(?:ご)?(?:報告|共有|紹介)")
+
+_ADD_REPORT_MAYBE = re.compile(r"(?:ご)?(?:お知らせ|案内|連絡|説明|提案|回答|返信)")
+
+_ADD_PERF_MARK = re.compile(r"以下|下記|次の|とおり|通り|取り急ぎ|まずは|本メール|この(?:メール|場|たび)|ここに|本日は|について|の件で|件につき")
+
+_ADD_FUTURE_MARK = re.compile(r"今後|以後|以降|次回|次の(?:版|回|リリース|会議)|来週|来月|来年|明日|明朝|本日中|今日中|今週中|月内|年内|後日|改めて|あらためて|追って|"
+                          r"別途|順次|引き続き|必ず|責任を(?:もって|持って)|までに|次第|こちらで|当方で|弊社で|当社で|私(?:から|が|より|ども)|"
+                          r"担当(?:者)?(?:が|から)|チームが|前日に|事前に|早急に|速やかに|至急|すぐに|のちほど|後ほど|あとで|(?:ない|ぬ)よう(?:に)?")
+
+# 「お客様に」は送る相手なので、主語の印にしない。
+
+# 名乗りの文（ご報告いたします）を約束として見るための、あとで行う印。「について」「以下」があっても、
+# 追って・改めて・後日のような印があれば約束とみなす。
+
+_ADD_LATER_MARK = re.compile(r"今後|以後|次回|来週|来月|明日|後日|改めて|あらためて|追って|別途|順次|のちほど|後ほど|あとで|次第|までに|本日中|今日中|今週中|月内|年内")
+
+_ADD_LATER_STRONG = re.compile(r"後日|改めて|あらためて|追って|別途|のちほど|後ほど|次第|までに")
+
+_ADD_OTHER_SUBJECT = re.compile(r"(?:先方|お客様|お客さま|貴社|御社|皆様|皆さま|皆さん|取引先|委託先|メーカー|業者)(?:が|から(?!の)|より(?!の))")
+
+# 書き手の行為と読める印。これがない普通の「〜します」は、説明や手順の文かもしれないので数えない（promise_review）。
+
+_ADD_WRITER_MARK = re.compile(r"私|わたくし|弊社|当社|当方|当店|当課|当部|当室|我々|われわれ|こちら|担当|当チーム|当センター")
+
+_ADD_STATIVE = ("あり", "い", "なり", "おり", "でき", "ござい", "分かり", "わかり", "変わり", "始まり", "終わり", "決まり", "届き", "かかり",
+            "起き", "起こり", "生じ", "減り", "増え", "消え", "見え", "聞こえ", "思い", "考え", "感じ", "存じ", "困り", "異なり", "違い",
+            "続き", "残り", "当たり", "含み", "使え", "言え", "思え", "見られ", "考えられ", "限り", "要り", "いり", "入り", "済み", "済み",
+            "並び", "向き", "似", "合い", "気がし", "痛み", "要し", "有し", "存し", "属し", "喜び", "悲しみ", "驚き", "願い", "勝り", "優れ", "及び", "すみ", "過ぎ", "すぎ", "頼り", "知り")
+
+# 原文の未来の行為や決まり。約束の言い換えを一つずつ打ち消す。
+
+_ADD_OLD_FUTURE = re.compile(r"(?:[" + _ADD_K + "ァ-ヴー]{1,6}|[ぁ-ん]{1,3})(?:ます|ません|する|しない|します|いたします|致します|まいります|参ります|"
+                         r"(?<=[るうくすつぬぶむぐ])(?=[。、]|ので|が|けど|[よねわなぞさ](?:[。、!！?？]|$)|$)|ない(?=[。、]|ので|が|[よねわ](?:[。、!！]|$)|$))"
+                         r"|予定|つもり|方針|ことに(?:なり|なる|し)|たい(?=[。、]|と|です|$)|次第|ましょう")
+
+# 推敲後の約束。再発防止、保証、その他の約束の順に見る。
+
+_ADD_PROMISE = [
+    ("prevention", "再発防止", r"(?P<k>再発(?:防止|しない|を防|の防止))"),
+    ("prevention", "今後このようなことがないよう", r"(?P<k>(?:今後|二度と)[^。]{0,16}?(?:ない|ぬ)よう)"),
+    ("prevention", "同じことが起きないよう", r"(?P<k>同(?:じ|様の)(?:ミス|誤り|こと|事態|問題|不具合)が(?:起き|起こら|発生し|生じ)(?:ない|ぬ)よう)"),
+    ("prevention", "徹底", r"(?P<k>徹底)(?:いた|致)?し(?:ます|てまいります|て参ります)|(?P<k2>徹底)(?:する|します|を図)"),
+    ("prevention", "気をつける", r"(?P<k>気を(?:つけ|付け|引き締め)|注意(?:を払|し)|心がけ|心掛け|肝に銘じ|努め|取り組んで)(?:ます|てまいります|て参ります|ていきます|る(?=[。]|$))"),
+    ("guarantee", "ことはない", r"(?P<k>(?:る|く|う|す|つ|む|ぶ|ぐ|ぬ|い)ことは(?:ありません|ございません|ない(?=[。]|$)|一切))"),
+    ("guarantee", "費用はかからない", r"(?P<k>(?:追加|別途)?(?:の)?(?:費用|料金|負担|手数料)(?:は|が|も)?(?:一切)?(?:かかりません|かからない|発生しません|発生いたしません|いただきません|ございません))|(?P<k2>(?:無料|無償)(?:で(?!す)|にて))"),
+    ("guarantee", "まま使える", r"(?P<k>(?:まま|問題なく|支障なく|引き続き|これまでどおり|これまで通り|安心して)[^。]{0,16}?(?:いただけ(?:ます|る)|ご利用(?:になれ|でき)(?:ます|る)))"),
+    ("guarantee", "変えない", r"(?P<k>(?:変え|上げ|値上げし|変更し|据え置)(?:ない|ません|く)(?=[。]|$))"),
+    ("guarantee", "保証", r"(?P<k>保証|お約束|約束)(?:いた|致)?し(?:ます|ましょう)"),
+    ("promise", "させていただく", r"(?P<k>[" + _ADD_K + "ァ-ヴー]{1,6}|[ぁ-ん]{1,3})させていただ(?:きます|く(?=[。、]|ので|$))"),
+    ("promise", "いたします", r"(?P<k>(?:お|ご)?[" + _ADD_K + "ァ-ヴー]{1,6}(?:(?![をがはにでともへのやか])[ぁ-ん][" + _ADD_K + "]{0,2})?|(?:お|ご)[ぁ-ん" + _ADD_K + "]{1,6})(?:いた|致)し(?:ます|ましょう)(?!た)"),
+    ("promise", "てまいります", r"(?P<k>[" + _ADD_K + "ァ-ヴー]{1,6}[ぁ-ん]{0,3})(?:て|で)(?:まいり|参り|いき)ます(?!た)"),
+    ("promise", "お〜します", r"(?P<k>(?:お|ご)[" + _ADD_K + "ァ-ヴー]{1,6}[ぁ-ん]{0,2})(?:し|いたし)ます(?!た)"),
+    ("promise", "サ変します", r"(?P<k>[" + _ADD_K + "ァ-ヴー]{2,6})(?:し|いたし)ます(?!た)(?=[。、]|ので|が|$)"),
+    ("promise", "動詞ます", r"(?P<k>[" + _ADD_K + "][ぁ-ん]{0,3}?)(?:[しきぎちにびみりいえけせてねべめれげ])ます(?!た)(?=[。、]|ので|が|$)"),
+    ("promise", "常体の約束", r"(?P<k>[" + _ADD_K + "ァ-ヴー]{1,6}[ぁ-ん]{0,3}?)(?:する|る|う|く|す|つ|む|ぶ|ぐ)(?=[。]|$)"),
+]
+
+_ADD_PROMISE_RX = [(sub, name, re.compile(p)) for sub, name, p in _ADD_PROMISE]
+
+_ADD_REQUEST = re.compile(r"ください|下さい|お願い|いただけ(?:ます|ません)(?:か|でしょうか)|もらえ(?:ます|ません)か|いただきたく|いただければ|てほしい")
+
+_ADD_INTRANSITIVE_SAHEN = ("発生", "存在", "増加", "減少", "低下", "上昇", "変化", "成功", "失敗", "到着", "経過", "一致",
+                       "依存", "該当", "動作", "稼働", "機能", "関係", "影響", "相当", "共通", "意味", "比例", "集中",
+                       "通過", "所属", "在籍", "改善", "向上", "悪化", "安定", "不足", "満足", "感謝")
+
+# 人が主語にもなるサ変。未来の印か書き手の印があれば約束として見る（「今後は弊社で対応します」）。
+
+_ADD_AGENTIVE_SAHEN = ("完了", "終了", "対応", "参加", "出席", "欠席", "開始", "反映")
+
+_ADD_E_ROW = re.compile(r"(?:られ|れ|せ|え|け|げ|め|ね|べ|へ|ぜ|て)$")
+
+_ADD_INTRANSITIVE_TAIL = re.compile(r"(?:わり|まり|がり|さり|たり|なり|あり|おり|ござい|い|でき|れ|られ)$")
+
+_ADD_PAST_END = re.compile(r"(?:た|ました|でした|だった)[。]?[」』）)]*$")
+
+_ADD_OLD_INTRANSITIVE = re.compile(r"(?:見つか|分か|わか|消え|変わ|増え|減|届|始ま|終わ|決ま|遅れ|止ま|動|起き|起こ|残|続|かか|間に合|替わ|上が|下が|広が|つなが|生じ|現れ|壊れ|外れ|漏れ|集ま|伸び|延び|縮)(?:る|く|う|ります|ります|きます|えます|れます|びます|ません|らない|かない|わない|ない)$")
+
+_ADD_OLD_STATIVE = re.compile(r"(?:あり|い|おり|でき|ござい|分かり|わかり|なり)(?:ます|ません)$")
+
+# 原文にある再発防止と保証の根拠は、表や見出しも含めて探す。
+
+_ADD_PREVENT_ANY = re.compile(r"再発|今後[^。]{0,16}(?:ない|ぬ)よう|二度と|徹底|気を(?:つけ|付け|引き締め)|注意(?:を払|し|いた)|心がけ|心掛け|肝に銘じ|努め|取り組")
+
+# 原文の再発防止の語が、まだない・決まっていない対策を言うときは、誓いの根拠にしない（「再発防止策は未定です」）。
+
+_ADD_PREVENT_UNSETTLED = re.compile(r"[^。]{0,10}?(?:未定|未|検討中|調査中|調整中|ない|ありません|不要|なし|求め|要請)")
+
+# 再発防止の名詞には、書き手がこれから取り組む述語が要る（「再発防止策は実施済みです」「再発防止を求められました」を除く）。
+
+_ADD_PREVENT_ACT = re.compile(r"(?:ます|する(?=[。、]|$)|[るうくすつむぶぐ](?=[。、]|$)|こととし|ことにし|予定|てまいり|ていき)")
+
+# 済んだこと・不要・他人からの求め・打ち消しは誓いにしない。「〜こととした」「〜ことにした」はこれからの行為の決めなので除かない。
+
+_ADD_PREVENT_NOT_ACT = re.compile(r"済|不要|求め|要請|指摘|依頼され|ません|ない(?=[。、]|$)|(?<!こととし)(?<!ことにし)(?:でした|ました|だった|た(?=[。]|$))")
+
+_ADD_GUARANTEE_FAM = {"ことはない": r"ことは(?:ありません|ございません|ない)",
+                 "費用はかからない": r"(?:費用|料金|料(?=は|が|を|も)|負担|手数料)(?:は|が|も)?[^。]{0,8}?(?:かから|かかりません|発生し(?:ない|ません)|いただき?ません|不要|なし|ゼロ|[0０〇]円)|無料|無償|[0０〇]円",
+                 "まま使える": r"まま|問題なく|支障なく|これまでどおり|これまで通り|安心",
+                 "変えない": r"(?:変え|上げ|値上げし|変更し|据え置)(?:ない|ません|く)", "保証": r"保証|約束"}
+
+# 理由・原因と手段・結果のつなぎ。
+
+_ADD_CAUSAL = [
+    ("reason", r"(?<=[るたいだう])ため(?:に)?(?=[、]|です|でした|だ|$)|(?<=[のな])ため(?=[、])|(?<!の)ので(?!す|しょう)|(?<=[るたいだ])から(?=[、]|です|だ|こそ|では)|ことから"),
+    ("means", r"によって|により|による(?:もの)?|ことで|ことにより|おかげ|せいで|が原因|を受けて|の影響で|影響により|の効果で|効果により|がきっかけ"),
+    ("result", r"(?:その|この)?結果(?:、|として)|そのため|このため|これにより|これによって|それにより|したがって|よって(?=、)|"
+               r"につなが(?:る|り|った|って|ります|りました)|をもたら|に寄与|に貢献|が功を奏"),
+]
+
+_ADD_CAUSAL_RX = [(fam, re.compile(p)) for fam, p in _ADD_CAUSAL]
+
+# 「調べた結果、分かった」は経緯で、因果の足しにしない。
+
+_ADD_INQUIRY_RESULT = re.compile(r"(?:調べ|調査し|確認し|検証し|比較し|試し|測定し|計測し|分析し|検討し|話し合っ|協議し|集計し|聞い|尋ね|試験し|点検し|審査し|見直し)た$")
+
+# 原文の時を言う言い方（とき、時に、際に、直後に）。推敲で同じ中身を原因の語（により、ことで）にしたら因果の足しとみなす。
+
+_ADD_TIME_LINK = re.compile(r"(?:とき|(?<![日同当常定随一臨即瞬何毎])時)(?:に|は|、)|(?<![実交国])際(?:に|は|、)|(?:直後|最中)に")
+
+_ADD_CONTENT = re.compile("[" + _ADD_K + "]{2,}|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9]+")
+
+
+def _addition_state_words(text):
+    found, taken = [], []
+    for fam, name, rx in _ADD_STATE_RX:
+        for m in rx.finditer(text):
+            if any(a < m.end() and m.start() < b for a, b in taken):
+                continue
+            taken.append(m.span())
+            if _ADD_COND.match(text, m.end()) or _ADD_STATE_DENIED.match(text, m.end()):
+                continue
+            clause = text[max(text.rfind("。", 0, m.start()), text.rfind("、", 0, m.start())) + 1:m.start()]
+            if name.endswith("（読点）") and not re.search("[はが]", clause):
+                continue
+            if name == "見送り" and not _ADD_SEND_OFF_OBJECT.search(text[max(0, text.rfind("。", 0, m.start()) + 1):m.start()]) \
+                    and not re.match(r"り(?:と(?:な|し|させ|いたし)|にな|です|でした|だ|。|$)", text[m.start() + 2:]):
+                continue
+            found.append((fam, name, m.start(), m.group(0)))
+    return sorted(found, key=lambda w: w[2])
+
+
+def _addition_topic(text, pos):
+    """状態の語の前の、同じ節の内容語（何の状態か）。別の文に移ったとみなすときに照らす。"""
+    start = max(text.rfind("。", 0, pos), text.rfind("、", 0, pos)) + 1
+    words = [w for w in _ADD_CONTENT.findall(text[start:pos]) if w not in _ADD_TOPIC_STOP]
+    if not words:
+        words = [w for w in _ADD_CONTENT.findall(text[max(text.rfind("。", 0, pos) + 1, 0):pos]) if w not in _ADD_TOPIC_STOP]
+    return words
+
+
+def _addition_on_topic(topic, text):
+    return not topic or any(w in text or any(w[i:i + 2] in text for i in range(len(w) - 1)) for w in topic)
+
+
+def _addition_stem_neg(word):
+    """未X の X と、まだ〜ない の述語の頭（2字）。推敲後に X＋否定 があれば残ったとみなす。"""
+    m = re.match("未([" + _ADD_K + "]{1,3})", word)
+    if m:
+        return m.group(1)
+    m = re.search("([" + _ADD_K + "ァ-ヴー]{1,4})[ぁ-ん]{0,4}(?:" + _ADD_NEG + "|" + _ADD_PERF_NEG + ")$", word)
+    return m.group(1)[-2:] if m else None
+
+
+def _addition_promise_clauses(text):
+    """推敲後の文の約束の句。[(subkind, 名前, key, 位置, 書き手の印)]。会話の行、問いの文、依頼、名乗り・あいさつの定型は見ない。
+    書き手の印は、謙譲の形（いたします、させていただきます、お・ご〜します、てまいります）、未来の印、書き手の主語のどれか。"""
+    if not text or re.match(r"^[^「」『』、。\s]{0,8}[「『].*[」』][。．]?$", text):
+        return []
+    found, taken = [], []
+    stripped = text.rstrip()
+    question = _is_question(stripped) or bool(re.search(r"か[」』）)]*$", stripped))
+    for sub, name, rx in _ADD_PROMISE_RX:
+        for m in rx.finditer(text):
+            if any(a < m.end() and m.start() < b for a, b in taken):
+                continue
+            # 見ないと決めた位置も取っておく（あとの広い型が同じ位置の一部を拾わないように）
+            taken.append(m.span())
+            key = m.groupdict().get("k") or m.groupdict().get("k2") or ""
+            clause_start = max(text.rfind("。", 0, m.start()) + 1, 0)
+            clause_end = text.find("。", m.end())
+            clause = text[clause_start: clause_end if clause_end >= 0 else len(text)]
+            window = text[max(0, m.start() - 2):m.end() + 8]
+            if question and clause_end < 0:
+                continue
+            if _ADD_REQUEST.search(window) or "「" in text[:m.start()] and "」" not in text[text.rfind("「", 0, m.start()):m.start()]:
+                continue
+            future = bool(_ADD_FUTURE_MARK.search(clause))
+            strong = (name in ("させていただく", "いたします", "てまいります", "お〜します") or future
+                      or bool(_ADD_WRITER_MARK.search(clause)))
+            if sub == "prevention":
+                tail = text[m.end(): clause_end if clause_end >= 0 else len(text)]
+                if _ADD_PREVENT_NOT_ACT.search(tail[:24]) or (key.endswith("防止") and not _ADD_PREVENT_ACT.search(tail)):
+                    continue
+            if sub == "promise":
+                if _ADD_PERFORMATIVE.search(window[:len(window) - 8]):
+                    continue
+                head = re.sub("^[おご]", "", key)
+                if name in ("サ変します", "動詞ます") and any(head.endswith(w) for w in _ADD_INTRANSITIVE_SAHEN):
+                    continue
+                if name in ("サ変します", "動詞ます") and not strong and any(head.endswith(w) for w in _ADD_AGENTIVE_SAHEN):
+                    continue
+                if name == "動詞ます":
+                    stem = text[m.start():m.end() - 2]
+                    if _ADD_INTRANSITIVE_TAIL.search(stem) or any(stem.endswith(w) for w in _ADD_STATIVE):
+                        continue
+                    if _ADD_E_ROW.search(stem) and not _ADD_FUTURE_MARK.search(clause):
+                        continue
+                if name == "常体の約束":
+                    stem = text[m.start():m.end()]
+                    if (not _ADD_FUTURE_MARK.search(clause) or re.search(r"(?:れる|られる|できる|なる|ある|いる|える|める|わる|まる|がる)$", stem)
+                            or re.search(r"(?:ます|です|でしょう)$", stem)):
+                        continue
+                # 名乗りの文は見ない。ただし未来の印（追って、改めて、後日）があれば約束として見る。
+                later = bool(_ADD_LATER_MARK.search(clause))
+                if _ADD_REPORT.search(key) and (not later or _ADD_PERF_MARK.search(clause) and not _ADD_LATER_STRONG.search(clause)):
+                    continue
+                if _ADD_REPORT_MAYBE.search(key) and _ADD_PERF_MARK.search(clause) and not future:
+                    continue
+                if _ADD_OTHER_SUBJECT.search(clause):
+                    continue
+            found.append((sub, name, key, m.start(), strong or sub != "promise"))
+    return found
+
+
+def _addition_key_head(key):
+    """約束の述語の頭。お・ご を外した漢字かカタカナの続き（1字の漢字なら次のかな1字まで）。"""
+    key = re.sub("^[おご]", "", key)
+    m = re.match("[" + _ADD_K + "ァ-ヴー]+", key)
+    if not m:
+        return key[:2]
+    head = m.group(0)
+    if len(head) == 1 and len(key) > 1:
+        head = key[:2]
+    return head
+
+
+# 述語の字を照らすときに外す、時や向きの字。
+
+_ADD_PRED_SKIP = set("来週月日年今明後前次回時分秒中内外本当弊社私様方等毎朝夕夜昼午予定針第度場合上下末初")
+
+# 原文の述語と推敲後の約束が別の字でも、同じ行為の言い換えとみなす組（直す → 修正 など）。
+
+_ADD_PRED_SYNONYMS = {
+    "直": ("修正", "修理", "訂正", "改修", "是正", "対応"), "出": ("提出", "送付", "発行", "提示", "お送"),
+    "送": ("送付", "発送", "送信", "お送"), "作": ("作成", "作製", "制作", "用意", "準備"), "調": ("調査", "確認"),
+    "見": ("確認", "拝見", "目を通"), "読": ("拝読", "確認"), "書": ("記載", "記入", "作成"),
+    "伝": ("連絡", "報告", "知らせ", "共有"), "知": ("連絡", "報告", "通知", "案内"), "言": ("連絡", "報告", "申し", "伝え"),
+    "返": ("返信", "返答", "回答", "返却"), "決": ("決定", "確定"), "変": ("変更",), "止": ("停止", "中止", "終了"),
+    "始": ("開始", "着手"), "続": ("継続", "引き続"), "払": ("支払", "入金"), "届": ("お届", "配送", "納品"),
+    "渡": ("お渡", "提出", "送付"), "聞": ("確認", "伺", "お聞"), "片": ("整理",), "用": ("準備", "手配"),
+    "準": ("用意", "手配"), "手": ("準備", "用意"),
+}
+
+
+def _addition_pred_stem(text, end):
+    """述語の字（時の字を外した漢字とカタカナ）。予定・つもりのような印だけなら、その前の動詞の字。"""
+    left = text[:end]
+    for _ in range(2):
+        seg = re.search("[" + _ADD_K + "ァ-ヴー]*[ぁ-ん]*$", left).group(0)
+        stem = frozenset(c for c in seg if re.match("[" + _ADD_K + "ァ-ヴー]", c) and c not in _ADD_PRED_SKIP)
+        if stem or not seg:
+            return stem
+        left = left[:len(left) - len(seg)]
+    return frozenset()
+
+
+def _addition_old_futures(text):
+    """原文の文の、書き手の未来の行為や決まりを言える述語の字の並び（言い換えの打ち消しに使う。広く取る）。"""
+    if _ADD_PAST_END.search(text.rstrip()) and not re.search(r"(?:ます|する|ない|ません)(?:が|ので|、)", text):
+        return []
+    if _is_question(text) or text.rstrip().endswith("か"):
+        return []
+    out = []
+    for m in _ADD_OLD_FUTURE.finditer(text):
+        if re.match(r"(?:予定|つもり|方針)(?:は|が|も)?(?:ない|なく|ありません|ございません|なし)", text[m.start():m.start() + 12]):
+            continue
+        s = text[max(0, m.start() - 4):m.end()]
+        if _ADD_OLD_STATIVE.search(s) and not re.search(r"いたします$", s) or _ADD_OLD_INTRANSITIVE.search(s) or re.search(r"(?:です|でした|だ|である)$", s):
+            continue
+        out.append(_addition_pred_stem(text, m.end()))
+    # 体言止めのサ変（「次回は20日に開催。」）
+    stripped = text.rstrip().rstrip("。")
+    if re.search("[" + _ADD_K + "]{2}$", stripped):
+        out.append(_addition_pred_stem(stripped, len(stripped)))
+    return out
+
+
+def _addition_old_future_count(text):
+    return len(_addition_old_futures(text))
+
+
+def _addition_old_negatives(text):
+    return [_addition_pred_stem(text, m.end()) for m in
+            re.finditer(r"(?<!あり)(?<!ござい)(?:ない|ません)(?=[。、]|$|ので|が)", text)]
+
+
+def _addition_old_negative(text):
+    return len(_addition_old_negatives(text))
+
+
+def _addition_same_act(stem, part):
+    """原文の述語の字が、推敲後の約束の句（読点から句まで）と同じ行為を言えるか。字のない述語（やります）はどれとも合う。"""
+    if not stem:
+        return True
+    if any(c in part for c in stem):
+        return True
+    return any(word in part for c in stem for word in _ADD_PRED_SYNONYMS.get(c, ()))
+
+
+def _addition_find_all(table, text):
+    found, taken = [], []
+    for fam, rx in table:
+        for m in rx.finditer(text):
+            if any(a < m.end() and m.start() < b for a, b in taken):
+                continue
+            taken.append(m.span())
+            found.append((fam, m.group(0), m.start(), m.end()))
+    return sorted(found, key=lambda w: w[2])
+
+
+def _addition_causal_words(text):
+    return [w for w in _addition_find_all(_ADD_CAUSAL_RX, text)
+            if not (w[1].startswith("結果") and _ADD_INQUIRY_RESULT.search(text[:w[2]]))]
+
+
+def _addition_bigrams(text):
+    t = re.sub(r"[\s、。，．・「」『』（）()]", "", text)
+    return set(t[i:i + 2] for i in range(len(t) - 1))
+
+
+def _addition_novelty(span, old_doc):
+    words = [w for w in _ADD_CONTENT.findall(span)]
+    if not words:
+        return 0.0
+    new = [w for w in words if w not in old_doc and not any(w[i:i + 2] in old_doc for i in range(len(w) - 1))]
+    return len(new) / float(len(words))
+
+
+def _addition_time_to_cause(old, span):
+    cause = set(_ADD_CONTENT.findall(span))
+    for m in _ADD_TIME_LINK.finditer(old):
+        before = old[max(old.rfind("。", 0, m.start()), old.rfind("、", 0, m.start())) + 1:m.start()]
+        if cause & set(_ADD_CONTENT.findall(before)):
+            return True
+    return False
+
+
+def _addition_cause_span(text, fam, start, end):
+    if fam == "result" and not re.match(r"につなが|をもたら|に寄与|に貢献|が功", text[start:]):
+        stop = text.find("。", end)
+        return text[end: stop if stop >= 0 else len(text)]
+    left = text[:start]
+    cut = max(left.rfind("、"), left.rfind("。"), left.rfind("は"))
+    return left[cut + 1:]
+
+
+class _AdditionDocument:
+    """文書全体の根拠と語の検索結果。検出中に同じ本文を何度も走査しない。"""
+
+    def __init__(self, sides, masks, risks):
+        self.raw = sides.texts[0]
+        self.bodies = [_all_bodies(sides, side, masks[side]) for side in (0, 1)]
+        self.old_text = "".join(b.text for b in self.bodies[0])
+        self.nonpast = "".join(t for t in re.split(r"(?<=[。\n])", self.raw)
+                              if not _ADD_PAST_END.search(t.rstrip()))
+        self.prevent = any(not _ADD_PREVENT_UNSETTLED.match(self.raw, m.end()) for m in _ADD_PREVENT_ANY.finditer(self.raw))
+        self.states, self.kept, self.heads, self.matches = {}, {}, {}, {}
+        self.counts = [Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
+        self.by_kind = {}
+        for risk in risks:
+            self.by_kind.setdefault(risk['kind'], []).append(risk)
+
+    def find(self, name, text):
+        key = (name, text)
+        if key not in self.matches:
+            if name == 'promise':
+                found = _addition_promise_clauses(text)
+            else:
+                found = _addition_causal_words(text)
+            self.matches[key] = found
+        return self.matches[key]
+
+    def state_words(self, text):
+        if text not in self.states:
+            self.states[text] = _addition_state_words(text) if _ADD_STATE_ANY.search(text) else []
+        return self.states[text]
+
+    def state_kept(self, family, word, text):
+        key = (family, word, text)
+        if key not in self.kept:
+            families = (family,) + _ADD_KEEP_CROSS.get(family, ())
+            kept = any(w[0] in families for w in self.state_words(text))
+            kept = kept or any(rx.search(text) for rx in _ADD_KEEP_EXTRA_RX.get(family, ()))
+            if not kept and word.endswith('中') and family in ('investigating', 'considering', 'in_progress'):
+                kept = bool(re.search(re.escape(word[:-1]) + _ADD_PROGRESSIVE, text))
+            if family in ('unknown', 'not_done') and not _ADD_DONE.search(text):
+                kept = kept or bool(_ADD_ANY_NEG.search(_ADD_APOLOGY.sub('', text)))
+            stem = _addition_stem_neg(word)
+            if not kept and stem:
+                kept = bool(re.search(re.escape(stem) + '[^。、]{0,8}?(?:' + _ADD_NEG + '|' + _ADD_PERF_NEG + ')', text))
+            self.kept[key] = kept
+        return self.kept[key]
+
+    def same_sentence(self, kind, body):
+        return [r for r in self.by_kind.get(kind, ()) if _same_review_sentence(body, r)]
+
+    def has_head(self, head):
+        if head not in self.heads:
+            self.heads[head] = bool(head and re.search(re.escape(head) + '(?![' + _ADD_K + 'ァ-ヴー])', self.nonpast))
+        return self.heads[head]
+
+
+class _AdditionGroup:
+    """既存の組を本文にし、隣の未対応文と打ち消し用の数を共有する。"""
+
+    def __init__(self, group, masks):
+        self.bodies = [[masks[side].body(s) or _Body('', s.text, s.line, s.start) for s in group[key]]
+                       for side, key in enumerate(('old', 'new'))]
+        self.pairs = [dict(group['pairs']), {j: i for i, j in group['pairs']}]
+        self.contexts, self.texts = {}, {}
+        self.future, self.negative, self.causal = None, None, None
+        self.bigram_index = None
+        self.covered_cache, self.joined_lines = {}, {}
+
+    def prepare_future(self):
+        # 約束の句があるときだけ、原文の述語を取る。
+        if self.future is None:
+            preds = {text: (_addition_old_futures(text), _addition_old_negatives(text))
+                     for text in {b.text for b in self.bodies[0]}}
+            self.future, self.negative = [[list(preds[b.text][n]) for b in self.bodies[0]] for n in (0, 1)]
+            self.used_preds = [set() for _ in self.bodies[0]]
+
+    def prepare_causal(self):
+        if self.causal is None:
+            counts = {text: len(_addition_causal_words(text))
+                      for text in {b.text for b in self.bodies[0]}}
+            self.causal = [counts[b.text] for b in self.bodies[0]]
+
+    def context(self, side, index):
+        key = (side, index)
+        if key not in self.contexts:
+            bodies, paired = self.bodies[side], self.pairs[side]
+            if index is None:
+                indices = [k for k in range(len(bodies)) if k not in paired]
+            else:
+                indices = [index] + _unpaired_neighbors(len(bodies), index, paired)
+            self.contexts[key] = indices
+        return self.contexts[key]
+
+    def text(self, side, index):
+        key = (side, index)
+        if key not in self.texts:
+            self.texts[key] = ''.join(self.bodies[side][k].text for k in self.context(side, index))
+        return self.texts[key]
+
+    def risk(self, kind, subkind, i, j, detail):
+        old = self.bodies[0][i] if i is not None else None
+        new = self.bodies[1][j] if j is not None else None
+        return _risk(kind, subkind, old.line if old else None, new.line if new else None,
+                     old.raw if old else None, new.raw if new else None, detail)
+
+    def covered(self, text):
+        # 2字の並びから原文の文を逆引きする。全組み合わせで本文を読み直さない。
+        if text in self.covered_cache:
+            return self.covered_cache[text]
+        if self.bigram_index is None:
+            self.bigram_index, self.bigram_sizes = {}, []
+            for k, body in enumerate(self.bodies[0]):
+                grams = _addition_bigrams(body.text)
+                self.bigram_sizes.append(len(grams))
+                for gram in grams:
+                    self.bigram_index.setdefault(gram, []).append(k)
+        counts = Counter(k for gram in _addition_bigrams(text) for k in self.bigram_index.get(gram, ()))
+        covered = sorted(k for k, n in counts.items() if n / float(self.bigram_sizes[k]) >= 0.4)
+        self.covered_cache[text] = covered
+        self.joined_lines[text] = [self.bodies[0][k].line for k in covered]
+        return covered
+
+
+def _addition_state_risks(doc, group):
+    out = []
+    for i, body in enumerate(group.bodies[0]):
+        j = group.pairs[0].get(i)
+        if not body.text or (j is not None and body.text == group.bodies[1][j].text):
+            continue
+        # 否定の候補があれば、その候補に任せる。
+        if any(r['old_line'] == body.line and normalize(r['old'] or '') == normalize(body.raw)
+               for r in doc.by_kind.get('negation', ())):
+            continue
+        # 推量の印が足された文は、文の種類の印の候補に任せる（確度の候補と同じ扱い）。
+        if any(_same_review_sentence(body, r) and any(m['kind'] in ('推量', '意見') for m in r['detail'].get('added', []))
+               for r in doc.same_sentence('sentence_type', body) if r['subkind'] == 'marks'):
+            continue
+        lost = []
+        for family, name, pos, word in doc.state_words(body.text):
+            topic = _addition_topic(body.text, pos)
+            near = group.context(1, j)
+            if any(doc.state_kept(family, word, group.bodies[1][k].text)
+                   and (k == j or _addition_on_topic(topic, group.bodies[1][k].text)) for k in near):
+                continue
+            if doc.counts[1][family] >= doc.counts[0][family] and any(
+                    doc.state_kept(family, word, b.text) and _addition_on_topic(topic, b.text) for b in doc.bodies[1]):
+                continue
+            lost.append((family, word))
+        if lost:
+            steps = [step for r in doc.same_sentence('certainty_review', body) for step in r['detail']['steps']]
+            out.append(group.risk('state', 'lost', i, j, {
+                'words': [w for _, w in lost], 'families': sorted({f for f, _ in lost}), 'certainty_steps': steps}))
+    return out
+
+
+def _addition_promise_risk(doc, group, i, j):
+    body = group.bodies[1][j]
+    clauses = doc.find('promise', body.text)
+    if not clauses:
+        return None
+    group.prepare_future()
+    context = group.context(0, i)
+    old_text = group.text(0, i)
+    kept = []
+    for sub, name, key, pos, strong in clauses:
+        if sub == 'prevention':
+            if doc.prevent:
+                continue
+        elif sub == 'guarantee':
+            if re.search(_ADD_GUARANTEE_FAM[name], doc.raw):
+                continue
+        else:
+            head = _addition_key_head(key)
+            if doc.has_head(head) or (head and i is not None and re.search(
+                    re.escape(head) + '(?![' + _ADD_K + 'ァ-ヴー])', old_text)):
+                continue
+        # 一つの原文の述語は、同じ行為を言える約束の句を一つだけ打ち消す（読みます → 破棄します は打ち消さない）。
+        can_cancel = sub == 'promise' or (sub == 'guarantee' and name in ('ことはない', '変えない') and i is not None)
+        if can_cancel:
+            part_start = max(body.text.rfind('、', 0, pos), body.text.rfind('。', 0, pos)) + 1
+            part = body.text[part_start:pos + len(key) + 4]
+            if not _addition_cancel(group, context, sub, part, i):
+                kept.append((sub, name, key, pos, strong))
+        else:
+            kept.append((sub, name, key, pos, strong))
+    if i is not None and doc.same_sentence('certainty', group.bodies[0][i]):
+        kept = [c for c in kept if c[0] != 'promise']
+    # 読み手への依頼が消えて書き手の行為になった文は、文の種類の印の候補に任せる。
+    if i is not None and not _ADD_REQUEST.search(body.text) and any(r['subkind'] == 'marks'
+                             and any(m['kind'] == '依頼・決まり' for m in r['detail'].get('lost', ()))
+                             and not any(m['kind'] == '依頼・決まり' for m in r['detail'].get('added', ()))
+                             for r in doc.same_sentence('sentence_type', group.bodies[0][i])):
+        kept = [c for c in kept if c[0] != 'promise']
+    out = []
+    counted = [c for c in kept if c[4]]
+    weak = [c for c in kept if not c[4]]
+    if counted:
+        subkind = next((sub for sub in ('prevention', 'guarantee') if any(c[0] == sub for c in counted)), 'added')
+        out.append(group.risk('promise', subkind, i, j, {
+            'phrases': [body.text[pos:pos + max(len(key), 2) + 6] for _, _, key, pos, _ in counted],
+            'names': [name for _, name, _, _, _ in counted]}))
+    if weak:
+        out.append(group.risk('promise_review', 'added', i, j, {
+            'phrases': [body.text[pos:pos + max(len(key), 2) + 6] for _, _, key, pos, _ in weak],
+            'names': [name for _, name, _, _, _ in weak]}))
+    return out
+
+
+def _addition_cancel(group, context, sub, part, paired):
+    """組の原文の文の述語は、言い換えとして字を問わずに打ち消す（確かめます → チェックします）。
+    隣の文や組にならなかった文の述語は、同じ行為を言えるときだけ打ち消す。"""
+    for k in context:
+        preds = [(n, stem) for n, stem in enumerate(group.future[k])]
+        if sub == 'guarantee':
+            preds += [(len(group.future[k]) + n, stem) for n, stem in enumerate(group.negative[k])]
+        for n, stem in preds:
+            if n not in group.used_preds[k] and (k == paired or _addition_same_act(stem, part)):
+                group.used_preds[k].add(n)
+                return True
+    return False
+
+
+def _addition_claim_risks(doc, group, i, j):
+    body = group.bodies[1][j]
+    out, remaining = [], []
+    causes = doc.find('causal', body.text)
+    if causes:
+        group.prepare_causal()
+    for cause in causes:
+        for k in group.context(0, i):
+            if group.causal[k]:
+                group.causal[k] -= 1
+                break
+        else:
+            remaining.append(cause)
+    if remaining:
+        covered = group.covered(body.text)
+        joined = len(covered) >= 2
+        words = [word for family, word, start, end in remaining if joined or
+                 _addition_novelty(_addition_cause_span(body.text, family, start, end), doc.old_text) >= 0.5]
+        reason = 'joined' if joined else 'new_content'
+        if not words and i is not None:
+            # 原文の「〜時に」「〜際に」を、同じ中身のまま原因の語にした（集中時に → 集中したことで）。
+            old = group.bodies[0][i].text
+            words = [word for family, word, start, end in remaining if family == 'means'
+                     and _addition_time_to_cause(old, _addition_cause_span(body.text, family, start, end))]
+            reason = 'time_to_cause'
+        if words:
+            out.append(group.risk('claim', 'causal', i, j, {
+                'words': words, 'reason': reason,
+                'joined_lines': group.joined_lines[body.text] if joined else []}))
+    return out
+
+
+def _addition_risks(sides, groups, risks, masks):
+    """状態の消えと書き足し。文の対応とマスクは既存の検出から受け取る。"""
+    if not groups:
+        return []
+    prepared = [_AdditionGroup(source, masks) for source in groups]
+    # 手がかりが一つもない変更では、文書全体の根拠を走査しない。
+    # 伏せた本文で調べるので、コードを外して隣り合った語も取りこぼさない。
+    state_texts = {body.text for group in prepared for body in group.bodies[0]}
+    new_texts = {body.text for group in prepared for body in group.bodies[1]}
+    has_state = any(_ADD_STATE_ANY.search(text) for text in state_texts)
+    patterns = [rx for _, _, rx in _ADD_PROMISE_RX] + [rx for _, rx in _ADD_CAUSAL_RX]
+    if not has_state and not any(rx.search(text) for text in new_texts for rx in patterns):
+        return []
+    doc = _AdditionDocument(sides, masks, risks)
+    out = []
+    for group in prepared:
+        out.extend(_addition_state_risks(doc, group))
+        claims = []
+        for j, body in enumerate(group.bodies[1]):
+            i = group.pairs[1].get(j)
+            if not body.text or (i is not None and body.text == group.bodies[0][i].text):
+                continue
+            promise = _addition_promise_risk(doc, group, i, j)
+            if promise:
+                out.extend(promise)
+            claims.extend(_addition_claim_risks(doc, group, i, j))
+        out.extend(claims)
     return out
 
 
@@ -5874,12 +6640,12 @@ class _QuoteSide:
                 self.outside[sentence.start] = _quote_normalize(outside[offset:offset + len(sentence.text)])
 
 
-def _quote_risks(sides, groups):
+def _quote_risks(sides, groups, masks=None):
     """かぎかっこの中の言葉の書き換え。原文の変わった文のかぎかっこを、推敲後の対応する文とすぐ隣の組にならなかった文
     （組がなければ同じ塊の近い位置の文）だけと照らす。文書全体のどこかに同じ言葉があるだけでは残ったとしない
     （「はい」→「いいえ」、「必要」→「不必要」。反証で見つけた例）。かっこを外しただけ（照らす文のかっこの外に同じ言葉がある）と、
     同じかぎかっこを別の場所に動かしただけ（文書全体の同じ形の数が減っていない）は出さない。"""
-    masks = (_Masker(sides, 0), _Masker(sides, 1))
+    masks = masks or (_Masker(sides, 0), _Masker(sides, 1))
     old_side, new_side = _QuoteSide(sides, 0, masks[0]), _QuoteSide(sides, 1, masks[1])
     out = []
     for group in groups:
@@ -6509,6 +7275,27 @@ def _risk_line(risk):
     kind, subkind, detail = risk["kind"], risk.get("subkind"), risk.get("detail") or {}
     old_line, new_line = risk.get("old_line"), risk.get("new_line")
     where = _where(old_line, new_line)
+    if kind == "state":
+        return ("状態の語が消えた{}: {}。原文は、まだ決まっていない・分かっていない・済んでいないことを伝えています。"
+                "決まった・済んだ・約束した形に変えていないか確かめ、変えていれば原文の状態に戻してください。".format(
+                    where, "、".join(detail["words"])))
+    if kind == "promise":
+        label = {"added": "書き手の約束", "guarantee": "保証", "prevention": "再発防止の誓い"}[subkind]
+        advice = "依頼にない誓いなら外してください。" if subkind == "prevention" else "原文と依頼にない{}なら外してください。".format(
+            "約束" if subkind == "added" else "保証")
+        return "原文にない{}{}: {}。{}".format(label, _where(None, new_line),
+                "、".join("「{}」".format(p) for p in detail["phrases"]), advice)
+    if kind == "promise_review":
+        return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
+                "書き手の約束として足したのなら外してください。".format(
+                    _where(None, new_line), "、".join("「{}」".format(p) for p in detail["phrases"])))
+    if kind == "claim":
+        quoted = "、".join("「{}」".format(w) for w in detail["words"])
+        reason = {"joined": "原文の別々の文を因果でつないでいます。",
+                  "time_to_cause": "原文の時を言う言い方（〜時に、〜際に）を、原因の言い方に変えています。"}.get(
+                      detail["reason"], "原文にない原因や効き目を足しています。")
+        return ("原文にない因果のつながり{}: {}。{}原文が事実を並べていただけなら、"
+                "つなぎの語を外して並べてください。".format(where, quoted, reason))
     if kind in ("certainty", "certainty_review"):
         if kind == "certainty":
             label = "確度が強まった"
@@ -7017,17 +7804,20 @@ def read_text(path):
 
 _EXIT_CODES = """終了コード:
   0  比べ終わり、--fail-on の条件に当たらなかった（候補の有無によらない）。--endings の正常終了、-h と --version も0
-  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印・確度の恐れが1件以上）
+  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印・確度・状態の語・約束の恐れが1件以上）
   2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk] 元の文 書き直した文\n"
           "       yomiyasu_diff.py --endings ファイル [--stance 立場]\n"
           "       yomiyasu_diff.py --version")
 _FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化、"
-                 "確度を強めた書き換え（見込み → 予定、と思われる → 断定など）が"
+                 "確度を強めた書き換え（見込み → 予定、と思われる → 断定など）、"
+                 "原文の状態の語（未定、未確認、調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足しが"
                  "1件でもあれば、終了コード1で終わります。コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
                  "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、"
                  "数えない語だけの確度の変化、予定の言い切り（する予定です → します）、かぎかっこの中の言葉の変化も数えません。"
+                 "原文にない因果のつながりの足しと、書き手の行為と読む印（いたします、今後・改めて、"
+                 "弊社などの主語）のない「〜します」の足し（説明や手順の文かもしれないもの）も数えません。"
                  "候補は確かめる場所で、意味が変わったという判定ではありません。"
                  "条件に当たらなくても、意味が同じだという証明にはなりません。")
 
@@ -7166,7 +7956,8 @@ def _fail_on_line(total, counted, risks=()):
         return "終了コード1: --fail-on=meaning-risk の条件に当たりました（意味が変わる恐れ {}件）。".format(counted)
     return ("終了コード1: --fail-on=meaning-risk の条件に当たりました"
             "（意味が変わる恐れ {}件のうち、数値・否定・入れ替え・文の種類{} {}件）。".format(
-                total, "・確度" if any(r["kind"] == "certainty" for r in risks) else "", counted))
+                total, "".join(label for kind, label in (("certainty", "・確度"), ("state", "・状態の語"), ("promise", "・約束"))
+                               if any(r["kind"] == kind for r in risks)), counted))
 
 
 def _read_input(path):
