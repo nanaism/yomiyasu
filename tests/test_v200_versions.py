@@ -211,7 +211,7 @@ class TestVersionStrings(unittest.TestCase):
                     self.assertEqual(aliases, [], "__version__ の別名の定数がある")
 
     def test_changelog_first_heading(self):
-        """4. CHANGELOG.md の最初の `## ` 見出しが `## 2.0.0-beta - YYYY-MM-DD` の形（先行版の印を含む）で、manifest の版と同じ。"""
+        """4. CHANGELOG.md の最初の `## ` 見出しが `## 2.0.0 - YYYY-MM-DD` の形で、manifest の版と同じ（版のあとに「-」と印の付いた形も受ける）。"""
         path = ROOT / "CHANGELOG.md"
         self.assertTrue(path.is_file(), "CHANGELOG.md がない")
         headings = [line.rstrip("\r") for line in path.read_text(encoding="utf-8").split("\n") if line.startswith("## ")]
@@ -323,13 +323,13 @@ class TestCliVersions(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         self.assertEqual(process.stdout, "yomiyasu_lint.py {} (JSON format {})\n".format(version, format_version))
         # 10.1 L1: 完全一致
-        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.0.0-beta (JSON format 2)\n")
+        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.0.0 (JSON format 2)\n")
         self.assertEqual(process.stderr, "")
 
     def test_diff_and_check_version_lines(self):
         """diff と check の --version は 10.1 L1 の1行（完全一致）で0。"""
-        # diff `yomiyasu_diff.py 2.0.0-beta (JSON format 2)`、
-        # check `yomiyasu_check.py 2.0.0-beta (record format 1, result format 1, materials format 1)`。
+        # diff `yomiyasu_diff.py 2.0.0 (JSON format 2)`、
+        # check `yomiyasu_check.py 2.0.0 (record format 1, result format 1, materials format 1)`。
         expected = {
             DIFF: lambda version: "yomiyasu_diff.py {} (JSON format {})".format(
                 version, self.format_constant("DIFF_FORMAT_VERSION")),
@@ -338,8 +338,8 @@ class TestCliVersions(unittest.TestCase):
                 self.format_constant("MATERIALS_FORMAT_VERSION")),
         }
         literal = {
-            DIFF: "yomiyasu_diff.py 2.0.0-beta (JSON format 2)",
-            CHECK: "yomiyasu_check.py 2.0.0-beta (record format 1, result format 1, materials format 1)",
+            DIFF: "yomiyasu_diff.py 2.0.0 (JSON format 2)",
+            CHECK: "yomiyasu_check.py 2.0.0 (record format 1, result format 1, materials format 1)",
         }
         for script in (DIFF, CHECK):
             with self.subTest(script=script.name):

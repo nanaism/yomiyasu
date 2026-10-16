@@ -273,7 +273,7 @@ class TestReferenceExamplesMatchCheck(FactRecoveryCase):
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
         data = json.loads(result.stdout.decode("utf-8"))
         self.assertEqual([source.get("label") for source in data["materials"]["sources"] if source["role"] == "material"],
-                         ["利用者の発言（2回目の依頼）"])
+                         ["利用者の発言"])
         self.assertIsNotNone(data.get("fact_gaps"))
 
 
