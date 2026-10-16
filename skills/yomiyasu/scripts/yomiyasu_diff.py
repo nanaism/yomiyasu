@@ -1696,6 +1696,7 @@ class _Sides:
         self.analyses = (_analyze(orig), _analyze(rw))
         self._normalized = [None, None]
         self._numbers = [None, None]
+        self.quiet_marks = []
 
     def line_of(self, side, position):
         """文字の位置（0から）を行番号（1から）にする。"""
@@ -3765,18 +3766,45 @@ def _meaning_risks(sides, full, type_changes, groups=None):
              + _question_risks(sides, groups) + _protected_risks(sides, full) + _contrast_risks(sides, groups)
              + _feeling_risks(sides, groups))
     found.sort(key=lambda item: (item[0], _RISK_ORDER.get(item[2]["kind"], 9), item[1]))
-    risks = [risk for _, _, risk in found] + _marks_risks(sides, type_changes)
+    all_marks = _marks_risks(sides, type_changes)
+    quiet, delegated = [], []
+    for mark in all_marks:
+        classification = _classify_hedge_marks(mark["old"], mark["new"], mark["detail"]["lost"], mark["detail"]["added"])
+        if classification in ("same", "strengthen"):
+            quiet.append(mark)
+            if classification == "strengthen":
+                delegated.append(mark)
+    quiet_ids = {id(mark) for mark in quiet}
+    risks = [risk for _, _, risk in found] + [mark for mark in all_marks if id(mark) not in quiet_ids]
     sides.immutable, citations = _immutable_values(sides, risks, groups)
     # 足した候補は既存の候補の後ろに、行の順で並べる（既存の並びは変えない。反証で見つけた例）
     citations.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                                   r["new_line"] if r["new_line"] is not None else 0))
     risks += citations
     masks = (_Masker(sides, 0), _Masker(sides, 1))
-    added = _certainty_risks(sides, groups, risks, masks) + _quote_risks(sides, groups, masks)
+    certainty = _certainty_risks(sides, groups, risks, masks)
+    # 強める向きでも、同じ原文の文に数える確度が出なければ印を戻す。
+    strengthened = [(r["old_line"], normalize(r["old"] or "").strip()) for r in certainty
+                    if (r["kind"], r["subkind"]) == ("certainty", "strengthened")]
+    restored_ids = set()
+    for mark in delegated:
+        old = normalize(mark["old"] or "").strip()
+        # _same_review_sentence と同じく、行と文の含み合いの両方で照らす（別の行の同じ文で戻すのを止めない。反証で見つけた例）
+        if not any(old and text and (old in text or text in old)
+                   and (mark["old_line"] is None or line == mark["old_line"]) for line, text in strengthened):
+            restored_ids.add(id(mark))
+    if restored_ids:
+        quiet_ids -= restored_ids
+        risks = ([risk for _, _, risk in found]
+                 + [mark for mark in all_marks if id(mark) not in quiet_ids] + citations)
+        certainty = _certainty_risks(sides, groups, risks, masks)
+    sides.quiet_marks = [mark for mark in quiet if id(mark) in quiet_ids]
+    added = certainty + _quote_risks(sides, groups, masks)
     added.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                               r["new_line"] if r["new_line"] is not None else 0))
     risks += added
-    additions = _addition_risks(sides, groups, risks, masks)
+    # 出力から外した印も、状態・約束の候補を重ねない決めには使う。
+    additions = _addition_risks(sides, groups, risks + sides.quiet_marks, masks)
     # 状態の候補に写した確度の見直しだけを取り除く。数える確度は残す。
     lost = [_Body('', r['old'], r['old_line'], 0) for r in additions if r['kind'] == 'state']
     risks = [r for r in risks if r['kind'] != 'certainty_review'
@@ -5789,6 +5817,11 @@ _QUOTE_DROP = re.compile(r"[\s、。，．,.!！…‥・〜~－-]|\.\.\.")
 
 def _certainty_words(text):
     """表の順に重なりを除く。(強さ, 名前, 位置, 否定つき, core) を位置の順で返す。"""
+    return [word[:5] for word in _certainty_word_spans(text)]
+
+
+def _certainty_word_spans(text):
+    """確度の語を、_certainty_words の5つ組に終わりの位置を足して返す。"""
     found, taken = [], []
     for level, name, regex, core in _CERT:
         for match in regex.finditer(text):
@@ -5796,7 +5829,7 @@ def _certainty_words(text):
                 continue
             taken.append(match.span())
             negative = name != "必ずしも" and bool(_CERTAINTY_NEG_AFTER.search(text[match.end():match.end() + 10]))
-            found.append((level, name, match.start(), negative, core))
+            found.append((level, name, match.start(), negative, core, match.end()))
     return sorted(found, key=lambda word: word[2])
 
 
@@ -5811,15 +5844,134 @@ def _certainty_negations(text, words):
 def _cancel_same_level(before, after):
     """同じ強さの語を打ち消し、残った語を返す。同じ名前の語から先に打ち消す（残る語の core を、打ち消した語から借りない。
     「可能性があり、点検することがある」→「可能性があり、点検する予定です」は、ことがある → 予定 として残る。反証で見つけた例）。"""
-    rest_old, rest_new = list(before), list(after)
+    rest_old, rest_new, _ = _cancel_pairs(before, after)
+    return rest_old, rest_new
+
+
+def _cancel_pairs(before, after):
+    """_cancel_same_level と同じ順で打ち消し、残った語と、打ち消した (元の語, 後の語) の組を返す。"""
+    rest_old, rest_new, pairs = list(before), list(after), []
     for same_name in (True, False):
         for word in list(rest_old):
             for other in rest_new:
                 if other[0] == word[0] and (not same_name or other[1] == word[1]):
                     rest_old.remove(word)
                     rest_new.remove(other)
+                    pairs.append((word, other))
                     break
-    return rest_old, rest_new
+    return rest_old, rest_new, pairs
+
+
+# 推量の語のすぐあとの条件の形（おそれがあれば、可能性がある場合）。条件の有無が変わった文は同じ強さにしない（反証で見つけた例）
+_HEDGE_CONDITION = re.compile(r"[^、。！？!?\n]{0,8}?(?:れば|たら|なら|場合|とき|時(?:は|に))")
+# 節の頭を決める字と、節の中身として比べる字（漢字、片仮名、英数字）
+_HEDGE_CLAUSE_STOP = re.compile(r"[、。！？!?\n，,]")
+_HEDGE_CONTENT = re.compile(r"[一-龥々〆ヵヶァ-ヴA-Za-z0-9０-９Ａ-Ｚａ-ｚ]")
+
+
+def _hedge_polarity(text, word, words):
+    """語のある節（前後の読点・句点・改行まで）の否定の印の数。確度の語の範囲と、そのすぐあとに続く否定
+    （可能性も否定でき｜ません）は数えない。"""
+    head = text.rfind("\n", 0, word[2]) + 1
+    for stop in "、。！？!?，,":
+        head = max(head, text.rfind(stop, 0, word[2]) + 1)
+    match = _HEDGE_CLAUSE_STOP.search(text, word[5])
+    tail = match.start() if match else len(text)
+    return sum(1 for a, b in _negation_marks(text[head:tail])
+               if not any(a + head < w[5] and b + head > w[2] or a + head == w[5] for w in words))
+
+
+def _hedge_conditions(text, words):
+    """すぐあとが条件の形になっている確度の語の数。"""
+    return sum(1 for w in words if _HEDGE_CONDITION.match(text, w[5]))
+
+
+def _hedge_clause(text, start):
+    """語の前の、同じ節の中身の字（読点・句点・改行から語の頭まで）。"""
+    head = text[max(0, start - 200):start]
+    stops = [match.end() for match in _HEDGE_CLAUSE_STOP.finditer(head)]
+    return set(_HEDGE_CONTENT.findall(head[stops[-1]:] if stops else head))
+
+
+def _classify_hedge_marks(orig, rewrite, lost, added):
+    """推量だけの印の変化を、確度の語の強さで分ける。
+    same と strengthen だけを印の候補から外す。問い、否定（述語の否定の数の違い、「とは限らない」を含む）、条件の形の違い、
+    表外語を先に除き、印に重なる語をすべて打ち消せたか、残った語がどちら向きに変わったかを見る。
+    same にするのは、打ち消しの相手が core の語で、同じ節の中身の字を共有し（別の事柄への慎重さで打ち消さない）、
+    相手のない語がどちらの側にも残らないときだけ（反証で見つけた例）。"""
+    if {mark["kind"] for mark in list(lost) + list(added)} != {"推量"}:
+        return "other_kinds"
+    side = 0 if lost else 1
+    texts = (orig or "", rewrite or "")
+    words = [_certainty_word_spans(text) for text in texts]
+    hits = [[(start, start + len(hit)) for start, kind, hit in _mark_positions(text) if kind == "推量"]
+            for text in texts]
+    for text, ws, marks in zip(texts, words, hits):
+        for start, end in _sentence_spans(text) or [(0, len(text))]:
+            sentence = text[start:end].strip()
+            if sentence and (_is_question(sentence) or _CERTAINTY_QUESTION.search(sentence)):
+                if any(start <= w[2] < end for w in ws) or any(start <= a < end for a, _ in marks):
+                    return "question"
+    if _certainty_negations(texts[0], words[0]) != _certainty_negations(texts[1], words[1]):
+        return "negation"
+    # 「とは限らない」は起こらない見込みの言い方なので、かもしれない と打ち消さない
+    if any(w[1] == "必ずしも" for ws in words for w in ws):
+        return "negation"
+    if _hedge_conditions(texts[0], words[0]) != _hedge_conditions(texts[1], words[1]):
+        return "condition"
+    hit_words = []
+    for start, end in hits[side]:
+        overlapping = [w for w in words[side] if w[2] < end and start < w[5]]
+        if not overlapping:
+            return "not_in_table"
+        if any(w[3] for w in overlapping):
+            return "negation"
+        # 「らしい」は伝聞とも読めるので、見込み・推測の語と打ち消さない
+        if any(w[1] == "そう・よう" and "らし" in texts[side][w[2]:w[5]] for w in overlapping):
+            return "not_in_table"
+        for word in overlapping:
+            if word not in hit_words:
+                hit_words.append(word)
+    before, after = ([w for w in ws if not w[3]] for ws in words)
+    rest_old, rest_new, pairs = _cancel_pairs(before, after)
+    rest_old.sort(key=lambda w: (w[0], w[2]))
+    rest_new.sort(key=lambda w: (w[0], w[2]))
+    rest = rest_old if side == 0 else rest_new
+    left = [w for w in rest if w in hit_words]
+    if not left:
+        # 相手のない語が残った（再開が遅れるかもしれず、停止する見込みです → 遅れる恐れがあり、停止します）
+        if len(rest_old) != len(rest_new):
+            return "unpaired"
+        for pair in pairs:
+            hit, other = pair if side == 0 else pair[::-1]
+            if hit not in hit_words:
+                continue
+            # 数えない語（ことがある、検討、傾向、期待できる など）は、推量の語と同じ意味の種類と言えない
+            if not other[4]:
+                return "not_core"
+            # 慎重な言い方と一緒に、その節の述語の肯定と否定が替わった（間に合うと思われます → 間に合わない見込みです）
+            if (_hedge_polarity(texts[side], hit, words[side])
+                    != _hedge_polarity(texts[1 - side], other, words[1 - side])):
+                return "negation"
+            clauses = _hedge_clause(texts[side], hit[2]), _hedge_clause(texts[1 - side], other[2])
+            if all(clauses) and not clauses[0] & clauses[1]:
+                return "unanchored"
+        return "same"
+    paired = min(len(rest_old), len(rest_new))
+    old_base = min([w[0] for w in before] + [4])
+    new_base = min([w[0] for w in after] + [4])
+    outcomes = set()
+    for word in left:
+        index = rest.index(word)
+        if index < paired:
+            other = (rest_new if side == 0 else rest_old)[index]
+            up = other[0] > word[0] if side == 0 else word[0] > other[0]
+            outcomes.add("strengthen" if up else "weaken")
+        elif side == 0:
+            outcomes.add("lost" if new_base > word[0] else "consolidated")
+        else:
+            outcomes.add("added" if old_base > word[0] else "consolidated")
+    return "mixed" if len(outcomes) > 1 else outcomes.pop()
 
 
 def _cancel_with_context(rest, pools):
@@ -7032,7 +7184,8 @@ def _review_candidate(subkind, old, new, detail):
 def _hedges(sides, groups, risks):
     """一覧の語の出現総数が減った文。文の分割先も数え、移動しただけの文は除く。
     同じ文に sentence_type/marks の推量減少か確度の強まりがあれば、独立の候補を出さない。
-    既存の候補は元のまま残すため、その場合の --fail-on は既存の推量印の扱いに従う。"""
+    同じ強さの言い換えなどで出力から外した推量の印も、重複を避けるために使う。"""
+    risks = risks + sides.quiet_marks
     words, _ = _load_list("hedges")
     regex = re.compile("|".join(re.escape(w) for w in sorted(set(words), key=len, reverse=True))) if words else None
     masks = (_Masker(sides, 0), _Masker(sides, 1))
@@ -8036,11 +8189,12 @@ _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読�
           "       yomiyasu_diff.py --endings ファイル [--stance 立場]\n"
           "       yomiyasu_diff.py --version")
 _FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化、"
-                 "確度を強めた書き換え（見込み → 予定、と思われる → 断定など）、"
+                 "確度を強めた書き換え（かもしれない → 見込み、見込み → 予定、と思われる → 断定など）、"
                  "原文の状態の語（未定、未確認、調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足しが"
                  "1件でもあれば、終了コード1で終わります。コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
                  "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、"
                  "数えない語だけの確度の変化、予定の言い切り（する予定です → します）、かぎかっこの中の言葉の変化も数えません。"
+                 "推量の印が同じ強さの慎重な言い方に替わっただけの文（かもしれません → 恐れがあります、と思われます → 見込みです）も数えません。"
                  "原文にない因果のつながりの足しと、書き手の行為と読む印（いたします、今後・改めて、"
                  "弊社などの主語）のない「〜します」の足し（説明や手順の文かもしれないもの）も数えません。"
                  "候補は確かめる場所で、意味が変わったという判定ではありません。"

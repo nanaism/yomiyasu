@@ -175,8 +175,9 @@ class DesignExamples(unittest.TestCase):
         elif tag.startswith('N'):
             self.assertEqual(certainty, [])
             if tag in ('N2', 'N3'):
-                # 同じ強さでも既存の推量印は出る。この既存の判定は変えない。
-                self.assertTrue(risks(result, 'sentence_type'))
+                # 同じ強さへの言い換えは、意味が変わる恐れには数えない。
+                self.assertEqual(risks(result, 'sentence_type'), [])
+                self.assertEqual(result['fail_on_meaning_risk_count'], 0)
         elif tag.startswith('Q'):
             expected = {'Q1': 'changed', 'Q2': 'changed', 'Q3': 'changed', 'Q6': 'lost'}
             self.assertEqual([r['subkind'] for r in quotes], [expected[tag]] if tag in expected else [])

@@ -7,8 +7,8 @@
   },
   "source_commit": {
     "lint": "45a5885（scripts に未コミットの変更あり: check の固め）",
-    "diff": "状態の語の消えと書き足しの検出を追加し、そのあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにした作業ツリー（既存9キーと既存候補は変更なし）。",
-    "check": "状態の語の消えと書き足しの検出、見直し候補の行と直した箇所の節を追加し、lint の rule_penalty_score の式を直したあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにした作業ツリー（既存9キーと既存候補は変更なし）。"
+    "diff": "状態の語の消えと書き足しの検出を追加し、そのあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにし、推量の印が同じ強さの慎重な言い方に替わっただけの文を意味が変わる恐れの候補から外した作業ツリー（既存9キーと既存候補は変更なし）。",
+    "check": "状態の語の消えと書き足しの検出、見直し候補の行と直した箇所の節を追加し、lint の rule_penalty_score の式を直したあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにし、推量の印が同じ強さの慎重な言い方に替わっただけの文を意味が変わる恐れの候補から外した作業ツリー（既存9キーと既存候補は変更なし）。"
   },
   "source_sha256": {
     "lint": {
@@ -19,7 +19,7 @@
     },
     "diff": {
       "yomiyasu_lint.py": "73c370d607399b4408368c53785c9f9bebc5234180a4c4c1e5d4006365c3aa23",
-      "yomiyasu_diff.py": "982415caca6373fdc7b83c4f35ec3dbf685839c6cc38efe4f2fe81da6919abba",
+      "yomiyasu_diff.py": "2ea2a5d4eeed731aad93b3d2fd916fe60ef0173ccb9aa7ab2041de124eaf17f3",
       "yomiyasu_check.py": "3f0be402b8c56591ec2e0c09ca030645948b0cd94f2cc17d569e909d7a47ae13",
       "markdown_visibility.py": "4d296be7fc1c1cb6b908cd16cf3de51449d7902db9bc1888f095fc7a65ae843c",
       "references/lists/feelings.txt": "5f71a66f5e2679de04ecd30395ab74ca61962297c22ef3f4efa5c8e625446166",
@@ -3213,6 +3213,7 @@
     },
     "事実の復元の道具: check の資料つき新規作成48組を変更前と比較し、照合の節の外の出力・終了コードは不変。照合の該当行と確度の注意を追加した組だけ compose の要約を更新した。JSON は追加キー fact_gaps を除いて比較する。lint、diff、資料なしの出力の要約は更新していない。",
     "2026-10-16 事実の復元の道具を、見直し候補の行と直した箇所の節のあとに入れたときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは check の compose の2組だけ（raw_ai/04 と blacklist_ai/07。照合の節に「資料にあった確度の語が最終稿にない」の行が1行足された）。diff の行、check のほかの使い方、終了コード、lint の行は1字も変わらなかった。source_sha256 の diff と check は今のスクリプトの値にした。",
-    "2026-10-16 run --stdin の1行目の {仕上げ} を、ファイルのときと同じく返す直前の verify（最終稿だけを verify --final - に渡す）の案内にしたときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは check の stdin の48組だけ（推敲の48組のすべて。1行目の「本文はこのままで返答し、完了報告を付けるときは、この出力の2行目を写してください。」が「提出の直前に、本文を変えずに、最終稿だけを標準入力から verify --state-dir … --final - に渡して1回実行してください。」になった）。diff の行、check のほかの使い方、終了コード、lint の行は1字も変わらなかった。source_sha256 の diff の yomiyasu_check.py と check は今のスクリプトの値にした。"
+    "2026-10-16 run --stdin の1行目の {仕上げ} を、ファイルのときと同じく返す直前の verify（最終稿だけを verify --final - に渡す）の案内にしたときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは check の stdin の48組だけ（推敲の48組のすべて。1行目の「本文はこのままで返答し、完了報告を付けるときは、この出力の2行目を写してください。」が「提出の直前に、本文を変えずに、最終稿だけを標準入力から verify --state-dir … --final - に渡して1回実行してください。」になった）。diff の行、check のほかの使い方、終了コード、lint の行は1字も変わらなかった。source_sha256 の diff の yomiyasu_check.py と check は今のスクリプトの値にした。",
+    "2026-10-16 diff で、推量の印が同じ強さの慎重な言い方に替わっただけの文（かもしれません → 恐れがあります など）を、意味が変わる恐れの候補（文の種類の印）と --fail-on から外したときの確かめ: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、lint、diff、check の行、終了コードは1字も変わらなかった（この組には当たる文がない）。値は作り直さず、source_sha256 の diff の yomiyasu_diff.py だけを今のスクリプトの値にした。"
   ]
 }
