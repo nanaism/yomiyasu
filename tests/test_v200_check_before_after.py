@@ -375,7 +375,7 @@ class BeforeAfterTest(DocTypeCase):
         expected = ["format", "format_version", "tool_version", "command", "status", "status_line", "message", "next",
                     "run_id", "attempt", "fix_count", "mode", "context", "record_path", "fail_on_hit", "meaning_risk_count",
                     "fail_on_meaning_risk_count", "stiffness_check", "tone_check", "hedges_check", "immutable_check",
-                    "politeness_check", "lint", "diff", "materials", "candidate_counts", "changed_places"]
+                    "politeness_check", "lint", "diff", "materials", "candidate_counts", "changed_places", "fact_gaps"]
         self.assertEqual(list(data), expected)
         self.assertEqual(data["format_version"], 1)
         self.assertEqual(data["candidate_counts"], {"basis": "lint", "source": 0, "final": 0, "source_kind": "original",

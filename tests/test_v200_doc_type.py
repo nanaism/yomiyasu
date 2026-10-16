@@ -340,6 +340,7 @@ def unchanged_check():
                                                             "--state-dir", state])
                 value = json.loads(out)
                 value.pop("context", None)
+                value.pop("fact_gaps", None)  # 任意の手がかりの追加キーを除いて比較する
                 for key in ("lint", "diff"):
                     if isinstance(value.get(key), dict):
                         value[key].pop("context", None)
@@ -461,7 +462,7 @@ class DefaultsTest(DocTypeCase):
         self.assertNotIn("doc_type=", lines[1])
         self.assertNotIn("reader=", lines[1])
         _, record = self.record(lines)
-        self.assertEqual(list(record["options"]), ["stance", "fail_on", "timeout", "doc_type", "reader"])
+        self.assertEqual(list(record["options"]), ["stance", "fail_on", "timeout", "doc_type", "reader", "fact_gaps"])
         self.assertEqual((record["options"]["doc_type"], record["options"]["reader"]), (None, None))
         self.assertEqual(lines[2].split("、")[0], "実行した検査: lint（最終稿）候補0件")
         for argv in (("run", "--source", a, "--final", b), ("verify", "--final", b)):
@@ -925,7 +926,7 @@ class OptionTest(DocTypeCase):
                         lines[2])
         self.assertEqual(lines[-2:], [lines[1], ""])
         _, record = self.record(lines)
-        self.assertEqual(list(record["options"]), ["stance", "fail_on", "timeout", "doc_type", "reader"])
+        self.assertEqual(list(record["options"]), ["stance", "fail_on", "timeout", "doc_type", "reader", "fact_gaps"])
         self.assertEqual((record["options"]["doc_type"], record["options"]["reader"]), ("slides", "general"))
         self.assertEqual(record["result"]["token"], lines[1])
         # verify は記録の値を状態の行と JSON に出す

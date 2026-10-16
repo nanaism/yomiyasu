@@ -3993,6 +3993,8 @@ def _load_list(name):
             parsed = parse_list(data.decode("utf-8-sig"), pattern=pattern)
             if pattern and name not in _LIST_THIRD_COLUMN and any(len(item) > 2 for item in parsed):
                 raise ValueError("3つ目の欄はこの一覧では使えません")
+            if name == "fact-gaps" and any(item[0] not in ("degree", "change", "effect", "figure") for item in parsed):
+                raise ValueError("事実の穴の種類は degree、change、effect、figure です")
             items = [_compile_item(item) for item in parsed] if pattern else parsed
             source = "references/lists/{}.txt".format(name)
         except Exception as error:  # UTF-8 でない、書き方や正規表現の誤り。止めずに内蔵の一覧で動く
@@ -5455,6 +5457,47 @@ class _Source:
         self.names = set(_squash(match.group(0)) for match in _ground_names(masked))
         self.words = set(match.group(0) for match in _GROUND_WORD.finditer(masked))
         self.words.update(match.group(0) for match in _CERTAINTY.finditer(text))
+        self.lines = _split_lines(text)
+        starts = _line_starts(self.lines)
+        self.number_lines = {}
+        self.number_rows = {}
+        for number in comparison:
+            line = bisect_right(starts, number.start)
+            self.number_lines.setdefault(number.key, set()).add(line)
+            self.number_rows.setdefault(number.value, []).append((number, line))
+        self.name_lines = {}
+        for match in _ground_names(masked):
+            self.name_lines.setdefault(_squash(match.group()), set()).add(bisect_right(starts, match.start()))
+        self.bare_lines = {}
+        self.certainty_words = list(OrderedDict.fromkeys(m.group() for m in _GROUND_CERTAINTY.finditer(text)))
+        for line, body in enumerate(self.lines, 1):
+            match = _BARE_SETTING.match(unicodedata.normalize("NFKC", body))
+            if match:
+                value = _ground_number_key((match.group(1), ""))[0]
+                self.bare_lines.setdefault(value, []).append(line)
+
+    def evidence(self, index, line):
+        return [index, line, self.lines[line - 1].rstrip("\r\n")[:60]]
+
+    def matching_lines(self, kind, key, final):
+        if kind == "name":
+            if key in self.name_lines:
+                return sorted(self.name_lines[key])
+            pattern = re.compile(r"(?<![A-Za-z0-9])" + re.escape(key) + r"(?![A-Za-z0-9])")
+            return [i for i, text in enumerate(self.lines, 1) if pattern.search(_squash(text))]
+        key = _ground_number_key(key)
+        lines = set(self.number_lines.get(key, ()))
+        value, unit = key
+        final_set, final_notation = final
+        if unit:
+            lines.update(line for number, line in self.number_rows.get(value, ())
+                         if not number.unit and _notation_match(number, final_set, unit))
+        else:
+            lines.update(line for number, line in self.number_rows.get(value, ())
+                         if number.unit and any(_notation_match(other, self.numbers, number.unit)
+                                                for other in final_notation.get(key, ())))
+        return sorted(lines)
+
 
     def has(self, kind, key, final=None):
         if kind == "number":
@@ -5481,7 +5524,63 @@ class _Source:
         return any(_notation_match(number, self.numbers) for number in final_notation.get(key, ()))
 
 
-def ground(final, materials, original=None):
+
+# 照合だけに足す語。既存の diff の確度判定と候補件数は変えない。
+_GROUND_CERTAINTY = re.compile(_CERTAINTY.pattern +
+    r"|たぶん|多分|おそらく|恐らく|きっと|と思います|と思う|気がする|記憶では|方向で|検討して|まだ決まって|確かめていない"
+    + "|" + TYPE_MARKERS["推量"].pattern, re.M)
+_BARE_SETTING = re.compile(
+    r"^[ \t]*[+-]?[ \t]*[^\W\d]\w*[ \t]*[=:][ \t]*"
+    r"([0-9]+(?:\.[0-9]+)?)(?=[ \t]*(?:$|[#;]))")
+
+
+def _ground_evidence(sources, kind, key, final, indices):
+    rows = []
+    for index in indices:
+        source = sources[index - 1]
+        for line in source.matching_lines(kind, key, final):
+            rows.append(source.evidence(index, line))
+            if len(rows) == 3:
+                return rows
+    return rows
+
+
+def _ground_value_certainty(items, doc, found, sources, final):
+    if not any(source.certainty_words for source in sources):
+        return
+    dropped = {item["text"]: item for item in items if item["classification"] == "dropped_certainty"}
+    def add(word, value=None):
+        if word not in dropped:
+            item = {"kind": "certainty", "text": word, "value": None, "unit": None,
+                    "final_lines": [], "classification": "dropped_certainty"}
+            dropped[word] = item
+            items.append(item)
+        if value is not None:
+            values = dropped[word].setdefault("values", [])
+            if value not in values:
+                values.append(value)
+    final_words = set(m.group() for m in _GROUND_CERTAINTY.finditer(doc.texts[0]))
+    for source in sources:
+        for word in source.certainty_words:
+            if word not in final_words:
+                add(word)
+    # 値が繰り返される場合も、言い切った文を1つでも含めば見せる。
+    occurrences = {}
+    for number in _find_numbers(doc.texts[0], doc.analyses[0], unit_pattern=_GROUND_UNIT):
+        occurrences.setdefault(number.key, []).append(number.start)
+    for (kind, key), entry in found.items():
+        if kind != "number":
+            continue
+        if not any(not _GROUND_CERTAINTY.search(doc.sentence_at(start))
+                   for start in occurrences.get(key, [entry["start"]])):
+            continue
+        for source in sources:
+            if source.has(kind, key, final):
+                for line in source.matching_lines(kind, key, final):
+                    for match in _GROUND_CERTAINTY.finditer(source.lines[line - 1]):
+                        add(match.group(), entry["text"])
+
+def ground(final, materials, original=None, labels=None):
     """資料との照合。final は最終稿、materials は資料の文字列の並び、
     original は原文（推敲のとき。なければ新規作成）。照合の JSON（attempt-<n>.materials.json の形）を返す。
 
@@ -5499,6 +5598,9 @@ def ground(final, materials, original=None):
     推敲の「資料に基づく補足の候補」）を1行ずつ足したもの。「参考」の行は数えない。"""
     mode = "rewrite" if original is not None else "compose"
     materials = list(materials)
+    labels = list(labels) if labels is not None else [None] * len(materials)
+    if len(labels) != len(materials):
+        raise ValueError("資料と出典の数が違います")
     doc = _Doc(final)
     original_source = _Source(original) if original is not None else None
     material_sources = [_Source(text) for text in materials]
@@ -5506,7 +5608,7 @@ def ground(final, materials, original=None):
     if original is not None:
         sources.append({"role": "source", "index": 1, "chars": len(original)})
     for index, text in enumerate(materials, 1):
-        sources.append({"role": "material", "index": index, "chars": len(text)})
+        sources.append({"role": "material", "index": index, "chars": len(text), "label": labels[index - 1]})
 
     items, risks = [], []
     final_found = _find_numbers(doc.texts[0], doc.analyses[0], unit_pattern=_GROUND_UNIT)
@@ -5524,6 +5626,20 @@ def ground(final, materials, original=None):
             classification = "not_in_sources"
         items.append({"kind": kind, "text": entry["text"], "value": entry["value"], "unit": entry["unit"],
                       "final_lines": entry["lines"], "classification": classification})
+        item = items[-1]
+        if classification == "from_materials":
+            item["found_in"] = [i for i, source in enumerate(material_sources, 1) if source.has(kind, key, final)]
+            if kind in ("number", "name"):
+                item["evidence"] = _ground_evidence(material_sources, kind, key, final, item["found_in"])
+        elif classification == "not_in_sources" and kind == "number":
+            bare = []
+            value = _ground_number_key(key)[0]
+            for i, source in enumerate(material_sources, 1):
+                bare.extend(source.evidence(i, line) for line in source.bare_lines.get(value, ()))
+                if len(bare) >= 3:
+                    break
+            if bare:
+                item["bare_in"] = bare[:3]
         if classification != "not_in_sources":
             continue
         if kind == "number" and mode == "compose" and key in strong:
@@ -5573,6 +5689,7 @@ def ground(final, materials, original=None):
         lines += 1
     if mode == "rewrite" and any(item["classification"] == "from_materials" for item in items):
         lines += 1
+    _ground_value_certainty(items, doc, found, material_sources, final)
     return {"format": "yomiyasu-materials", "format_version": MATERIALS_FORMAT_VERSION, "tool_version": __version__,
             "mode": mode, "sources": sources, "items": items, "meaning_risks": risks,
             "candidate_count": len(risks) + lines, "meaning_risk_count": len(risks),
@@ -6781,6 +6898,114 @@ def _register_changes(sides, groups, politeness):
                     "switched": len(pairs), "old_counts": counts[0], "new_counts": counts[1],
                     "lines": [[old.line, new.line] for old, new in pairs[:5]]}))
     return _review_section(out, threshold=threshold, skipped_by=None)
+
+
+# ---- 事実の穴の候補（check の任意の手がかり。diff の出力には含めない） ----
+
+_GAP_DEGREE = re.compile(
+    r"大幅(?:に|な|の)|劇的(?:に|な)|飛躍的(?:に|な)|格段(?:に|の)|著し(?:く|い)|圧倒的(?:に|な)|桁違い|段違い"
+    r"|大きく(?=改善|向上|短縮|削減|減|増|変わ|変え|速|下が|上が|低下|上昇|低減|前進|進歩)"
+    r"|大きな(?=改善|効果|成果|前進|進歩|変化|向上)")
+
+# 変化の述語。形容詞と和語の動詞は丁寧の形（ました、ます、ています）だけにする（小説や随筆の「短くなった」「首を伸ばした」を
+# 拾わない）。漢語の動詞は常体の終止形も拾う。
+_GAP_CHANGE = re.compile(
+    r"(?:短く|長く|速く|早く|遅く|軽く|重く|多く|少なく|高く|低く|広く|狭く|細かく|厳しく|緩く|ゆるく)"
+    r"(?:し(?:ました|ます|ています|ていました)|なり(?:ました|ます)|なって(?:います|いました))"
+    r"|(?:増や|減ら|延ば|伸ば|縮め|引き上げ|引き下げ)(?:し(?:ました|ます|ています)|ます|ました)"
+    r"|(?:短縮|削減|増加|減少|向上|高速化|軽量化|低減|縮小|拡大|延長|増強|緩和)"
+    r"(?:し(?:ました|ます|ています)|され(?:ました|ます|ています)|でき(?:ました|ます)|しました|します"
+    r"|した(?=[。]|$)|する(?=[。]|$))")
+
+_GAP_EFFECT = re.compile(
+    r"(?:信頼性|安定性|品質|性能|パフォーマンス|使い勝手|利便性|生産性|効率|保守性|可読性|開発体験|体験|満足度|安全性|堅牢性)"
+    r"(?:が|を)(?:向上|高ま|高め|改善|上が|上げ|支え|底上げ|強化)"
+    r"|(?:混乱|影響|リスク|負担|手間|ダウンタイム|ばらつき)(?:を|が)(?:最小限|最小|低減|軽減|抑え|減ら)"
+    r"|(?:改善|最適化|効率化|強化|刷新)(?:しました|します|を行いました|を行います|を実施しました|を図りました|を図ります)"
+    r"|シームレス(?:に|な)"
+    r"|(?:柔軟な|より良い|最適な)(?:選択肢|運用|対応|体験)")
+
+_GAP_FIGURE = re.compile(
+    r"土台(?:づくり|作り)?|(?<!基)礎(?!石)|基盤づくり|第一歩|大きな一歩|一歩前進|連鎖を断ち切|断ち切り"
+    r"|道を(?:開|拓|ひら)(?!け)|扉を(?:開|ひら)(?!け)|(?:鍵|カギ)を握|武器(?:に|と)な|強力な武器|景色が(?:変わ|一変)|新たな(?:地平|ステージ|次元)"
+    r"|次の(?:ステージ|次元)|底上げ|盤石|追い風|起爆剤|羅針盤|架け橋|屋台骨|息を吹き込|命を吹き込"
+    r"|静かに(?:壊れ|失敗|落ち)|黙って(?:無視|捨て|スキップ|破棄|止ま)")
+
+_GAP_NEED = {"degree": "程度の値（何がどれだけ）", "change": "変わる前と後の値", "effect": "何がどう変わるか",
+        "figure": "比喩が指す中身（何が起きた、何をした）"}
+
+_GAP_HEDGE = re.compile(r"かもしれ|かも知れ|可能性|予定|未定|未確認|検討中|調査中|見込み|はず|でしょう|だろう|と思|ようです|らしい"
+                   r"|おそれ|恐れ|と考えられ|と見られ|れば|なら(?=[、。]|$)|たら(?=[、。]|$)")
+# 当たった語のすぐあとの述語が打ち消し（大きく変わりません、一度に大きく変えず）なら出さない
+_GAP_NEGATED_TAIL = re.compile(r"^[^、。，！？!?]{0,6}?(?:ない|ません|ず(?![つっ])|なかっ|(?:する|される|した|している)こと(?:は|が)(?:ない|ありません))")
+# 意図してぼかした数・時期・相手。この語がある文は出さない（埋めるよう促さない）
+_GAP_VAGUE = re.compile(r"一部の|複数|いくつか|数(?:社|時間|分|秒|日|週間|か月|年|倍|割|件|回|人|台|十|百|千|万)|近日|後日|別途|ある取引先|関係者")
+# 比べる元がある（「本体より長く」）変化は、値がなくても穴にしない（change だけ）
+_GAP_COMPARED = re.compile(r"より")
+_GAP_QUESTION = re.compile(r"(?:[？?]|か[。？?])[」』）)]*$")
+_GAP_KANJI_NUM = re.compile(r"[〇一二三四五六七八九十百千万]+(?:倍|割|分|秒|時間|日|件|回|人|個|%|％)")
+_GAP_SKIP_KINDS = ("code", "frontmatter", "html_block", "table", "heading", "heading_underline", "blank", "thematic_break",
+              "reference_definition")
+_GAP_ORDER = ("figure", "effect", "degree", "change")
+_GAP_NEXT_SENTENCE_RULE = True
+_GAP_ASSUMPTION = re.compile(r"もし|仮に|場合|とすれば|としたら|ならば")
+_GAP_QUOTE = re.compile(r"「[^」]*」|『[^』]*』")
+_GAP_OMISSION = re.compile(r"省きます|省略|伏せ|社外秘|非公開|別途|控え|今後|これからも|引き続き|まいります|ていきます|ていきたい|続けます|に向けて")
+BUILTIN_LISTS["fact-gaps"] = tuple((kind, pattern.pattern) for kind, pattern in
+                                  (("figure", _GAP_FIGURE), ("effect", _GAP_EFFECT), ("degree", _GAP_DEGREE), ("change", _GAP_CHANGE)))
+_LIST_PATTERNS["fact-gaps"] = True
+
+
+def _gap_has_number(text):
+    return bool(extract_numbers(text)) or bool(_GAP_KANJI_NUM.search(text))
+
+
+def fact_gaps(text, doc_type=None):
+    """任意の手がかり。全件数と種類別件数を数え、記録には20件・文80字まで残す。"""
+    if doc_type in ("essay", "promo"):
+        return {"count": 0, "skipped": doc_type, "by_kind": {}, "items": []}
+    doc = _Doc(text)
+    rows = doc.analyses[0]["lines"]
+    sentences = []
+    for index in range(len(doc.lines[0])):
+        if index < len(rows) and (rows[index]["kind"] in _GAP_SKIP_KINDS or rows[index].get("quote_depth")):
+            continue
+        for sentence in _line_sentences(doc, 0, index, index + 1):
+            sentences.append(sentence)
+    masker = _Masker(doc, 0)
+    masker.spans = sorted(masker.spans + [(m.start(), m.end()) for m in _GAP_QUOTE.finditer(text)])
+    masker.lefts = [left for left, _ in masker.spans]
+    patterns, _ = _load_list("fact-gaps")
+    out = []
+    for position, sentence in enumerate(sentences):
+        body = sentence.text
+        if (masker.mask(body, sentence.start) != body or _gap_has_number(body)
+                or _GAP_HEDGE.search(body) or _GAP_QUESTION.search(body) or _GAP_VAGUE.search(body)
+                or _GAP_OMISSION.search(body) or _GAP_ASSUMPTION.search(body) or _GROUND_CERTAINTY.search(body)):
+            continue
+        if _GAP_NEXT_SENTENCE_RULE and position + 1 < len(sentences):
+            nxt = sentences[position + 1]
+            if nxt.line - sentence.line <= 1 and _gap_has_number(nxt.text):
+                continue
+        found = None
+        for kind, pattern in patterns:
+            if kind not in _GAP_NEED:
+                continue
+            for match in pattern.finditer(body):
+                if _GAP_NEGATED_TAIL.match(body[match.end():]):
+                    continue
+                if kind == "change" and _GAP_COMPARED.search(body[:match.start()]):
+                    continue
+                found = (kind, match.group(0))
+                break
+            if found:
+                break
+        if found:
+            out.append({"kind": found[0], "line": sentence.line, "sentence": body, "match": found[1],
+                        "need": _GAP_NEED[found[0]]})
+    counts = dict(Counter(item["kind"] for item in out))
+    return {"count": len(out), "skipped": None, "by_kind": counts,
+            "items": [dict(item, sentence=item["sentence"][:80]) for item in out[:20]]}
 
 
 # ---- diff() ----

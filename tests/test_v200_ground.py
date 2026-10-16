@@ -50,7 +50,7 @@ class GroundCase(unittest.TestCase):
         result = self.function("ground")(final, materials, original)
         self.assertEqual(list(result), TOP_KEYS)
         for item in result["items"]:
-            self.assertEqual(set(item), ITEM_KEYS, item)
+            self.assertEqual(set(item) - {"found_in", "evidence", "bare_in", "values"}, ITEM_KEYS, item)
             self.assertIn(item["classification"], CLASSIFICATIONS)
         for risk in result["meaning_risks"]:
             self.assertEqual(set(risk), RISK_KEYS, risk)
@@ -215,7 +215,7 @@ class TestGroundCompose(GroundCase):
         self.assertEqual(result["mode"], "compose")
         self.assertEqual(result["not_judged"], NOT_JUDGED)
         # 10.3 C1: sources[].role は "source" と "material"。新規作成では資料だけ。index は役割ごとに1から
-        self.assertEqual(result["sources"], [{"role": "material", "index": 1, "chars": len("最大5回まで再試行する。\n")}])
+        self.assertEqual(result["sources"], [{"role": "material", "index": 1, "label": None, "chars": len("最大5回まで再試行する。\n")}])
         self.assertEqual(result["meaning_risks"], [])
         self.assertEqual(result["meaning_risk_count"], 0)
 
@@ -313,7 +313,7 @@ class TestGroundRewrite(GroundCase):
         result = self.ground("保存期間は30日です。\n", ["保存期間は30日に変更した。\n"], "保存期間は3日です。\n")
         self.assertEqual(result["mode"], "rewrite")
         self.assertEqual(result["sources"], [{"role": "source", "index": 1, "chars": len("保存期間は3日です。\n")},
-                                             {"role": "material", "index": 1, "chars": len("保存期間は30日に変更した。\n")}])
+                                             {"role": "material", "index": 1, "label": None, "chars": len("保存期間は30日に変更した。\n")}])
 
     def test_k22_number_from_materials_is_not_a_ground_risk(self):
         result = self.ground("保存期間は30日です。\n", ["保存期間は30日に変更した。\n"], "保存期間は3日です。\n")

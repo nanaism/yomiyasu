@@ -57,8 +57,11 @@ FINALIZE_FILE = "提出の直前に、本文を変えずに verify を1回実行
 # check の固め（勧め55、反証レビュー spec 3）: --state-dir か YOMIYASU_STATE_DIR で状態フォルダを決めたときの {仕上げ}。
 # 試験は YOMIYASU_STATE_DIR で状態フォルダを決めるので、ふつうはこちら（CheckCase.finalize_file）
 FINALIZE_STATE_DIR = "提出の直前に、本文を変えずに verify --state-dir {} を1回実行してください。"
-# check の固め（勧め56）: 本文だけを返す指定では確認の記録を付けないので「完了報告を付けるときは」
-FINALIZE_STDIN = "本文はこのままで返答し、完了報告を付けるときは、この出力の2行目を写してください。"
+# --stdin のときの {仕上げ}。本文だけを返す依頼で verify が抜けたので、ファイルと同じく返す直前の verify を案内する。
+# 状態フォルダを決めたときは verify にも同じ --state-dir を付ける（CheckCase.finalize_stdin）
+FINALIZE_STDIN = "提出の直前に、本文を変えずに、最終稿だけを標準入力から verify --final - に渡して1回実行してください。"
+FINALIZE_STDIN_STATE_DIR = ("提出の直前に、本文を変えずに、最終稿だけを標準入力から verify --state-dir {} --final - に渡して"
+                            "1回実行してください。")
 # 10.4 S11: --no-record のときの {仕上げ}
 # check の固め（勧め59）: 「直さないなら」に続けて読めるように並べ替えた
 FINALIZE_NO_RECORD = ("完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください"
@@ -115,7 +118,7 @@ LINE_ENDINGS_NOTE = "改行コードだけが違います（git の autocrlf や
 
 RECORD_KEYS = ("format", "format_version", "run_id", "attempt", "fix_count", "previous", "created_at", "mode",
                "cwd", "host", "skill", "tools", "python", "inputs", "options", "required_checks", "checks",
-               "materials_summary", "result", "record_digest")
+               "materials_summary", "fact_gaps", "result", "record_digest")
 INPUT_KEYS = ("role", "index", "path", "via", "bytes", "sha256", "text_sha256", "bom", "eol", "snapshot")
 CHECK_KEYS = ("name", "status", "exit_code", "duration_ms", "target", "report", "report_sha256", "text",
               "text_sha256", "summary", "stderr", "error")
@@ -365,6 +368,11 @@ class CheckCase(unittest.TestCase):
         付けるよう案内する（勧め55。反証レビュー spec 3）。"""
         return FINALIZE_STATE_DIR.format('"{}"'.format(self.state))
 
+    def finalize_stdin(self):
+        """--stdin（--final - を含む）のときの {仕上げ}。試験は YOMIYASU_STATE_DIR で状態フォルダを決めるので、
+        verify --final - にも同じ状態フォルダを付けるよう案内する。"""
+        return FINALIZE_STDIN_STATE_DIR.format('"{}"'.format(self.state))
+
     def env(self, **extra):
         env = dict(os.environ)
         for name in ("YOMIYASU_STATE_DIR", "YOMIYASU_SESSION", "CODEX_THREAD_ID"):
@@ -563,7 +571,7 @@ class TestK1RecordAndOutput(CheckCase):
             self.assertEqual(item["snapshot"], "inputs/{}.bin".format(sha256_bytes(data)))
             self.assertEqual((self.state / item["snapshot"]).read_bytes(), data)
         # G7（種類と読者の設計 9.5、10.1）: options に doc_type と reader を足す（付けなければ null）
-        self.assertEqual(record["options"], {"stance": None, "fail_on": [], "timeout": 90, "doc_type": None, "reader": None})
+        self.assertEqual(record["options"], {"stance": None, "fail_on": [], "timeout": 90, "doc_type": None, "reader": None, "fact_gaps": False})
         self.assertEqual(record["required_checks"], ["lint", "diff"])
         self.assertEqual(sorted(entry["name"] for entry in record["checks"]), ["diff", "lint"])
         source_sha = sha256_file(a)
@@ -1501,8 +1509,10 @@ class TestComposeAndMaterials(CheckCase):
                                    "、資料との照合（資料1件）資料にない数値・名前0件")
         self.assertIn("■ 資料との照合（資料1件）", lines)
         self.assertIn("- 資料に基づく補足の候補: 30日", lines)
-        self.assertEqual(lines[lines.index("■ 資料との照合（資料1件）") + 1:][:2],
-                         ["- 資料に基づく補足の候補: 30日", "- " + MATERIALS_DISCLAIMER])
+        self.assertEqual(lines[lines.index("■ 資料との照合（資料1件）") + 1:][:3],
+                         ["- 資料に基づく補足の候補: 30日",
+                          "- 資料に基づく補足の候補（該当行）: 30日（資料1の1行目「保存期間は30日に変更した。」）",
+                          "- " + MATERIALS_DISCLAIMER])
         process = self.check("run", "--source", a, "--material", m, "--final", b, "--new-run",
                              "--fail-on=meaning-risk")
         self.assertEqual(process.returncode, 1, process.stdout + process.stderr)
@@ -1559,7 +1569,7 @@ class TestStdin(CheckCase):
 
     def test_k24_stdin_run_and_verify_by_text_hash(self):
         process, lines = self.check_ok("run", "--stdin", stdin=self.BODY)
-        self.assertEqual(lines[0], RUN_REWRITE_FIRST + FINALIZE_STDIN)
+        self.assertEqual(lines[0], RUN_REWRITE_FIRST + self.finalize_stdin())
         status, fields = self.status(lines[1])
         expected_hash = text_sha256("保存期間は30日です。\n".encode("utf-8"))
         self.assertEqual((status, fields["final"], fields["mode"], fields["checks"]),
@@ -2284,7 +2294,7 @@ class TestCommonPromises(CheckCase):
         path, record = self.record_from(lines)
         self.assertEqual((record["inputs"]["final"]["via"], record["inputs"]["final"]["path"]), ("stdin", None))
         self.assertEqual(record["inputs"]["source"]["via"], "file")
-        self.assertEqual(lines[0], RUN_REWRITE_FIRST + FINALIZE_STDIN)
+        self.assertEqual(lines[0], RUN_REWRITE_FIRST + self.finalize_stdin())
         for args in (["run", "--source", "-", "--final", "-"], ["run", "--stdin", "--final", b],
                      ["run", "--stdin", "--source", a], ["run", "--stdin", "--material", a]):
             with self.subTest(args=[str(x) for x in args]):

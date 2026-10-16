@@ -436,6 +436,30 @@ class HookTests(ManagedCase):
                                 env=self.env, capture_output=True, text=True, timeout=5)
         self.assertIn('2.0.0-beta', result.stdout)
 
+    def test_h16b_help_and_print_config_errors(self):
+        """--help に引数、環境変数、終了コードがあり、--print-config の値の誤りだけが終了コード2。
+        フックとして呼ぶ形（--host）と知らない引数は、ホストを止めないよう今までどおり何も出さずに0。"""
+        def run(*args):
+            return subprocess.run([sys.executable, '-B', str(HOOK)] + list(args), cwd=str(self.root), env=self.env,
+                                  capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL)
+        before = sorted(str(p) for p in self.root.rglob('*'))
+        shown = run('--help')
+        self.assertEqual((shown.returncode, shown.stderr), (0, ''))
+        for text in ('使い方: yomiyasu_hook.py --host claude-code|codex [--state-dir DIR]', '終了コード:',
+                     'YOMIYASU_STATE_DIR', 'CLAUDE_PROJECT_DIR', 'hook-errors.log', '知らない引数も無視します'):
+            self.assertIn(text, shown.stdout)
+        self.assertEqual(run('-h').stdout, shown.stdout)
+        for args in (['--print-config', 'cursor'], ['--print-config']):
+            with self.subTest(args=args):
+                result = run(*args)
+                self.assertEqual((result.returncode, result.stdout), (2, ''))
+                self.assertEqual(result.stderr, '--print-config には claude-code か codex を渡してください。\n')
+        for args in (['--bogus'], ['--host'], ['--host', 'cursor'], ['--host', 'claude-code', '--bogus']):
+            with self.subTest(args=args):
+                result = run(*args)
+                self.assertEqual((result.returncode, result.stdout, result.stderr), (0, '', ''))
+        self.assertEqual(before, sorted(str(p) for p in self.root.rglob('*')))
+
     def test_h18_no_hook_declarations(self):
         self.assertEqual(list(ROOT.rglob('SKILL.md')), [ROOT / 'skills' / 'yomiyasu' / 'SKILL.md'])
         front = (ROOT / 'skills' / 'yomiyasu' / 'SKILL.md').read_text(encoding='utf-8').split('---')[1]

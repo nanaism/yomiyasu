@@ -291,7 +291,8 @@ class RulePenaltyScoreTest(unittest.TestCase):
         expected = """rule_penalty_score（--json の目安）:
   候補が0件なら100。候補があれば 100 × 40 ÷ (40 + x) を四捨五入し、1〜99に収めます。
   x は、行ごとの候補の重み（error 3、warn 2、info 1）を地の文1,000字あたりに直した数です。
-  地の文はコード、表、引用、見出し、URL を除いた字数で、1,000字に満たなければ1,000字として割ります。
+  地の文はコード、表、引用、見出し、前置きの設定（frontmatter）、HTML、URL と空白を除いた字数で、
+  1,000字に満たなければ1,000字として割ります。
   excess_bold と excess_list は1件で2、bold_label_list は1を x に足し、
   negative_parallelism_density は数えません。ダッシュの規則に当たった行は、候補に出さない4行目からも数えます。
   --doc-type で候補が変わると、点数も変わります。CI では --fail-on か counts を使ってください。"""

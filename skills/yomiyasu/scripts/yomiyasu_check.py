@@ -105,6 +105,9 @@ _TOOL_NAMES = ("yomiyasu_check.py", "yomiyasu_lint.py", "yomiyasu_diff.py", "mar
 # 変わっていれば tool_changed にする（diff の詰めの直し。反証で見つけた例）
 _LIST_NAMES = ("nominalization", "intensifiers", "feelings", "hedges")
 _LIST_KEYS = tuple("references/lists/{}.txt".format(name) for name in _LIST_NAMES)
+# 事実の穴の候補の一覧（--fact-gaps を付けた run の記録の tools にだけ入る）。入った記録は、ほかの4つと同じく verify で比べ、
+# 変わっていれば tool_changed にする（前は --replay だけで比べ、通常の verify は executed のままだった）
+_FACT_GAPS_KEY = "references/lists/fact-gaps.txt"
 # ファイルがないとみなす誤り（yomiyasu_diff.py の _LIST_ABSENT と同じ）
 _LIST_ABSENT = (FileNotFoundError, NotADirectoryError)
 # 外から渡す実行IDの形。状態フォルダの外を指せないようにする
@@ -150,11 +153,14 @@ _SAME_AS_FINAL_ERROR = ("資料と最終稿が同じ中身です。資料には�
                         "書き直す前の文章なら --source に渡してください。")
 # 空の最終稿（空白だけの本文も同じ）
 _EMPTY_FINAL_ERROR = "最終稿が空です。書き終えた最終稿を渡してください。"
-# 1行目の {仕上げ}。--stdin と verify の executed は、本文だけを返す指定もあるので「完了報告を付けるときは」
-# とする。--no-record は「直さないなら」に続けて読めるように並べ替えた
+# 1行目の {仕上げ}。verify の executed は、本文だけを返す指定もあるので「完了報告を付けるときは」とする。
+# --stdin も、ファイルと同じく返す直前の verify を案内する（本文だけを返す依頼で verify が抜けたため）。
+# --no-record は「直さないなら」に続けて読めるように並べ替えた
 _FINALIZE_FILE = "提出の直前に、本文を変えずに verify を1回実行してください。"
 _FINALIZE_STATE_DIR = "提出の直前に、本文を変えずに verify --state-dir {} を1回実行してください。"
-_FINALIZE_STDIN = "本文はこのままで返答し、完了報告を付けるときは、この出力の2行目を写してください。"
+_FINALIZE_STDIN = "提出の直前に、本文を変えずに、最終稿だけを標準入力から verify --final - に渡して1回実行してください。"
+_FINALIZE_STDIN_STATE_DIR = ("提出の直前に、本文を変えずに、最終稿だけを標準入力から verify --state-dir {} --final - に渡して"
+                             "1回実行してください。")
 _FINALIZE_NO_RECORD = ("完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください"
                        "（記録を残さない指定なので verify はできません）。")
 _FAILED_NAMES = {"timeout": "時間切れ", "error": "内部エラー"}
@@ -203,7 +209,7 @@ _STDIN_FORM = ("<<<yomiyasu:original>>>\n（書き直す前の原文）\n<<<yomi
 _MARKER_HEAD = "<<<yomiyasu:"
 _MARKER_SHOWN = 60              # 案内に写す行の字数の上限
 _BAD_MARKER_KEY = "決まった区切りの行と一字一句同じではありません"
-_BAD_MARKER = "{}行目の「{}」が、" + _BAD_MARKER_KEY + "。区切りの行には出典などを書き足せません"
+_BAD_MARKER = "{}行目の「{}」が、" + _BAD_MARKER_KEY + "。資料は <<<yomiyasu:material 出典>>>（出典は200字まで）、原文と最終稿は出典なしで書いてください"
 _BAD_MARKER_TAIL = ("本文に <<<yomiyasu: で始まる行があるときは、ファイルに保存して --source（新規作成では --material）と"
                     " --final で渡してください。")
 
@@ -693,7 +699,7 @@ def _attempt_numbers(run_dir):
     return sorted(numbers)
 
 
-def _tool_versions():
+def _tool_versions(fact_gaps=False):
     """記録の tools（4本の版の文字列と SHA-256）。スクリプトは読み込まず、バイト列から読む。
     references/lists/ の一覧のファイルがあれば、"references/lists/<名前>.txt" のキーで {"version": null, "sha256"} を足す
     （開けないときは sha256 も null。ないときはキーを作らない）。"""
@@ -707,7 +713,9 @@ def _tool_versions():
             continue
         match = _TOOL_VERSION.search(data.decode("utf-8", "replace"))
         tools[name] = {"version": match.group(1) if match else None, "sha256": _sha256(data)}
-    for name, key in zip(_LIST_NAMES, _LIST_KEYS):
+    names = _LIST_NAMES + (("fact-gaps",) if fact_gaps else ())
+    for name in names:
+        key = "references/lists/{}.txt".format(name)
         try:
             with open(os.path.join(_HERE, os.pardir, "references", "lists", name + ".txt"), "rb") as handle:
                 tools[key] = {"version": None, "sha256": _sha256(handle.read())}
@@ -819,6 +827,7 @@ class _Input(object):
     """入力1つ（原文、資料、最終稿）。バイト列を1回だけ読み、ハッシュと、decode_source でそろえた本文を持つ。"""
 
     def __init__(self, role, index, path, data):
+        self.label = None
         self.role = role                      # "source"、"material"、"final"
         self.index = index                    # 資料は1から、ほかは0
         self.path = path                      # 絶対パス。標準入力なら None
@@ -849,6 +858,7 @@ class _Input(object):
         if self.role == "material":
             # 資料を原文とみなした印。似かたは小数第3位まで（新規作成でないときは null）。treated_by は、似かたで決めたか（similarity）、
             # 同じ実行の前の回から引き継いだか（previous_attempt）。印がなければ null（反証で見つけた例）
+            record["label"] = self.label
             record["treated_as_source"] = self.treated_as_source
             record["similarity"] = round(self.similarity, 3) if self.similarity is not None else None
             record["treated_by"] = self.treated_by
@@ -905,7 +915,53 @@ def _read_named(role, index, given, stdin_data):
     return item, None
 
 
-def _split_stdin(data):
+
+_MATERIAL_MARKER = re.compile(r"^<<<yomiyasu:material(?:[ \t]+(.+?))?>>>[ \t]*$")
+
+
+def _material_marker(bare):
+    try:
+        text = bare.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+    match = _MATERIAL_MARKER.fullmatch(text)
+    if match is None:
+        return None
+    label = match.group(1)
+    if label is not None and (len(label) > 200 or ">>>" in label):
+        return None
+    return (label,)
+
+
+def _split_material(item, first_index):
+    """区切りは資料の本文に含めない。区切りなしの入力のバイト列はそのまま保存する。"""
+    data = item.data[3:] if item.data.startswith(b"\xef\xbb\xbf") else item.data
+    rows = data.splitlines(True)
+    markers = {}
+    first = next((i for i, row in enumerate(rows) if row.strip()), None)
+    for i, row in enumerate(rows):
+        bare = row.rstrip(b"\r\n")
+        marker = _material_marker(bare)
+        if marker is not None:
+            markers[i] = marker[0]
+        elif bare.decode("utf-8").strip().lower().startswith(_MARKER_HEAD):
+            return None, _BAD_MARKER.format(i + 1, bare.decode("utf-8")[:_MARKER_SHOWN])
+    if first not in markers:
+        item.index = first_index
+        return [item], None
+    blocks = []
+    starts = sorted(markers)
+    for n, start in enumerate(starts):
+        end = starts[n + 1] if n + 1 < len(starts) else len(rows)
+        body = b"".join(rows[start + 1:end])
+        block, problem = _make_input("material", first_index + n, item.path, body)
+        if problem:
+            return None, problem
+        block.label = markers[start]
+        blocks.append(block)
+    return blocks, None
+
+def _split_stdin(data, with_labels=False):
     """区切りの行で標準入力を分ける。([(役割, バイト列)], None) か (None, 理由)。
 
     各部分は、区切りの行の次のバイトから、次の区切りの行の先頭まで（末尾の改行を含む）。先頭の BOM は1つ外す。"""
@@ -923,6 +979,10 @@ def _split_stdin(data):
         if bare.endswith(b"\r"):
             bare = bare[:-1]
         role = _MARKERS.get(bare)
+        label = None
+        material = _material_marker(bare)
+        if material is not None:
+            role, label = "material", material[0]
         if role is None and b"<<<" in bare:
             text = bare.decode("utf-8", "replace")
             if text.strip().lower().startswith(_MARKER_HEAD):
@@ -931,7 +991,7 @@ def _split_stdin(data):
         if role is not None:
             if current is not None:
                 parts.append(current)
-            current = [role, following, following]
+            current = [role, following, following, label]
         elif current is None:
             if bare.strip():
                 return None, "空白以外の最初の行が区切りの行ではありません"
@@ -940,7 +1000,7 @@ def _split_stdin(data):
         position = following
     if current is not None:
         parts.append(current)
-    roles = [role for role, _, _ in parts]
+    roles = [part[0] for part in parts]
     if roles.count("final") == 0:
         return None, "<<<yomiyasu:final>>> の行がありません"
     if roles.count("final") > 1:
@@ -949,7 +1009,9 @@ def _split_stdin(data):
         return None, "<<<yomiyasu:original>>> の行が2つ以上あります"
     if "source" not in roles and "material" not in roles:
         return None, "<<<yomiyasu:original>>> の行も <<<yomiyasu:material>>> の行もありません"
-    return [(role, data[start:end]) for role, start, end in parts], None
+    if with_labels:
+        return [(role, data[start:end], label) for role, start, end, label in parts], None
+    return [(role, data[start:end]) for role, start, end, _ in parts], None
 
 
 def _read_inputs(args):
@@ -958,7 +1020,7 @@ def _read_inputs(args):
         data, problem = _read_stdin_bytes()
         if problem:
             return None, problem
-        pieces, problem = _split_stdin(data)
+        pieces, problem = _split_stdin(data, with_labels=True)
         if problem:
             message = "--stdin の本文の区切りが正しくありません（{}）。行全体が区切りになるように、次の形で渡してください。\n{}".format(
                 problem, _STDIN_FORM)
@@ -966,11 +1028,12 @@ def _read_inputs(args):
                 message += "\n" + _BAD_MARKER_TAIL
             return None, message
         source, materials, final = None, [], None
-        for role, piece in pieces:
+        for role, piece, label in pieces:
             index = len(materials) + 1 if role == "material" else 0
             item, problem = _make_input(role, index, None, piece)
             if problem:
                 return None, problem
+            item.label = label
             if role == "source":
                 source = item
             elif role == "material":
@@ -994,7 +1057,10 @@ def _read_inputs(args):
         item, problem = _read_named("material", index, path, stdin_data)
         if problem:
             return None, problem
-        materials.append(item)
+        blocks, problem = _split_material(item, len(materials) + 1)
+        if problem:
+            return None, problem
+        materials.extend(blocks)
     final, problem = _read_named("final", 0, args.final[0], stdin_data)
     if problem:
         return None, problem
@@ -1327,6 +1393,17 @@ def _materials_lines(diff_module, ctx):
         supplements = [item["text"] for item in items if item.get("classification") == "from_materials"]
         if supplements:
             lines.append("- 資料に基づく補足の候補: " + "、".join(supplements))
+    def shown(item, key):
+        evidence = item.get(key) or []
+        places = "、".join("資料{}の{}行目「{}」".format(index, line, text[:40]) for index, line, text in evidence)
+        return item["text"] + ("（" + places + "）" if places else "")
+    backed = [item for item in items if item.get("evidence")]
+    if backed:
+        lines.append("- 資料に基づく補足の候補（該当行）: " + "、".join(shown(item, "evidence") for item in backed[:5]))
+    bare = [item for item in items if item.get("bare_in")]
+    if bare:
+        lines.append("- 単位のない数とだけ一致（資料にない数値に数えています。根拠の行か読み比べてください）: "
+                     + "、".join(shown(item, "bare_in") for item in bare[:5]))
     words = [item["text"] for item in items
              if item.get("kind") == "word" and item.get("classification") == "not_in_sources"]
     if rewrite and ctx.diff_result is not None:
@@ -1335,7 +1412,8 @@ def _materials_lines(diff_module, ctx):
         words = [word for word in words if word not in new_words]
     if words:
         lines.append("- 資料にない語: " + "、".join(words))
-    dropped = [item["text"] for item in items if item.get("classification") == "dropped_certainty"]
+    dropped = [item["text"] + ("（{}の文）".format("、".join(item["values"])) if item.get("values") else "")
+               for item in items if item.get("classification") == "dropped_certainty"]
     if dropped:
         lines.append("- 資料にあった確度の語が最終稿にない: " + "、".join(dropped))
     if not rewrite:
@@ -1372,6 +1450,7 @@ class _Context(object):
         self.source_lint_status = None
         self.diff_result = None      # 子の JSON そのもの
         self.materials_result = None
+        self.fact_gaps = None
         self.risks = []              # 意味が変わる恐れ（diff の basis 入りの写しと、照合の unsupported）
         self.diff_risks = None       # diff の basis 入りの写し
         self.texts = {}              # 人が読む形（.txt に書く文。lint と diff は子の JSON から作ったもの）
@@ -1415,7 +1494,7 @@ class _Context(object):
 
     def candidate_total(self):
         """1回目の「候補あり／なし」は、lint、diff、資料との照合の候補の合計で決める。"""
-        total = 0
+        total = self.fact_gaps["count"] if self.fact_gaps else 0
         for result in (self.lint_result, self.diff_result, self.materials_result):
             if result is not None:
                 total += int(result.get("candidate_count") or 0)
@@ -1487,7 +1566,8 @@ def _run_checks(ctx, snapshots, stance, timeout):
                 # 照合の意味が変わる恐れに重ねない（同じ値を二重に出さない。反証で見つけた例）
                 ctx.materials_result = diff_module.ground(
                     ctx.final.text, [item.text for item in ctx.materials],
-                    ctx.diff_source.text if ctx.diff_source is not None else None)
+                    ctx.diff_source.text if ctx.diff_source is not None else None,
+                    labels=[item.label for item in ctx.materials])
                 entry["status"] = "ran"
             except Exception as error:  # 照合の例外は記録に残し、状態を partial にする
                 entry["error"] = "{}: {}".format(type(error).__name__, error)
@@ -1590,8 +1670,8 @@ def _review_count(section):
 
 
 def _fail_on_hits(ctx, diff_module):
-    """--fail-on に当たった値（指定した順）。meaning-risk は数値・否定・入れ替え・文の種類・引用の印・確度の強まりと資料にない数値、
-    warn と error は lint の候補で決める。"""
+    """--fail-on に当たった値（指定した順）。meaning-risk は diff の FAIL_ON_KINDS（数値・否定・入れ替え・文の種類・引用の印・
+    確度の強まり・状態の語の消え・書き手の約束の足し）と、新規作成の資料にない数値、warn と error は lint の候補で決める。"""
     hits = []
     counts = (ctx.lint_result or {}).get("counts") or {}
     for value in ctx.fail_on:
@@ -1615,6 +1695,8 @@ def _finalize_text(ctx):
     if ctx.no_record:
         return _FINALIZE_NO_RECORD
     if ctx.final.via == "stdin":
+        if ctx.state_dir_option is not None:
+            return _FINALIZE_STDIN_STATE_DIR.format('"{}"'.format(ctx.state_dir_option))
         return _FINALIZE_STDIN
     if ctx.state_dir_option is not None:
         return _FINALIZE_STATE_DIR.format('"{}"'.format(ctx.state_dir_option))
@@ -1777,7 +1859,13 @@ def _summary_line(ctx, diff_module=None):
         diff_done = "diff" in ctx.required and "diff" not in failed and ctx.diff_risks is not None
         parts.append("資料との照合（{}）資料にない数値・名前{}件".format(
             where, _unsupported_count(ctx.materials_result, ctx.diff_risks if diff_done else None, diff_module)))
-    return "実行した検査: " + ("、".join(parts) if parts else "なし")
+    summary = "実行した検査: " + ("、".join(parts) if parts else "なし")
+    if ctx.fact_gaps is not None:
+        if ctx.fact_gaps["skipped"]:
+            summary += "、事実の穴の候補（種類 {} では出していません）".format(ctx.fact_gaps["skipped"])
+        else:
+            summary += "、事実の穴の候補{}件".format(ctx.fact_gaps["count"])
+    return summary
 
 
 def _detector_value(ctx, diff_module, key):
@@ -1971,6 +2059,19 @@ def _sections(ctx, lint_module, diff_module):
                         + ctx.lint_findings)
     if ctx.materials_result is not None:
         sections.append("\n".join(_materials_lines(diff_module, ctx)))
+    if ctx.fact_gaps is not None and not ctx.fact_gaps["skipped"]:
+        advice = ("この種類では補わず、必要なら書き手への問いにしてください" if ctx.doc_type in ("formal", "paper")
+                  else "根拠に中身が書かれているときだけ補い、なければ残すか、書き手への問いにしてください")
+        rows = ["■ 事実の穴の候補（{}件。比喩や程度の語だけで、中身や値が書かれていないかもしれない所です。{}。候補は一部だけです）".format(
+            ctx.fact_gaps["count"], advice)]
+        for item in ctx.fact_gaps["items"][:10]:
+            rows.append("- 後{}行目（{}がない「{}」）: {}".format(item["line"], item["need"], item["match"], item["sentence"]))
+        if ctx.fact_gaps["count"] > 10:
+            rows.append("- ほか{}件".format(ctx.fact_gaps["count"] - 10))
+        problem = diff_module._LIST_PROBLEMS.get("fact-gaps")
+        if problem:
+            rows.append("- 一覧を読めなかったので、内蔵の一覧を使いました（{}）。".format(problem))
+        sections.append("\n".join(rows))
     if parts is not None and parts["full_diff"]:
         sections.append(parts["full_diff"])
     return sections
@@ -2121,6 +2222,7 @@ def _save(state, ctx, link, moment, cwd, host, tools, options, path_key, lint_mo
         record["required_checks"] = list(ctx.required)
         record["checks"] = [ctx.entries[name] for name in ctx.required]
         record["materials_summary"] = summary
+        record["fact_gaps"] = ctx.fact_gaps
         record["result"] = OrderedDict((
             ("status", status), ("token", token), ("next", following), ("fail_on_hit", bool(ctx.fail_on_hits)),
             ("meaning_risk_count", len(ctx.risks)), ("fail_on_meaning_risk_count", diff_module.fail_on_count(ctx.risks)),
@@ -2273,10 +2375,13 @@ def _run_impl(args, parser):
         return 2
     final_compact = _compact(ctx.final.text) if ctx.materials else ""
     compacts = [_compact(item.text) for item in ctx.materials]
-    if any(item.text_sha256 == ctx.final.text_sha256 or (final_compact and compact == final_compact)
+    if any((item.text_sha256 == ctx.final.text_sha256 or (final_compact and compact == final_compact))
+           and not (ctx.source is not None and item.label is not None)
            for item, compact in zip(ctx.materials, compacts)):
         # 資料と最終稿が同じファイルか同じ本文なら、照合が空回りする（推敲でも新規作成でも2）。空白、全角と半角、
-        # 書式の文字だけが違う写しも同じ本文とみなす（似かたと同じ下ごしらえ。反証で見つけた例）
+        # 書式の文字だけが違う写しも同じ本文とみなす（似かたと同じ下ごしらえ。反証で見つけた例）。
+        # 推敲で、出典つきの区切りの資料（抜き書き）だけは除く。短い原稿を根拠の文どおりに直すと、根拠の文と
+        # 最終稿が同じになることがあるため（載せ替えの反証で見つけた例）
         _error(_SAME_AS_FINAL_ERROR)
         return 2
     ctx.mode = "rewrite" if ctx.source is not None else "compose"
@@ -2296,10 +2401,10 @@ def _run_impl(args, parser):
     host = OrderedDict((("session", _host_value(session)),
                         ("codex_thread_id", _host_value(os.environ.get("CODEX_THREAD_ID"))),
                         ("armed_by", None)))
-    tools = _tool_versions()
+    tools = _tool_versions(args.fact_gaps)
     # doc_type と reader は、文書の種類と読者のオプションを足したときに後ろに足した（キーを足すだけなので RECORD_FORMAT_VERSION は1のまま）
     options = OrderedDict((("stance", stance), ("fail_on", list(fail_on)), ("timeout", timeout),
-                           ("doc_type", doc_type), ("reader", reader)))
+                           ("doc_type", doc_type), ("reader", reader), ("fact_gaps", args.fact_gaps)))
 
     # 2. 実行IDと回を決める（読むだけ。別の原文の実行IDなら、何も書かずに2）
     state = None if args.no_record else _state_dir(args.state_dir)
@@ -2334,6 +2439,9 @@ def _run_impl(args, parser):
                     item.treated_by = "previous_attempt"
                     break
     ctx.required = _mode_checks(ctx.mode, ctx.materials, treated=ctx.treated is not None)
+    if args.fact_gaps:
+        # 事実の穴の候補は、管理の上限で止まる run では探さない（上限の判定のあとに置く。載せ替えの反証で見つけた例）
+        ctx.fact_gaps = diff_module.fact_gaps(ctx.final.text, doc_type)
 
     # 3. 入力の写しを置き、検査はこの写しに対して行う。記録を書かないとき（--no-record、書けない）は、
     #    消す前提の一時フォルダに写しを置き、終わったら消す。ほかの場所に記録を逃がさない
@@ -2415,7 +2523,8 @@ def _run_impl(args, parser):
             ("immutable_check", _detector_value(ctx, diff_module, "immutable")),
             ("politeness_check", _detector_value(ctx, diff_module, "politeness")),
             ("lint", ctx.lint_result), ("diff", diff_result), ("materials", ctx.materials_result),
-            ("candidate_counts", candidate_counts), ("changed_places", changed_places)))
+            ("candidate_counts", candidate_counts), ("changed_places", changed_places),
+            ("fact_gaps", ctx.fact_gaps)))
         print(json.dumps(result, ensure_ascii=True, indent=1))
     else:
         if recording:
@@ -2467,7 +2576,7 @@ _SCRIPT_AND_LIST_CHANGED_LINE = ("記録のあとで、検査スクリプトと�
 def _tool_changed_line(problems):
     """tool_changed の1行目。変わったのがスクリプトだけなら決まった文、一覧も変わっていれば一覧の名前を書く。"""
     changed = [detail for code, detail in problems if code == "tool_changed"]
-    lists = [key for key in _LIST_KEYS if key in changed]
+    lists = [key for key in _LIST_KEYS + (_FACT_GAPS_KEY,) if key in changed]
     if not lists:
         return _VERIFY_LINES["tool_changed"]
     if len(lists) == len(changed):
@@ -2856,6 +2965,24 @@ def _find(state, final, run_id, source):
     return "no_record", None
 
 
+
+def _fact_gaps_shape(gaps):
+    if not isinstance(gaps, dict) or set(gaps) != {"count", "skipped", "by_kind", "items"}:
+        return False
+    count, skipped, kinds, items = (gaps[key] for key in ("count", "skipped", "by_kind", "items"))
+    if (type(count) is not int or count < 0 or skipped not in (None, "essay", "promo")
+            or not isinstance(kinds, dict) or not isinstance(items, list) or len(items) != min(count, 20)):
+        return False
+    if any(kind not in ("degree", "change", "effect", "figure") or type(n) is not int or n <= 0
+           for kind, n in kinds.items()) or sum(kinds.values()) != count:
+        return False
+    if skipped and (count or kinds or items):
+        return False
+    return all(isinstance(item, dict) and item.get("kind") in kinds
+               and type(item.get("line")) is int and item["line"] >= 1
+               and all(isinstance(item.get(key), str) for key in ("sentence", "match", "need"))
+               and len(item["sentence"]) <= 80 for item in items)
+
 def _record_shape(record):
     """記録の必須のキーと型。食い違ったキーの名前の並び（空なら形は合っている）。"""
     wrong = []
@@ -2881,6 +3008,10 @@ def _record_shape(record):
         if not need(isinstance(item, dict) and all(key in item for key in _INPUT_KEYS), name):
             return
         need(item.get("role") == role, name + ".role")
+        if role == "material":
+            label = item.get("label")
+            need(label is None or (is_text(label) and len(label) <= 200 and ">>>" not in label
+                                  and "\n" not in label and "\r" not in label), name + ".label")
         need(item.get("index") == index and type(item.get("index")) is int, name + ".index")
         via = item.get("via")
         need(via in ("file", "stdin"), name + ".via")
@@ -2918,7 +3049,7 @@ def _record_shape(record):
         isinstance(tools.get(name), dict) and text_or_null(tools[name].get("version"))
         and text_or_null(tools[name].get("sha256")) for name in _TOOL_NAMES) and all(
         isinstance(tools[key], dict) and tools[key].get("version") is None and text_or_null(tools[key].get("sha256"))
-        for key in _LIST_KEYS if key in tools), "tools")
+        for key in _LIST_KEYS + (_FACT_GAPS_KEY,) if key in tools), "tools")
     python = record.get("python")
     # unicode_version は、このキーを足す前の記録にはないので、あるときだけ型を確かめる（反証で見つけた例）
     need(isinstance(python, dict) and is_text(python.get("version")) and is_text(python.get("implementation"))
@@ -2956,6 +3087,13 @@ def _record_shape(record):
          and type(options.get("timeout")) in (int, float)
          and _known_value(options.get("doc_type"), DOC_TYPES) and _known_value(options.get("reader"), READER_LEVELS),
          "options")
+    if isinstance(options, dict):
+        need(type(options.get("fact_gaps", False)) is bool, "options.fact_gaps")
+        gaps = record.get("fact_gaps")
+        if options.get("fact_gaps"):
+            need(_fact_gaps_shape(gaps), "fact_gaps")
+        else:
+            need(gaps is None, "fact_gaps")
     required = record.get("required_checks")
     need(isinstance(required, list) and all(name in _CHECK_NAMES for name in required)
          and len(set(required)) == len(required), "required_checks")
@@ -3244,7 +3382,8 @@ def _replay(state, record, timeout):
                 source_text = text_of(source_item) if source_item is not None else None
                 material_texts = [text_of(item) for item in inputs["materials"]]
                 final_text = text_of(inputs["final"])
-                rebuilt["materials"] = (diff_module.ground(final_text, material_texts, source_text), material_texts)
+                rebuilt["materials"] = (diff_module.ground(final_text, material_texts, source_text,
+                    labels=[item.get("label") for item in inputs["materials"]]), material_texts)
             except Exception as error:  # 照合を作り直せない（写しが読めない、例外）
                 problems.append(("replay_error", "materials: {}: {}".format(type(error).__name__, error)))
         results = children.wait()
@@ -3257,6 +3396,21 @@ def _replay(state, record, timeout):
         if status == "error" and (code is None or code < 0):
             # 起動できない、待てない（終了コードなし）、シグナルで止まった（負の終了コード）
             raise _ReplayError("{}: {}".format(name, error if code is None else "シグナル{}で止まりました".format(-code)))
+
+    if record["options"].get("fact_gaps"):
+        # 一覧は通常の verify の 9 でも比べる（変われば tool_changed で、ここには来ない）。ここでは念のため、候補が偶然同じでも、
+        # 別の一覧による再現を一致とはしない。
+        key = _FACT_GAPS_KEY
+        if _list_sha256(_tool_versions(True), key) != _list_sha256(record["tools"], key):
+            problems.append(("replay_mismatch", key))
+        try:
+            with open(snapshot(inputs["final"]), "rb") as handle:
+                gap_text = decode_source(handle.read())[0]
+            gaps = diff_module.fact_gaps(gap_text, record["options"].get("doc_type"))
+            if gaps != record.get("fact_gaps"):
+                problems.append(("replay_mismatch", "fact_gaps"))
+        except Exception as error:
+            problems.append(("replay_error", "fact_gaps: {}".format(error)))
 
     timed_out = []
     parsed = {}
@@ -3380,7 +3534,8 @@ def _verify_record(state, found, final, source, since, replay, timeout):
     if not _final_matches(record["inputs"]["final"], final):
         fail("invalid_record", "final_hash", "記録の inputs.final のハッシュが今の最終稿と合いません")
     # 新規作成の記録は、写しから原文とみなす資料を求め直す。印を消して diff を外した記録を完了と扱わない
-    current_tools = _tool_versions()
+    fact_gaps_recorded = isinstance(record.get("options"), dict) and record["options"].get("fact_gaps") is True
+    current_tools = _tool_versions(fact_gaps_recorded)
     recorded_treated = _record_treated(record)
     treated = recorded_treated is not None
     reason = _recheck_problem(record, current_tools) if record["mode"] == "compose" else None
@@ -3457,11 +3612,12 @@ def _verify_record(state, found, final, source, since, replay, timeout):
             if not ok:
                 fail("invalid_record", "report", "{} がないか、ハッシュが記録と合いません".format(expected))
     # 9. スクリプトと一覧のファイルと SKILL.md。一覧は、記録のときにあったか、今あるか、中身が同じかを比べる（diff の詰めの直し。
-    # 一覧は diff の結果を変える入力なので、変われば tool_changed。反証で見つけた例）
+    # 一覧は diff の結果を変える入力なので、変われば tool_changed。反証で見つけた例）。fact-gaps.txt は、--fact-gaps を付けた
+    # run の記録だけで比べる（付けなかった run の結果は、この一覧で変わらない）
     for name in _TOOL_NAMES:
         if current_tools[name]["sha256"] != record["tools"][name]["sha256"]:
             fail("tool_changed", "tool_changed", name)
-    for key in _LIST_KEYS:
+    for key in _LIST_KEYS + ((_FACT_GAPS_KEY,) if fact_gaps_recorded else ()):
         if _list_sha256(current_tools, key) != _list_sha256(record["tools"], key):
             fail("tool_changed", "tool_changed", key)
     if _skill_info()["skill_md_sha256"] != record["skill"]["skill_md_sha256"]:
@@ -4007,7 +4163,7 @@ def _managed_limit(state, entry, ctx, args, link):
               "meaning_risk_count": None, "fail_on_meaning_risk_count": None,
               "lint": None, "diff": None, "materials": None,
               "stiffness_check": None, "tone_check": None, "hedges_check": None,
-              "immutable_check": None, "politeness_check": None}
+              "immutable_check": None, "politeness_check": None, "fact_gaps": None}
     print(json.dumps(result, ensure_ascii=True, indent=1) if args.json else "\n".join((message, token, "登録: " + path)))
     return True
 
@@ -4173,15 +4329,18 @@ _USAGE = ("yomiyasu_check.py run --final 最終稿 (--source 原文 | --material
           "       yomiyasu_check.py --version")
 _RUN_USAGE = ("yomiyasu_check.py run --final 最終稿 (--source 原文 | --material 資料) [--material 資料 …]\n"
               "           [--stance 立場] [--doc-type 種類] [--reader 読者] [--fail-on meaning-risk|warn|error …] [--timeout 秒]\n"
-              "           [--run-id ID | --new-run] [--session ID] [--state-dir DIR] [--no-record] [--json]\n"
+              "           [--run-id ID | --new-run] [--session ID] [--state-dir DIR] [--no-record] [--fact-gaps] [--json]\n"
               "       yomiyasu_check.py run --stdin [上と同じオプション]")
 _VERIFY_USAGE = ("yomiyasu_check.py verify --final 最終稿|- [--run-id ID] [--source 原文] [--since ISO8601]\n"
                  "           [--replay] [--timeout 秒] [--state-dir DIR] [--json]")
 _FAIL_ON_HELP = ("指定した条件に当たれば、記録を残したうえで終了コード1で終わります。何度でも、カンマ区切りでも指定できます。"
                  "meaning-risk: 意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の"
-                 "変化、引用の印、確度を強めた書き換え（見込み → 予定、と思われる → 断定など）と、資料にない数値。コード・URL・引用ブロックなど変えない箇所の変化と、資料にない名前は数えません。"
+                 "変化、引用の印の変化、確度を強めた書き換え（見込み → 予定、と思われる → 断定など）、原文の状態の語（未定、未確認、"
+                 "調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足し（ここまでは diff の "
+                 "--fail-on=meaning-risk と同じ）と、新規作成で資料にない数値。コード・URL・引用ブロックなど変えない箇所の変化と、資料にない名前は数えません。"
                  "否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、数えない語だけの確度の変化、予定の言い切り（する予定です → します）、"
-                 "かぎかっこの中の言葉の変化も数えません。"
+                 "かぎかっこの中の言葉の変化も数えません。原文にない因果のつながりの足しと、書き手の行為と読む印（いたします、今後・改めて、"
+                 "弊社などの主語）のない「〜します」の足しと、事実の穴の候補（--fact-gaps）も数えません。"
                  "warn: lint の warn か error の候補。error: lint の error の候補。"
                  "条件に当たらなくても、意味が同じだという証明にはなりません。")
 
@@ -4240,9 +4399,11 @@ def _build_parser():
                         help="提供された資料のファイル。何度でも指定できます。最終稿の数値、名前、語、確度の語を資料と照らします。")
     inputs.add_argument("--stdin", action="store_true",
                         help="ファイルを作らない対話のため、原文（か資料）と最終稿を標準入力から読みます。"
-                             "行全体が <<<yomiyasu:original>>>、<<<yomiyasu:material>>>、<<<yomiyasu:final>>> の行で区切ります。"
+                             "行全体が <<<yomiyasu:original>>>、<<<yomiyasu:material 出典>>>、<<<yomiyasu:final>>> の行で区切ります。出典は省略可、200字まで（>>> を含めない）。--material のファイルと - の中身も同じ資料の区切りを使えます。"
                              "区切りの行は一字一句このとおりに書きます（<<<yomiyasu: で始まるほかの行があれば、終了コード2で止めます）。")
     options = run.add_argument_group("オプション")
+    options.add_argument("--fact-gaps", action="store_true",
+                         help="事実の穴の候補の一部を表示します（失敗条件には含めません。essay・promo では出しません）")
     options.add_argument("-h", "--help", action="help", help="このヘルプを表示して終わります。")
     options.add_argument("--stance", metavar="立場",
                          help="文書の立場（diff と同じ）。勧め（読み手に勧める）、決まり（手順）、説明（報告、体験）のどれか。")

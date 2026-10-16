@@ -7,8 +7,8 @@
   },
   "source_commit": {
     "lint": "45a5885（scripts に未コミットの変更あり: check の固め）",
-    "diff": "作業ツリー（状態の語の消えと書き足しの検出を追加）",
-    "check": "作業ツリー（状態の語の消えと書き足しの検出を追加）"
+    "diff": "状態の語の消えと書き足しの検出を追加し、そのあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにした作業ツリー（既存9キーと既存候補は変更なし）。",
+    "check": "状態の語の消えと書き足しの検出、見直し候補の行と直した箇所の節を追加し、lint の rule_penalty_score の式を直したあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにした作業ツリー（既存9キーと既存候補は変更なし）。"
   },
   "source_sha256": {
     "lint": {
@@ -19,15 +19,15 @@
     },
     "diff": {
       "yomiyasu_lint.py": "73c370d607399b4408368c53785c9f9bebc5234180a4c4c1e5d4006365c3aa23",
-      "yomiyasu_diff.py": "10dab29e68ed0b3cec5c30460031d074e918f0e31215fb2bc2e4f06b880de3db",
-      "yomiyasu_check.py": "624e07bf22b10e0e893a7d49846f5beb24a13594d19a986fde2f320a41cbe729",
+      "yomiyasu_diff.py": "982415caca6373fdc7b83c4f35ec3dbf685839c6cc38efe4f2fe81da6919abba",
+      "yomiyasu_check.py": "3f0be402b8c56591ec2e0c09ca030645948b0cd94f2cc17d569e909d7a47ae13",
       "markdown_visibility.py": "4d296be7fc1c1cb6b908cd16cf3de51449d7902db9bc1888f095fc7a65ae843c",
       "references/lists/feelings.txt": "5f71a66f5e2679de04ecd30395ab74ca61962297c22ef3f4efa5c8e625446166",
       "references/lists/hedges.txt": "ed666036f63f4705d2c129d3fd30e971018d50732bbef2c18081412a61ccd771",
       "references/lists/intensifiers.txt": "3e4829226d871ce10e4ae89c49ae218b6d9ed77cafcd6ddfd0fdb6cecd1fec2e",
       "references/lists/nominalization.txt": "2f685bbcd7dfc5ea871ff5655368195d471cea6ac4ff57e75a0648aadd466048"
     },
-    "check": "a9bbc663e7e9efa9b5fd9fdceddb10265c82251eaf5ff42b4a36589b26b41618"
+    "check": "3f0be402b8c56591ec2e0c09ca030645948b0cd94f2cc17d569e909d7a47ae13"
   },
   "tool_version": "2.0.0",
   "python": "3.14.5",
@@ -2298,7 +2298,7 @@
       "replay": "5e7c8249603ef7d8",
       "rerun": "a071ca0940a42dba",
       "compose": "d12f1c9f312d882f",
-      "stdin": "0d77082a6e6cffae",
+      "stdin": "3698d7280b8b27f6",
       "fail_on": "40d2412a73b920e0",
       "no_record": "46aea0d7a8890df6",
       "json": "624c8551ece008be"
@@ -2309,7 +2309,7 @@
       "replay": "a83c2f4beb8f19c0",
       "rerun": "920f3d68a7608bb0",
       "compose": "a4b34ec4e237488f",
-      "stdin": "2af5490ef4e89ac5",
+      "stdin": "8c43ae1d647ab17f",
       "fail_on": "e342bcd1d273d925",
       "no_record": "3ebf4f74251e42d4",
       "json": "f531972fba6340dd"
@@ -2320,7 +2320,7 @@
       "replay": "ff7b15ddf3fe3783",
       "rerun": "f60cc4a192fed736",
       "compose": "9a57727b08151f7e",
-      "stdin": "e1344484eba33a30",
+      "stdin": "b973c3eec2af811a",
       "fail_on": "d58d14adadc7b61c",
       "no_record": "a4becd2acacf2e7a",
       "json": "a29cd704749a4e4c"
@@ -2331,7 +2331,7 @@
       "replay": "c29424cd98a7e1d2",
       "rerun": "e98d5f6193d03965",
       "compose": "d7c1bac602d9c465",
-      "stdin": "0565c04b9cf27a9b",
+      "stdin": "1f256fd6a1d1e14c",
       "fail_on": "941547ddc46f8de3",
       "no_record": "27794906d9344a41",
       "json": "a9bb3738f0a719fa"
@@ -2342,7 +2342,7 @@
       "replay": "475786ca8c9b4d4c",
       "rerun": "978dcb9c76964a8d",
       "compose": "9cfa4e1ac72c6622",
-      "stdin": "a46a60fb880b8a59",
+      "stdin": "70bfc061c3f73287",
       "fail_on": "adc8366c3b533d42",
       "no_record": "9d50d3c70afd3b63",
       "json": "c9efe4a26ab53663"
@@ -2353,7 +2353,7 @@
       "replay": "36d5a0de04b5d377",
       "rerun": "0262479601e700ce",
       "compose": "f9628398b0bbddb8",
-      "stdin": "43e94c40939756fb",
+      "stdin": "913c339059a85364",
       "fail_on": "8efe40d184ba5dc4",
       "no_record": "b253cd5f044fa1d2",
       "json": "bc6bf1418c443203"
@@ -2364,7 +2364,7 @@
       "replay": "57ae4efe96eef0d1",
       "rerun": "99409bbf18e12d5e",
       "compose": "c20f8d857da2f5cb",
-      "stdin": "f060d0798390480d",
+      "stdin": "66123a966d0efe25",
       "fail_on": "dc772678f63b2796",
       "no_record": "74b9a8abebc9ed58",
       "json": "3d178b154c84d9b3"
@@ -2375,7 +2375,7 @@
       "replay": "ae5826c59c1bd9a1",
       "rerun": "269a2c925b7c1343",
       "compose": "fd84448a9ebc6571",
-      "stdin": "ba6e9eff2ae745f0",
+      "stdin": "c54a2afc6ba5e5d2",
       "fail_on": "32e33e7c969d56f6",
       "no_record": "b396792ca3024c9b",
       "json": "8a9a760ec5c2ac55"
@@ -2386,7 +2386,7 @@
       "replay": "3ff27f7b4e0e997b",
       "rerun": "26f762fcd7aecbca",
       "compose": "edae184148050a24",
-      "stdin": "92e63d38acaf1529",
+      "stdin": "aabdfcfd6321912f",
       "fail_on": "1e02a7f9af090dca",
       "no_record": "206d7472f0f7bdfe",
       "json": "f9953731776e39a8"
@@ -2397,7 +2397,7 @@
       "replay": "de7da5c81a9414b1",
       "rerun": "c6d323b8b478a0ba",
       "compose": "c61194703e9859ea",
-      "stdin": "0b6e08d3d56f0161",
+      "stdin": "36c400c4ec3ec977",
       "fail_on": "588846c7a1bfa3d0",
       "no_record": "2dd9157d28d95d1e",
       "json": "a84cf59b9167b30b"
@@ -2408,7 +2408,7 @@
       "replay": "dda8244985d61816",
       "rerun": "c033c836014030ef",
       "compose": "5d9429dbe58564a1",
-      "stdin": "a4e1f0aa9705c2b0",
+      "stdin": "f0f108be57f7ef4c",
       "fail_on": "7822d24ac2296e64",
       "no_record": "7e3814489cf00a70",
       "json": "b1af3443a40bdacd"
@@ -2419,7 +2419,7 @@
       "replay": "d37165da605f77b7",
       "rerun": "e58907d5d2e9cc67",
       "compose": "defa3a2ce1658afc",
-      "stdin": "451db55dfdd538d9",
+      "stdin": "10dcabe7bebb5c7a",
       "fail_on": "97299ace6e413316",
       "no_record": "6df41f151f1df96f",
       "json": "71f8f00395e305f6"
@@ -2430,7 +2430,7 @@
       "replay": "089d02a1634337a4",
       "rerun": "d21f1264939569bd",
       "compose": "cc700634a26d88e2",
-      "stdin": "621acc571b354802",
+      "stdin": "2ac05873fc27e490",
       "fail_on": "3f607201a4e7b613",
       "no_record": "169690b524f7a98b",
       "json": "97ca66d7bc7e5c72"
@@ -2441,7 +2441,7 @@
       "replay": "1ed55de45bc3369f",
       "rerun": "0c054435dc9524d1",
       "compose": "7b2db182ee36e915",
-      "stdin": "c9f42b5cb5e2ed84",
+      "stdin": "23e52e7b2d0b72f2",
       "fail_on": "354868681ffcf29f",
       "no_record": "0832f681d66770d0",
       "json": "991ad7a52f20c5f4"
@@ -2452,7 +2452,7 @@
       "replay": "80860eb1b0e4f4a7",
       "rerun": "0e699936f5411f1a",
       "compose": "dba50e5d95bb3af2",
-      "stdin": "058b5039c7c81cbb",
+      "stdin": "6735328683607d81",
       "fail_on": "b3a4242c4d2f2696",
       "no_record": "5c3560f539d8bf44",
       "json": "5ad94aa9284c3914"
@@ -2463,7 +2463,7 @@
       "replay": "a3419a5ad6bb7420",
       "rerun": "d6e7cc0efd565dbc",
       "compose": "5edbc9e56a39e580",
-      "stdin": "0873364353b7da42",
+      "stdin": "e87f96029c41147e",
       "fail_on": "080428938e38841d",
       "no_record": "c1ffac611551bcbd",
       "json": "ab0b450612157d73"
@@ -2474,7 +2474,7 @@
       "replay": "0093a672be769893",
       "rerun": "0f49438b951763c0",
       "compose": "cab6ba55e283d679",
-      "stdin": "9e580e73ec53dc86",
+      "stdin": "443f2e488d8377e0",
       "fail_on": "3abea0e8edfced2e",
       "no_record": "a618b08966048919",
       "json": "17c8c3cff82ffe01"
@@ -2485,7 +2485,7 @@
       "replay": "299bdc21615eb4f6",
       "rerun": "d6cae55308809c91",
       "compose": "93c342d2da38450a",
-      "stdin": "7b1c72f83cbfcc8b",
+      "stdin": "38037e0f9ad63d26",
       "fail_on": "6887a6a7bdd38b98",
       "no_record": "fff98510b3876470",
       "json": "a7154b569e827be6"
@@ -2496,7 +2496,7 @@
       "replay": "3a46d323c91eff91",
       "rerun": "c7be707882f3f4c0",
       "compose": "7fdad179527e55d8",
-      "stdin": "07ed2e9ba93ac963",
+      "stdin": "56400ae3283e634f",
       "fail_on": "0bcc33a62450ae52",
       "no_record": "e5776e9b9667b6e1",
       "json": "34dbc601a26132ec"
@@ -2507,7 +2507,7 @@
       "replay": "d9119f450c0d631b",
       "rerun": "465422735f289e1b",
       "compose": "fd3ba821b4213676",
-      "stdin": "d3aa4e1742946de9",
+      "stdin": "797e10351d9642cd",
       "fail_on": "a181fbf8beeb55aa",
       "no_record": "5f63be089cd0c4b7",
       "json": "36182e11f445cca8"
@@ -2517,8 +2517,8 @@
       "verify": "f089cf877004d469",
       "replay": "d153d70b761f79c2",
       "rerun": "ea99902384e6a0d4",
-      "compose": "a74cfae9f62f0a6b",
-      "stdin": "5e45bb20e2f04e94",
+      "compose": "982f95550d014a3b",
+      "stdin": "3d344b83a2291229",
       "fail_on": "3f121f1a1845ec57",
       "no_record": "226bff345c03299a",
       "json": "556f21496ac67482"
@@ -2529,7 +2529,7 @@
       "replay": "59efc96b16cf6359",
       "rerun": "7f4b7e54372eeb84",
       "compose": "db58a2d7532250ad",
-      "stdin": "1561bacb0409760e",
+      "stdin": "9dd5ed50279ab5b1",
       "fail_on": "9ef041e9b22edf56",
       "no_record": "8fe48c6c694f5548",
       "json": "820d167d047a07ce"
@@ -2540,7 +2540,7 @@
       "replay": "86d43a31afce4202",
       "rerun": "976950cfbbeda151",
       "compose": "a6b690eeda8dd8eb",
-      "stdin": "755933206f2ea7fb",
+      "stdin": "1e45ef6ab8a714c6",
       "fail_on": "fe5c09b7cb6f0690",
       "no_record": "ea0384100f5053cc",
       "json": "5afeba43b75ee412"
@@ -2551,7 +2551,7 @@
       "replay": "36e3f58577c27bbb",
       "rerun": "a14fd7bbe40138df",
       "compose": "179f8f122de827a5",
-      "stdin": "58ccd249152bc051",
+      "stdin": "3bb7f5142759f9f0",
       "fail_on": "a0d448d888a03bfc",
       "no_record": "a9ae1655e3773878",
       "json": "633061627baa1a61"
@@ -2562,7 +2562,7 @@
       "replay": "22634db339f04e77",
       "rerun": "936dd1e5ca60ca36",
       "compose": "7b028bbf05ddfcb2",
-      "stdin": "3e715c825e66cd7b",
+      "stdin": "0cf3c9f528a3530a",
       "fail_on": "6b26106decfc6403",
       "no_record": "6a227e3aaf32d0e5",
       "json": "d6b5753f9c2596fc"
@@ -2573,7 +2573,7 @@
       "replay": "52f8cb5f86955e40",
       "rerun": "e3adbb341ccf5f51",
       "compose": "179aa72ed6319464",
-      "stdin": "60395bd418651ee4",
+      "stdin": "81f7771168751499",
       "fail_on": "677f8f0fdfd3058a",
       "no_record": "cc6e49decc7100b4",
       "json": "c693c1b105c66f4c"
@@ -2584,7 +2584,7 @@
       "replay": "d74b873f181d7e05",
       "rerun": "5a18ae11957512f3",
       "compose": "b14a7cfe90eb77a6",
-      "stdin": "01054ac4d98989cd",
+      "stdin": "ff0096cea4bccf4a",
       "fail_on": "db52ff3a2c449d8b",
       "no_record": "6b67c049a04247c6",
       "json": "88e2b69e139464b6"
@@ -2595,7 +2595,7 @@
       "replay": "a58950672af6054d",
       "rerun": "23807ad60174ecad",
       "compose": "045711c629741398",
-      "stdin": "bcbb1348e6548bcb",
+      "stdin": "b25c594629355af9",
       "fail_on": "953f300abbe2d91a",
       "no_record": "42e921cac9beb885",
       "json": "0912bd2b55fc2694"
@@ -2606,7 +2606,7 @@
       "replay": "2da66f6885a8e197",
       "rerun": "146ef9eabaddd0d1",
       "compose": "a7be30740ab29da9",
-      "stdin": "e65aa010d5bd35d3",
+      "stdin": "f9cbec683fda85d2",
       "fail_on": "b787b070cf6cf38a",
       "no_record": "fb9323e27d5e7a81",
       "json": "1a41c9e9d7e351a3"
@@ -2617,7 +2617,7 @@
       "replay": "74dda41d13650b72",
       "rerun": "34c93ca75e0437b0",
       "compose": "f11d7089449ae312",
-      "stdin": "29dac952f0a54de1",
+      "stdin": "8927459153b6bf94",
       "fail_on": "791a91cbea9d6a32",
       "no_record": "142412559fb654ce",
       "json": "8fbf9b6e7dfd197c"
@@ -2628,7 +2628,7 @@
       "replay": "4077cd7c053c37fa",
       "rerun": "bfef818ebecd7955",
       "compose": "5ae53ebb63031eef",
-      "stdin": "5b406babef14a90c",
+      "stdin": "51750982079ba8d5",
       "fail_on": "2c2f64df613bda3c",
       "no_record": "e5ce97b752114859",
       "json": "52c62463575acf7c"
@@ -2639,7 +2639,7 @@
       "replay": "72cedb5f74be84cf",
       "rerun": "83d87ccf89a7d97e",
       "compose": "b95999021d3f2a13",
-      "stdin": "e406d33af4f27709",
+      "stdin": "ebb8054f2acd3781",
       "fail_on": "c87faa453bda0e19",
       "no_record": "50d41350805622c2",
       "json": "418d5f2e4d5bcbf3"
@@ -2650,7 +2650,7 @@
       "replay": "dc4f4fb9c9d865ac",
       "rerun": "0f37711f7b2eabf6",
       "compose": "f515853c0b8116ba",
-      "stdin": "efe0eee56ca96c61",
+      "stdin": "66e693d00d036203",
       "fail_on": "8028fbcd6ca91b5e",
       "no_record": "acda4532397b675c",
       "json": "c3a4d732f98bdd9d"
@@ -2661,7 +2661,7 @@
       "replay": "b10c553c735ca636",
       "rerun": "0abfeb3c75220ebc",
       "compose": "eb7b3daeacde7a84",
-      "stdin": "0eef04e95c51a211",
+      "stdin": "c5c795f4ffc60267",
       "fail_on": "f41ff11d3a310aaa",
       "no_record": "25d71f470c2fa369",
       "json": "a0e21dbd9d404b89"
@@ -2672,7 +2672,7 @@
       "replay": "733b2b8b43d96386",
       "rerun": "32a5670898a6ca2b",
       "compose": "c18696658d1ce338",
-      "stdin": "60c6bfe2f0c1a10f",
+      "stdin": "f02c8f253fa7e7de",
       "fail_on": "f8aa43cdc70fdcb7",
       "no_record": "b03631feb63b7c3a",
       "json": "78b6a09583d1ff0a"
@@ -2683,7 +2683,7 @@
       "replay": "1b276317fb04d19d",
       "rerun": "1b091d2ab32d3285",
       "compose": "14d8119ffd14ba42",
-      "stdin": "28f370e273257fbf",
+      "stdin": "ea3b512fd1315e0f",
       "fail_on": "3ae2cb5a60b21e0e",
       "no_record": "1ea6b59c3ad351b1",
       "json": "2281ad4c77276bd9"
@@ -2694,7 +2694,7 @@
       "replay": "29991298db6c529f",
       "rerun": "33bd815cad355019",
       "compose": "9cfae631aeebd5af",
-      "stdin": "6858134c76349a9f",
+      "stdin": "9e3eecf97893edab",
       "fail_on": "1605bebf7ff7355d",
       "no_record": "8ddc2a62a3c6191d",
       "json": "8dd7314c6a5b35e2"
@@ -2705,7 +2705,7 @@
       "replay": "48ee7b931845907e",
       "rerun": "9e10bed7fe8b0244",
       "compose": "15436eac79487198",
-      "stdin": "9f10f276c34dcddf",
+      "stdin": "7f2b51a3928533ca",
       "fail_on": "8144e138abacf283",
       "no_record": "68a09b47a1195b0e",
       "json": "c1a04098b5e31aa8"
@@ -2716,7 +2716,7 @@
       "replay": "550c889f7ad5f6ad",
       "rerun": "1055acd7294f3dd4",
       "compose": "6d214680e492a83a",
-      "stdin": "e536dcfa4f267525",
+      "stdin": "229d567d4bb0fee3",
       "fail_on": "5f8664941eddbd18",
       "no_record": "984b16a966de9c1e",
       "json": "785beea870bcebff"
@@ -2726,8 +2726,8 @@
       "verify": "c7496f254e7106b5",
       "replay": "0219765a1c008072",
       "rerun": "559024083d60cff9",
-      "compose": "7fa3e41d6a786046",
-      "stdin": "76d864a66fe11dc9",
+      "compose": "3a1ba02b6ad486b0",
+      "stdin": "df2ab4a9d43afedb",
       "fail_on": "dfd4f587ecb95ec8",
       "no_record": "5df56df8bfc9aae6",
       "json": "c5b9e041fb802630"
@@ -2738,7 +2738,7 @@
       "replay": "9fabedc36a7da6f4",
       "rerun": "aabe438835638af6",
       "compose": "fcdfacae406d1961",
-      "stdin": "f4eb37b62d9dc1a9",
+      "stdin": "01975f2aa3d6b57e",
       "fail_on": "b938c6219ba5ae1c",
       "no_record": "0bd75172890ef21b",
       "json": "e18113382f314203"
@@ -2749,7 +2749,7 @@
       "replay": "a0a739ca2aafe455",
       "rerun": "0cee59fc01f76217",
       "compose": "3199197afa373ed8",
-      "stdin": "74bd6f23d78fe7a6",
+      "stdin": "154d4e58025767da",
       "fail_on": "c5a8fceac21c03eb",
       "no_record": "4d751270563a9df8",
       "json": "75310de41d981b73"
@@ -2760,7 +2760,7 @@
       "replay": "d45b1d555f18743f",
       "rerun": "641eb44888df9705",
       "compose": "d629986d955cc9c0",
-      "stdin": "0b9c16b14dfd6cf0",
+      "stdin": "5a904a5d6f3c04ee",
       "fail_on": "7f34c908e8092e4f",
       "no_record": "5804f9fbe16f67f2",
       "json": "343c02d12675d218"
@@ -2771,7 +2771,7 @@
       "replay": "e2f290d5506c5ac7",
       "rerun": "94ac8267d2c73305",
       "compose": "aa6dbe04db9d35f0",
-      "stdin": "4f502429e7726524",
+      "stdin": "09215fee08911a58",
       "fail_on": "dab9ee1b33485c80",
       "no_record": "ecc3e92f1108ed52",
       "json": "a4b85a190a12d6a2"
@@ -2782,7 +2782,7 @@
       "replay": "112a77be669d3eac",
       "rerun": "cf54be716f05ba19",
       "compose": "013897fbc49d1f48",
-      "stdin": "72f8bad33eb84353",
+      "stdin": "df581b6397ca561c",
       "fail_on": "3c55d3ce07800048",
       "no_record": "e0dd02c2ecb9a171",
       "json": "79e991c4c7a5a52e"
@@ -2793,7 +2793,7 @@
       "replay": "32e79da406713eea",
       "rerun": "fe68725cfe9276cc",
       "compose": "9e3639381ecfbb43",
-      "stdin": "d5d1dc11d166787a",
+      "stdin": "71eb0981c96a6d5c",
       "fail_on": "7468434b0251183f",
       "no_record": "ad4773aad95efde4",
       "json": "b23f0d188e6e15c8"
@@ -2804,7 +2804,7 @@
       "replay": "1421bc2a2127ecf1",
       "rerun": "2c068ff52506316b",
       "compose": "a66c0bede5cf9b3e",
-      "stdin": "f50c1a9b7db6dfbc",
+      "stdin": "a12cd3b9277b9e83",
       "fail_on": "4443f7c8362b7481",
       "no_record": "01a9507678303c9d",
       "json": "1c5aa5711ababeca"
@@ -2815,7 +2815,7 @@
       "replay": "cc0fac90ab9ffce5",
       "rerun": "3941e3ebeb96ff39",
       "compose": "1108ee35f484a389",
-      "stdin": "1a62ab8e95afeb0a",
+      "stdin": "55fb8e72cac95551",
       "fail_on": "957505cb42fc166a",
       "no_record": "437a88cdaa942645",
       "json": "6349ea2903862684"
@@ -3210,6 +3210,9 @@
           "untouched_equal": 560
         }
       }
-    }
+    },
+    "事実の復元の道具: check の資料つき新規作成48組を変更前と比較し、照合の節の外の出力・終了コードは不変。照合の該当行と確度の注意を追加した組だけ compose の要約を更新した。JSON は追加キー fact_gaps を除いて比較する。lint、diff、資料なしの出力の要約は更新していない。",
+    "2026-10-16 事実の復元の道具を、見直し候補の行と直した箇所の節のあとに入れたときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは check の compose の2組だけ（raw_ai/04 と blacklist_ai/07。照合の節に「資料にあった確度の語が最終稿にない」の行が1行足された）。diff の行、check のほかの使い方、終了コード、lint の行は1字も変わらなかった。source_sha256 の diff と check は今のスクリプトの値にした。",
+    "2026-10-16 run --stdin の1行目の {仕上げ} を、ファイルのときと同じく返す直前の verify（最終稿だけを verify --final - に渡す）の案内にしたときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは check の stdin の48組だけ（推敲の48組のすべて。1行目の「本文はこのままで返答し、完了報告を付けるときは、この出力の2行目を写してください。」が「提出の直前に、本文を変えずに、最終稿だけを標準入力から verify --state-dir … --final - に渡して1回実行してください。」になった）。diff の行、check のほかの使い方、終了コード、lint の行は1字も変わらなかった。source_sha256 の diff の yomiyasu_check.py と check は今のスクリプトの値にした。"
   ]
 }

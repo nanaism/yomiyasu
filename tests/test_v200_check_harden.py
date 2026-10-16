@@ -22,7 +22,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_v200_check import (  # noqa: E402
-    CHECK, CheckCase, ROOT, SCRIPTS, SKILL_MD, TOOL_NAMES, FINALIZE_FILE, RUN_COMPOSE_FIRST, RUN_REWRITE_FIRST,
+    CHECK, CheckCase, ROOT, SCRIPTS, SKILL_MD, TOOL_NAMES, FINALIZE_FILE, FINALIZE_STDIN, RUN_COMPOSE_FIRST, RUN_REWRITE_FIRST,
     RUN_REWRITE_FIRST_NO_CANDIDATES, RUN_SAME_FINAL, RUN_AFTER_FIX, RUN_OVER_LIMIT, VERIFY_LINE1,
     inject_cli_code, record_digest, sha256_file, split_lines, text_sha256, tree_digest,
 )
@@ -52,8 +52,8 @@ SOURCE_WAS_FINAL_NOTE = ("原文が、前に最終稿として検査した本文
 # 55: --state-dir で記録したときの {仕上げ} と、verify の no_record の3行目
 FINALIZE_STATE_DIR = "提出の直前に、本文を変えずに verify --state-dir {} を1回実行してください。"
 NO_RECORD_LINE3 = "記録: なし（探した状態フォルダ: {}）"
-# 56: 本文だけを返す指定もあるので「完了報告を付けるときは」
-FINALIZE_STDIN_NEW = "本文はこのままで返答し、完了報告を付けるときは、この出力の2行目を写してください。"
+# 56: 本文だけを返す指定もあるので、verify の executed は「完了報告を付けるときは」。run --stdin の {仕上げ} は、
+# ファイルと同じく返す直前の verify を案内する（CheckCase.finalize_stdin。本文だけを返す依頼で verify が抜けたため）
 VERIFY_EXECUTED_TAIL = "合格の判定ではありません。完了報告を付けるときは、この出力の2行目を写してください。"
 # 57、58: 原文から本文が変わっていないとき
 RUN_NO_CHANGE_NEW = ("検査を実行しました。原文から変更はありません。書き直したのに変更なしと出たときは、"
@@ -877,10 +877,12 @@ class TestOutputWording(CheckCase):
         self.assertEqual(verify_lines[2], NO_RECORD_LINE3.format(self.state))
 
     def test_report_copy_wording_allows_body_only_replies(self):
-        """勧め56: 本文だけを返す指定では確認の記録を付けないので「完了報告を付けるときは」。"""
+        """勧め56: 本文だけを返す指定では確認の記録を付けないので、verify は「完了報告を付けるときは」。
+        run --stdin は、返す直前に最終稿だけを verify --final - に渡すよう案内する。"""
         body = "<<<yomiyasu:original>>>\n保存期間は3日です。\n<<<yomiyasu:final>>>\n保存期間は30日です。\n"
         process, lines = self.check_ok("run", "--stdin", stdin=body)
-        self.assertEqual(lines[0], RUN_REWRITE_FIRST + FINALIZE_STDIN_NEW)
+        self.assertEqual(lines[0], RUN_REWRITE_FIRST + self.finalize_stdin())
+        self.assertNotIn("この出力の2行目を写して", lines[0])
         verify_lines, _ = self.assert_verify(self.check("verify", "--final", "-", stdin="保存期間は30日です。\n"),
                                              "executed", code=0)
         self.assertTrue(verify_lines[0].endswith(VERIFY_EXECUTED_TAIL), verify_lines[0])
@@ -1070,6 +1072,28 @@ class TestReviewFinalizeStateDir(CheckCase):
         plain.pop("YOMIYASU_STATE_DIR")
         process, lines = self.check_ok("run", "--source", a, "--final", b, env=plain, cwd=top)
         self.assertEqual(lines[0], RUN_REWRITE_FIRST + FINALIZE_FILE)
+
+    def test_stdin_finalize_names_verify_with_the_same_state_folder(self):
+        """--stdin でも、返す直前に最終稿だけを verify --final - に渡すよう案内し、その案内どおりの verify が記録と合う。
+        状態フォルダを決めたときは同じ --state-dir を、決めないとき（git の最上位の .yomiyasu/）は付けない。"""
+        body = "<<<yomiyasu:original>>>\n保存期間は3日です。\n<<<yomiyasu:final>>>\n保存期間は30日です。\n"
+        final = "保存期間は30日です。\n"
+        other = self.root / "env state"
+        process, lines = self.check_ok("run", "--stdin", stdin=body, env=self.env(YOMIYASU_STATE_DIR=str(other)))
+        self.assertEqual(lines[0], RUN_REWRITE_FIRST + FINALIZE_STDIN.replace(
+            "verify --final -", 'verify --state-dir "{}" --final -'.format(other)))
+        plain = self.env()
+        plain.pop("YOMIYASU_STATE_DIR")
+        self.assert_verify(self.check("verify", "--state-dir", other, "--final", "-", stdin=final, env=plain),
+                           "executed", code=0)
+        top = self.root / "top"
+        top.mkdir()
+        (top / ".git").mkdir()
+        process, lines = self.check_ok("run", "--stdin", stdin=body, env=plain, cwd=top)
+        self.assertEqual(lines[0], RUN_REWRITE_FIRST + FINALIZE_STDIN)
+        self.assert_verify(self.check("verify", "--final", "-", stdin=final, env=plain, cwd=top), "executed", code=0)
+        # 区切りの行ごと渡すと、記録と合わない（最終稿だけを渡す理由）
+        self.assert_verify(self.check("verify", "--final", "-", stdin=body, env=plain, cwd=top), "no_record")
 
 
 class TestReviewRecordedSource(CheckCase):

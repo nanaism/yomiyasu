@@ -12,6 +12,32 @@ _BUDGETS = {"UserPromptExpansion": 4, "UserPromptSubmit": 4, "PreToolUse": 7,
 _LIMITS = {"max_stop_blocks": 2, "max_runs": 3, "deadline_min": 30}
 _MAX_INPUT = 4 * 1024 * 1024
 _MAX_TEXT = 2 * 1024 * 1024
+_HELP = """使い方: yomiyasu_hook.py --host claude-code|codex [--state-dir DIR]
+       yomiyasu_hook.py --print-config claude-code|codex
+       yomiyasu_hook.py --version
+
+任意のフックです。利用者が Claude Code か Codex の設定ファイルに貼ったときだけ、ホストが決まった時点で呼びます。
+登録した原稿（yomiyasu_check.py start）について、返答の終わりに最終稿が検査記録と合うかを確かめ、合わなければ作業を
+続けさせます。登録した原稿に関係する投稿で、本文が検査記録と照合できないときは止めます。読みやすさの合格や、意味が
+保たれたかは判定しません。登録していない原稿には何もしません。
+
+引数:
+  --host claude-code|codex  フックとして動きます。ホストのイベントの JSON を標準入力から読みます。
+  --state-dir DIR           登録を探す状態フォルダ。省くと環境変数 YOMIYASU_STATE_DIR（空白だけの値と ${ を
+                            含む値は使いません）、git の最上位（なければ作業ディレクトリ）の .yomiyasu/ の順に探します。
+                            Claude Code では、環境変数 CLAUDE_PROJECT_DIR のプロジェクトの .yomiyasu/ も探します。
+  --print-config claude-code|codex
+                            設定に貼る JSON の例（このスクリプトの絶対パス入り）を出します。設定ファイルには書き込みません。
+  --version                 版を表示して終わります。
+  -h, --help                このヘルプを表示して終わります。
+
+終了コード:
+  0  フックとして呼ばれたとき（--host）は、いつも0です。入力や引数が違っても、登録がなくても、内部の誤りでも、
+     ホストの作業を止めないよう何も出さずに終わります（知らない引数も無視します）。作業を続けさせるときと投稿を
+     止めるときは、終了コードではなく標準出力の JSON で伝えます。内部の誤りは、check が作った状態フォルダが
+     あれば、その hook-errors.log に1行残します。-h、--version、--print-config も0です。
+  2  --print-config の値がないか、claude-code でも codex でもない（標準エラーに使える値を出します）。"""
+_PRINT_CONFIG_ERROR = "--print-config には claude-code か codex を渡してください。"
 
 
 def _options(argv):
@@ -26,6 +52,10 @@ def _options(argv):
         elif key in ("--host", "--state-dir", "--print-config") and index + 1 < len(argv):
             result[key] = argv[index + 1]
             index += 2
+        elif key == "--print-config":
+            # A missing value is reported by main (exit 2); --print-config is never in a host's settings.
+            result[key] = None
+            index += 1
         else:
             return None
     return result
@@ -706,9 +736,15 @@ def main(argv=None):
         if options.get('--version'):
             output = 'yomiyasu_hook.py ' + __version__
         elif options.get('-h') or options.get('--help'):
-            output = 'yomiyasu_hook.py --host claude-code|codex [--state-dir DIR]\nyomiyasu_hook.py --print-config claude-code|codex\nyomiyasu_hook.py --version'
+            output = _HELP
         elif options.get('--print-config') in ('claude-code', 'codex'):
             output = json.dumps(_config(options['--print-config']), ensure_ascii=True, indent=2)
+        elif '--print-config' in options:
+            # Only a person runs --print-config (it is never in a host's settings), so a wrong value is a usage error.
+            if hasattr(sys.stderr, 'reconfigure'):
+                sys.stderr.reconfigure(encoding='utf-8')
+            sys.stderr.write(_PRINT_CONFIG_ERROR + '\n')
+            return 2
         else:
             host = options.get('--host')
             if host not in ('claude-code', 'codex'):

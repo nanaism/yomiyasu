@@ -284,7 +284,8 @@ class ListHashTest(CheckCase):
     def test_check_list_names_match_diff(self):
         module = load_check_module()
         self.assertEqual(tuple(module._LIST_NAMES), LIST_NAMES)
-        self.assertEqual(set(LIST_NAMES), set(yomiyasu_diff.BUILTIN_LISTS))
+        # fact-gaps は任意の手がかり。verify の通常判定ではなく replay で比べる。
+        self.assertEqual(set(LIST_NAMES) | {"fact-gaps"}, set(yomiyasu_diff.BUILTIN_LISTS))
 
 
 # ---- spec の F5 の後半: 読めない一覧の知らせと、気持ちの語の一覧の出どころ ----
@@ -502,8 +503,8 @@ class AnyOfTest(unittest.TestCase):
 
 class StdinMarkerTest(CheckCase):
     BAD = (
-        ("出典を足した区切り", "<<<yomiyasu:original>>>\n保存期間は3日です。\n<<<yomiyasu:material 利用者の発言>>>\n"
-         "保存期間は30日に変える。\n<<<yomiyasu:final>>>\n保存期間は30日です。\n", 3, "<<<yomiyasu:material 利用者の発言>>>"),
+        ("原文に出典を足した区切り", "<<<yomiyasu:original>>>\n保存期間は3日です。\n<<<yomiyasu:original 利用者の発言>>>\n"
+         "保存期間は30日に変える。\n<<<yomiyasu:final>>>\n保存期間は30日です。\n", 3, "<<<yomiyasu:original 利用者の発言>>>"),
         ("複数形", "<<<yomiyasu:original>>>\n保存期間は3日です。\n<<<yomiyasu:materials>>>\n保存期間は30日に変える。\n"
          "<<<yomiyasu:final>>>\n保存期間は30日です。\n", 3, "<<<yomiyasu:materials>>>"),
         ("綴りの誤りの最初の行", "<<<yomiyasu:orignal>>>\n保存期間は3日です。\n<<<yomiyasu:final>>>\n保存期間は30日です。\n",
@@ -531,7 +532,7 @@ class StdinMarkerTest(CheckCase):
                 self.assertFalse(self.state.exists())
 
     def test_long_marker_lines_are_shortened(self):
-        body = ("<<<yomiyasu:original>>>\n保存期間は3日です。\n<<<yomiyasu:material " + "あ" * 100 + ">>>\nメモ\n"
+        body = ("<<<yomiyasu:original>>>\n保存期間は3日です。\n<<<yomiyasu:material " + "あ" * 201 + ">>>\nメモ\n"
                 "<<<yomiyasu:final>>>\n保存期間は30日です。\n")
         process = self.check("run", "--stdin", stdin=body)
         self.assertEqual(process.returncode, 2)
