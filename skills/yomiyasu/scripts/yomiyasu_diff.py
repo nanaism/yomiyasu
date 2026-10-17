@@ -21,7 +21,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
   名詞化の言い回し、強める語、気持ちの語、慎重表現の一覧は ../references/lists/ から読み、なければ内蔵の一覧を使う。
 意味が同じかどうか、つながりが合っているか、文末が立場に合っているかの最終判断は、この結果を見たモデル（または人）がする。
 """
-__version__ = "2.0.0"
+__version__ = "2.0.1"
 
 import os
 import re
@@ -31,6 +31,7 @@ import argparse
 import difflib
 import traceback
 import unicodedata
+from array import array
 from bisect import bisect_left, bisect_right
 _VISIBILITY_NAMES = ("analyze_markdown", "inline_protected_spans", "unicode_whitespace", "decode_source",
                      "normalize_doc_type", "normalize_reader", "context_label", "DOC_TYPES")
@@ -393,6 +394,31 @@ def _type_changes(o: str, r: str, opcodes):
     return out
 
 
+def _overlapping(items, spans):
+    """各範囲 (a, b) について、items のうち x[2] < b かつ a < x[3] のもの（items の順のまま）の一覧。
+    [[x for x in items if x[2] < b and a < x[3]] for a, b in spans] と同じ。items を始まりの順に並べ、前からの終わりの最大を持っておき、
+    b より前に始まるものを後ろから、そこまでの終わりの最大が a 以下になる（それより前に a より後で終わるものがない）所まで見る。"""
+    order = sorted(range(len(items)), key=lambda k: items[k][2])
+    starts = [items[k][2] for k in order]
+    reach, top = [], None
+    for k in order:
+        end = items[k][3]
+        top = end if top is None or end > top else top
+        reach.append(top)
+    out = []
+    for a, b in spans:
+        q = bisect_left(starts, b) - 1
+        found = []
+        while q >= 0 and reach[q] > a:
+            k = order[q]
+            if items[k][3] > a:
+                found.append(k)
+            q -= 1
+        found.sort()
+        out.append([items[k] for k in found])
+    return out
+
+
 def _pair_gone_sentences(o, r, opcodes, groups, moved, gone, r_spans):
     """比べずに飛ばした元の文（同じ文が書き直した文章にないもの）を、字面が重なる書き直した文と組にする。
 
@@ -405,18 +431,38 @@ def _pair_gone_sentences(o, r, opcodes, groups, moved, gone, r_spans):
     def dice(x, y):
         return 2 * len(x & y) / ((len(x) + len(y)) or 1)
 
+    # v2.0.0 までは、書き直した文ごとにすべての範囲を見て owners を作り、消えた文と書き直した文のすべての組で共通の組を数えていた
+    # （どちらも数の2乗）。同じものを、範囲の始まりの順の並びと、2文字の組から書き直した文を引く表で求める（結果は同じ）。
     r_grams = [_bigrams(r[a:b].strip()) for a, b in r_spans]
-    owners = [[g for g in groups if g[2] < b and a < g[3]] for a, b in r_spans]
-    owner_grams = [set().union(*[_bigrams("".join(g[0])) for g in gs + [m for m in moved if m[2] < b and a < m[3]]])
-                   for gs, (a, b) in zip(owners, r_spans)]
+    owners = _overlapping(groups, r_spans)
+    moved_over = _overlapping(moved, r_spans)
+    group_grams = {}
+
+    def grams_of(g):
+        grams = group_grams.get(id(g))
+        if grams is None:
+            grams = group_grams[id(g)] = _bigrams("".join(g[0]))
+        return grams
+    owner_grams = [set().union(*[grams_of(g) for g in gs + ms]) for gs, ms in zip(owners, moved_over)]
+    spans_with = {}
+    for idx, grams in enumerate(r_grams):
+        for gram in grams:
+            spans_with.setdefault(gram, []).append(idx)
     candidates = []
     for gi, (text, _, _) in enumerate(gone):
         grams = _bigrams(text)
-        for idx, (a, b) in enumerate(r_spans):
-            shared = grams & r_grams[idx]
+        # shared_counts[idx] は len(grams & r_grams[idx])。共通の組が1つもない文は、下の least（3以上）に届かないので数えなくてよい。
+        shared_counts = Counter()
+        for gram in grams:
+            found = spans_with.get(gram)
+            if found:
+                shared_counts.update(found)
+        for idx in sorted(shared_counts):
+            shared_count = shared_counts[idx]
             least = 3 if min(len(grams), len(r_grams[idx])) <= 6 else 4
-            if len(shared) < least or len(shared) < 0.5 * min(len(grams), len(r_grams[idx])):
+            if shared_count < least or shared_count < 0.5 * min(len(grams), len(r_grams[idx])):
                 continue
+            shared = grams & r_grams[idx]
             if len(shared - owner_grams[idx]) < least:
                 continue
             candidates.append((dice(grams, r_grams[idx]), gi, idx))
@@ -456,24 +502,41 @@ def _pair_gone_sentences(o, r, opcodes, groups, moved, gone, r_spans):
 
 def _widen_to_sentences(groups, moved, r_spans):
     """範囲を、それが入っている書き直した文の端まで広げる。ほかの元の文の範囲に掛かるところには広げない。
-    消した文の文末の数文字に引きずられて、隣の文に足した印が範囲の外に出るのを防ぐ。"""
+    消した文の文末の数文字に引きずられて、隣の文に足した印が範囲の外に出るのを防ぐ。
+
+    ほかの範囲 (ca, cb) で止める所は、左が「a 以前に終わる範囲の終わり cb の最大」、右が「b 以後に始まる範囲の始まり ca の最小」。
+    v2.0.0 までは範囲ごとにすべての範囲を見ていた（範囲の数の2乗。数十万字の文書で十数秒）。終わりと始まりを並べておき、二分探索で引く。
+    a < b で、どの範囲も ca <= cb なら、ca >= b の範囲は cb > a なので、2つの条件は同時に成り立たない。(a, b) 自身（と同じ範囲）は
+    どちらの条件にも当たらないので、飛ばさなくても同じになる。よって、すべての範囲を順に見たときと同じ端になる。
+    それ以外の形（a >= b の範囲、ca > cb の範囲があるとき）は、前と同じく、すべての範囲を順に見る。"""
     if not groups:
         return
     r_starts, r_ends = [a for a, _ in r_spans], [b for _, b in r_spans]
     claimed = sorted([(g[2], g[3]) for g in groups] + [(m[2], m[3]) for m in moved])
+    ordered = all(ca <= cb for ca, cb in claimed)
+    claimed_starts = [ca for ca, _ in claimed]          # claimed は始まりの順に並んでいる
+    claimed_ends = sorted(cb for _, cb in claimed)
     for g in groups:
         a, b = g[2], g[3]
         i = bisect_right(r_starts, a) - 1
         j = bisect_left(r_ends, b)
         left = r_starts[i] if 0 <= i < len(r_spans) and r_ends[i] > a else a
         right = r_ends[j] if j < len(r_spans) and r_starts[j] < b else b
-        for ca, cb in claimed:
-            if (ca, cb) == (a, b):
-                continue
-            if cb <= a:
-                left = max(left, cb)
-            elif ca >= b:
-                right = min(right, ca)
+        if ordered and a < b:
+            k = bisect_right(claimed_ends, a)
+            if k:
+                left = max(left, claimed_ends[k - 1])
+            k = bisect_left(claimed_starts, b)
+            if k < len(claimed_starts):
+                right = min(right, claimed_starts[k])
+        else:
+            for ca, cb in claimed:
+                if (ca, cb) == (a, b):
+                    continue
+                if cb <= a:
+                    left = max(left, cb)
+                elif ca >= b:
+                    right = min(right, ca)
         g[2], g[3] = min(a, left), max(b, right)
 
 
@@ -717,37 +780,506 @@ def stance_flags(t: str, stance=None, markdown: bool = False):
     return rows, flags
 
 
+# ---- difflib と同じ答えを、少ない計算で求める照合（v2.0.1 の速さの直し）----
+# difflib.SequenceMatcher(None, a, b, autojunk=False) を文書全体に1文字ずつかけると、同じ字が何度も出る文書では
+# find_longest_match の繰り返しが文書の大きさの3乗近くで重くなる（3万字の全面書き換えで2分あまり。数十万字の文書では、直しが数十か所でも
+# 10分近くかかった）。
+# _ExactSequenceMatcher は、文字列どうしで、捨てる要素（isjunk と autojunk の popular）がないときだけ、difflib と同じ答えを別の求め方で出す。
+# それ以外（文字列でない並び、捨てる要素があるとき）は difflib にそのまま任せる。
+# 下の定数は、どの求め方を選ぶかだけを決める。どの求め方も同じ値を求めるので、定数を変えても時間が変わるだけで、答えは変わらない。
+_MATCH_SMALL_AREA = 2048          # 範囲の両側の字数の積がこれ以下なら、difflib と同じ DP で解く（小さい範囲では、ほかの手より速い）
+_MATCH_PROBE_MAX = 64             # 上限の長さちょうどの一致を、その長さの部分文字列の表で探す、長さの上限
+_MATCH_SEED_SHORT = 12            # 長い一致を種（短い部分文字列）で探すときの、種の長さ（_MATCH_SAMPLE_MIN 以下にする）
+_MATCH_SEED_LONG = 40             # 探す長さが種の2倍以上の段で使う、長い種（定型の文が多い文書で、種の候補が増えすぎないようにする）
+_MATCH_SAMPLE_MIN = 24            # 種で探す段の、一致の長さの下限（これより短い一致は DP か接尾辞オートマトンで求める）
+_MATCH_SAMPLE_BUDGET_DIV = 4      # 種で探す1つの段で調べてよい候補の数（範囲の両側の字数の和をこれで割った数）。超えたら次の手に回す
+_MATCH_SAM_FACTOR = 24            # 接尾辞オートマトンの1字の手間が、DP の内側の1回の何倍か（DP とどちらで解くかの見積もりにだけ使う）
+_MATCH_WHOLE_INDEX_MIN = 4096     # b の範囲がこれより長いときは、b 全体の部分文字列の表を作って、ほかの範囲でも使い回す
+_MATCH_PROBE_CACHE = 2            # 長さちょうどの一致を探す b 全体の表を、いくつの長さの分まで残すか（最近使った順に残す）
+_MATCH_LOCAL_DIV = 8              # b 全体の表がまだない長さで、範囲の両側の字数の和が len(b) をこれで割った数以下なら、表を作らずその範囲だけで探す
+_MATCH_AUTOMATON_MAX = 1 << 16    # 接尾辞オートマトンを作る b の範囲の長さの上限（1字あたり約450バイト使う。これより長い範囲は二分探索で解く）
+_MATCH_ROLLING_MIN = 256          # 長さの二分探索で、部分文字列を切り出して hash を取る代わりに、1字ずつずらして求める hash を使う長さの下限
+_ROLLING_MOD = (1 << 61) - 1      # 1字ずつずらして求める hash（多項式の hash）の法（素数）
+_ROLLING_BASE = 1000000007        # 同じ hash の底（字の番号の最大 0x10FFFF より大きくする）
+
+
+def _common_prefix_len(a, i, b, j, limit):
+    """a[i:i+n] == b[j:j+n] となる最大の n（limit 以下）。1字ずつ比べず、切り出した文字列どうしを比べる（C の速さで比べられる）。
+    8字から倍々に伸ばして違いの出る幅を見つけ、その幅を二分探索で詰める。"""
+    if limit <= 0:
+        return 0
+    if a[i:i + limit] == b[j:j + limit]:
+        return limit
+    low, high = 0, limit          # a[i:i+low] は同じ、a[i:i+high] は違う
+    step = 8
+    while step < high and a[i:i + step] == b[j:j + step]:
+        low = step
+        step *= 2
+    if step < high:
+        high = step
+    while high - low > 1:
+        middle = (low + high) // 2
+        if a[i + low:i + middle] == b[j + low:j + middle]:
+            low = middle
+        else:
+            high = middle
+    return low
+
+
+def _common_suffix_len(a, i, b, j, limit):
+    """a[i-n:i] == b[j-n:j] となる最大の n（limit 以下）。_common_prefix_len の後ろ向き。"""
+    if limit <= 0:
+        return 0
+    if a[i - limit:i] == b[j - limit:j]:
+        return limit
+    low, high = 0, limit
+    step = 8
+    while step < high and a[i - step:i] == b[j - step:j]:
+        low = step
+        step *= 2
+    if step < high:
+        high = step
+    while high - low > 1:
+        middle = (low + high) // 2
+        if a[i - middle:i - low] == b[j - middle:j - low]:
+            low = middle
+        else:
+            high = middle
+    return low
+
+
+def _automaton_longest(a, alo, ahi, b, blo, bhi, cap):
+    """a[alo:ahi] と b[blo:bhi] のいちばん長い共通の部分（同じ長さなら a で前、それも同じなら b で前）を、
+    b[blo:bhi] の接尾辞オートマトンで求める。cap は答えの長さの上限（証明済み）で、そこに届いたら読むのをやめる。
+
+    各状態に、その状態の文字列が b で最初に終わる位置（first）を持たせる（同じ状態の文字列は、終わる位置の集まりが同じ）。
+    a を前から1字ずつ読み、今の位置で終わる、b にある最も長い文字列の長さを更新する。長さが今までの最大を超えたときだけ記録するので、
+    最大の長さに最初に届いた a の位置が残る（a で最も前）。b の位置は、その状態の first から求める（b で最も前）。"""
+    link = [-1]
+    length = [0]
+    trans = [{}]
+    first = [-1]
+    last = 0
+    for pos in range(blo, bhi):
+        c = b[pos]
+        cur = len(length)
+        length.append(length[last] + 1)
+        link.append(0)
+        trans.append({})
+        first.append(pos)
+        p = last
+        while p != -1 and c not in trans[p]:
+            trans[p][c] = cur
+            p = link[p]
+        if p != -1:
+            q = trans[p][c]
+            if length[p] + 1 == length[q]:
+                link[cur] = q
+            else:
+                clone = len(length)
+                length.append(length[p] + 1)
+                link.append(link[q])
+                trans.append(trans[q].copy())
+                first.append(first[q])
+                while p != -1 and trans[p].get(c) == q:
+                    trans[p][c] = clone
+                    p = link[p]
+                link[q] = clone
+                link[cur] = clone
+        last = cur
+    state = size = best = 0
+    best_end = best_state = -1
+    for pos in range(alo, ahi):
+        c = a[pos]
+        while state and c not in trans[state]:
+            state = link[state]
+            size = length[state]
+        target = trans[state].get(c)
+        if target is None:
+            state = size = 0
+            continue
+        state = target
+        size += 1
+        if size > best:
+            best, best_end, best_state = size, pos, state
+            if best >= cap:
+                break
+    if not best:
+        return difflib.Match(alo, blo, 0)
+    return difflib.Match(best_end - best + 1, first[best_state] - best + 1, best)
+
+
+def _gram_index(b, q):
+    """b の長さ q の部分文字列を引く表。各位置 j について、b[j:j+q] の hash の下位ビットと j を1つの整数にまとめ、小さい順に並べた配列。
+
+    部分文字列そのものを鍵にした辞書は、数十万字の b で1つ数十MB になる（鍵の文字列と位置の一覧の分）。整数の配列なら1位置8バイトで済む。
+    同じ hash の位置は j の小さい順に続くので、ある範囲の中の位置を二分探索で引ける。hash が同じでも中身の違う部分文字列があるので、
+    引いた位置は必ず b を切り出して比べる（hash は表を引く手がかりにだけ使い、答えには使わない。実行ごとに hash の値が変わっても同じ答えになる）。"""
+    shift = len(b).bit_length()           # 位置の分のビット数
+    keep = (1 << (63 - shift)) - 1        # 残す hash のビット（まとめた整数が符号つき64ビットに収まるように）
+    keys = sorted([((hash(b[j:j + q]) & keep) << shift) | j for j in range(len(b) - q + 1)])
+    return array("q", keys), shift, keep, (1 << shift) - 1
+
+
+def _rolling_hashes(codes, size):
+    """codes（字の番号の配列）の、長さ size の部分ごとの多項式の hash を、位置の順に出す（部分がなければ何も出さない）。
+    1字ずつずらして求めるので、1つの部分の手間は size によらない。同じ並びは必ず同じ値になる。違う並びが同じ値になることも
+    まれにあるので、使う側は値が同じ所を必ず切り出して比べる（hash は手がかりにだけ使い、答えには使わない）。"""
+    if size <= 0 or len(codes) < size:
+        return
+    mod, base = _ROLLING_MOD, _ROLLING_BASE
+    top = pow(base, size - 1, mod)
+    value = 0
+    for code in codes[:size]:
+        value = (value * base + code) % mod
+    yield value
+    for old, new in zip(codes, codes[size:]):
+        value = ((value - old * top) * base + new) % mod
+        yield value
+
+
 class _ExactSequenceMatcher(difflib.SequenceMatcher):
-    """Exact whole-input containment shortcut; otherwise use the standard matcher."""
+    """difflib.SequenceMatcher と同じ答えを返す照合。文字列どうしで捨てる要素がないときだけ、速い求め方を使う。
+
+    difflib の find_longest_match(alo, ahi, blo, bhi) が返すのは、a[alo:ahi] と b[blo:bhi] の中でいちばん長い共通の部分 (i, j, k) のうち、
+    i が最も小さいもの、それも同じなら j が最も小さいもの（共通の部分がなければ (alo, blo, 0)）。DP が i の小さい順、同じ i では j の小さい順に
+    見て、今までの最大を超えたときだけ記録するため。捨てる要素がなければ、difflib の最後の「一致を前後に広げる」処理は何もしない
+    （広げられるなら、それより長い共通の部分があることになり、いちばん長いことに反する）。
+    このクラスは同じ値を、次のどれかで求める。どれも「いちばん長く、a で最も前、b で最も前」を求めるので、どれを選んでも答えは同じ。
+      1. 上限の長さが片方の範囲の長さと同じなら、str.find でその範囲がもう片方に含まれるかを見る（find は最も前の位置を返す）。
+      2. 上限が _MATCH_PROBE_MAX 以下なら、上限の長さちょうどの一致を、その長さの部分文字列の表で a の前から探す。
+         見つかれば答え。見つからなければ、答えの長さは上限 -1 以下と分かる。
+      3. 長い一致は種で探す（_seeded）。長さ L 以上の一致がなければ、答えは L より短いと分かるので、L を半分にして続ける。
+      4. 残りは、difflib と同じ DP（b の位置のうち範囲の中のものだけをたどる）か、接尾辞オートマトン（_automaton_longest）で求める。
+         b の範囲がとても長いときは、オートマトンの代わりに答えの長さを二分探索で決める（_bisect_length。記憶を多く使わないため）。
+
+    get_matching_blocks は difflib と同じ順に範囲を分け、分けた範囲に答えの長さの上限を渡す。上限は見積もりではなく、次のとおり必ず成り立つ。
+    範囲の答えを (i, j, k) とすると、
+      - 右の範囲 [i+k, ahi) × [j+k, bhi) の一致は、元の範囲の中の一致でもあるので、長さは k 以下。
+      - 左の範囲 [alo, i) × [blo, j) に長さ k の一致があれば、元の範囲の中で i より前から始まる長さ k の一致になり、
+        答えが「a で最も前」であることに反する。よって長さは k-1 以下。
+
+    使い回す表（_seed_indexes、_probe_indexes、_collision_rate）は、要るときに作って self.__dict__ に置き、並びを替えたら捨てる。
+    difflib の __init__ は途中で set_seq1 と set_seq2 を呼ぶので、そのときはまだ表の属性がない。ないときも同じに扱えるよう、
+    getattr でなく self.__dict__ の get、setdefault、pop で読み書きする（__init__ を上書きしなくて済む）。"""
+
+    def set_seq1(self, a):
+        if a is not self.__dict__.get("a"):
+            self.__dict__.pop("_collision_rate", None)          # a と b の両方で決まる
+        difflib.SequenceMatcher.set_seq1(self, a)
+
+    def set_seq2(self, b):
+        if b is not self.__dict__.get("b"):
+            for key in ("_collision_rate", "_seed_indexes", "_probe_indexes"):   # b で決まる
+                self.__dict__.pop(key, None)
+        difflib.SequenceMatcher.set_seq2(self, b)
+
+    def _fast(self):
+        """速い求め方を使えるか。文字列どうしで、捨てる要素がないときだけ（それ以外は difflib に任せる）。"""
+        return (self.isjunk is None and not self.bjunk and not self.bpopular
+                and type(self.a) is str and type(self.b) is str)
+
+    def get_matching_blocks(self):
+        if self.matching_blocks is not None:
+            return self.matching_blocks
+        if not self._fast():
+            return difflib.SequenceMatcher.get_matching_blocks(self)
+        # difflib の get_matching_blocks と同じ。分けた範囲に答えの長さの上限を足しただけ。
+        la, lb = len(self.a), len(self.b)
+        queue = [(0, la, 0, lb, min(la, lb))]
+        matching_blocks = []
+        while queue:
+            alo, ahi, blo, bhi, bound = queue.pop()
+            i, j, k = x = self._longest(alo, ahi, blo, bhi, bound)
+            if k:
+                matching_blocks.append(x)
+                if alo < i and blo < j:
+                    queue.append((alo, i, blo, j, k - 1))
+                if i + k < ahi and j + k < bhi:
+                    queue.append((i + k, ahi, j + k, bhi, k))
+        matching_blocks.sort()
+        i1 = j1 = k1 = 0
+        non_adjacent = []
+        for i2, j2, k2 in matching_blocks:
+            if i1 + k1 == i2 and j1 + k1 == j2:
+                k1 += k2
+            else:
+                if k1:
+                    non_adjacent.append((i1, j1, k1))
+                i1, j1, k1 = i2, j2, k2
+        if k1:
+            non_adjacent.append((i1, j1, k1))
+        non_adjacent.append((la, lb, 0))
+        self.matching_blocks = list(map(difflib.Match._make, non_adjacent))
+        return self.matching_blocks
 
     def find_longest_match(self, alo=0, ahi=None, blo=0, bhi=None):
-        if self.isjunk is not None or self.autojunk or not isinstance(self.a, str) or not isinstance(self.b, str):
-            return super().find_longest_match(alo, ahi, blo, bhi)
-        a, b = self.a, self.b
-        ahi = len(a) if ahi is None else ahi
-        bhi = len(b) if bhi is None else bhi
-        if alo != 0 or blo != 0 or ahi != len(a) or bhi != len(b):
-            return super().find_longest_match(alo, ahi, blo, bhi)
-        a_len, b_len = ahi - alo, bhi - blo
-        if not a_len or not b_len:
-            return difflib.Match(alo, blo, 0)
+        ahi = len(self.a) if ahi is None else ahi
+        bhi = len(self.b) if bhi is None else bhi
+        # 範囲が文字列の外にはみ出す呼び方（負の位置など）と、位置が int でない呼び方（True など）も、difflib に任せて同じふるまいにする
+        # （difflib は、一致があれば位置を足し引きして int で返し、なければ渡された alo と blo をそのまま返す）
+        if not (self._fast() and type(alo) is int and type(ahi) is int and type(blo) is int and type(bhi) is int
+                and 0 <= alo <= ahi <= len(self.a) and 0 <= blo <= bhi <= len(self.b)):
+            return difflib.SequenceMatcher.find_longest_match(self, alo, ahi, blo, bhi)
+        return self._longest(alo, ahi, blo, bhi, min(ahi - alo, bhi - blo))
 
-        # Containment attains the maximum possible size; find preserves first ties.
-        if a_len <= b_len:
+    def _longest(self, alo, ahi, blo, bhi, bound):
+        """find_longest_match(alo, ahi, blo, bhi) と同じ値。bound は答えの長さの上限（証明済み）。"""
+        a, b = self.a, self.b
+        la, lb = ahi - alo, bhi - blo
+        cap = min(bound, la, lb)
+        if cap <= 0:
+            return difflib.Match(alo, blo, 0)
+        if la * lb <= _MATCH_SMALL_AREA:
+            return self._dp(alo, ahi, blo, bhi)
+        # 1と2. 上限の長さちょうどの一致を探す。見つかれば、a で最も前（同じ a なら b で最も前）のものが答え。
+        # 見つからなければ、答えは上限 -1 以下。
+        if cap == la:
             j = b.find(a[alo:ahi], blo, bhi)
             if j != -1:
-                return difflib.Match(alo, j, a_len)
-        else:
+                return difflib.Match(alo, j, cap)
+            cap -= 1
+        elif cap == lb:
             i = a.find(b[blo:bhi], alo, ahi)
             if i != -1:
-                return difflib.Match(i, blo, b_len)
+                return difflib.Match(i, blo, cap)
+            cap -= 1
+        elif cap <= _MATCH_PROBE_MAX:
+            found = self._probe(alo, ahi, blo, bhi, cap)
+            if found is not None:
+                return found
+            cap -= 1
+        if cap <= 0:
+            return difflib.Match(alo, blo, 0)
+        # 3. 長い一致を種で探す。長さ L 以上の一致がなければ答えは L より短いので、L を半分にして続ける。
+        length = cap
+        while length >= _MATCH_SAMPLE_MIN:
+            found = self._seeded(alo, ahi, blo, bhi, length, (la + lb) // _MATCH_SAMPLE_BUDGET_DIV)
+            if found is None:                # 候補が多すぎて調べきれない。何も決めずに次の手に回す
+                break
+            if found is not False:
+                return found
+            cap = length - 1
+            length //= 2
+        # 4. 残り。DP の手間（範囲の中の同じ字の組の数の見込み）が小さければ DP、大きければ接尾辞オートマトン。
+        # b の範囲がとても長いときは、オートマトンの代わりに答えの長さを二分探索で決める（使う記憶を抑える）。
+        if la * lb * self._collision() <= _MATCH_SAM_FACTOR * (la + lb):
+            return self._dp(alo, ahi, blo, bhi)
+        if lb <= _MATCH_AUTOMATON_MAX:
+            return _automaton_longest(a, alo, ahi, b, blo, bhi, cap)
+        return self._bisect_length(alo, ahi, blo, bhi, cap)
 
-        return super().find_longest_match(alo, ahi, blo, bhi)
+    def _bisect_length(self, alo, ahi, blo, bhi, cap):
+        """答えの長さを二分探索で決めて、_longest と同じ値を返す（cap は答えの長さの上限）。
+        長さ m の共通の部分があれば、その端を1字削った長さ m-1 の共通の部分もあるので、「長さ m ちょうどの一致があるか」は m について単調。
+        最後に見つかった長さが答えの長さで、そのとき _first_of_length が返す一致（a で最も前、同じ a なら b で最も前）が答えになる。
+        この道を通るのは、b の範囲が _MATCH_AUTOMATON_MAX より長く、種で探す段が候補の多さで止まったとき（1字や短い周期の
+        くり返しが長く続く文字列）だけ。段の数は cap の対数で、1段の手間は _first_of_length のとおり。"""
+        low, high, found = 0, cap, None
+        codes = []          # 長い長さの段で使う、範囲の字の番号の配列（段をまたいで使い回す）
+        while low < high:
+            middle = (low + high + 1) // 2
+            match = self._first_of_length(alo, ahi, blo, bhi, middle, codes)
+            if match is None:
+                high = middle - 1
+            else:
+                low, found = middle, match
+        return found if found is not None else difflib.Match(alo, blo, 0)
+
+    def _first_of_length(self, alo, ahi, blo, bhi, size, codes):
+        """長さ size ちょうどの共通の部分のうち、a で最も前、同じ a なら b で最も前のもの。なければ None（_probe と同じ値）。
+        b[blo:bhi] の長さ size の部分ごとの hash を集め、a の位置を前から見て、hash が集まりにあるときだけ実際の字で確かめる。
+        同じ字の並びの hash は必ず同じなので、hash が集まりにない a の位置には、b[blo:bhi] に同じ並びがない。
+        段ごとに作り直し、残さない（b 全体の表を長さごとに残す _probe と違い、記憶を使い続けない）。
+
+        size が _MATCH_ROLLING_MIN より短いときは、部分を切り出して hash を取り、確かめは str.find（b[blo:bhi] の中で最も前の位置を
+        返し、hash が偶然同じなだけなら -1）で行う。1段の手間は（a と b の範囲の字数の和）× size だが、切り出しと hash は C の速さ。
+        それ以上の長さでは、切り出す手間が size に比例して重くなる（1字のくり返し10万字で、二分探索の全体が30秒あまりかかった）ので、
+        1字ずつずらして求める hash（_rolling_hashes）を使う。1段の手間は字数の和に比例し、size によらない。
+        b の側は hash ごとに最も前の位置を残す。その位置の字が a の部分と同じなら、同じ並びのもっと前の位置は同じ hash になり
+        そちらが残るはずなので、それが最も前の位置になる。違えば（hash だけが同じ、まれ）、str.find で最も前の位置を探し直す。"""
+        a, b = self.a, self.b
+        if size < _MATCH_ROLLING_MIN:
+            seen = {hash(b[j:j + size]) for j in range(blo, bhi - size + 1)}
+            for i in range(alo, ahi - size + 1):
+                gram = a[i:i + size]
+                if hash(gram) in seen:
+                    j = b.find(gram, blo, bhi)
+                    if j != -1:
+                        return difflib.Match(i, j, size)
+            return None
+        if not codes:
+            codes.append(array("l", map(ord, a[alo:ahi])))
+            codes.append(array("l", map(ord, b[blo:bhi])))
+        first = {}
+        for offset, value in enumerate(_rolling_hashes(codes[1], size)):
+            if value not in first:
+                first[value] = blo + offset
+        get = first.get
+        for offset, value in enumerate(_rolling_hashes(codes[0], size)):
+            j = get(value)
+            if j is not None:
+                i = alo + offset
+                gram = a[i:i + size]
+                if b[j:j + size] != gram:
+                    j = b.find(gram, blo, bhi)
+                    if j == -1:
+                        continue
+                return difflib.Match(i, j, size)
+        return None
+
+    def _probe(self, alo, ahi, blo, bhi, size):
+        """長さ size ちょうどの共通の部分のうち、a で最も前、同じ a なら b で最も前のもの。なければ None。
+        a の位置を前から順に見て、その位置の size 字が b[blo:bhi] のどこに最初にあるかを表で引く。"""
+        a, b = self.a, self.b
+        if bhi - blo <= _MATCH_WHOLE_INDEX_MIN:
+            first = {}
+            for j in range(bhi - size, blo - 1, -1):      # 後ろから入れて、同じ部分文字列は最も前の位置を残す
+                first[b[j:j + size]] = j
+            get = first.get
+            for i in range(alo, ahi - size + 1):
+                j = get(a[i:i + size])
+                if j is not None:
+                    return difflib.Match(i, j, size)
+            return None
+        # b の範囲が長いときは、b 全体の表を長さごとに作って使い回す（右の範囲が続くと、同じ長さで何度も引くため）。
+        # 表は最近使った順に _MATCH_PROBE_CACHE 個まで残す。表のない長さで、範囲が b 全体より十分小さいときは、表を作らずに
+        # その範囲だけで探す（字の種類の少ない文字列では、範囲ごとに上限の長さがばらばらで、b 全体の表を作り直し続けることがある）。
+        cache = self.__dict__.setdefault("_probe_indexes", {})
+        index = cache.pop(size, None)
+        if index is None:
+            if (ahi - alo) + (bhi - blo) <= len(b) // _MATCH_LOCAL_DIV:
+                return self._probe_local(alo, ahi, blo, bhi, size)
+            while cache and len(cache) >= _MATCH_PROBE_CACHE:
+                del cache[next(iter(cache))]                # いちばん前に使った長さの表を捨てる
+            index = _gram_index(b, size)
+        cache[size] = index                                 # 使った表を最後に置く（dict は入れた順を保つ）
+        keys, shift, keep, low = index
+        count = len(keys)
+        last = bhi - size
+        for i in range(alo, ahi - size + 1):
+            gram = a[i:i + size]
+            base = (hash(gram) & keep) << shift
+            p = bisect_left(keys, base | blo)
+            end = base | last
+            while p < count and keys[p] <= end:
+                j = keys[p] & low
+                if b[j:j + size] == gram:
+                    return difflib.Match(i, j, size)
+                p += 1
+        return None
+
+    def _probe_local(self, alo, ahi, blo, bhi, size):
+        """_probe と同じ値を、範囲の中だけの表で求める（短いほうの側の部分文字列の表を作り、もう片方を前から見る）。
+        b の側の表なら、a の位置を前から見て最初に見つかったものが答え（_probe の短い範囲と同じ）。
+        a の側の表（部分文字列ごとに最も前の a の位置）なら、b の位置を前から見て、引けた a の位置がそれまでより前のときだけ残す。
+        同じ a の位置は、b で最も前の位置で最初に引けるので、残ったものが a で最も前、同じ a なら b で最も前になる。"""
+        a, b = self.a, self.b
+        if bhi - blo <= ahi - alo:
+            first = {}
+            for j in range(bhi - size, blo - 1, -1):
+                first[b[j:j + size]] = j
+            get = first.get
+            for i in range(alo, ahi - size + 1):
+                j = get(a[i:i + size])
+                if j is not None:
+                    return difflib.Match(i, j, size)
+            return None
+        first = {}
+        for i in range(ahi - size, alo - 1, -1):
+            first[a[i:i + size]] = i
+        get = first.get
+        best = None
+        for j in range(blo, bhi - size + 1):
+            i = get(b[j:j + size])
+            if i is not None and (best is None or i < best[0]):
+                best = (i, j)
+                if i == alo:
+                    break
+        return None if best is None else difflib.Match(best[0], best[1], size)
+
+    def _seeded(self, alo, ahi, blo, bhi, length, budget):
+        """長さ length 以上の共通の部分のうち、いちばん長く、a で最も前、同じ a なら b で最も前のもの。
+        なければ False（答えは length-1 以下と分かる）。調べる候補が budget を超えたら None（何も決めない）。
+
+        種の長さを q、格子の間隔を s = length-q+1 とし、a の格子の位置 t を alo+s-1 から s おきにとる。長さ length 以上の
+        共通の部分が a[x:x+length] を含むとき、区間 [x, x+length-q]（s 個の連続した位置。x >= alo なので alo+s-1 以上の格子の位置が入る）
+        には格子の位置 t が必ず1つあり、その共通の部分は種 a[t:t+q] を含む。そこで、格子の位置の種が b[blo:bhi] に現れる所をすべて引き、
+        そこから範囲の中で前後に伸ばせるだけ伸ばした一致を集め、いちばん長く、a で最も前、b で最も前のものを選ぶ。
+        答え（いちばん長い共通の部分）は、それ以上伸ばせないので、伸ばした一致のどれかとして必ず集まる。"""
+        a, b = self.a, self.b
+        q = _MATCH_SEED_LONG if length >= 2 * _MATCH_SEED_LONG else _MATCH_SEED_SHORT
+        indexes = self.__dict__.setdefault("_seed_indexes", {})
+        index = indexes.get(q)
+        if index is None:
+            index = indexes[q] = _gram_index(b, q)
+        keys, shift, keep, low = index
+        count = len(keys)
+        step = length - q + 1
+        last = bhi - q
+        seeds = []
+        total = 0
+        for t in range(alo + step - 1, ahi - q + 1, step):
+            gram = a[t:t + q]
+            base = (hash(gram) & keep) << shift
+            p = bisect_left(keys, base | blo)
+            end = base | last
+            while p < count and keys[p] <= end:
+                u = keys[p] & low
+                if b[u:u + q] == gram:
+                    seeds.append((t, u))
+                    total += 1
+                    if total > budget:
+                        return None
+                p += 1
+        best = None
+        for t, u in seeds:
+            back = _common_suffix_len(a, t, b, u, min(t - alo, u - blo))
+            size = back + q + _common_prefix_len(a, t + q, b, u + q, min(ahi - t, bhi - u) - q)
+            if size >= length:
+                candidate = (-size, t - back, u - back)
+                if best is None or candidate < best:
+                    best = candidate
+        if best is None:
+            return False
+        return difflib.Match(best[1], best[2], -best[0])
+
+    def _collision(self):
+        """a の1字と b の1字が同じである割合（DP の手間の見積もりにだけ使う）。"""
+        rate = self.__dict__.get("_collision_rate")
+        if rate is None:
+            count_a, count_b = Counter(self.a), Counter(self.b)
+            same = sum(n * count_b.get(ch, 0) for ch, n in count_a.items())
+            rate = self._collision_rate = same / float(max(1, len(self.a) * len(self.b)))
+        return rate
+
+    def _dp(self, alo, ahi, blo, bhi):
+        """difflib の find_longest_match の DP と同じ。b の字の位置の一覧（b2j）のうち、[blo, bhi) の中の位置だけをたどる
+        （difflib は範囲の外の位置を continue と break で飛ばすので、たどる位置も、記録する値も同じ）。"""
+        a, b2j = self.a, self.b2j
+        besti, bestj, bestsize = alo, blo, 0
+        j2len = {}
+        for i in range(alo, ahi):
+            positions = b2j.get(a[i])
+            newj2len = {}
+            if positions:
+                get = j2len.get
+                for j in positions[bisect_left(positions, blo):bisect_left(positions, bhi)]:
+                    k = newj2len[j] = get(j - 1, 0) + 1
+                    if k > bestsize:
+                        besti, bestj, bestsize = i - k + 1, j - k + 1, k
+            j2len = newj2len
+        return difflib.Match(besti, bestj, bestsize)
 
 
 def ending_changes(o: str, r: str):
     """書き直しで文末の種類が変わった文。似ている元の文と組にして比べる"""
     return _ending_changes_from_units(ending_units(o), ending_units(r))
+
+
+# 文末の種類の比べで、元の文と書き直した文の字数の積がこれを超える組は、ratio を _ExactSequenceMatcher で求める（答えは difflib と同じ）。
+# difflib の ratio は長い文の組で長さの2乗の時間がかかる（「。」のない2万字の1文で20秒あまり）。短い文の組では difflib のほうが速い。
+_ENDING_EXACT_AREA = 160000
 
 
 def _ending_changes_from_units(ou, ru):
@@ -756,7 +1288,7 @@ def _ending_changes_from_units(ou, ru):
     originals = OrderedDict()
     for y in ou:
         originals.setdefault(y["sentence"], y)
-    postings = None
+    items = lengths = at_least = None
     matches = {}
     changes = []
     for x in ru:
@@ -768,26 +1300,52 @@ def _ending_changes_from_units(ou, ru):
                 best, score = originals[sentence], 1.0
             else:
                 matcher = difflib.SequenceMatcher(None, "", sentence, autojunk=False)
-                if postings is None:
-                    postings = {}
-                    for i, original in enumerate(originals):
+                exact = None
+                if at_least is None:
+                    # at_least[ch][t] は、字 ch を t+1 回以上含む元の文の番号の一覧（番号の順）
+                    items = list(originals.items())
+                    lengths = [len(original) for original, _ in items]
+                    at_least = {}
+                    for i, (original, _) in enumerate(items):
                         for ch, n in Counter(original).items():
-                            postings.setdefault(ch, []).append((i, n))
-                overlaps = [0] * len(originals)
+                            levels = at_least.setdefault(ch, [])
+                            while len(levels) < n:
+                                levels.append([])
+                            for t in range(n):
+                                levels[t].append(i)
+                # overlaps[i] は、字ごとの min(この文の数, 元の文 i の数) の和（字の多重集合の重なり。ratio の上限に使う）。
+                # min(n, c) は「c >= t となる t（1..n）の数」なので、字ごとに at_least の最初の n 段を数え足す。
+                # v2.0.0 は字ごとに、その字を含む元の文の数だけ Python で min を足していた。数え足しを Counter.update（C の速さ）に
+                # しただけで、値は同じ。手間の大きさは変わっていない。「。」や「の」はほとんどの元の文にあるので、この数え足しと下の
+                # 元の文ごとの確かめは「書き直した文の数 × 元の文の数」に近い回数になる（全面書き換えでは文の数の2乗。速くなったのは
+                # 1回あたりの手間だけ）。
+                overlaps = Counter()
                 for ch, n in Counter(sentence).items():
-                    for i, original_n in postings.get(ch, ()):
-                        overlaps[i] += min(n, original_n)
+                    levels = at_least.get(ch)
+                    if levels:
+                        for indexes in levels[:n]:
+                            overlaps.update(indexes)
                 rewrite_len = len(sentence)
-                for i, (original, y) in enumerate(originals.items()):
-                    total_len = len(original) + rewrite_len
-                    length_bound = 2.0 * min(len(original), rewrite_len) / total_len if total_len else 1.0
+                # 共通の字が1つもない元の文は、overlap_bound が0で下の条件に届かないので、見なくても同じ（total_len が0になるのは
+                # この文と元の文がどちらも空のときだけで、そのときは上の完全一致で決まっている）。
+                # 残りは前と同じ番号の順に、同じ条件で見る。
+                for i in sorted(overlaps):
+                    original, y = items[i]
+                    total_len = lengths[i] + rewrite_len
+                    length_bound = 2.0 * min(lengths[i], rewrite_len) / total_len if total_len else 1.0
                     if length_bound < 0.45 or length_bound <= score:
                         continue
                     overlap_bound = 2.0 * overlaps[i] / total_len if total_len else 1.0
                     if overlap_bound < 0.45 or overlap_bound <= score:
                         continue
-                    matcher.set_seq1(original)
-                    sc = matcher.ratio()
+                    if lengths[i] * rewrite_len > _ENDING_EXACT_AREA:
+                        if exact is None:
+                            exact = _ExactSequenceMatcher(None, "", sentence, autojunk=False)
+                        exact.set_seq1(original)
+                        sc = exact.ratio()
+                    else:
+                        matcher.set_seq1(original)
+                        sc = matcher.ratio()
                     if sc > score:
                         best, score = y, sc
             matches[sentence] = best, score
@@ -1237,7 +1795,9 @@ def context(t: str, i: int, j: int, width: int = 18) -> str:
 
 
 def _rule_candidates(orig_raw: str, rw_raw: str, stance=None) -> dict:
-    """v1.1.2 の diff() の9つの点検（markers から type_changes まで）。中身は v1.1.2 と1字も変えない。"""
+    """v1.1.2 の diff() の9つの点検（markers から type_changes まで）。結果は v1.1.2 と1字も変えない。
+    v2.0.1 で、語が原文にあるかを、同じ語ごとに1度だけ原文全体から探すようにした（値は同じ。足した部分の多い数十万字の文書で、
+    同じ語を足した部分ごとに原文全体から探し直して重かった）。"""
     o, r = normalize(orig_raw), normalize(rw_raw)
     out = {"markers": [], "new_words": [], "lost_words": [], "structure": [], "spans": [], "logic": logic_points(rw_raw),
            "bold": bold_problems(rw_raw)}
@@ -1261,8 +1821,16 @@ def _rule_candidates(orig_raw: str, rw_raw: str, stance=None) -> dict:
     # 2. 元にない語・消えた語（語の単位で、文のどこかに出てくるかを見る）
     o_words = set(CONTENT.findall(o))
     r_words = set(CONTENT.findall(r))
-    out["new_words"] = sorted(w for w in r_words if w not in o)
-    out["lost_words"] = sorted(w for w in o_words if w not in r)
+    absent = {}
+
+    def not_in_o(w):
+        """w not in o と同じ。o から取った語は o にあるので探さず、ほかの語も、同じ語は o 全体から探し直さない。"""
+        found = absent.get(w)
+        if found is None:
+            found = absent[w] = w not in o_words and w not in o
+        return found
+    out["new_words"] = sorted(w for w in r_words if not_in_o(w))
+    out["lost_words"] = sorted(w for w in o_words if w not in r_words and w not in r)
 
     # 3. 構造
     if has_list(orig_raw) and not has_list(rw_raw):
@@ -1280,7 +1848,7 @@ def _rule_candidates(orig_raw: str, rw_raw: str, stance=None) -> dict:
                 seg = r[j1:j2]
                 around = r[max(0, j1 - 3):j2 + 3]
                 kinds = [n for n, p in _MARKER_REGEXES if p.search(around)]
-                words = [w for w in CONTENT.findall(seg) if w not in o]
+                words = [w for w in CONTENT.findall(seg) if not_in_o(w)]
                 if kinds or words:
                     out["spans"].append({"added": seg, "was": o[i1:i2], "kinds": kinds, "new_words": words,
                                          "where": context(r, j1, j2)})
@@ -4084,7 +4652,10 @@ class _Masker:
         end = start + len(text)
         first = max(0, bisect_right(self.lefts, start) - 1)
         pieces, cursor = [], start
-        for left, right in self.spans[first:]:
+        spans = self.spans
+        # self.spans[first:] と切り出すと、文ごとに残りの範囲をすべて写すことになる（伏せる範囲の多い文書で2乗）。番号でたどる。
+        for index in range(first, len(spans)):
+            left, right = spans[index]
             if left >= end:
                 break
             if right <= start:
@@ -6524,11 +7095,17 @@ def _addition_bigrams(text):
     return set(t[i:i + 2] for i in range(len(t) - 1))
 
 
-def _addition_novelty(span, old_doc):
+def _addition_novelty(span, old_doc, old_bigrams=None):
+    """span の語のうち、原文 old_doc になく、どの2字も old_doc にない語の割合。
+    old_bigrams（old_doc の2字の組の集まり）を渡すと、語ごとに old_doc 全体を探さずに同じ値を求める。_ADD_CONTENT の語は2字以上で、
+    語が old_doc にあればその最初の2字も old_doc にあるので、「どの2字も old_doc の2字の組にない」だけで決まる。"""
     words = [w for w in _ADD_CONTENT.findall(span)]
     if not words:
         return 0.0
-    new = [w for w in words if w not in old_doc and not any(w[i:i + 2] in old_doc for i in range(len(w) - 1))]
+    if old_bigrams is None:
+        new = [w for w in words if w not in old_doc and not any(w[i:i + 2] in old_doc for i in range(len(w) - 1))]
+    else:
+        new = [w for w in words if not any(w[i:i + 2] in old_bigrams for i in range(len(w) - 1))]
     return len(new) / float(len(words))
 
 
@@ -6561,10 +7138,18 @@ class _AdditionDocument:
                               if not _ADD_PAST_END.search(t.rstrip()))
         self.prevent = any(not _ADD_PREVENT_UNSETTLED.match(self.raw, m.end()) for m in _ADD_PREVENT_ANY.finditer(self.raw))
         self.states, self.kept, self.heads, self.matches = {}, {}, {}, {}
+        self._old_bigrams = None
         self.counts = [Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
         self.by_kind = {}
         for risk in risks:
             self.by_kind.setdefault(risk['kind'], []).append(risk)
+
+    def old_bigrams(self):
+        """原文の本文（old_text）の2字の組の集まり（_addition_novelty で、語ごとに原文全体を探さないため。初めて要るときに作る）。"""
+        if self._old_bigrams is None:
+            text = self.old_text
+            self._old_bigrams = {text[k:k + 2] for k in range(len(text) - 1)}
+        return self._old_bigrams
 
     def find(self, name, text):
         key = (name, text)
@@ -6789,7 +7374,7 @@ def _addition_claim_risks(doc, group, i, j):
         covered = group.covered(body.text)
         joined = len(covered) >= 2
         words = [word for family, word, start, end in remaining if joined or
-                 _addition_novelty(_addition_cause_span(body.text, family, start, end), doc.old_text) >= 0.5]
+                 _addition_novelty(_addition_cause_span(body.text, family, start, end), doc.old_text, doc.old_bigrams()) >= 0.5]
         reason = 'joined' if joined else 'new_content'
         if not words and i is not None:
             # 原文の「〜時に」「〜際に」を、同じ中身のまま原因の語にした（集中時に → 集中したことで）。
@@ -6989,6 +7574,15 @@ def _contained(short, long):
     return sum(block.size for block in blocks) / len(short)
 
 
+def _neighbor_pairs(order, firsts, i, last):
+    """組の並び order（(原文の文, 推敲後の文) を小さい順に並べたもの。firsts はその原文の文の番号の並び）のうち、原文の文が i より前の
+    最後の組と、i より後の最初の組の、推敲後の文の番号（前の組がなければ 0、後の組がなければ last）。
+    [b for a, b in order if a < i][-1] と [b for a, b in order if a > i][0] と同じ値を、二分探索で求める
+    （v2.0.0 は原文の文ごとに組をすべて見ていて、1つの塊に文が数千ある文書で2乗に重くなった）。"""
+    before, after = bisect_left(firsts, i), bisect_right(firsts, i)
+    return (order[before - 1][1] if before else 0), (order[after][1] if after < len(order) else last)
+
+
 def _register_changes(sides, groups, politeness):
     threshold = {"min_sentences": 3, "min_ratio": 0.5}
     if any(c["subkind"] == "polite_ratio" for c in politeness.get("candidates", [])):
@@ -7010,7 +7604,8 @@ def _register_changes(sides, groups, politeness):
         news = [masks[1].body(s) for s in group["new"]]
         new_registers = [_register_of(b.text) if eligible(1, b) else "" for b in news]
         order = sorted(group["pairs"])
-        paired_old = set(i for i, _ in order)
+        order_firsts = [i for i, _ in order]
+        paired_old = set(order_firsts)
         found = []
         for i, j in order:
             if not eligible(0, olds[i]) or not new_registers[j]:
@@ -7026,10 +7621,7 @@ def _register_changes(sides, groups, politeness):
             source = _register_of(old.text)
             if not source:
                 continue
-            earlier = [b for a, b in order if a < i]
-            later = [b for a, b in order if a > i]
-            low = earlier[-1] if earlier else 0
-            high = later[0] if later else len(news) - 1
+            low, high = _neighbor_pairs(order, order_firsts, i, len(news) - 1)
             if high - low > 5:
                 middle = min(len(news) - 1, i * len(news) // max(1, len(olds)))
                 low, high = max(low, middle - 2), min(high, middle + 3)
