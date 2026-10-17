@@ -583,6 +583,9 @@ class HookTests(ManagedCase):
         self.assertEqual(error, b'')
 
     def test_state_candidates_and_partial_session_binding(self):
+        # Keep default state discovery local even when the temporary directory
+        # is inside another Git worktree (for example, via TMPDIR).
+        (self.root / '.git').mkdir()
         run_id = self.start('--session', 'A')['run_id']
         self.hook('UserPromptSubmit', 'codex')
         self.assertEqual(self.entry(run_id)['host'], 'codex')
