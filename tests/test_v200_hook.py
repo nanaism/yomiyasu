@@ -583,6 +583,9 @@ class HookTests(ManagedCase):
         self.assertEqual(error, b'')
 
     def test_state_candidates_and_partial_session_binding(self):
+        # Make the temporary folder its own Git root. Once YOMIYASU_STATE_DIR is ignored below, the state folder is
+        # found from the nearest ancestor with .git, which must not be a repository or worktree that contains TMPDIR.
+        (self.root / '.git').mkdir()
         run_id = self.start('--session', 'A')['run_id']
         self.hook('UserPromptSubmit', 'codex')
         self.assertEqual(self.entry(run_id)['host'], 'codex')
