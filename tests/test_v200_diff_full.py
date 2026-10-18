@@ -45,7 +45,8 @@ NO_CANDIDATE_STATUS = "状態: 変更はあるが、専用の規則に当たる�
 ZERO_HUNK_STATUS = "状態: 変更はあるが、専用の規則に当たる見直し候補はない（変更 0か所。改行コード・BOM・末尾の改行だけが違う）"
 ZERO_HUNK_HEADING = "■ 全文差分（変更 0か所。省略していません）"
 BOM = "\ufeff"  # 見えない文字なので、ソースには直接書かない
-CHILD_TIMEOUT = 30  # 性能の試験の子プロセスの上限（秒）。遅い実装でも試験全体を止めない
+# 性能の試験の子プロセスの上限（秒）。遅い実装でも試験全体を止めない。遅い機械で測り直しても収まるよう、v2.0.2 で30秒から延ばした
+CHILD_TIMEOUT = 60
 
 # 2.7 の例A〜D（一字一句）
 A_OLD, A_NEW = "保存期間は3日です。\n", "保存期間は30日です。\n"
@@ -294,21 +295,39 @@ def changed_middle(old, new):
     return len(old) + len(new) - 2 * (head + tail)
 
 
-# 性能の試験で、測る処理だけを子プロセスで動かす。最大3回測り、最も速い値を返す（上限より速ければそこでやめる）。
+# 性能の試験の上限を壁時計の秒数だけにすると、実装が同じでも遅い機械で落ちる。そこで v2.0.2 から、次の2つを見る。
+# 1つ目は時間の伸びで、同じ形で4分の1の大きさの文書も同じ子プロセスで測り、本来の大きさの時間がその GROWTH_LIMIT 倍未満で
+# あることを見る。文書の大きさに比例する処理なら約4倍、大きさの2乗で伸びる処理なら約16倍になる。同じプロセスの中の比なので、
+# 機械の速さによらない。2つ目は時間そのもので、v2.0.1 と同じ秒数の上限を、基準の処理（CHILD_TIMER の pace）が PACE_SECONDS 秒で
+# 終わる機械での上限とする。同じ子プロセスで測った pace がそれより遅い機械では、遅い比の分だけ上限を延ばす。速い機械でも上限は縮めない。
+GROWTH_LIMIT = 8
+# pace の CPU 時間。Apple M5 Pro の Python 3.14.5 で、ほかの処理が少ないときに子プロセスで測った最小（0.059秒。v2.0.2）。
+# ほかの処理が多いときは 0.08〜0.10秒になる。pace の中身を変えたら測り直す
+PACE_SECONDS = 0.060
+
+# 性能の試験で、測る処理だけを子プロセスで動かす。時間は CPU 時間で測る（ほかのプロセスに CPU を譲って待った時間を入れない）。
+# pace と、測る文書（4分の1の大きさの文書があればそれも）を交互に測り、それぞれの最も速い値を返す。上限を満たせばそこでやめ、
+# 満たさなければ最大5回まで測り直す。
 CHILD_TIMER = r'''
+import difflib
+import gc
 import json
+import re
 import sys
 import time
+from bisect import bisect_left
+from collections import Counter
 
 sys.path.insert(0, sys.argv[1])
 import yomiyasu_diff
 
 with open(sys.argv[2], encoding="utf-8") as handle:
     task = json.load(handle)
-pairs, limit = task["pairs"], task["limit"]
+# Windows の CPU 時間は刻みが粗い（約16ミリ秒）ので、壁時計で測る
+clock = time.perf_counter if sys.platform == "win32" else time.process_time
 
 
-def full_rewrite():
+def full_rewrite(pairs):
     orig, rewrite = pairs[0]
     full = yomiyasu_diff.full_diff(orig, rewrite)
     # 9キーの分析（type_changes）は測らない（2.11の1）。空のリストを渡し、中で作らせない
@@ -316,39 +335,102 @@ def full_rewrite():
     return None
 
 
-def small_fix():
+def small_fix(pairs):
     orig, rewrite = pairs[0]
     return len(yomiyasu_diff.full_diff(orig, rewrite)["hunks"])
 
 
-def corpus():
+def corpus(pairs):
     for orig, rewrite in pairs:
         yomiyasu_diff.diff(orig, rewrite)
     return len(pairs)
 
 
-def ground():
+def ground(pairs):
     orig, rewrite = pairs[0]
     yomiyasu_diff.ground(rewrite, [orig], original=orig)
     return None
 
 
-def extract():
+def extract(pairs):
     orig, rewrite = pairs[0]
     return len(yomiyasu_diff.extract_numbers(orig))
 
 
+# pace は yomiyasu を使わない、量の決まった計算。diff の処理に近い種類（difflib の照合、正規表現で文と数を拾って数える、
+# 関数の呼び出しの多い走査、dict と二分探索）を同じくらいずつ動かし、機械と Python の速さを測る
+PACE_OLD = "".join("第%d項の値は%d件です。" % (i, i * 7 % 1000) for i in range(100))
+PACE_NEW = "".join("第%d項の値は%d件でした。" % (i, i * 11 % 1000) for i in range(100))
+PACE_TEXT = "".join("設定ファイル%dの値は%d件です。担当者は%d番目の結果を残し、会議で共有します。" % (i, i * 3, i % 97)
+                    for i in range(1500))
+PACE_SENTENCE = re.compile(r"[^。]*。")
+PACE_NUMBER = re.compile(r"[0-9]+(?P<unit>件|番目)?")
+PACE_WORDS = ["語%d" % (i * 7919 % 5000) for i in range(30000)]
+
+
+class PaceRow(tuple):
+    __slots__ = ()
+    start = property(lambda self: self[1])
+
+
+PACE_ROWS = [PaceRow((i, i * 5, i * 5 + 5)) for i in range(1000)]
+
+
+def pace():
+    total = len(difflib.SequenceMatcher(None, PACE_OLD, PACE_NEW, autojunk=False).get_opcodes())
+    for _ in range(6):
+        counts = Counter()
+        for sentence in PACE_SENTENCE.finditer(PACE_TEXT):
+            for number in PACE_NUMBER.finditer(sentence.group()):
+                counts[(number.group(), number.group("unit"))] += 1
+        total += len(counts)
+    for k in range(1000):
+        total += next(row for row in PACE_ROWS if row.start <= k * 5 + 2 < row[2])[0]
+    for _ in range(6):
+        seen = {}
+        for i, word in enumerate(PACE_WORDS):
+            seen.setdefault(word, []).append(i)
+        starts = sorted(len(places) * 100000 + k for k, places in enumerate(seen.values()))
+        total += sum(bisect_left(starts, x) for x in range(0, 30000, 3))
+    return total
+
+
+def sample(work, repeat):
+    # work を repeat 回動かした1回あたりの時間と、最後の戻り値。前に作ったものを先に片付けておく
+    gc.collect()
+    started = clock()
+    for _ in range(repeat):
+        value = work()
+    return (clock() - started) / repeat, value
+
+
 run = {"full_rewrite": full_rewrite, "small_fix": small_fix, "corpus": corpus, "ground": ground,
        "extract": extract}[task["run"]]
-best = value = None
-for _ in range(3):
-    started = time.perf_counter()
-    value = run()
-    elapsed = time.perf_counter() - started
-    best = elapsed if best is None else min(best, elapsed)
-    if best < limit:
+inputs, limit, growth = task["inputs"], task["limit"], task["growth"]
+deadline = time.perf_counter() + task["deadline"]
+values, repeats = [None] * len(inputs), [1] * len(inputs)
+if len(inputs) == 2:
+    # 小さい文書で一度動かし、初めの1回だけの準備（一覧の読み込みなど）を測る前に済ませる。短い処理は、1つの標本が
+    # 0.05秒を超えるまで繰り返す（時計の刻みと割り込みの揺れを薄める）。本来の大きさは小さい文書の4倍の時間と見積もる
+    once = sample(lambda: run(inputs[0]), 1)[0]
+    if once < 0.05:
+        once = sample(lambda: run(inputs[0]), 1)[0]
+    repeats = [int(0.05 / max(once, 1e-6)) + 1, int(0.05 / max(4 * once, 1e-6)) + 1]
+best, best_pace = [None] * len(inputs), None
+for rounds in range(1, 6):
+    round_started = time.perf_counter()
+    elapsed = sample(pace, 1)[0]
+    best_pace = elapsed if best_pace is None else min(best_pace, elapsed)
+    for k, pairs in enumerate(inputs):
+        elapsed, values[k] = sample(lambda: run(pairs), repeats[k])
+        best[k] = elapsed if best[k] is None else min(best[k], elapsed)
+    budget = limit * max(1.0, best_pace / task["pace_seconds"])
+    if best[-1] < budget and (growth is None or best[-1] < growth * best[0]):
         break
-print(json.dumps({"best": best, "value": value}))
+    if 2 * time.perf_counter() - round_started > deadline:
+        break
+print(json.dumps({"best": best[-1], "quarter": best[0] if len(inputs) == 2 else None, "pace": best_pace,
+                  "rounds": rounds, "value": values[-1], "quarter_value": values[0] if len(inputs) == 2 else None}))
 '''
 
 
@@ -412,10 +494,14 @@ class DiffCase(unittest.TestCase):
                         "v2.0.0 の yomiyasu_diff は %s() を公開する（設計 2.10）" % name)
         return getattr(yomiyasu_diff, name)
 
-    def time_in_child(self, run, pairs, limit):
-        """CHILD_TIMER の run を子プロセスで動かし、{"best": 秒, "value": 戻り値} を返す。
+    def time_in_child(self, run, pairs, limit, quarter=None):
+        """CHILD_TIMER の run を子プロセスで動かし、{"best": 秒, "quarter": 秒, "pace": 秒, "rounds": 回数, "value": 戻り値,
+        "quarter_value": 戻り値} を返す。quarter（pairs と同じ形で4分の1の大きさの組）を渡すと、その時間も測る。
         時間は子の中で測る。CHILD_TIMEOUT 秒で終わらなければ失敗にする（同じプロセスで動かすと timeout が効かない）。"""
-        task = self.write("timing-%s.json" % run, json.dumps({"run": run, "pairs": pairs, "limit": limit}, ensure_ascii=False))
+        inputs = ([quarter] if quarter is not None else []) + [pairs]
+        task = self.write("timing-%s.json" % run, json.dumps(
+            {"run": run, "inputs": inputs, "limit": limit, "growth": GROWTH_LIMIT if quarter is not None else None,
+             "pace_seconds": PACE_SECONDS, "deadline": CHILD_TIMEOUT / 2}, ensure_ascii=False))
         timed_out = False
         try:
             process = subprocess.run([sys.executable, "-B", "-c", CHILD_TIMER, str(SCRIPTS), str(task)],
@@ -426,6 +512,21 @@ class DiffCase(unittest.TestCase):
             self.fail("%s が %d 秒で終わらない（上限 %s 秒）" % (run, CHILD_TIMEOUT, limit))
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         return json.loads(process.stdout)
+
+    def assert_fast(self, run, pairs, limit, quarter=None, message=""):
+        """run の時間が上限（limit 秒を、pace の遅さの比で延ばした値）未満で、quarter を渡したときは、4分の1の大きさからの
+        時間の伸びが GROWTH_LIMIT 倍未満であることを確かめ、time_in_child の結果を返す。"""
+        timing = self.time_in_child(run, pairs, limit, quarter)
+        scale = max(1.0, timing["pace"] / PACE_SECONDS)
+        detail = ("%s: %.3f秒。上限 %.3f秒（%s秒 × この機械の遅さ %.2f。基準の処理 %.3f秒）。%d回測った最も速い値"
+                  % (run, timing["best"], limit * scale, limit, scale, timing["pace"], timing["rounds"]))
+        if quarter is not None:
+            detail += "。4分の1の大きさでは %.4f秒（%.1f倍）" % (timing["quarter"], timing["best"] / timing["quarter"])
+        self.assertLess(timing["best"], limit * scale, (message + "\n" if message else "") + detail)
+        if quarter is not None:
+            self.assertLess(timing["best"], GROWTH_LIMIT * timing["quarter"],
+                            "文書を4倍にすると時間が %d倍以上に伸びる（大きさの2乗で伸びる処理の疑い）\n%s" % (GROWTH_LIMIT, detail))
+        return timing
 
     def assert_status_lines(self, report, status_line):
         lines = report.split("\n")
@@ -1125,34 +1226,43 @@ class TestDeterminism(DiffCase):
 class TestPerformance(DiffCase):
     """6.3 性能（2.11 の約束の1と、tests に置く緩い上限）。
 
-    測る処理は子プロセスで動かし（CHILD_TIMEOUT 秒で打ち切る）、最大3回のうち最も速い値を上限と比べる。"""
+    測る処理は子プロセスで動かし（CHILD_TIMEOUT 秒で打ち切る）、基準の処理と交互に最大5回測った最も速い値を上限と比べる。
+    上限の秒数は v2.0.1 と同じで、基準の処理が遅い機械ではその比の分だけ延ばす（くわしくは GROWTH_LIMIT の前の注釈）。
+    同じ形で4分の1の大きさの文書も測り、時間の伸びが文書の大きさの2乗に近づかないことも見る。"""
 
     def test_full_rewrite_of_60000_chars(self):
         """6万字の全面書き換えで full_diff() と meaning_risks() の合計が3秒未満。
         9キーの分析（type_changes）は測らない（2.11の1）。meaning_risks() には type_changes=[] を渡す。"""
         self.need_function("full_diff")
         self.need_function("meaning_risks")
-        orig, count = long_document(SECTION_SENTENCES)
-        rewrite, _ = long_document(REWRITE_SENTENCES, paragraphs=count)
+
+        def pair(min_chars):
+            orig, count = long_document(SECTION_SENTENCES, min_chars=min_chars)
+            return [orig, long_document(REWRITE_SENTENCES, paragraphs=count)[0]]
+
+        orig, rewrite = full = pair(60000)
         self.assertGreaterEqual(len(orig), 60000)
         self.assertGreaterEqual(len(rewrite), 60000)
-        timing = self.time_in_child("full_rewrite", [[orig, rewrite]], 3.0)
-        self.assertLess(timing["best"], 3.0, "6万字の全面書き換えで full_diff() と meaning_risks() の合計が3秒未満")
+        self.assert_fast("full_rewrite", [full], 3.0, [pair(15000)],
+                         "6万字の全面書き換えで full_diff() と meaning_risks() の合計が3秒未満")
 
     def test_small_fix_in_60000_chars(self):
         self.need_function("full_diff")
-        orig, _ = long_document(SECTION_SENTENCES)
-        middle = orig.index("第200節の")
-        rewrite = orig[:middle] + "第201節の" + orig[middle + len("第200節の"):]
-        self.assertEqual(len(rewrite), len(orig))
-        timing = self.time_in_child("small_fix", [[orig, rewrite]], 0.5)
-        self.assertLess(timing["best"], 0.5, "6万字の小さな修正で full_diff() が0.5秒未満")
-        self.assertEqual(timing["value"], 1, "hunk は1つ")
 
-    def short_paragraphs(self):
-        orig, count = long_document(SHORT_SENTENCES, sentences_per_paragraph=2)
-        self.assertGreaterEqual(len(orig), 60000)
-        self.assertTrue(850 <= count <= 1000, count)
+        def pair(min_chars, section):
+            orig, _ = long_document(SECTION_SENTENCES, min_chars=min_chars)
+            middle = orig.index("第%d節の" % section)
+            return [orig, orig[:middle] + "第%d節の" % (section + 1) + orig[middle + len("第%d節の" % section):]]
+
+        orig, rewrite = full = pair(60000, 200)
+        self.assertEqual(len(rewrite), len(orig))
+        timing = self.assert_fast("small_fix", [full], 0.5, [pair(15000, 50)], "6万字の小さな修正で full_diff() が0.5秒未満")
+        self.assertEqual([timing["value"], timing["quarter_value"]], [1, 1], "hunk は1つ")
+
+    def short_paragraphs(self, min_chars=60000):
+        orig, count = long_document(SHORT_SENTENCES, min_chars=min_chars, sentences_per_paragraph=2)
+        self.assertGreaterEqual(len(orig), min_chars)
+        self.assertTrue(850 * min_chars // 60000 <= count <= 1000 * min_chars // 60000, count)
         self.assertTrue(55 <= len(orig) / count - 2 <= 75, len(orig) / count)
         return orig, count
 
@@ -1160,115 +1270,135 @@ class TestPerformance(DiffCase):
         """10.2 D16: 約65字の段落900個（6万字）の全面書き換えでも、full_diff() と meaning_risks() の合計が3秒未満。"""
         self.need_function("full_diff")
         self.need_function("meaning_risks")
-        orig, count = self.short_paragraphs()
-        rewrite, _ = long_document(SHORT_REWRITE_SENTENCES, paragraphs=count, sentences_per_paragraph=2)
-        self.assertGreaterEqual(len(rewrite), 60000)
-        timing = self.time_in_child("full_rewrite", [[orig, rewrite]], 3.0)
-        self.assertLess(timing["best"], 3.0, "短い段落の6万字の全面書き換えで full_diff() と meaning_risks() の合計が3秒未満")
+
+        def pair(min_chars):
+            orig, count = self.short_paragraphs(min_chars)
+            return [orig, long_document(SHORT_REWRITE_SENTENCES, paragraphs=count, sentences_per_paragraph=2)[0]]
+
+        full = pair(60000)
+        self.assertGreaterEqual(len(full[1]), 60000)
+        self.assert_fast("full_rewrite", [full], 3.0, [pair(15000)],
+                         "短い段落の6万字の全面書き換えで full_diff() と meaning_risks() の合計が3秒未満")
 
     def test_small_fixes_at_both_ends_of_short_paragraphs(self):
         """10.2 D16: 短い段落900個の文書で、最初と最後の段落を1字ずつ直しても full_diff() が0.5秒未満（前後の同じ行を外すだけでは
         速くならない形）。hunk は2つ。"""
         self.need_function("full_diff")
-        orig, _ = self.short_paragraphs()
-        first, last = orig.index("第0段の"), orig.rindex("段の")
-        rewrite = orig[:first] + "第一段の" + orig[first + len("第0段の"):last] + "節の" + orig[last + len("段の"):]
-        timing = self.time_in_child("small_fix", [[orig, rewrite]], 0.5)
-        self.assertLess(timing["best"], 0.5, "短い段落の6万字の両端の小さな修正で full_diff() が0.5秒未満")
-        self.assertEqual(timing["value"], 2, "hunk は2つ")
+
+        def pair(min_chars):
+            orig, _ = self.short_paragraphs(min_chars)
+            first, last = orig.index("第0段の"), orig.rindex("段の")
+            return [orig, orig[:first] + "第一段の" + orig[first + len("第0段の"):last] + "節の" + orig[last + len("段の"):]]
+
+        timing = self.assert_fast("small_fix", [pair(60000)], 0.5, [pair(15000)],
+                                  "短い段落の6万字の両端の小さな修正で full_diff() が0.5秒未満")
+        self.assertEqual([timing["value"], timing["quarter_value"]], [2, 2], "hunk は2つ")
 
     def test_corpus_48_pairs_diff_total_under_one_second(self):
-        """コーパス48組の diff() 合計が1秒未満（v1.1.2 でも通る後戻り防止）。"""
+        """コーパス48組の diff() 合計が1秒未満（v1.1.2 でも通る後戻り防止）。コーパスは大きさを変えられないので、伸びは見ない。"""
         pairs = [[read_exact(source), read_exact(rewritten)] for source, rewritten in corpus_pairs()]
         self.assertEqual(len(pairs), 48)
-        timing = self.time_in_child("corpus", pairs, 1.0)
+        timing = self.assert_fast("corpus", pairs, 1.0)
         self.assertEqual(timing["value"], 48)
-        self.assertLess(timing["best"], 1.0)
 
 
 class TestPerformanceEdges(DiffCase):
     """反証レビューで見つかった、2.11 の約束（6万字の全面書き換えで full_diff() と meaning_risks() の合計が3秒未満、
-    6万字の小さな修正で full_diff() が0.5秒未満）を超えた形。測り方は TestPerformance と同じ（子プロセスで最大3回）。"""
+    6万字の小さな修正で full_diff() が0.5秒未満）を超えた形。測り方は TestPerformance と同じ（子プロセスで、基準の処理と交互に
+    最大5回。同じ形で4分の1の大きさの文書からの伸びも見る）。"""
 
     def test_full_rewrite_with_many_numbers(self):
         """反証レビュー F5: 値の違う数値を6,000個あまり含む文書の全面書き換え（文が組にならない）。"""
-        orig = "\n\n".join("第{}項の値は{}件です。".format(i, i) for i in range(4200)) + "\n"
-        rewrite = "\n\n".join("別の書き方で{}回と書く。".format(i + 50000) for i in range(4200)) + "\n"
-        self.assertGreaterEqual(len(orig), 60000)
-        timing = self.time_in_child("full_rewrite", [[orig, rewrite]], 3.0)
-        self.assertLess(timing["best"], 3.0)
+        def pair(count):
+            return ["\n\n".join("第{}項の値は{}件です。".format(i, i) for i in range(count)) + "\n",
+                    "\n\n".join("別の書き方で{}回と書く。".format(i + 50000) for i in range(count)) + "\n"]
+
+        full = pair(4200)
+        self.assertGreaterEqual(len(full[0]), 60000)
+        self.assert_fast("full_rewrite", [full], 3.0, [pair(1050)])
 
     def test_deleting_a_document_with_many_numbers(self):
-        """反証レビュー E6: 数値を1万個含む6万字弱の1行を「なし。」にする（文書全体の数値の比べ）。"""
-        orig = "".join("{}件。".format(i) for i in range(10000)) + "\n"
-        timing = self.time_in_child("full_rewrite", [[orig, "なし。\n"]], 3.0)
-        self.assertLess(timing["best"], 3.0)
+        """反証レビュー E6: 数値を1万個含む6万字弱の1行を「なし。」にする（文書全体の数値の比べ）。
+        v2.0.1 までは、値ごとにその行の文を前から順に見ていて、1行の文の数と値の数の積で時間が伸びた（4倍の大きさで約13倍）。"""
+        def pair(count):
+            return ["".join("{}件。".format(i) for i in range(count)) + "\n", "なし。\n"]
 
-    def long_code_line(self):
-        line = " ".join("--opt%d=value%d" % (i, i) for i in range(2300))
+        self.assert_fast("full_rewrite", [pair(10000)], 3.0, [pair(2500)])
+
+    def long_code_line(self, options=2300):
+        line = " ".join("--opt%d=value%d" % (i, i) for i in range(options))
         orig = "設定の例です。\n\n```\n" + line + "\n```\n\n保存期間は3日です。\n"
-        self.assertGreater(len(line), 40000)
-        return orig, orig.replace("3日です", "30日です")
+        self.assertGreater(len(line), 40000 * options // 2300)
+        return [orig, orig.replace("3日です", "30日です")]
 
     def test_long_code_line_with_a_small_fix(self):
         """反証レビュー regress 1: コードの囲みの中に4万字の1行がある文書で、本文の数値を1つ変える。
         意味が変わる恐れ、資料との照合、数値の取り出しが、どれも0.5秒未満（数値を取る前に伏せた長い空白の行で、
         番号つき箇条書きの番号の正規表現が2乗の時間にならない）。"""
-        orig, rewrite = self.long_code_line()
+        full, quarter = self.long_code_line(), self.long_code_line(575)
         for run in ("full_rewrite", "ground", "extract"):
             with self.subTest(run=run):
-                timing = self.time_in_child(run, [[orig, rewrite]], 0.5)
-                self.assertLess(timing["best"], 0.5)
+                self.assert_fast(run, [full], 0.5, [quarter])
 
     def test_long_line_without_japanese_periods(self):
         """反証レビュー E3・regress 2: 「。！？!?」のない6万字の1行（「．」で区切った文）の1語の直しで、full_diff() が0.5秒未満、
         meaning_risks() との合計が3秒未満（2,000字を超える断片と文に difflib の ratio() をかけない）。"""
         words = ("設定ファイル", "サーバー", "利用者", "管理者", "キャッシュ", "ログ", "画面", "手順書")
         verbs = ("を開きます", "を確認します", "が止まります", "を保存します", "が増えます", "を消します", "を送ります")
-        parts, size, i = [], 0, 0
-        while size < 60000:
-            parts.append("{}{}は{}{}．".format(words[i % 8], i, words[i * 3 % 8], verbs[i % 7]))
-            size += len(parts[-1])
-            i += 1
-        orig = "".join(parts) + "\n"
-        rewrite = orig.replace("サーバー", "サーバ", 1)
-        timing = self.time_in_child("small_fix", [[orig, rewrite]], 0.5)
-        self.assertLess(timing["best"], 0.5)
-        self.assertEqual(timing["value"], 1)
-        timing = self.time_in_child("full_rewrite", [[orig, rewrite]], 3.0)
-        self.assertLess(timing["best"], 3.0)
-        negated = orig[:40000].rsplit("．", 1)[0] + "．\n"
-        timing = self.time_in_child("full_rewrite", [[negated, negated.replace("を保存します", "を保存しません", 1)]], 3.0)
-        self.assertLess(timing["best"], 3.0)
+
+        def line(chars):
+            parts, size, i = [], 0, 0
+            while size < chars:
+                parts.append("{}{}は{}{}．".format(words[i % 8], i, words[i * 3 % 8], verbs[i % 7]))
+                size += len(parts[-1])
+                i += 1
+            return "".join(parts) + "\n"
+
+        def pair(chars):
+            orig = line(chars)
+            return [orig, orig.replace("サーバー", "サーバ", 1)]
+
+        def negated(chars):
+            orig = line(60000)[:chars].rsplit("．", 1)[0] + "．\n"
+            return [orig, orig.replace("を保存します", "を保存しません", 1)]
+
+        full = pair(60000)
+        timing = self.assert_fast("small_fix", [full], 0.5, [pair(15000)])
+        self.assertEqual([timing["value"], timing["quarter_value"]], [1, 1])
+        self.assert_fast("full_rewrite", [full], 3.0, [pair(15000)])
+        self.assert_fast("full_rewrite", [negated(40000)], 3.0, [negated(10000)])
 
     def test_one_line_json_in_code_with_a_small_fix(self):
         """反証レビュー regress 2: コードの囲みの中の1行の JSON（約2.8万字）で1語だけ変える。full_diff() が0.5秒未満。"""
-        data = json.dumps([{"id": i, "name": "item%d" % i, "tags": ["a", "b"], "ok": True} for i in range(440)])
-        orig = "設定の例です。\n\n```json\n" + data + "\n```\n"
-        rewrite = orig.replace('"item100"', '"item100x"')
-        timing = self.time_in_child("small_fix", [[orig, rewrite]], 0.5)
-        self.assertLess(timing["best"], 0.5)
+        def pair(items):
+            data = json.dumps([{"id": i, "name": "item%d" % i, "tags": ["a", "b"], "ok": True} for i in range(items)])
+            orig = "設定の例です。\n\n```json\n" + data + "\n```\n"
+            return [orig, orig.replace('"item100"', '"item100x"')]
+
+        self.assert_fast("small_fix", [pair(440)], 0.5, [pair(110)])
 
     def test_full_rewrite_of_long_lines_with_full_width_periods(self):
-        """反証レビュー F6: 1行（段落）が2,000字を超える「．」の文書の全面書き換え。各文を少しずつ言い換える。"""
+        """反証レビュー F6: 1行（段落）が2,000字を超える「．」の文書の全面書き換え。各文を少しずつ言い換える。
+        4分の1の大きさの文書は、行の数をそろえて1行を750字にする（1行の長さに対する伸びを見る）。"""
         old_sentences = ("設定ファイル{n}の値を確かめ，記録の表と照らします．", "担当者は{n}番目の結果を残し，会議で共有します．",
                          "古い値は消さずに，変えた理由を横に書き足します．")
         new_sentences = ("設定ファイル{n}の値を見直し，記録の表と比べます．", "担当者は{n}番目の結果を記録し，会議で伝えます．",
                          "古い値は残したまま，変えた理由を横に足します．")
 
-        def document(sentences):
+        def document(sentences, chars, width):
             lines, n = [], 0
-            while sum(len(line) + 2 for line in lines) < 60000:
+            while sum(len(line) + 2 for line in lines) < chars:
                 line = ""
-                while len(line) < 3000:
+                while len(line) < width:
                     line += sentences[n % 3].format(n=n)
                     n += 1
                 lines.append(line)
             return "\n\n".join(lines) + "\n"
 
-        orig, rewrite = document(old_sentences), document(new_sentences)
-        timing = self.time_in_child("full_rewrite", [[orig, rewrite]], 3.0)
-        self.assertLess(timing["best"], 3.0)
+        def pair(chars, width):
+            return [document(old_sentences, chars, width), document(new_sentences, chars, width)]
+
+        self.assert_fast("full_rewrite", [pair(60000, 3000)], 3.0, [pair(15000, 750)])
 
 
 # ---- CLI の約束（0.4、2.1、2.9、10.5）。lint の試験（test_v200_lint_output.py）と同じ型 ----
@@ -1612,7 +1742,7 @@ class TestCliContract(DiffCase):
         """2.1: main(argv=None) は終了コードを返す（CLI は sys.exit(main()) の形）。"""
         self.assertTrue(callable(getattr(yomiyasu_diff, "main", None)), "main がない")
         self.assertIn("argv", inspect.signature(yomiyasu_diff.main).parameters)
-        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_diff.py 2.0.1 (JSON format 2)\n", ""))
+        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_diff.py 2.0.2 (JSON format 2)\n", ""))
         self.assertEqual(self.call_main([str(self.a_old), str(self.a_new)]), (0, EXAMPLE_A + "\n", ""))
         self.assertEqual(self.call_main(["--fail-on=meaning-risk", str(self.a_old), str(self.a_new)]),
                          (1, EXAMPLE_A + "\n\n" + FAIL_LINE_A + "\n", ""))

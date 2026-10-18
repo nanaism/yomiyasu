@@ -1,11 +1,13 @@
 <p align="center">
-  <img src="./assets/yomiyasu_logo.jpg" alt="yomiyasu v2.0.1 logo" width="700">
+  <img src="./assets/yomiyasu_logo.jpg" alt="yomiyasu v2.0.2 logo" width="700">
 </p>
 
 # yomiyasu（よみやす）
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](./LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/nanaism/yomiyasu)](https://github.com/nanaism/yomiyasu/releases)
+
+[English](./README.en.md)
 
 ## これは何？
 
@@ -16,6 +18,8 @@
 Claude Code、Codex、CursorをはじめとするAIコーディング環境に読み込ませて使用してください。
 
 2.0.0 では推敲した文章を返す前に、数値や否定が変わっていないかを yomiyasu 自身が検査するようになりました。書き手と読み手の関係に合わせた敬語の直しと、会話や資料にある事実の補いも加わっています（[2.0.0 で加わったこと](#200-で加わったこと)）。
+
+2.0.2 から、yomiyasu は「この文章を yomiyasu で読みやすくして」のように名前を出して頼んだときだけ使われます。毎回使いたいときに指示のファイルへ足す1行は、「[毎回 yomiyasu を使いたいとき](#毎回-yomiyasu-を使いたいとき)」にあります。
 
 開発の背景、AI生成文の読みにくさ、コーパスを使った検証については、次の解説記事で紹介しています。
 
@@ -230,13 +234,14 @@ Claudeのカスタムスキル登録機能（Web版など）には登録専用�
 Codex は作業するリポジトリの `.agents/skills/` の下に置いたスキルを読みます。上の入れ方を使わない場合や Codex Cloud で開く場合は、このリポジトリの `skills/yomiyasu/` フォルダを中身ごと、作業するリポジトリの `.agents/skills/yomiyasu/` にコピーしてください。
 
 ```bash
-# 作業するリポジトリの直下で実行
+# 作業するリポジトリの直下で実行（入れ直すときも同じ手順です）
+rm -rf /tmp/yomiyasu .agents/skills/yomiyasu
 git clone --depth 1 https://github.com/nanaism/yomiyasu /tmp/yomiyasu
 mkdir -p .agents/skills
 cp -R /tmp/yomiyasu/skills/yomiyasu .agents/skills/yomiyasu
 ```
 
-この置き方では、Codex がスキルを `yomiyasu:yomiyasu` という名前で一覧に載せます。`$yomiyasu:yomiyasu` と書くか、「/yomiyasu」とだけ送るか、依頼の文に「yomiyasu で」と書いて呼んでください（`$yomiyasu` と短く書いた回では、スキルの指示が読み込まれませんでした）。コピーしたフォルダは自動では新しくなりません。最新にするには、同じ手順でコピーし直してください。
+この置き方では Codex がスキルを `yomiyasu:yomiyasu` という名前で一覧に載せます。`$yomiyasu:yomiyasu` と書くか、「/yomiyasu」とだけ送るか、依頼の文に「yomiyasu で」と書いて呼んでください。コピーしたフォルダは自動では新しくなりません。最新にするには、同じ手順でコピーし直してください。
 
 ### 他の日本語校正スキルとの干渉について
 
@@ -247,18 +252,74 @@ cp -R /tmp/yomiyasu/skills/yomiyasu .agents/skills/yomiyasu
 AIチャットやコーディングエージェントに下書きを貼り付けて、次のように指示します。
 
 ```text
-この文章を読みやすくして。
+この文章を yomiyasu で読みやすくして。
 （ここに修正したい文章を貼り付け）
 ```
 
+このように依頼の文に名前を書いたとき、「/yomiyasu」と送ったとき、「日本語を推敲するスキルを使って」のようにスキルでの推敲をはっきり頼んだときに、yomiyasu が使われます。名前を出さずに「読みやすくして」とだけ頼むと、エージェントは yomiyasu を使わずに直します。
+
 「/yomiyasu」とだけ送ると、yomiyasu は直前の返答でAIが書いた本文か、作業フォルダの直下に1つだけある原稿（`.md` か `.txt`）を推敲します。原稿のファイルは書き換えず、最終稿を同じフォルダに別の名前で保存します。
+
+### 毎回 yomiyasu を使いたいとき
+
+AI が書いたり直したりする日本語をいつも yomiyasu に通したいときは、エージェントが毎回読む指示のファイルに、入れ方ごとに下に示す1行を足してください。1行に書くスキルの名前は入れ方によって `yomiyasu:yomiyasu` と `yomiyasu` に分かれます。
+
+#### Claude Code
+
+プラグインで入れた場合は、スキルの名前が `yomiyasu:yomiyasu` になるので、次の1行を書きます。
+
+```text
+記事、ドキュメント、PR の説明文、コミットメッセージなどの日本語の文章を書いたり直したりするときは、常に yomiyasu:yomiyasu スキルで推敲してください。コードを直したあとの作業の報告には使わなくてかまいません。
+```
+
+`npx skills add` や `gh skill install` でスキルとして入れた場合は、名前が `yomiyasu` なので、次の1行を書きます。
+
+```text
+記事、ドキュメント、PR の説明文、コミットメッセージなどの日本語の文章を書いたり直したりするときは、常に yomiyasu スキルで推敲してください。コードを直したあとの作業の報告には使わなくてかまいません。
+```
+
+1つのリポジトリだけで使うならそのリポジトリの直下の `CLAUDE.md` に、すべてのリポジトリで使うなら `~/.claude/CLAUDE.md` に書きます。書いたあとに始めた会話から有効になります。
+
+この1行があると、名前を出さずに記事や PR の説明文、コミットメッセージ、翻訳を書かせたときも、エージェントは yomiyasu で推敲します。コードを直したあとの作業の報告まで推敲させたいときは、「日本語の文章を書いたり直したりするときは、常に yomiyasu:yomiyasu スキルで推敲してください。」とだけ書きます。スキルとして入れた場合は、`yomiyasu:yomiyasu` を `yomiyasu` にします。
+
+#### Codex
+
+作業するリポジトリの `.agents/skills/` に置いた場合も、`npx skills add` や `gh skill install` で入れた場合も、スキルの名前は `yomiyasu:yomiyasu` です。スキルのフォルダに Codex 用のプラグインの設定 `.codex-plugin/plugin.json` が入っているためです。次の1行を書きます。
+
+```text
+記事、ドキュメント、PR の説明文、コミットメッセージなどの日本語の文章を書いたり直したりするときは、常に yomiyasu:yomiyasu スキルで推敲してください。コードを直したあとの作業の報告には使わなくてかまいません。
+```
+
+1つのリポジトリだけで使うならそのリポジトリの直下の `AGENTS.md` に、すべてのリポジトリで使うなら `~/.codex/AGENTS.md`（`CODEX_HOME` を設定しているときはその場所の `AGENTS.md`）に書きます。書いたあとに始めた会話から有効になります。
+
+コードや設定を直したあとの報告まで推敲させたいときは、「日本語の文章を書いたり直したりするときは、常に yomiyasu:yomiyasu スキルで推敲してください。」とだけ書きます。この書き方にすると、Codex は変数の名前を変えるだけの作業でも、最後の報告を書く前に yomiyasu を読みます。
+
+#### `npx openskills install` で入れたとき
+
+openskills はスキルの一覧を `AGENTS.md` に書き込み、エージェントは `npx openskills read yomiyasu` でスキルを読みます。この入れ方でのスキルの名前は `yomiyasu` です。`npx openskills sync` は `AGENTS.md` の `<skills_system>` から `</skills_system>` までを書き直すので、1行はその外に書いてください。
+
+```text
+記事、ドキュメント、PR の説明文、コミットメッセージなどの日本語の文章を書いたり直したりするときは、常に yomiyasu スキルで推敲してください（npx openskills read yomiyasu で読み込みます）。コードを直したあとの作業の報告には使わなくてかまいません。
+```
+
+2.0.2 に更新したら、`npx openskills update yomiyasu` のあとに `npx openskills sync` も実行してください。スキルの description は sync のときに `AGENTS.md` に写されるので、sync するまで、エージェントは 2.0.1 の description をもとに yomiyasu を使うかどうかを決めます。
+
+openskills は既定でスキルをプロジェクトの `.claude/skills/` に置くので、Claude Code はこのスキルを `yomiyasu` という名前で直接読みます。この場合は Claude Code の節にある、スキルとして入れたときの1行を `CLAUDE.md` に書いてください。
+
+#### Claude.ai
+
+ZIP で登録したスキルの名前は `yomiyasu` です。すべての会話で使うなら設定（Settings）の「Instructions for Claude」に、1つのプロジェクトだけで使うならそのプロジェクトの指示（project instructions）に、次の1行を書きます。どちらの置き場所も Claude のヘルプの [Understanding Claude's personalization features](https://support.claude.com/en/articles/10185728-understanding-claude-s-personalization-features) に書かれています。
+
+```text
+日本語の文章を書いたり直したりするときは、常に yomiyasu スキルで推敲してください。
+```
 
 ### 文書の種類と読者
 
 文書の種類と読者は依頼の中で伝えられます。伝えなければ、スキルが本文の形から推定します。
 
 ```text
-この障害報告を、専門知識のない社外の利用者向けに読みやすくして。
+この障害報告を yomiyasu で、専門知識のない社外の利用者向けに読みやすくして。
 （ここに修正したい文章を貼り付け）
 ```
 
@@ -307,7 +368,7 @@ yomiyasu は推敲した本文のあとに、変えたところと確認の記�
 
 一方で、文章は平均356字と、依頼した500字程度より短くなりました。読みやすさの評価は4通りの中で最も低く、時間と費用も約4倍かかっています。これはAIが採点した、文章の種類ごとの本数も少ない1つの試験の結果です。記事では、この使い方は数字や日付、条件を正確に伝えたい文章（営業メール、障害報告書、手順書など）に向くとしています。エッセイや告知のような読み物には何も付けずに書かせるか、依頼に一言添えるほうが向くという結論です。
 
-2.0.0 で資料から新しく書かせると、yomiyasu は付属の検査で最終稿の数値や名前を資料と照らし合わせ、資料にないものを見直し候補として出します。
+2.0.0 で資料から新しく書かせると、yomiyasu は付属の検査で最終稿の数値や名前を資料と照らし合わせ、資料にないものを見直し候補として出します。2.0.2 からは名前を出さずに書かせると yomiyasu は使われません。資料から書かせるときも「notes.md をもとに記事を書いて、最後に yomiyasu で推敲して」のように、依頼に名前を入れてください。
 
 種類ごとの決まり、敬語の上げ方、事実を補う決まり、完了報告の欄の詳しい説明は [docs/usage.md](./docs/usage.md) にまとめています。
 
@@ -334,6 +395,8 @@ python3 scripts/yomiyasu_lint.py minutes.md --doc-type minutes
 # JSON形式で結果を出力
 python3 scripts/yomiyasu_lint.py article.md --json
 ```
+
+2.0.0 で `--json` の点数のキーを `score` から `rule_penalty_score` に、候補の有無のキーを `is_clean` から `no_rule_findings` に変えました。前の名前のキーは残していないので、`jq .score` のように前の名前で読むと `null` になります。`rule_penalty_score` は計算も変えたので、`score` に使っていたしきい値はそのまま使えません。どちらの形式の JSON かは `format_version` で見分けられます（2.0.0 からは2で、1.1.2 までの JSON にはこのキーがありません）。jq での読み替えの例は [JSON を前のキーの名前で読んでいたとき](./docs/tools.md#json-を前のキーの名前で読んでいたとき) にあります。
 
 #### 出力例
 
@@ -406,7 +469,7 @@ Claude Code か Codex の設定に貼ったときだけ動く補助のスクリ�
 
 付属の検査は決まった形を拾うだけです。候補が出なかった所も元の文と読み比べて確かめてください。
 
-このバージョンの動作は対話の画面を使わないコマンド（`claude -p` と `codex exec`）で macOS の Claude Code と Codex を動かして確かめました。対話の画面、プラグイン・skills CLI・openskills で入れた環境、Codex Cloud、Cursor、Claude.ai へのZIPの登録、Windows では確かめていません。
+推敲の動作は対話の画面を使わないコマンド（`claude -p` と `codex exec`）で macOS の Claude Code と Codex を動かして確かめました。対話の画面、プラグイン・skills CLI・openskills で入れた環境、Codex Cloud、Cursor、Claude.ai へのZIPの登録、Windows での動作は確かめていません。2.0.2 では手元のリポジトリの写しを使って、Claude Code のプラグイン、skills CLI、GitHub CLI、openskills で入れられることと、入れたスキルが読み込まれることを確かめました。GitHub から入れる形はまだ試していません。
 
 検査で拾えない形、正しい推敲にも候補が出る形、測った結果は [docs/limitations.md](./docs/limitations.md) にまとめています。
 
@@ -417,7 +480,9 @@ Claude Code か Codex の設定に貼ったときだけ動く補助のスクリ�
 ├── .claude-plugin/                   # Claude Code用プラグイン設定
 │   ├── plugin.json
 │   └── marketplace.json
+├── .github/workflows/ci.yml          # 自動の試験（テスト一式と、2か所のファイルが同じかの確かめ）
 ├── README.md                         # 本ドキュメント
+├── README.en.md                      # 英語の短い紹介
 ├── CHANGELOG.md                      # 変更履歴（2.0.0 から）
 ├── LICENSE                           # ライセンス（MIT）
 ├── UNICODE-LICENSE.txt               # Unicodeデータの著作権・許諾通知
@@ -441,6 +506,7 @@ Claude Code か Codex の設定に貼ったときだけ動く補助のスクリ�
 │   └── lists/                        # 検査に使う語の一覧（名詞化、強める語、気持ちの語、慎重な言い方、事実の穴の候補）
 ├── skills/                           # 配布用スキル（唯一のSKILL.mdと参照文書・検査ツール）
 │   └── yomiyasu/
+│       ├── .codex-plugin/plugin.json  # Codex でスキルを yomiyasu:yomiyasu の名前で載せるための設定
 │       ├── SKILL.md
 │       ├── references/
 │       └── scripts/
@@ -535,4 +601,4 @@ yomiyasuは、多くの先行研究や公開された知見をもとに作って
 
 ## 最後に
 
-このREADMEの「これは何？」から「限界」までの節は、yomiyasu 2.0.0 で推敲しています。README の全体は付属の `yomiyasu_lint.py` に通しています。
+このREADMEの「これは何？」から「限界」までの節は yomiyasu で推敲しています。README の全体は付属の `yomiyasu_lint.py` に通しています。

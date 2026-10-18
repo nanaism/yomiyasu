@@ -12,7 +12,7 @@ mail（メール・チャット）と paper（論文・研究レポート）も�
 同じ権限で原稿と記録の両方を書き換えられる環境では、記録は実行漏れを見つけるためのもので、
 改ざんの防止や人の承認の証明にはならない。
 """
-__version__ = "2.0.1"
+__version__ = "2.0.2"
 
 import sys
 
@@ -594,18 +594,42 @@ def _ensure_state(state, default_place=False):
         raise
 
 
+def _home_path(value):
+    """--state-dir と環境変数 YOMIYASU_STATE_DIR の値の頭の ~ を、ホームフォルダに置き換える（フックの _home_path と同じ）。
+
+    置き換えるのは、値が「~」だけのときと、「~/」で始まるとき（Windows では「~\\」も）だけで、os.path.expanduser で
+    展開する。シェルの引用符の中や、エージェントの設定ファイルの環境変数では、~ が展開されないまま届くため。
+    「~user/x」や「~x」は置き換えない（その名前の利用者が機械にいるかどうかで、場所が変わらないように）。
+    HOME がなければ expanduser と同じく利用者の情報から探す。それでも決まらないとき（結果がまだ ~ で始まるか、
+    expanduser が例外を出したとき）は、値をそのまま返す（これまでと同じく、作業ディレクトリからの相対パス）。
+    ホームフォルダが空か空白だけ、またはルート（「/」、Windows では「C:\\」など）だけのときも、決まらないものとして
+    値をそのまま返す。HOME が空の文字列のとき expanduser は「~/x」を「/x」に、「~」を「/」にするので、状態フォルダを
+    ファイルシステムのルートに置かないため（HOME が「/」のときも expanduser の結果は同じで、見分けられない）。"""
+    if isinstance(value, str) and (value == "~" or value[:2] in ("~/", "~" + os.sep)):
+        try:
+            home = os.path.expanduser("~")
+            expanded = os.path.expanduser(value)
+        except Exception:  # pwd を読めない環境など
+            return value
+        if (not home.startswith("~") and os.path.splitdrive(home)[1].strip().strip("/" + os.sep)
+                and not expanded.startswith("~")):
+            return expanded
+    return value
+
+
 def state_dir_for(cwd, option=None):
     """状態フォルダの決め方（run、verify、フックで同じ規則）。
 
     1 --state-dir、2 環境変数 YOMIYASU_STATE_DIR、3 作業ディレクトリから上へたどり、.git（フォルダでもファイルでもよい）が
     ある最初のフォルダの .yomiyasu/、4 作業ディレクトリの .yomiyasu/。ここではフォルダを作らない。
     環境変数が空白だけのときと、展開されなかった ${…} を含むときは、ないものとして3と4に進む（--session の ${ と同じ扱い。
-    作業フォルダに「${CLAUDE_PROJECT_DIR}」のようなフォルダを作らない。反証で見つけた例）。"""
+    作業フォルダに「${CLAUDE_PROJECT_DIR}」のようなフォルダを作らない。反証で見つけた例）。
+    1と2の値の頭の ~ は、_home_path の決まりでホームフォルダに置き換える。"""
     if option:
-        return os.path.abspath(os.path.join(cwd, option))
+        return os.path.abspath(os.path.join(cwd, _home_path(option)))
     environment = os.environ.get("YOMIYASU_STATE_DIR")
     if environment and environment.strip() and "${" not in environment:
-        return os.path.abspath(os.path.join(cwd, environment))
+        return os.path.abspath(os.path.join(cwd, _home_path(environment)))
     cwd = os.path.abspath(cwd)
     current = cwd
     while True:
@@ -621,6 +645,8 @@ def _state_dir(option):
     # Absolute overrides must still work when the process cwd has disappeared.
     environment = os.environ.get("YOMIYASU_STATE_DIR")
     selected = option or (environment if environment and environment.strip() and "${" not in environment else None)
+    if selected:
+        selected = _home_path(selected)
     if selected and os.path.isabs(selected):
         return os.path.normpath(selected)
     return state_dir_for(_getcwd(), option)

@@ -5,7 +5,7 @@ sys.dont_write_bytecode = True
 import json
 import os
 
-__version__ = "2.0.1"
+__version__ = "2.0.2"
 _EVENTS = ("UserPromptExpansion", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd")
 _BUDGETS = {"UserPromptExpansion": 4, "UserPromptSubmit": 4, "PreToolUse": 7,
             "PostToolUse": 7, "Stop": 20, "SessionEnd": 0.8}
@@ -72,6 +72,27 @@ def _project_state(cwd):
         current = parent
 
 
+def _home_path(value):
+    """A leading ~ in --state-dir or YOMIYASU_STATE_DIR becomes the home folder (same rule as check._home_path).
+
+    Only "~" alone and "~/" (also "~\\" on Windows) are expanded, with os.path.expanduser. "~user/x" and "~x" are kept.
+    When the home folder cannot be found (the result still starts with ~, or expanduser raised), the value is kept,
+    as before (a path relative to cwd). A home folder that is empty, blank or only a root ("/", or "C:\\" on Windows)
+    also counts as not found: with HOME set to "", expanduser turns "~/x" into "/x" and "~" into "/", and the state
+    folder must not land at the filesystem root (HOME="/" gives the same results, so the two cannot be told apart).
+    """
+    if isinstance(value, str) and (value == "~" or value[:2] in ("~/", "~" + os.sep)):
+        try:
+            home = os.path.expanduser("~")
+            expanded = os.path.expanduser(value)
+        except Exception:
+            return value
+        if (not home.startswith("~") and os.path.splitdrive(home)[1].strip().strip("/" + os.sep)
+                and not expanded.startswith("~")):
+            return expanded
+    return value
+
+
 def _state_given(option):
     """The first state folder came from --state-dir or YOMIYASU_STATE_DIR (same test as _states and check)."""
     env = os.environ.get("YOMIYASU_STATE_DIR", "")
@@ -83,7 +104,7 @@ def _states(cwd, host, option):
     env = os.environ.get("YOMIYASU_STATE_DIR", "")
     for value in (option, env if env.strip() and "${" not in env else None):
         if value:
-            candidates.append(os.path.abspath(os.path.join(cwd, value)))
+            candidates.append(os.path.abspath(os.path.join(cwd, _home_path(value))))
     candidates.append(_project_state(cwd))
     project = os.environ.get("CLAUDE_PROJECT_DIR")
     if host == "claude-code" and project and "${" not in project:

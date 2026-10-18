@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  twins:
+    name: Copies in skills/yomiyasu match
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - name: references/ and skills/yomiyasu/references/ are identical
+        run: diff -r references skills/yomiyasu/references
+      - name: scripts/ and skills/yomiyasu/scripts/ are identical
+        # scripts/ also holds the corpus tools that are not distributed, so compare file by file in both directions.
+        run: |
+          status=0
+          for file in skills/yomiyasu/scripts/*; do
+            cmp "$file" "scripts/${file##*/}" || status=1
+          done
+          for file in scripts/yomiyasu_*.py scripts/markdown_visibility.py; do
+            cmp "$file" "skills/yomiyasu/scripts/${file##*/}" || status=1
+          done
+          exit "$status"
+
+  test:
+    name: pytest (Python ${{ matrix.python-version }})
+    # Pinned rather than ubuntu-latest: Python 3.9 is past its end of life and may not be built for newer images.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.14"]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install pytest
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Run the test suite
+        run: python -m pytest -q -ra --durations=25

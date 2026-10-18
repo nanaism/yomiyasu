@@ -19,6 +19,17 @@ class SkillPackageTests(unittest.TestCase):
         self.assertEqual(skills_directory.resolve(), PACKAGE.parent.resolve())
         self.assertTrue((skills_directory / "yomiyasu" / "SKILL.md").is_file())
 
+    def test_only_root_plugin_manifest(self):
+        # Layout rule of this repository: the Claude plugin manifests exist once, in the root .claude-plugin/,
+        # and the marketplace's only plugin is the whole repository ("./"). The skill folder carries only
+        # .codex-plugin/plugin.json for Codex. The root has no bin/ folder.
+        manifests = sorted(path for path in ROOT.rglob("*.json")
+                           if path.parent.name == ".claude-plugin" and ".git" not in path.relative_to(ROOT).parts)
+        self.assertEqual(manifests, [ROOT / ".claude-plugin" / "marketplace.json", ROOT / ".claude-plugin" / "plugin.json"])
+        marketplace = json.loads((ROOT / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+        self.assertEqual([entry["source"] for entry in marketplace["plugins"]], ["./"])
+        self.assertFalse((ROOT / "bin").exists())
+
     def test_installed_resources_are_self_contained(self):
         for relative in (
             "references/gemini-syntax.md",

@@ -111,9 +111,47 @@ python3 scripts/yomiyasu_lint.py article.md --json
 - 終了コードは、0が検査を最後まで実行して条件に当たらなかったとき、1が `--strict` か `--fail-on` に当たったとき、2が使い方か入力の誤り、3が内部の誤りか、出力先が閉じられて結果を最後まで書けなかったときです。
 - `--doc-type` を付けると、その種類で普通な書き方を拾う規則の候補を外し、外した件数を出します（外した候補の中身は、付けずに実行すると見られます）。`--reader` は表示と JSON に残すだけで、候補は変えません。
 - 行頭から書いた `<details>` と `</details>` の組の中にある箇条書きは、箇条書きの比率（`excess_list`）に数えません。根拠を `<details>` に畳んだ文書で、過剰な箇条書きの候補が出ないようにするためです。中の箇条書きの行の数は、JSON の `metrics` の `details_list_lines` に出ます。
-- JSON の `score` と `is_clean` は、`rule_penalty_score` と `no_rule_findings` に名前を変えました。`rule_penalty_score` は計算も変えたので、1.1.2 の `score` に使っていたしきい値はそのまま使えません（[rule_penalty_score の式](#rule_penalty_score-の式)）。形式は `data.get("format_version", 1)` で見分けられます（[CHANGELOG](../CHANGELOG.md) の「互換性のない変更」）。
+- JSON の `score` と `is_clean` は、`rule_penalty_score` と `no_rule_findings` に名前を変えました。`rule_penalty_score` は計算も変えたので、1.1.2 の `score` に使っていたしきい値はそのまま使えません（[rule_penalty_score の式](#rule_penalty_score-の式)）。形式は `data.get("format_version", 1)` で見分けられます（[CHANGELOG](../CHANGELOG.md) の「互換性のない変更」）。jq での読み替えの例は [JSON を前のキーの名前で読んでいたとき](#json-を前のキーの名前で読んでいたとき) にあります。
 
 このリンターは、推敲で見落としやすい表現を拾うための補助です。文章をAIが書いたかどうかを判定する道具ではありません。同梱の評価用コーパス（`tests/corpus/`）には、モデルに人の文章らしく書かせた例文が8本あり（`tests/corpus/human/human_doc_*.md`。フォルダの名前は human ですが、人が書いた文ではありません）、8本とも見直し候補は0件でした。候補が少ないことは、人が書いた証拠にはなりません。コーパスの中で人が書いた文章は、作者の記事1本を見出しで8つに分けた抜粋（`human_oga_*.md`）だけです。量が少ないので、人の文章とAIの文章をどれだけ見分けられるかの数値は載せていません。1.1.2 の README に載せた human の16本の数値の訂正は、[CHANGELOG](../CHANGELOG.md) の「訂正」に書いています。
+
+### JSON を前のキーの名前で読んでいたとき
+
+1.1.2 までの lint の `--json` の出力を読むスクリプトがあれば、2.0.0 からはキーの名前を読み替えてください。前の名前のキーは残していないので、`jq .score` と `jq .is_clean` は `null` を返します。`jq -e .is_clean` のように jq の終了コードで判定していた CI は、候補があってもなくても失敗します。
+
+| 1.1.2 まで | 2.0.0 から | 中身 |
+|---|---|---|
+| `score` | `rule_penalty_score` | 規則に当たった候補の多さの目安です。計算を変えたので、前のしきい値はそのまま使えません（[rule_penalty_score の式](#rule_penalty_score-の式)） |
+| `is_clean` | `no_rule_findings` | 候補が1件もなければ true です。`candidate_count` が0のときと同じです |
+
+`format_version` は 2.0.0 からの JSON にあり、値は2です。1.1.2 までの JSON にはこのキーがないので、ないときは1とみなしてください。`yomiyasu_check.py run --json` の `lint` の中のキーも同じ名前と同じ値です（`.lint.rule_penalty_score`）。
+
+```bash
+# 2.0.0 からの名前で読む
+python3 scripts/yomiyasu_lint.py article.md --json | jq '.rule_penalty_score'
+python3 scripts/yomiyasu_lint.py article.md --json | jq '.no_rule_findings'
+
+# 形式を見分ける（2.0.0 からは2、1.1.2 までは1）
+python3 scripts/yomiyasu_lint.py article.md --json | jq '.format_version // 1'
+
+# 1.1.2 と 2.0.0 のどちらの JSON でも読む
+python3 scripts/yomiyasu_lint.py article.md --json | jq 'if (.format_version // 1) >= 2 then .rule_penalty_score else .score end'
+python3 scripts/yomiyasu_lint.py article.md --json | jq 'if (.format_version // 1) >= 2 then .no_rule_findings else .is_clean end'
+```
+
+候補の有無を `jq '.no_rule_findings // .is_clean'` と書くと、2.0.0 からの JSON で候補がある文書では `null` になります。jq の `//` は false も値がないものとして扱い、右の `.is_clean` を読むためです。上の例のように `format_version` で分けてください。
+
+CI で止めるときは、点数のしきい値の代わりに `--fail-on` を使ってください。JSON で判定したいときは、`counts` の件数を使えます。
+
+```bash
+# warn か error の候補があれば終了コード1（jq は要りません）
+python3 scripts/yomiyasu_lint.py article.md --fail-on warn
+
+# 同じ判定を JSON で行う（warn か error の候補があれば jq の終了コードが1）
+python3 scripts/yomiyasu_lint.py article.md --json | jq -e '.counts.error + .counts.warn == 0'
+```
+
+この節の jq の例は 2.0.1 の lint の出力に jq 1.7.1 をかけて確かめました。どちらの JSON でも読む2つの例と `//` の例は、1.1.2 の lint の出力にもかけて確かめています。
 
 ## 2. yomiyasu_diff.py（推敲の前後の比較）
 
@@ -196,6 +234,7 @@ yomiyasu-check: executed via=verify run=20261014T124830Z-6b5d53f8 attempt=1 fina
 
 - 返す状態は「検査を実行した」（`executed`）で、合格ではありません。run は、検査の一部を実行できなければ `partial`、使い方の誤りなら `not_run` を返します。verify は、記録がない（`no_record`）、検査のあとに最終稿を書き換えた（`final_changed`）、記録のあとに検査スクリプトや語の一覧が変わった（`tool_changed`）ときなどに、完了と扱いません。diff を実行していない記録と、別の原稿の記録も、完了と扱いません。書き直す前の文章を資料として渡しても、資料が最終稿とよく似ていれば、run はそれを原文とみなして diff も実行します。
 - 記録は、git の最上位（なければ作業ディレクトリ）の `.yomiyasu/` に置きます。自分を無視する `.gitignore` を作るので、git には出ません。先にできていた `.yomiyasu/` でも、`.gitignore` と `state.json` がどちらもなければ作ります。場所は `--state-dir` か環境変数 `YOMIYASU_STATE_DIR` で変えられます。こうして指定したフォルダがすでにあるときは `.gitignore` を足さないので、git に入れたくなければ利用者が無視の設定をしてください。記録には原稿の写しが入りますが、外へは送りません。要らなくなれば消してかまいません。
+- `--state-dir` と `YOMIYASU_STATE_DIR` の値が `~` だけか `~/` で始まるときは、`~` をホームフォルダに置き換えます（Windows では `~\` も）。引用符の中の `~` や、エージェントの設定ファイルに書いた `~` は、シェルが展開しないまま届くためです。`~user/...` のような値や途中に `~` がある値は置き換えず、ほかの相対パスと同じく作業ディレクトリから数えます。ホームフォルダが分からない環境では値をそのまま使います。`HOME` がなく利用者の情報からも決まらないときと、`HOME` が空か `/` だけのときがこれに当たります（状態フォルダをファイルシステムのルートに置かないためです）。`~` だけを指定すると、ホームフォルダそのものが状態フォルダになり、`index/` や `runs/` などのフォルダがホームフォルダの直下にできます。ホームフォルダはすでにあるフォルダなので、`.gitignore` と `state.json` は作りません。ふつうは `~/.yomiyasu` のように、ホームフォルダの下のフォルダを指定してください。
 - 記録は実行漏れを見つけるためのもので、改ざんの防止や人の承認の証明にはなりません。同じ権限で原稿と記録の両方を書き換えられる環境では、記録を作り込むこともできます。`verify --replay` は記録の写しで lint と diff を動かし直し、結果が記録と同じかを確かめますが、写しと結果を同じように作り込んだ記録は見分けられません。
 - 環境変数: `YOMIYASU_STATE_DIR` は、`--state-dir` を省いたときの状態フォルダです（空白だけの値と、展開されずに `${` が残った値は使いません）。`YOMIYASU_SESSION` は、`run` と `start` で `--session` を省いたときのセッションの識別子です（run では記録に入れるだけで、start では登録をそのセッションに結び付けます）。Codex が渡す `CODEX_THREAD_ID` があれば、run は記録の `host.codex_thread_id` に入れます。記録に入れる値は、空の値と `${` が残った値を null にします。
 - `--json` の結果では、出力の「硬化の検査:」「勢いの検査:」「慎重表現の検査:」「値の検査:」「敬語の検査:」の行と同じ文字列が、`stiffness_check`、`tone_check`、`hedges_check`、`immutable_check`、`politeness_check` に入ります（diff を実行しなかったときと、mail でないときの `politeness_check` は null）。候補があるときだけ出る「文体の検査:」の行には文字列のキーがなく、結果は `diff.register` にあります。
@@ -306,7 +345,7 @@ Codex では次のように入れます。
 - 補助として、登録した原稿に関係する `gh` の投稿（pr、issue、release の本文と、api の本文の欄）と MCP の投稿で、本文が検査記録と照合できないときは止めます。`--body "$(cat 最終稿)"` のように本文を取り出せない投稿は、利用者に確かめます（Claude Code の `-p` では実行されません）。Codex には利用者に確かめる仕組みがないので、止めます。登録と関係ない投稿は止めません。
 - `yomiyasu_check.py end --source docs/draft.md` で登録を終えられます。セッションが終わったときも終わります。Claude Code の `-p` では1回ごとにセッションが終わるので、端末で登録した原稿が効くのは `-p` の1回分です。`--resume` で続けても、前の回の登録は引き継がれません。
 - 登録のある原稿の run は、上限を超えると検査せずに `unverified` と終了コード1を返します。登録の無い原稿の run と verify は、フックを入れる前と同じです。
-- フックが登録を探す状態フォルダは、`--state-dir`、環境変数 `YOMIYASU_STATE_DIR`、ホストが渡す作業ディレクトリの git の最上位（なければ作業ディレクトリ）の `.yomiyasu/` の順です。Claude Code では、環境変数 `CLAUDE_PROJECT_DIR` のプロジェクトの `.yomiyasu/` も探します。
+- フックが登録を探す状態フォルダは、`--state-dir`、環境変数 `YOMIYASU_STATE_DIR`、ホストが渡す作業ディレクトリの git の最上位（なければ作業ディレクトリ）の `.yomiyasu/` の順です。Claude Code では、環境変数 `CLAUDE_PROJECT_DIR` のプロジェクトの `.yomiyasu/` も探します。`--state-dir` と `YOMIYASU_STATE_DIR` の頭の `~` は check と同じ決まりでホームフォルダに置き換えるので、フックと check は同じフォルダを見つけます。この決まりは 2.0.2 からなので、2.0.1 のフックと 2.0.2 の check を組み合わせると、`~` で始まる値のときにフックと check が別のフォルダを見ます。yomiyasu を 2.0.2 に更新したら、`--print-config` で設定の例を出し直し、フックのパスが 2.0.2 のスクリプトを指すようにしてください。
 - フックとして呼ばれたとき（`--host`）は、入力や引数が違っても、登録がなくても、内部の誤りでも、何も出さずに終了コード0で終わります。知らない引数も無視します。ホストの作業を止めないためで、作業を続けさせることと投稿を止めることは、標準出力の JSON で伝えます。`--print-config` の値がないときと、`claude-code` と `codex` のほかの値のときだけ、終了コード2で使える値を出します。引数と終了コードは `yomiyasu_hook.py --help` にあります。
 
 ### フックの限界

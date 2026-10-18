@@ -159,15 +159,13 @@ class TestVersionStrings(unittest.TestCase):
     """4章の1〜6。"""
 
     def test_manifest_versions_agree(self):
-        """1. 4つの manifest の version がすべて同じ。（v1.1.2 でも通る後戻り防止）"""
+        """1. ルートの plugin.json と marketplace.json の version が同じ。（v1.1.2 でも通る後戻り防止）"""
         version = manifest_version()
         self.assertRegex(version, SEMVER)
-        for base in (ROOT, PACKAGE):
-            with self.subTest(base=str(base.relative_to(ROOT))):
-                plugin = read_json(base / ".claude-plugin" / "plugin.json")
-                marketplace = read_json(base / ".claude-plugin" / "marketplace.json")
-                self.assertEqual(plugin["version"], version)
-                self.assertEqual(marketplace["plugins"][0]["version"], version)
+        plugin = read_json(ROOT / ".claude-plugin" / "plugin.json")
+        marketplace = read_json(ROOT / ".claude-plugin" / "marketplace.json")
+        self.assertEqual(plugin["version"], version)
+        self.assertEqual(marketplace["plugins"][0]["version"], version)
 
     def test_skill_metadata_version(self):
         """2. SKILL.md の frontmatter の metadata.version が manifest の版と同じ。"""
@@ -231,15 +229,10 @@ class TestVersionStrings(unittest.TestCase):
         self.assertNotIn("compatibility", keys)
         self.assertNotIn("allowed-tools", keys)
 
-    def test_plugin_and_marketplace_copies(self):
-        """6. 2つの plugin.json は skills 以外のキーが同じ。2つの marketplace.json はバイト一致。（v1.1.2 でも通る後戻り防止）"""
-        root_plugin = read_json(ROOT / ".claude-plugin" / "plugin.json")
-        package_plugin = read_json(PACKAGE / ".claude-plugin" / "plugin.json")
-        root_plugin.pop("skills", None)
-        package_plugin.pop("skills", None)
-        self.assertEqual(root_plugin, package_plugin)
-        self.assertEqual((ROOT / ".claude-plugin" / "marketplace.json").read_bytes(),
-                         (PACKAGE / ".claude-plugin" / "marketplace.json").read_bytes())
+    def test_codex_manifest_has_only_the_name(self):
+        """6. skills/yomiyasu/.codex-plugin/plugin.json は名前だけを持つ（Codex の .agents/skills で yomiyasu:yomiyasu の名前にするため。版を持たないので、版を上げるときに変えない）。skills/yomiyasu には .claude-plugin を置かない（Claude のプラグインの設定は、ルートの .claude-plugin の1組だけにする）。"""
+        self.assertEqual(read_json(PACKAGE / ".codex-plugin" / "plugin.json"), {"name": read_json(ROOT / ".claude-plugin" / "plugin.json")["name"]})
+        self.assertFalse((PACKAGE / ".claude-plugin").exists())
 
 
 class TestCliVersions(unittest.TestCase):
@@ -323,13 +316,13 @@ class TestCliVersions(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         self.assertEqual(process.stdout, "yomiyasu_lint.py {} (JSON format {})\n".format(version, format_version))
         # 10.1 L1: 完全一致
-        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.0.1 (JSON format 2)\n")
+        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.0.2 (JSON format 2)\n")
         self.assertEqual(process.stderr, "")
 
     def test_diff_and_check_version_lines(self):
         """diff と check の --version は 10.1 L1 の1行（完全一致）で0。"""
-        # diff `yomiyasu_diff.py 2.0.1 (JSON format 2)`、
-        # check `yomiyasu_check.py 2.0.1 (record format 1, result format 1, materials format 1)`。
+        # diff `yomiyasu_diff.py 2.0.2 (JSON format 2)`、
+        # check `yomiyasu_check.py 2.0.2 (record format 1, result format 1, materials format 1)`。
         expected = {
             DIFF: lambda version: "yomiyasu_diff.py {} (JSON format {})".format(
                 version, self.format_constant("DIFF_FORMAT_VERSION")),
@@ -338,8 +331,8 @@ class TestCliVersions(unittest.TestCase):
                 self.format_constant("MATERIALS_FORMAT_VERSION")),
         }
         literal = {
-            DIFF: "yomiyasu_diff.py 2.0.1 (JSON format 2)",
-            CHECK: "yomiyasu_check.py 2.0.1 (record format 1, result format 1, materials format 1)",
+            DIFF: "yomiyasu_diff.py 2.0.2 (JSON format 2)",
+            CHECK: "yomiyasu_check.py 2.0.2 (record format 1, result format 1, materials format 1)",
         }
         for script in (DIFF, CHECK):
             with self.subTest(script=script.name):
