@@ -4,6 +4,8 @@
 お願いの表の行（種類なしと formal）、文を分けたときの再現、正しい直し3種（出さない）、今までも止めていた行（敬体の保証、
 許可から義務）が止まったままであることを確かめる。検出すべき例と検出してはいけない例は、このファイルで作った合成の文。
 表の行のうち3行（この値は管理者…、設定を変えても…、この処理は再実行…）も、確かめるために作った文。
+能力の言い方の消え（ability_lost）は、実際の推敲で誤検知が多かったので、どの文書の種類でも数えない候補（modality_review）にした。
+見直しで見つけた誤検知と取りこぼしの形は、実際の推敲の文を短くした合成の文で、検出してはいけない例と検出すべき例に入れた。
 """
 
 from pathlib import Path
@@ -33,7 +35,7 @@ TABLE = [
      "`accepted` は、この成果物を公開または完了判断に進めることを表す。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
     ("許可→言い切り", "この値は管理者が変更してもよい。", "この値は管理者が変更する。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
     ("能力→言い切り", "ほかの完了条件を満たしていればTaskを完了できます。", "ほかの完了条件を満たしていればTaskを完了します。",
-     [("modality_review", "ability_lost")], [("modality", "ability_lost")], 0, 1),
+     [("modality_review", "ability_lost")], [("modality_review", "ability_lost")], 0, 0),
     ("可能性→言い切り", "同じ文字列でも記録の種類が違う場合がある。", "同じ文字列でも記録の種類が違う。",
      [("certainty_review", "strengthened")], [("certainty", "strengthened")], 0, 1),
     ("説明→必ず", "どのArtifactを対象にしているかを照合する。", "どのArtifactを対象にしているかを必ず照合する。",
@@ -54,7 +56,7 @@ TABLE = [
     ("分けない", "レビューは任意です。監督Codexはレビュー証拠なしに成果物を判断し、ほかの完了条件を満たしていればTaskを完了できます。",
      "レビューは任意です。監督Codexはレビュー証拠なしに成果物を判断し、ほかの完了条件を満たしていればTaskを必ず完了します。",
      [("certainty_review", "strengthened"), ("modality_review", "ability_lost")],
-     [("certainty", "strengthened"), ("modality", "ability_lost")], 0, 2),
+     [("certainty", "strengthened"), ("modality_review", "ability_lost")], 0, 1),
     # 正しい直し（意味の恐れに出さない）
     ("外枠を外す", "この値は管理者が変更することができる。", "この値は管理者が変更できる。", [], [], 0, 0),
     ("同じ許可の言い換え", "この値は管理者が変更してもよい。", "この値は管理者が変更してよい。", [], [], 0, 0),
@@ -75,6 +77,33 @@ SHOULD_DETECT = [
     ("設定を読み込み、値を検証できる。", "設定を読み込む。値を検証する。", [("modality_review", "ability_lost")], ("能力", "断定")),
     # 常体の受身の保証
     ("結果の順序は入力の順と同じになる。", "結果の順序は入力の順と同じになることが保証される。", [("promise", "guarantee")], None),
+    # 許可の言い方に足した形（でも問題ない、ても大丈夫、で結構、ば結構、でも結構、文末の「許可します」）
+    ("この欄は空のままでも問題ない。", "この欄は空のままにする。", [("modality", "permission_lost")], ("許可", "断定")),
+    ("値は変更しても大丈夫です。", "値は変更します。", [("modality", "permission_lost")], ("許可", "断定")),
+    ("回答はメールで結構です。", "回答はメールにする。", [("modality", "permission_lost")], ("許可", "断定")),
+    ("空欄のままご提出いただければ結構です。", "空欄のままご提出いただきます。", [("modality", "permission_lost")], ("許可", "断定")),
+    ("空欄でも結構です。", "空欄のまま提出する。", [("modality", "permission_lost")], ("許可", "断定")),
+    ("管理者だけに書き込みを許可します。", "管理者だけが書き込みます。", [("modality", "permission_lost")], ("許可", "断定")),
+    # 「不要」と許可は別の種類（しなくてもよい → してもよい は許可の足し、してもよい → 不要だ は許可の消え）
+    ("入力しなくてもよい。", "入力してもよい。", [("negation", None), ("modality", "permission_added")], ("不要", "許可")),
+    ("入力してもよい。", "入力は不要だ。", [("modality", "permission_lost")], ("許可", "不要")),
+    # 能力の強い印に足した形（連用の「でき、」、「可能。」、「可能となる」）と、打ち消しと並んだ肯定の能力の消え
+    ("一覧から変更でき、すぐ反映される。", "一覧から変更し、すぐ反映される。", [("modality_review", "ability_lost")], ("能力", "断定")),
+    ("最大10件まで指定可能。", "最大10件まで指定する。", [("modality_review", "ability_lost")], ("能力", "断定")),
+    ("並列実行が可能となる。", "並列実行する。", [("modality_review", "ability_lost")], ("能力", "断定")),
+    ("接続できない場合は、手動で再接続できる。", "接続に失敗したら、手動で再接続する。", [("modality_review", "ability_lost")],
+     ("能力", "断定")),
+    # 保証の型に足した形（担保する、保証している、保証されている）
+    ("安全な実行を行う。", "安全な実行を担保する。", [("promise", "guarantee")], None),
+    ("値を検証する。", "値の正しさを保証している。", [("promise", "guarantee")], None),
+    ("順序が入力と同じになる。", "順序が入力と同じになることが保証されている。", [("promise", "guarantee")], None),
+]
+
+# formal で数える確度の段（検出すべき例）。種類なしでは数えない。
+SHOULD_COUNT_FORMAL = [
+    ("遅れる場合がある。", "遅れる。"),
+    ("日程は決まった。", "日程が確定した。"),
+    ("ログを保存する。", "ログを必ず保存する。"),
 ]
 
 # 検出してはいけない例（合成の文）。種類なしでも formal でも、許可・能力・約束・確度の数える候補を出さない。
@@ -111,6 +140,60 @@ SHOULD_NOT_DETECT = [
     ("負荷試験を必須にする。", "負荷試験を必ず実施する。"),
     # 弱める向きは数えない
     ("同じ値でも結果が違う。", "同じ値でも結果が違う場合がある。"),
+    # 許可ではない「よく」「よい」「いい」（よくなる、決して良い、良い経験、総じて良い、良い気分、どうでもいい、として、くて、
+    # くらいで）と、文末でない「許可された」「許可していない」
+    ("設定を見直してよくなった。", "設定を見直して改善した。"),
+    ("決して良いとは言えない。", "良いとは言えない。"),
+    ("それでも良い経験になった。", "それでも、いい経験になった。"),
+    ("総じて良い評価だった。", "全体に評価は高かった。"),
+    ("見ていて良い気分になる。", "見ていて気分が晴れる。"),
+    ("正直どうでもいい。", "正直、関心がない。"),
+    ("全体としてよい結果になった。", "全体として望ましい結果になった。"),
+    ("安くてよい。", "安くて助かる。"),
+    ("一度見るくらいでいい。", "一度見れば十分だ。"),
+    ("許可されたユーザーだけが参照する。", "許可済みのユーザーだけが参照する。"),
+    ("許可されていない形式は拒否される。", "許可していない形式は拒否される。"),
+    # 同じ許可の言い換え（よい → いい、ば結構 → て構わない、形で差し支え → て差し支え、ば差し支え）
+    ("最初は小さな範囲から試してもよいでしょう。", "最初は小さな範囲から試してもいいでしょう。"),
+    ("出してみてもよいと思う。", "出してみてもいいと思う。"),
+    ("「検討中」とお書きいただければ結構です。", "「検討中」とお書きいただいて構いません。"),
+    ("項目ごとに簡単にお書きいただく形で差し支えございません。", "項目ごとに簡単にお書きいただいて差し支えございません。"),
+    ("項目ごとに簡単にお書きいただく形で差し支えございません。", "項目ごとに簡単にお書きいただければ差し支えございません。"),
+    ("PDFでも差し支えありません。", "PDFでも問題ありません。"),
+    ("空欄でも構いません。", "空欄にしても大丈夫です。"),
+    # 「不要」の言い換え（しなくてよい → 必要はない、不要とする、送らなくてよい → 不要ではないか）と、依頼の「いただいても」
+    ("入力しなくてよい。", "入力する必要はない。"),
+    ("入力しなくてよい。", "入力は不要とする。"),
+    ("上長には送らなくてよいのではという意見が出ています。", "上長への送信は不要ではないかとの意見が出ています。"),
+    ("ご確認いただいてもよろしいでしょうか。", "ご確認いただけますか。"),
+    # 能力の過去の形（吸う側だけ。ことができた、できました → しました）
+    ("この設定で接続できました。", "この設定で接続することができました。"),
+    ("この方式で実現できました。", "この方式で作ることができました。"),
+    ("動作することを確認できました。", "動作することを確認しました。"),
+    ("原因を特定できた。", "原因を特定した。"),
+    # 能力の弱い印に足した形（過去の形の五段の可能、たどり着ける、使役の可能、漢字1字の一段）
+    ("大幅に削減できました。", "大幅に減らせました。"),
+    ("目的の注文に到達できるようにする。", "目的の注文にたどり着けるようにする。"),
+    ("頭を休ませることができる。", "頭を休ませられる。"),
+    ("結果を見ることができる。", "結果を見られる。"),
+    ("知見を得ることができる。", "知見を得られる。"),
+    ("会場に来ることができる。", "会場に来られる。"),
+    # 打ち消しの能力だけが消えた範囲（できません → 分かりません、できない場合 → 失敗したとき）と、出来上がりの「ができている」
+    ("どの行が原因か判別できません。", "どの行が原因か分かりません。"),
+    ("接続できない場合は再試行する。", "接続に失敗したときは再試行する。"),
+    ("この処理は不可能だ。", "この処理は行わない。"),
+    ("準備ができている。", "準備が整っている。"),
+    # 確度: 「確定しましたら」は確定ではない。頻度の語（まれに、ときどき、一部）を残した言い切りと、依頼・手順の「必ず」は
+    # formal でも数えない
+    ("確定後にURLをお送りします。", "確定しましたら、URLをお送りします。"),
+    ("遅れる場合がある。", "まれに遅れる。"),
+    ("遅れる場合がある。", "ときどき遅れる。"),
+    ("表示が崩れる場合がある。", "一部の古いブラウザでは表示が崩れる。"),
+    ("バックアップを取ってください。", "必ずバックアップを取ってください。"),
+    ("設定を確認すること。", "設定を必ず確認すること。"),
+    # 名詞の「担保」「保証書」
+    ("担保の設定を見直す。", "担保を見直す。"),
+    ("保証書を同封する。", "保証書を入れる。"),
 ]
 
 COUNTED_KINDS = ("modality", "promise", "certainty")
@@ -209,16 +292,27 @@ class ExamplesTest(unittest.TestCase):
                     found = [k for k in kinds(result) if k[0] in COUNTED_KINDS or k[0] == "modality_review"]
                     self.assertEqual(found, [])
 
+    def test_counted_in_formal(self):
+        """事実や仕様を述べる種類で数える確度の段（言い切り、確定、必ず）は、formal で数え、種類なしでは数えない。"""
+        for before, after in SHOULD_COUNT_FORMAL:
+            with self.subTest(before=before, after=after):
+                self.assertEqual(run(before, after, "formal")["fail_on_meaning_risk_count"], 1)
+                self.assertEqual(run(before, after)["fail_on_meaning_risk_count"], 0)
+
     def test_permission_to_prohibition_stays_a_sentence_type_mark(self):
         """依頼・決まりの印が動いた範囲は、文の種類の印の候補に任せる（許可・能力の候補を重ねない）。"""
         result = run("ログを削除してよい。", "ログを削除してはいけない。")
         self.assertIn(("sentence_type", "marks"), kinds(result))
         self.assertFalse([k for k in kinds(result) if k[0].startswith("modality")])
 
-    def test_ability_lost_is_counted_only_for_fact_documents(self):
+    def test_ability_lost_is_never_counted(self):
+        """能力の言い方の消えは、どの文書の種類でも数えない候補（modality_review）。"""
         before, after = "設定を読み込み、値を検証できる。", "設定を読み込む。値を検証する。"
-        self.assertEqual(run(before, after, "essay")["fail_on_meaning_risk_count"], 0)
-        self.assertEqual(run(before, after, "manual")["fail_on_meaning_risk_count"], 1)
+        for doc_type in (None, "essay") + yomiyasu_diff.COUNTED_TYPES:
+            with self.subTest(doc_type=doc_type):
+                result = run(before, after, doc_type)
+                self.assertEqual(kinds(result), [("modality_review", "ability_lost")])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
 
     def test_human_lines(self):
         labels = (("同じ Pull Request に含めてよい。", "同じ Pull Request に含められる。", None,
@@ -228,12 +322,12 @@ class ExamplesTest(unittest.TestCase):
                   ("ほかの完了条件を満たしていればTaskを完了できます。", "ほかの完了条件を満たしていればTaskを完了します。", None,
                    "- 能力の言い方が消えた（1行目）: 能力（できます） → なし（断定）。--fail-on には数えません"),
                   ("ほかの完了条件を満たしていればTaskを完了できます。", "ほかの完了条件を満たしていればTaskを完了します。", "formal",
-                   "- 能力の言い方が消えた（1行目）: 能力（できます） → なし（断定）。原文は「〜できる」"))
+                   "- 能力の言い方が消えた（1行目）: 能力（できます） → なし（断定）。--fail-on には数えません。原文は「〜できる」"))
         for before, after, doc_type, label in labels:
             with self.subTest(label=label):
                 self.assertIn(label, yomiyasu_diff.report(run(before, after, doc_type)))
         result = run("この値は管理者が変更してもよい。", "この値は管理者の値を3にする。")
-        self.assertIn("・許可と能力", yomiyasu_diff._fail_on_line(len(result["meaning_risks"]) + 1,
+        self.assertIn("・許可の言い方", yomiyasu_diff._fail_on_line(len(result["meaning_risks"]) + 1,
                                                           yomiyasu_diff.fail_on_count(result["meaning_risks"]),
                                                           result["meaning_risks"]))
 
@@ -246,7 +340,8 @@ class ContractsTest(unittest.TestCase):
         self.assertIn("modality_review", yomiyasu_diff._RISK_ORDER)
 
     def test_public_function_takes_doc_type(self):
-        """meaning_risks() は doc_type を受け、確度の数え方を diff() とそろえる。許可・能力の候補は diff() だけが足す。"""
+        """meaning_risks() は doc_type を受け、確度の数え方を diff() とそろえる。type_changes が None なら許可・能力の候補を
+        足さず、範囲も作らない。"""
         before, after = "同じ文字列でも記録の種類が違う場合がある。\n", "同じ文字列でも記録の種類が違う。\n"
         found = yomiyasu_diff.meaning_risks(before, after, type_changes=[], doc_type="formal")
         self.assertEqual([(r["kind"], r["subkind"]) for r in found], [("certainty", "strengthened")])
@@ -255,8 +350,24 @@ class ContractsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             yomiyasu_diff.meaning_risks(before, after, doc_type="unknown")
         with mock.patch.object(yomiyasu_diff, "_type_ranges", side_effect=AssertionError("範囲を作った")):
-            found = yomiyasu_diff.meaning_risks("変更してよい。\n", "変更できる。\n", type_changes=[])
+            found = yomiyasu_diff.meaning_risks("変更してよい。\n", "変更できる。\n")
         self.assertFalse([r for r in found if r["kind"].startswith("modality")])
+
+    def test_public_function_matches_diff(self):
+        """type_changes を渡した meaning_risks() は、許可・能力の候補を含めて diff() の meaning_risks と同じ（文の種類の印が
+        ある文書とない文書、種類なしと formal）。使い終えた範囲は持ち続けない。"""
+        documents = (("この値は変更してよい。外部APIは遅れるかもしれない。\n", "この値は変更できる。外部APIは遅れる。\n"),
+                     ("この値は変更してよい。\n", "この値は変更できる。\n"),
+                     ("設定を読み込み、値を検証できる。\n", "設定を読み込む。値を検証する。\n"))
+        for before, after in documents:
+            for doc_type in (None, "formal"):
+                with self.subTest(before=before, doc_type=doc_type):
+                    result = yomiyasu_diff.diff(before, after, doc_type=doc_type)
+                    self.assertTrue([r for r in result["meaning_risks"] if r["kind"].startswith("modality")])
+                    self.assertIsNone(yomiyasu_diff._LAST_TYPE_RANGES[0])
+                    found = yomiyasu_diff.meaning_risks(before, after, type_changes=result["type_changes"], doc_type=doc_type)
+                    self.assertEqual(found, result["meaning_risks"])
+                    self.assertIsNone(yomiyasu_diff._LAST_TYPE_RANGES[0])
 
     def test_ranges_are_made_once_in_diff(self):
         """diff() は、文の種類の印の範囲を許可・能力の比べで作り直さない。"""
