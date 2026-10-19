@@ -76,7 +76,8 @@ SKIP_RULES = {
     "proposal": (),
     "minutes": ("bold_label_list", "excess_list", "sentence_end_repetition"),
     "manual": ("excess_list",),
-    "slides": ("bold_label_list", "count_declaration", "excess_list", "short_summary_heading"),
+    # スライドの箇条で強調として選ぶ「〜のは、A、B、C。」（cleft_list_ending）も外す
+    "slides": ("bold_label_list", "cleft_list_ending", "count_declaration", "excess_list", "short_summary_heading"),
     "essay": (),
     "formal": (),
     # D-5: promo では書き手の絵文字を残す（勢いの検査は絵文字が減ると候補にするので、lint の絵文字の候補と食い違わせない）。
@@ -113,7 +114,7 @@ LINT_HELP_LIST = "\n".join([
     "  proposal  なし",
     "  minutes   bold_label_list、excess_list、sentence_end_repetition",
     "  manual    excess_list",
-    "  slides    bold_label_list、count_declaration、excess_list、short_summary_heading",
+    "  slides    bold_label_list、cleft_list_ending、count_declaration、excess_list、short_summary_heading",
     "  essay     なし",
     "  formal    なし",
     "  promo     emoji_prohibited、fragment_run",
@@ -174,9 +175,11 @@ SUMMARY_HEADING_ONLY = "# 報告\n\n作業は終わりました。\n\n## まと�
 BOLD_ERROR_ONLY = "これは**「重要」**です。\n"
 EMOJI_ONLY = "新作のケーキが並びました\U0001F370\n"
 FRAGMENT_RUN_ONLY = "安い。うまい。早い。\n"
+CLEFT_LIST_ONLY = "書き換えの中で変動したのは、確かさ、引用、語調。\n"
 RULE_SAMPLES = {
     "emoji_prohibited": EMOJI_ONLY,
     "fragment_run": FRAGMENT_RUN_ONLY,
+    "cleft_list_ending": CLEFT_LIST_ONLY,
     "excess_list": EXCESS_LIST_ONLY,
     "sentence_end_repetition": SENTENCE_END_ONLY,
     "bold_label_list": BOLD_LABEL_ONLY,
@@ -187,7 +190,7 @@ RULE_SAMPLES = {
 SLIDES_SAMPLE = ("# 新しい検索の仕組み\n\n- **対象**: 社内の文書\n- **期間**: 10月から\n- **担当**: 検索チーム\n\n"
                  "## まとめ\n\n検索が速くなります\U0001F600\n")
 SLIDES_LINE = ("文書の種類: スライド（slides）、読者: 指定なし。種類に合わせて外した候補 2件（bold_label_list 1件、"
-               "count_declaration 0件、excess_list 0件、short_summary_heading 1件）。")
+               "cleft_list_ending 0件、count_declaration 0件、excess_list 0件、short_summary_heading 1件）。")
 
 # 指示書2.2の3組（合成の文）
 PAIRS_22 = (("田中が佐藤を承認した。\n", "佐藤が田中を承認した。\n"),
@@ -633,7 +636,8 @@ class LintSkipTest(DocTypeCase):
             self.assertIsNone(parameters[name].default)
         self.assertEqual(yomiyasu_lint.lint_text(SLIDES_SAMPLE, doc_type=" ＳＬＩＤＥＳ ", reader="General")["context"],
                          {"doc_type": "slides", "reader": "general",
-                          "skipped_by_doc_type": {"bold_label_list": 1, "count_declaration": 0, "excess_list": 0,
+                          "skipped_by_doc_type": {"bold_label_list": 1, "cleft_list_ending": 0, "count_declaration": 0,
+                                                  "excess_list": 0,
                                                   "short_summary_heading": 1}})
         with self.assertRaises(ValueError):
             yomiyasu_lint.lint_text(SLIDES_SAMPLE, doc_type="tech")
@@ -922,7 +926,8 @@ class OptionTest(DocTypeCase):
         lint = json.loads((folder / "attempt-1.lint.json").read_text(encoding="utf-8"))
         diff = json.loads((folder / "attempt-1.diff.json").read_text(encoding="utf-8"))
         self.assertEqual(lint["context"], {"doc_type": "slides", "reader": "general",
-                                           "skipped_by_doc_type": {"bold_label_list": 1, "count_declaration": 0,
+                                           "skipped_by_doc_type": {"bold_label_list": 1, "cleft_list_ending": 0,
+                                                                   "count_declaration": 0,
                                                                    "excess_list": 0, "short_summary_heading": 1}})
         self.assertEqual(diff["context"], {"doc_type": "slides", "reader": "general"})
         # 子の .lint.txt には lint の4行目が入る

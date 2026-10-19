@@ -103,7 +103,8 @@ DOC_TYPE_SKIP_RULES = {
     "proposal": (),
     "minutes": ("bold_label_list", "excess_list", "sentence_end_repetition"),
     "manual": ("excess_list",),
-    "slides": ("bold_label_list", "count_declaration", "excess_list", "short_summary_heading"),
+    # スライドの箇条で強調として選ぶ「〜のは、A、B、C。」（cleft_list_ending）も普通の書き方として外す
+    "slides": ("bold_label_list", "cleft_list_ending", "count_declaration", "excess_list", "short_summary_heading"),
     "essay": (),
     "formal": (),
     # 紹介記事・宣伝文では書き手の絵文字を残す（diff の勢いの検査は絵文字が減ると候補にするので、lint の
@@ -1122,6 +1123,36 @@ _NEGATION_JANAI = re.compile(
 _SHORT_MOCHIRON = re.compile(r"^(もちろん|勿論)、[^。！？!?、「」『』]{1,10}[。！!]$")
 # 問いや依頼への答えの定型（「もちろん、大丈夫です。」）は先回りの認めではない
 _MOCHIRON_ANSWER = re.compile(r"^(もちろん|勿論)、(大丈夫|構いません|かまいません|いいですよ|いいよ|できます|可能です|です|だ)")
+# 文頭の「〜(連体形)のは、」のあとに名詞を並べ、述語を書かずに終える文（「書き換えで変わったのは、確かさ、引用、語調。」）。
+# 項目は格助詞（を・が・は・に・で・へ・から・まで・より）を含まず、名詞らしい字で終わる。読点だけで並べるなら3つ以上、
+# 「と・や・および」を交えるなら2つ以上。「〜など。」「〜の3つ。」「〜の3点。」で終わる形も当てる。
+# 述語まで書いた文（です、だ、でした、に限る）とダッシュで終わる文は、最後の項目が名詞の字で終わらないので当たらない。
+_CLEFT_LIST_HEAD = r"^[^。！？!?]{0,60}?(?:[るたいうくすつぬむぶぐ]|な)のは、"
+_CLEFT_LIST_NOUN_END = r"[一-龥々〆ヵヶァ-ヴーｦ-ﾟA-Za-z0-9０-９Ａ-Ｚａ-ｚ%％さみ]"
+# 読点だけで区切る項目（項目の中の「と・や」はそのまま項目の字として読む）
+_CLEFT_LIST_COMMA_ITEM = (r"(?:(?!から|より)[^、，,。！？!?「」『』（）()\[\]\sをがはにでへ]){0,14}"
+                          r"(?:" + _CLEFT_LIST_NOUN_END + r"|もの|こと)")
+# 「と・や・および」でも区切る項目（区切りの語を項目に含めず、区切り方を1つに決める）
+_CLEFT_LIST_MIXED_ITEM = (r"(?:(?!から|より|および)[^、，,。！？!?「」『』（）()\[\]\sをがはにでへとや]){0,14}"
+                          r"(?:" + _CLEFT_LIST_NOUN_END + r"|もの)")
+_CLEFT_LIST_TAIL = r"(?:など|の[0-9０-９一二三四五六七八九十]+[つ点])?[。！!]?$"
+_CLEFT_LIST_COMMA = re.compile(_CLEFT_LIST_HEAD + _CLEFT_LIST_COMMA_ITEM
+                               + r"(?:、" + _CLEFT_LIST_COMMA_ITEM + r"){2,}" + _CLEFT_LIST_TAIL)
+_CLEFT_LIST_MIXED = re.compile(_CLEFT_LIST_HEAD + r"(" + _CLEFT_LIST_MIXED_ITEM
+                               + r"(?:(?:、|と|や|および)" + _CLEFT_LIST_MIXED_ITEM + r")+)" + _CLEFT_LIST_TAIL)
+_CLEFT_LIST_JOINER = re.compile(r"[とや]|および")
+
+
+def _is_cleft_list_ending(sentence):
+    if "のは、" not in sentence:
+        return False
+    if _CLEFT_LIST_COMMA.match(sentence):
+        return True
+    mixed = _CLEFT_LIST_MIXED.match(sentence)
+    # 読点だけの2項目（「目指したのは、速さ、軽さ。」）は当てない
+    return bool(mixed and _CLEFT_LIST_JOINER.search(mixed.group(1)))
+
+
 # 否定のあとに「でもある」と続ける文（「AではなくBでもある」）は、元の言い方のまま残す
 _NEGATION_ALSO = re.compile(r"ではなく、?[^。]{1,40}?(?<!どこに)(?<!誰に)(?<!だれに)(?<!何)(?<!なん)(?<!いつ)でも(ある|あります|あった|ありました)")
 # 「- **特徴**: 説明」のように、太字の見出し語とコロンで始まる箇条書き
@@ -2983,6 +3014,19 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
                 "line": line_no,
                 "severity": "info",
                 "message": "評価の語だけの短い文が3つ以上続いています（「効く。重い。安い。」など）。何がどうなのかが前後から分かる場合は、対象と評価を述語までつないでください。分からない場合は主語や理由を作らず、原文を残して書き手に確かめてください。小説の語りや詩など、書き手が意図した表現は残してかまいません。",
+                "snippet": stripped
+            })
+        # 「〜のは、A、B、C。」（引用の中は伏せた文で見る）。頭が meta_filler の型の文（「重要なのは、」）は、そちらだけを出す。
+        if "のは、" in plain_text and any(
+                _is_cleft_list_ending(sentence)
+                and not any(_may_match_literals(required, sentence) and pattern.search(sentence)
+                            for pattern, _, required in filler_patterns)
+                for sentence, _ in rule9_context.get(line_no, ())):
+            findings.append({
+                "rule": "cleft_list_ending",
+                "line": line_no,
+                "severity": "info",
+                "message": "「〜のは、」のあとに名詞を並べ、述語を書かずに終える文（「〜で変わったのは、A、B、C。」）が検出されました。何かが変わった、何かを目指したといった前提を前の文や見出しで書いていなければ、「のは」の前の動詞を述語に戻し、「〜では、A、B、Cが変わった。」のように述語まで書いてください。前提が直前に書いてある場合や、見出し、結び、スライドの箇条で書き手が強調として選んだ形なら残してかまいません。",
                 "snippet": stripped
             })
 

@@ -148,7 +148,7 @@ SKILL.md 1章の規則のうち当てない範囲は、SKILL.md 2章 Step 1 の�
 | proposal | なし | |
 | minutes | bold_label_list、excess_list、sentence_end_repetition | 項目に分けた構造とラベルが普通。同じ文末の連続は議事録では人の文にも多い |
 | manual | excess_list | 番号つきの手順は並列が明確な箇条書き |
-| slides | bold_label_list、count_declaration、excess_list、short_summary_heading | 短い見出しと箇条書き、目次の数の宣言、まとめのページが普通の構成 |
+| slides | bold_label_list、cleft_list_ending、count_declaration、excess_list、short_summary_heading | 短い見出しと箇条書き、目次の数の宣言、まとめのページが普通の構成。箇条で強調として選ぶ「〜のは、A、B、C。」も普通の書き方 |
 | essay | なし | 読み取れる比喩を残し、成り立たない比喩を直すのは、エージェントが doc-types/essay.md に従って行う。metaphor_verb の候補（エッセイの比喩動詞）は外さない |
 | formal | なし | 硬い語の言い換えと「〜を行う」の外枠は、エージェントが当てない（SKILL.md 2章 Step 1 の表）。diff の文体の硬化の候補は参考としてだけ出る |
 | promo | emoji_prohibited、fragment_run | 書き手が気持ちや勢いを表す絵文字と、本文で評価の語を短く重ねる型（安い。うまい。早い。）は普通の書き方。「！」、見出しのキャッチコピー、勢いのある語と強める語、同じ褒め言葉の繰り返しは、エージェントが doc-types/promo.md に従って残す |
