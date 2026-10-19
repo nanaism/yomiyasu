@@ -1697,7 +1697,8 @@ def _review_count(section):
 
 def _fail_on_hits(ctx, diff_module):
     """--fail-on に当たった値（指定した順）。meaning-risk は diff の FAIL_ON_KINDS（数値・否定・入れ替え・文の種類・引用の印・
-    確度の強まり・状態の語の消え・書き手の約束の足し）と、新規作成の資料にない数値、warn と error は lint の候補で決める。"""
+    確度の強まり・状態の語の消え・書き手の約束の足し・許可と能力の言い方の変化）と、新規作成の資料にない数値、warn と error は
+    lint の候補で決める。diff の数え方は --doc-type で変わる（事実や仕様を述べる種類では、能力の言い方の消えと確度の2つも数える）。"""
     hits = []
     counts = (ctx.lint_result or {}).get("counts") or {}
     for value in ctx.fail_on:
@@ -4362,7 +4363,9 @@ _VERIFY_USAGE = ("yomiyasu_check.py verify --final 最終稿|- [--run-id ID] [--
 _FAIL_ON_HELP = ("指定した条件に当たれば、記録を残したうえで終了コード1で終わります。何度でも、カンマ区切りでも指定できます。"
                  "meaning-risk: 意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）の"
                  "変化、引用の印の変化、確度を強めた書き換え（見込み → 予定、と思われる → 断定など）、原文の状態の語（未定、未確認、"
-                 "調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足し（ここまでは diff の "
+                 "調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足し、許可の言い方（してよい、"
+                 "してもよい、構わない）が消えたか増えた書き換え、--doc-type が pr、article、incident、proposal、manual、formal、paper の"
+                 "ときは能力の言い方（できる、可能だ）が消えた書き換えと「場合がある」の言い切りと「必ず」などの足し（ここまでは diff の "
                  "--fail-on=meaning-risk と同じ）と、新規作成で資料にない数値。コード・URL・引用ブロックなど変えない箇所の変化と、資料にない名前は数えません。"
                  "否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、数えない語だけの確度の変化、予定の言い切り（する予定です → します）、"
                  "かぎかっこの中の言葉の変化も数えません。原文にない因果のつながりの足しと、書き手の行為と読む印（いたします、今後・改めて、"
@@ -4435,8 +4438,12 @@ def _build_parser():
                          help="文書の立場（diff と同じ）。勧め（読み手に勧める）、決まり（手順）、説明（報告、体験）のどれか。")
     options.add_argument("--doc-type", metavar="種類",
                          help="文書の種類。lint と diff に渡し、記録と状態の行に残します。lint は、その種類で普通な書き方を"
-                              "候補にする規則を外します（yomiyasu_lint.py -h の一覧）。差分（意味が変わる恐れと規則の見直し候補）と"
-                              "資料との照合の判定は変わりません。"
+                              "候補にする規則を外します（yomiyasu_lint.py -h の一覧）。差分（意味が変わる恐れと規則の見直し候補）の"
+                              "見つけ方と、資料との照合の判定は変わりません。"
+                              # yomiyasu_diff.py の _counted_doc_type_help() と同じ文（diff を読み込まずにヘルプを出すため、ここに書く）
+                              "pr、article、incident、proposal、manual、formal、paper（事実や仕様を述べる種類）では、能力の言い方の消えと、"
+                              "「場合がある」「ことがある」を消した言い切り、断定に「必ず」などを足した書き換えを --fail-on に数えます"
+                              "（意味の検査で種類によって変わるのはこの3つだけです）。"
                               # yomiyasu_diff.py の _detector_level_help() と同じ文（diff を読み込まずにヘルプを出すため、ここに書く。
                               # tests/test_v200_check_infra.py が一致を見張る。反証で見つけた例）
                               "文体の硬化の検査は incident、formal、paper のとき、勢いの検査は pr、article、incident、manual、formal、paper "

@@ -6,8 +6,9 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
 出すものは8つ。
   1. 全文差分: 変わった箇所を省略せずに出す（太字、見出しの段、空白、空行、字下げ、コード、引用、表の変化も残す）。
      変わった箇所を示すだけで、意味が同じだという証明ではない。
-  2. 意味が変わる恐れ: 数値、否定、主語と目的語の入れ替え、問いと平叙、文の種類の印、コード・URL・引用など変えない箇所の変化、
-     否定対比の主張の逆転、元の文書にない気持ちの語。どれも確かめる場所で、意味が変わったという判定ではない。
+  2. 意味が変わる恐れ: 数値、否定、主語と目的語の入れ替え、問いと平叙、文の種類の印、許可・能力の言い方（してよい、できる）、
+     コード・URL・引用など変えない箇所の変化、否定対比の主張の逆転、元の文書にない気持ちの語。
+     どれも確かめる場所で、意味が変わったという判定ではない。
   3. 規則の見直し候補（v1.1.2 からの9つの点検）:
      文末や言い回しの種類の数の増減、元の文にない語と消えた語、箇条書きや段落の変化、つながりを確かめる場所、
      文末の種類と文書の立場、文の種類の印、太字にならない書き方と直し方の案。
@@ -207,16 +208,18 @@ def _mark_positions(text: str):
     return found
 
 
-def _marks_in(positions, spans):
-    """範囲（開始, 終了）の中から始まる印を {種類: [印, ...]} にまとめる。"""
-    keys = [item[0] for item in positions]
+def _marks_in(positions, spans, kinds=TYPE_MARKERS, keys=None):
+    """範囲（開始, 終了）の中から始まる印を {種類: [印, ...]} にまとめる。並びは kinds の順（既定は文の種類の印）。
+    keys は positions の開始位置の並び（範囲ごとに作り直さないよう、呼ぶ側が1回だけ作って渡してよい）。"""
+    if keys is None:
+        keys = [item[0] for item in positions]
     marks = OrderedDict()
     for start, end in spans:
         for _, kind, hit in positions[bisect_left(keys, start):bisect_left(keys, end)]:
             hits = marks.setdefault(kind, [])
             if hit not in hits:
                 hits.append(hit)
-    return OrderedDict((kind, marks[kind]) for kind in TYPE_MARKERS if kind in marks)
+    return OrderedDict((kind, marks[kind]) for kind in kinds if kind in marks)
 
 
 def type_marks(sentence: str):
@@ -281,13 +284,49 @@ def _bigrams(text: str):
     return {text[i:i + 2] for i in range(len(text) - 1)}
 
 
+# 直近の _type_changes の入力と範囲（元, 後, 文字の対応, 範囲か None, 元の印の位置, 後の印の位置）。許可・能力の比べ
+# （_modality_changes）が、同じ文章なら範囲を作り直さずに使う（範囲づくりは数十万字の文書で重いため）。
+# _rule_candidates の引数と戻り値を変えずに渡すため、ここに1件だけ置く。文章が違えば使わずに作り直す。
+_LAST_TYPE_RANGES = [None]
+
+
 def _type_changes(o: str, r: str, opcodes):
     """元の各文が、文字単位の対応で書き直した文章のどの範囲に当たるかをたどり、範囲ごとに印を比べる。
     文を分けても、つないでも、範囲の中で比べるので、移っただけの印は変化として出ない。
     範囲が重なる元の文はまとめて比べる。丸ごと消えた文は比べない。丸ごと移した文は同じ文を探し、
-    移したうえで書き換えた文は、字面の近い文を書き直した文章から探して比べる。"""
+    移したうえで書き換えた文は、字面の近い文を書き直した文章から探して比べる。範囲は _type_ranges が作る。"""
     if not opcodes:
         return []
+    o_marks, r_marks = _mark_positions(o), _mark_positions(r)
+    if not o_marks and not r_marks:
+        _LAST_TYPE_RANGES[0] = (o, r, opcodes, None, o_marks, r_marks)
+        return []
+    ranges = _type_ranges(o, r, opcodes)
+    _LAST_TYPE_RANGES[0] = (o, r, opcodes, ranges, o_marks, r_marks)
+    o_keys, r_keys = [item[0] for item in o_marks], [item[0] for item in r_marks]
+    out = []
+    for texts, spans, a, b in ranges:
+        before = _marks_in(o_marks, spans, keys=o_keys)
+        after = _marks_in(r_marks, [(a, b)], keys=r_keys)
+        lost = [{"kind": kind, "hits": hits} for kind, hits in before.items() if kind not in after]
+        added = [{"kind": kind, "hits": hits} for kind, hits in after.items() if kind not in before]
+        if lost or added:
+            out.append({"orig": "".join(texts), "rewrite": _range_sentences(r, a, b), "lost": lost, "added": added})
+    return out
+
+
+def _range_sentences(r, a, b):
+    """書き直した文章の範囲 [a, b) を、前後の文の切れ目（句点・改行）まで広げた文。"""
+    left = max(r.rfind(ch, 0, a) for ch in "。！？!?\n") + 1
+    right = b if b and r[b - 1] in "。！？!?" else min([i for i in (r.find(ch, b) for ch in "。！？!?\n") if i != -1] + [len(r)])
+    right = right + 1 if right < len(r) and r[right] in "。！？!?" else right
+    return r[left:right].strip()
+
+
+def _type_ranges(o: str, r: str, opcodes):
+    """元の各文が、文字単位の対応（opcodes）で書き直した文章のどの範囲に当たるか。
+    [(元の文の並び, 元の文の範囲の並び, 書き直した文章の始め, 終わり)] を返す（範囲が重なる元の文は1つにまとめる。丸ごと
+    消えた文は入れない）。文の種類の印（_type_changes）と許可・能力の言い方（_modality_changes）が同じ範囲で比べる。"""
     opcodes = _slide_to_sentence_edges(opcodes, o, r)
     starts = [op[1] for op in opcodes]
 
@@ -323,9 +362,6 @@ def _type_changes(o: str, r: str, opcodes):
             k += 1
         return count
 
-    o_marks, r_marks = _mark_positions(o), _mark_positions(r)
-    if not o_marks and not r_marks:
-        return []
     r_spans = _sentence_spans(r)
     r_starts = [a for a, _ in r_spans]
 
@@ -380,18 +416,7 @@ def _type_changes(o: str, r: str, opcodes):
     if gone:
         groups = _pair_gone_sentences(o, r, opcodes, groups, moved, gone, r_spans)
     _widen_to_sentences(groups, moved, r_spans)
-    out = []
-    for texts, spans, a, b in [tuple(g) for g in groups] + moved:
-        before = _marks_in(o_marks, spans)
-        after = _marks_in(r_marks, [(a, b)])
-        lost = [{"kind": kind, "hits": hits} for kind, hits in before.items() if kind not in after]
-        added = [{"kind": kind, "hits": hits} for kind, hits in after.items() if kind not in before]
-        if lost or added:
-            left = max(r.rfind(ch, 0, a) for ch in "。！？!?\n") + 1
-            right = b if b and r[b - 1] in "。！？!?" else min([i for i in (r.find(ch, b) for ch in "。！？!?\n") if i != -1] + [len(r)])
-            right = right + 1 if right < len(r) and r[right] in "。！？!?" else right
-            out.append({"orig": "".join(texts), "rewrite": r[left:right].strip(), "lost": lost, "added": added})
-    return out
+    return [tuple(g) for g in groups] + moved
 
 
 def _overlapping(items, spans):
@@ -538,6 +563,132 @@ def _widen_to_sentences(groups, moved, r_spans):
                 elif ca >= b:
                     right = min(right, ca)
         g[2], g[3] = min(a, left), max(b, right)
+
+
+# ---- 許可・能力の言い方 ----
+# 仕様書では「〜してよい」（許可）と「〜できる」（能力）、「〜する」（説明）と「必ず〜する」「〜を保証する」（保証）の違いが、
+# そのまま仕様の違いになる。文の種類の印（TYPE_MARKERS）とは別の表に置き、文の種類の印と同じ範囲（_type_ranges）で、
+# 種類があるかないかを比べる（同じ種類の中の言い換え「することができる → できる」「してもよい → してよい」は変化にしない）。
+# 数えるのは許可が消えた・増えた範囲と、能力（強い印）が消えて能力の弱い印も許可も増えていない範囲だけ。能力が増えただけの範囲は
+# 正しい直し（名詞の句を動詞に開いた「〜できることを確認」など）が多いので出さない。義務・禁止・保証の印は、変化の相手の名前
+# （detail の to と from）を書くためだけに使う（義務・禁止の変化は文の種類の印、保証の足しは約束の候補、「必ず」は確度が受け持つ）。
+# 「て」のあとの許可から外す形: とても、にとって、と言っても、全て・すべて、極めて、初めて、改めて、あえて、かつて、せめて。
+# 「で」のあとは、「ん」「い」の後ろ（読んでよい、急いでよい）か、「でも」の形（何でもよい、PDF でも構わない）だけ。
+# 「これでよい」のような名詞のあとの「でよい」と、「とよい」「ばよい」（勧め）は当てない。
+_MODALITY_ENDS = r"(?:る|ます|ない|ません)"
+_PERMISSION_TAIL = (r"も?(?:よ(?:い|ろし|く(?=、|な))|良(?:い|く(?=、|な))|いい(?=[。、]|です|$)|構(?:わな|いませ)|かま(?:わな|いませ)"
+                    r"|差し?支え(?:な|あり|ござ))")
+_MODALITY_PATTERNS = (
+    ("許可", r"(?:て(?<!とて)(?<!とって)(?<!言って)(?<!いって)(?<!全て)(?<!すべて)(?<!極めて)(?<!きわめて)(?<!初めて)(?<!改めて)"
+           r"(?<!あえて)(?<!かつて)(?<!せめて)|で(?<=[んい]で)|で(?<=[^。、！？!?\n「『（(\s]で)(?=も))" + _PERMISSION_TAIL
+           + r"|許可(?:する|します|され(?:る|ます|て|た))"),
+    # 能力の強い印。「できるだけ」「できる限り」と「可能な限り」は除く。過去と打ち消しの形（できなかった、できず）も同じ種類
+    # （「利用できない状態が続いた → 利用できなかった」を能力の消えにしない）。「できた」「できました」は、「準備ができた」の
+    # ような出来上がりの意味と分けるため、「が」のすぐあとでは数えない。
+    ("能力", r"(?:でき|出来)(?:る(?!だけ|限り|かぎり)|ます|ない|ません|なかった|なく(?=て|な)|ず)"
+           r"|(?:でき|出来)(?<!ができ)(?<!が出来)(?:た|ました)|可能(?:です|だ|である|な(?!限|かぎ)|に)"),
+    # 能力の弱い印（消えた強い印を吸うだけに使う）。一段の可能（含められる、進められる）、いただける、得る・うる・える
+    # （あり得る、なりうる、ありえる）、五段の可能（使える、防げる、書ける など）。五段の可能は「続ける」「伝える」のような
+    # 動詞と取り違えないよう、語の頭を一覧で絞る。受身の「〜られる」も当たるが、強い印の消えを吸うだけなので害は小さい。
+    ("能力（弱い印）", r"られ(?<=[一-龥][めけえせてねべれげじみきちにひびりいぎ]られ)" + _MODALITY_ENDS
+                  + r"|(?:いただけ|頂け)" + _MODALITY_ENDS
+                  + r"|得(?<=[しりきちびみいにぎじ]得)" + _MODALITY_ENDS + r"|うる(?<=[しりきちびみいにぎじ]うる)"
+                  + r"|え(?:(?<=[使言払買会扱担補賄笑洗歌行]え)|(?<=[しりきちびみいにぎじ]え))" + _MODALITY_ENDS
+                  + r"|け(?<=[書聞行置解動引築描歩磨裁省]け)" + _MODALITY_ENDS
+                  + r"|げ(?<=[防稼急泳脱研]げ)" + _MODALITY_ENDS
+                  + r"|せ(?:(?<=[出話直消残戻外試探示移返回流隠渡通壊倒許貸押]せ)"
+                    r"|(?<=減らせ|増やせ|動かせ|生かせ|活かせ|果たせ|満たせ|冷やせ|延ばせ|伸ばせ|飛ばせ|起こせ))" + _MODALITY_ENDS
+                  + r"|て(?<=[待持保勝打放]て)" + _MODALITY_ENDS
+                  + r"|べ(?<=[選運呼学飛遊結喜]べ)" + _MODALITY_ENDS
+                  + r"|め(?:(?<=[読飲頼望掴組住]め)|(?<=楽しめ))" + _MODALITY_ENDS
+                  + r"|れ(?<=[守作取送乗帰撮登通走語測計図]れ)" + _MODALITY_ENDS),
+    ("義務", r"なければ(?:ならない|なりません|いけない|いけません)|なくては(?:ならない|なりません|いけない|いけません)"
+           r"|ないといけ(?:ない|ません)|ねばなら(?:ない|ず)"
+           r"|必要(?<!不必要)(?:があ(?:る|ります)|(?:に|と)(?:なる|なります)|(?:です|だ)(?=[。！!]|$))"
+           r"|べき(?<!しかるべき)(?<!然るべき)(?<!驚くべき)(?<!恐るべき)(?<!来るべき)(?<!特筆すべき)(?<!注目すべき)(?!乗)"
+           r"|ものと(?:する|します)|必須"),
+    ("禁止", r"(?:て|で)は(?:いけ|なら)(?:ない|ません)|禁止"),
+    ("保証", r"保証(?:する|します|される|されます|いたします|致します)(?=[。、]|$)|必ず(?!しも)|確実に"
+           r"|ことは(?:ない|ありません|ございません)(?=[。]|$)"),
+)
+MODALITY_MARKERS = OrderedDict((kind, re.compile(pattern, re.M)) for kind, pattern in _MODALITY_PATTERNS)
+# 種類ごとに、印の正規表現が当たるために必ず含まれる文字列（_TYPE_LITERALS と同じ使い方）。能力の弱い印は語の頭が多いので、
+# 前もって絞らずに当てる。
+_MODALITY_LITERALS = {
+    "許可": ("てよ", "でよ", "て良", "で良", "もよ", "も良", "いい", "構", "かま", "支え", "許可"),
+    "能力": ("でき", "出来", "可能"),
+    "能力（弱い印）": ("",),
+    "義務": ("なければ", "なくては", "ないといけ", "ねばなら", "必要", "べき", "ものと", "必須"),
+    "禁止": ("はいけ", "はなら", "禁止"),
+    "保証": ("保証", "必ず", "確実に", "ことは"),
+}
+# 変化の相手の名前に使う種類と、その並び。能力の弱い印は「能力」と書く。
+_MODALITY_NAMES = (("能力", ("能力", "能力（弱い印）")), ("義務", ("義務",)), ("禁止", ("禁止",)), ("保証", ("保証",)))
+# --fail-on=meaning-risk が能力の消え（ability_lost）と、確度の2つ（「場合がある」「ことがある」を消した言い切りと、断定に
+# 「必ず」などを足した書き換え）を数える文書の種類（事実や仕様を述べる種類）。並びは DOC_TYPES の順。
+# essay、promo、mail、minutes、slides と種類なしは、これまでどおり数えない候補にとどめる。
+COUNTED_TYPES = ("pr", "article", "incident", "proposal", "manual", "formal", "paper")
+
+
+def _modality_positions(text):
+    """文章全体に許可・能力などの印の正規表現を1回ずつ当て、(開始位置, 種類, 印) を位置の順に返す。"""
+    found = [(m.start(), kind, m.group(0)) for kind, pattern in MODALITY_MARKERS.items()
+             if any(literal in text for literal in _MODALITY_LITERALS[kind]) for m in pattern.finditer(text)]
+    found.sort(key=lambda item: item[0])
+    return found
+
+
+def _modality_names(kinds, fallback):
+    """種類の並び（印の種類の名前）を、変化の相手の名前（能力・義務・禁止・保証の順、「・」でつなぐ）にする。"""
+    names = [name for name, members in _MODALITY_NAMES if any(member in kinds for member in members)]
+    return "・".join(names) if names else fallback
+
+
+def _modality_changes(o: str, r: str):
+    """許可・能力の言い方が変わった範囲。正規化した元と後の文章を受け取り、
+    [{"orig", "rewrite", "subkind", "from", "to", "lost", "added"}] を返す（subkind は permission_lost、permission_added、
+    ability_lost）。範囲は文の種類の印と同じ（_type_ranges）。直前の _type_changes が同じ文章で作った範囲があれば使い回す。
+    同じ範囲で依頼・決まりの印が消えたか増えたときは、文の種類の印の候補に任せて出さない（「してよい → しなければならない」は
+    文の種類の印の候補1件のまま）。"""
+    if o == r:
+        return []
+    o_pos, r_pos = _modality_positions(o), _modality_positions(r)
+    if not any(kind in ("許可", "能力") for _, kind, _ in o_pos) and not any(kind == "許可" for _, kind, _ in r_pos):
+        return []
+    last = _LAST_TYPE_RANGES[0]
+    if last is not None and last[0] == o and last[1] == r:
+        opcodes, ranges, o_marks, r_marks = last[2:]
+    else:
+        opcodes = _ExactSequenceMatcher(None, o, r, autojunk=False).get_opcodes()
+        ranges, o_marks, r_marks = None, _mark_positions(o), _mark_positions(r)
+    if ranges is None:
+        ranges = _type_ranges(o, r, opcodes)
+    keys = [item[0] for item in o_pos], [item[0] for item in r_pos]
+    type_keys = [item[0] for item in o_marks], [item[0] for item in r_marks]
+    out = []
+    for texts, spans, a, b in ranges:
+        before = _marks_in(o_pos, spans, MODALITY_MARKERS, keys[0])
+        after = _marks_in(r_pos, [(a, b)], MODALITY_MARKERS, keys[1])
+        lost = [kind for kind in before if kind not in after]
+        added = [kind for kind in after if kind not in before]
+        found = []
+        if "許可" in lost:
+            found.append(("permission_lost", "許可", _modality_names(added, "断定")))
+        if "許可" in added:
+            found.append(("permission_added", _modality_names(lost, "断定"), "許可"))
+        if "能力" in lost and "能力（弱い印）" not in added and "許可" not in added:
+            found.append(("ability_lost", "能力", _modality_names(added, "断定")))
+        if not found:
+            continue
+        rule_before = "依頼・決まり" in _marks_in(o_marks, spans, keys=type_keys[0])
+        if rule_before != ("依頼・決まり" in _marks_in(r_marks, [(a, b)], keys=type_keys[1])):
+            continue
+        orig, rewrite = "".join(texts), _range_sentences(r, a, b)
+        for subkind, source, target in found:
+            out.append({"orig": orig, "rewrite": rewrite, "subkind": subkind, "from": source, "to": target,
+                        "lost": [{"kind": kind, "hits": before[kind]} for kind in lost],
+                        "added": [{"kind": kind, "hits": after[kind]} for kind in added]})
+    return out
 
 
 CONTENT = re.compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_.+#/-]+")
@@ -2745,14 +2896,15 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
 # 同じ塊の中で並べる順
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
-               "promise_review": 13}
+               "promise_review": 13, "modality": 14, "modality_review": 15}
 # 状態の語の消え（state）と約束の足し（promise）も数える。因果の足し（claim）と、書き手の印のない
 # 「〜します」の足し（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の印の変化、確度の強まり）。
 # 変えない箇所（protected）は意味が変わる恐れの節に出すが数えない。check は資料にない数値（unsupported/number）も数える。
 # diff の詰めで足した否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）も数えない（どちらも
 # 見直しの候補を出すだけで、点数や合否には使わない）
-FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty", "state", "promise")
+# 許可・能力の言い方の変化（modality）も数える。事実や仕様を述べる種類でない文書の能力の消え（modality_review）は数えない。
+FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty", "state", "promise", "modality")
 
 
 def fail_on_count(risks):
@@ -4659,17 +4811,34 @@ def _marks_risks(sides, type_changes):
             for change in (type_changes or [])]
 
 
-def meaning_risks(orig, rw, full=None, type_changes=None):
+def _modality_risks(sides, changes, doc_type=None):
+    """許可・能力の言い方の変化（_modality_changes の各項目）を候補にする。許可が消えた・増えたものは kind modality（数える）。
+    能力が消えたものは、事実や仕様を述べる種類（COUNTED_TYPES）では modality、ほかの種類と種類なしでは modality_review
+    （数えない）。detail は文の種類の印と同じ形の lost と added に、from と to（許可、能力、義務、禁止、保証、断定）を足したもの。"""
+    out = []
+    for change in changes or ():
+        counted = change["subkind"] != "ability_lost" or doc_type in COUNTED_TYPES
+        out.append(_risk("modality" if counted else "modality_review", change["subkind"],
+                         _find_line(sides, 0, change["orig"]), _find_line(sides, 1, change["rewrite"]),
+                         change["orig"], change["rewrite"],
+                         {"lost": change["lost"], "added": change["added"], "from": change["from"], "to": change["to"]}))
+    return out
+
+
+def meaning_risks(orig, rw, full=None, type_changes=None, *, doc_type=None):
     """意味が変わる恐れ（JSON の meaning_risks）。
 
     full は full_diff(orig, rw) の戻り値（渡さなければ作る）。type_changes は diff() の type_changes で、
-    None か [] なら文の種類の印（sentence_type/marks）を含めない。この関数の中で9キーの分析は作らない。"""
+    None か [] なら文の種類の印（sentence_type/marks）を含めない。この関数の中で9キーの分析は作らない。
+    許可・能力の言い方の候補（modality、modality_review）は、9キーの分析と同じ文字の対応で比べるので、diff() だけが足す。
+    doc_type は diff() と同じ文書の種類（事実や仕様を述べる種類では、確度の2つの強まりを数える側に入れる）。"""
     if full is None:
         full = full_diff(orig, rw)
-    return _meaning_risks(_Sides(orig, rw), full, type_changes)
+    return _meaning_risks(_Sides(orig, rw), full, type_changes, doc_type=normalize_doc_type(doc_type))
 
 
-def _meaning_risks(sides, full, type_changes, groups=None):
+def _meaning_risks(sides, full, type_changes, groups=None, doc_type=None, modality=None):
+    """意味が変わる恐れを集める。doc_type は正規化した文書の種類、modality は _modality_changes の戻り値（diff() が渡す）。"""
     if groups is None:
         groups = _sentence_pairs(sides, full)
     found = (_number_risks(sides, full, groups) + _negation_risks(sides, groups) + _swap_risks(sides, groups)
@@ -4692,7 +4861,7 @@ def _meaning_risks(sides, full, type_changes, groups=None):
                                   r["new_line"] if r["new_line"] is not None else 0))
     risks += citations
     masks = (_Masker(sides, 0), _Masker(sides, 1))
-    certainty = _certainty_risks(sides, groups, risks, masks)
+    certainty = _certainty_risks(sides, groups, risks, masks, doc_type=doc_type)
     # 強める向きでも、同じ原文の文に数える確度が出なければ印を戻す。
     strengthened = [(r["old_line"], normalize(r["old"] or "").strip()) for r in certainty
                     if (r["kind"], r["subkind"]) == ("certainty", "strengthened")]
@@ -4707,9 +4876,10 @@ def _meaning_risks(sides, full, type_changes, groups=None):
         quiet_ids -= restored_ids
         risks = ([risk for _, _, risk in found]
                  + [mark for mark in all_marks if id(mark) not in quiet_ids] + citations)
-        certainty = _certainty_risks(sides, groups, risks, masks)
+        certainty = _certainty_risks(sides, groups, risks, masks, doc_type=doc_type)
     sides.quiet_marks = [mark for mark in quiet if id(mark) in quiet_ids]
-    added = certainty + _quote_risks(sides, groups, masks)
+    # 許可・能力の言い方の候補も、確度とかぎかっこの候補と同じく、既存の候補の後ろに行の順で並べる。
+    added = certainty + _quote_risks(sides, groups, masks) + _modality_risks(sides, modality, doc_type)
     added.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                               r["new_line"] if r["new_line"] is not None else 0))
     risks += added
@@ -6901,9 +7071,22 @@ def _cancel_with_context(rest, pools):
     return kept
 
 
-def _certainty_change(old, new, old_context=(), new_context=()):
+# 事実や仕様を述べる種類（COUNTED_TYPES）で数える、頻度の言い方（core でない語）の言い切り。
+_COUNTED_BY_DOC_TYPE_FROM = ("場合がある", "ことがある")
+# 断定に強さ5の語（必ず、確実 など）を足した段を、種類で数えない原文の印（決まりを言う文の「必須にする」を「必ず実施する」に
+# した書き換えは、決まりの強さを言い換えただけのことが多い）。
+_CERTAINTY_DUTY = re.compile(r"必須|なければ(?:ならない|なりません|いけない|いけません)|必要(?<!不必要)があ(?:る|ります|り)"
+                             r"|ものと(?:する|します)|べき(?<!しかるべき)(?<!然るべき)(?<!驚くべき)(?<!恐るべき)(?<!来るべき)")
+
+
+def _certainty_change(old, new, old_context=(), new_context=(), split_context=(), doc_type=None, duty=False):
     """強さで打ち消して比べる。old_context と new_context は、隣の組にならなかった文の語のリストの並び（打ち消しだけに使い、
-    新しい段にはしない。使った語は取り除く）。確度を否定する形は、両側で同じなら外して残りを比べ、違えば比べない。"""
+    新しい段にはしない。使った語は取り除く）。確度を否定する形は、両側で同じなら外して残りを比べ、違えば比べない。
+    split_context は new_context のうち、元の文から分けた文とみなした文の語のリスト。打ち消しのあとに残った強さ5の語を、
+    書き直した文の語に足して比べる（文を分けた先の「必ず」を、元の文と比べる。比べた語はリストから取り除く）。
+    doc_type が事実や仕様を述べる種類（COUNTED_TYPES）なら、「場合がある」「ことがある」を消して言い切った段と、
+    断定に強さ5の語を足した段（duty が偽のとき。duty は、元の文か隣の組にならなかった元の文に決まりの言い方があるか）も
+    数え、その段に "counted_by": "doc_type" を付ける。"""
     if any(_is_question(text) or _CERTAINTY_QUESTION.search(text.rstrip()) for text in (old, new)):
         return None
     before, after = _certainty_words(old), _certainty_words(new)
@@ -6914,6 +7097,8 @@ def _certainty_change(old, new, old_context=(), new_context=()):
     rest_old, rest_new = _cancel_same_level(before, after)
     rest_old = _cancel_with_context(rest_old, new_context)
     rest_new = _cancel_with_context(rest_new, old_context)
+    split = [(pool, word) for pool in split_context for word in pool if word[0] == 5]
+    rest_new.extend(word for _, word in split)
     old_base = min([w[0] for w in before] + [4])
     new_base = min([w[0] for w in after] + [4])
     rest_old.sort(key=lambda w: (w[0], w[2]))
@@ -6922,14 +7107,25 @@ def _certainty_change(old, new, old_context=(), new_context=()):
     transitions = list(zip(rest_old[:paired], rest_new[:paired]))
     transitions.extend((w, None) for w in rest_old[paired:] if (w[0] < 4 and new_base > w[0]) or w[0] == 5)
     transitions.extend((None, w) for w in rest_new[paired:] if (w[0] < 4 and w[0] < old_base) or w[0] == 5)
+    used = [b for _, b in transitions if b is not None]
+    for pool, word in split:
+        if any(word is b for b in used) and word in pool:
+            pool.remove(word)
+    by_doc_type = doc_type in COUNTED_TYPES
     steps = []
     for a, b in transitions:
         from_level, to_level = (a[0] if a else 4), (b[0] if b else 4)
         if from_level == to_level:
             continue
-        steps.append({"from": a[1] if a else "断定", "to": b[1] if b else "断定",
-                      "from_level": from_level, "to_level": to_level,
-                      "counted": a is not None and a[4] and from_level in _COUNTED_FROM and to_level > from_level})
+        step = {"from": a[1] if a else "断定", "to": b[1] if b else "断定",
+                "from_level": from_level, "to_level": to_level,
+                "counted": a is not None and a[4] and from_level in _COUNTED_FROM and to_level > from_level}
+        if by_doc_type and not step["counted"] and (
+                (a is not None and a[1] in _COUNTED_BY_DOC_TYPE_FROM and to_level >= 4)
+                or (a is None and to_level == 5 and not duty)):
+            step["counted"] = True
+            step["counted_by"] = "doc_type"
+        steps.append(step)
     if not steps:
         return None
     up = any(s["to_level"] > s["from_level"] for s in steps)
@@ -6959,7 +7155,10 @@ def _unpaired_neighbors(count, index, paired):
     return [k for k in range(first, last + 1) if k != index]
 
 
-def _certainty_risks(sides, groups, risks, masks=None):
+def _certainty_risks(sides, groups, risks, masks=None, doc_type=None):
+    """確度の候補。組 (i, j) ごとに比べる。組にならなかった隣の書き直した文のうち、2文字の組の半分以上が元の文 i にある文は、
+    元の文から分けた文とみなし、その文の強さ5の語も比べる（文を分けても「必ず」の足しが比べられるように）。
+    doc_type は _certainty_change に渡す（事実や仕様を述べる種類で数える段を決める）。"""
     masks = masks or (_Masker(sides, 0), _Masker(sides, 1))
     marks = [r for r in risks if (r["kind"], r["subkind"]) == ("sentence_type", "marks")]
     out = []
@@ -6979,9 +7178,16 @@ def _certainty_risks(sides, groups, risks, masks=None):
             old, new = bodies[0][i], bodies[1][j]
             if not old.text or not new.text or old.text == new.text:
                 continue
-            contexts = [[pool(side, k) for k in _unpaired_neighbors(len(bodies[side]), index, paired[side])]
-                        for side, index in ((0, i), (1, j))]
-            change = _certainty_change(old.text, new.text, *contexts)
+            neighbors = [_unpaired_neighbors(len(bodies[side]), index, paired[side]) for side, index in ((0, i), (1, j))]
+            contexts = [[pool(side, k) for k in neighbors[side]] for side in (0, 1)]
+            old_grams = _bigrams(old.text)
+            split = []
+            for k in neighbors[1]:
+                grams = _bigrams(bodies[1][k].text)
+                if grams and len(grams & old_grams) * 2 >= len(grams):
+                    split.append(pool(1, k))
+            duty = bool(_CERTAINTY_DUTY.search(old.text)) or any(_CERTAINTY_DUTY.search(bodies[0][k].text) for k in neighbors[0])
+            change = _certainty_change(old.text, new.text, *contexts, split_context=split, doc_type=doc_type, duty=duty)
             if change is None:
                 continue
             kind, direction, detail = change
@@ -7154,7 +7360,9 @@ _ADD_PROMISE = [
     ("guarantee", "費用はかからない", r"(?P<k>(?:追加|別途)?(?:の)?(?:費用|料金|負担|手数料)(?:は|が|も)?(?:一切)?(?:かかりません|かからない|発生しません|発生いたしません|いただきません|ございません))|(?P<k2>(?:無料|無償)(?:で(?!す)|にて))"),
     ("guarantee", "まま使える", r"(?P<k>(?:まま|問題なく|支障なく|引き続き|これまでどおり|これまで通り|安心して)[^。]{0,16}?(?:いただけ(?:ます|る)|ご利用(?:になれ|でき)(?:ます|る)))"),
     ("guarantee", "変えない", r"(?P<k>(?:変え|上げ|値上げし|変更し|据え置)(?:ない|ません|く)(?=[。]|$))"),
-    ("guarantee", "保証", r"(?P<k>保証|お約束|約束)(?:いた|致)?し(?:ます|ましょう)"),
+    # 常体は述語の「保証する」「保証される」だけ（「保証することも」「保証できる」「配信保証」は当てない）。常体の「約束する」は
+    # 随筆や物語の地の文に多いので足さない。
+    ("guarantee", "保証", r"(?P<k>保証|お約束|約束)(?:いた|致)?し(?:ます|ましょう)|(?P<k2>保証)(?:する|される|されます)(?=[。、]|$)"),
     ("promise", "させていただく", r"(?P<k>[" + _ADD_K + "ァ-ヴー]{1,6}|[ぁ-ん]{1,3})させていただ(?:きます|く(?=[。、]|ので|$))"),
     ("promise", "いたします", r"(?P<k>(?:お|ご)?[" + _ADD_K + "ァ-ヴー]{1,6}(?:(?![をがはにでともへのやか])[ぁ-ん][" + _ADD_K + "]{0,2})?|(?:お|ご)[ぁ-ん" + _ADD_K + "]{1,6})(?:いた|致)し(?:ます|ましょう)(?!た)"),
     ("promise", "てまいります", r"(?P<k>[" + _ADD_K + "ァ-ヴー]{1,6}[ぁ-ん]{0,3})(?:て|で)(?:まいり|参り|いき)ます(?!た)"),
@@ -7658,7 +7866,13 @@ def _addition_promise_risk(doc, group, i, j):
         if can_cancel:
             part_start = max(body.text.rfind('、', 0, pos), body.text.rfind('。', 0, pos)) + 1
             part = body.text[part_start:pos + len(key) + 4]
-            if not _addition_cancel(group, context, sub, part, i):
+            # 「〜ことはない」は、否定の数が組の原文の文より増えたとき（複製しません → 複製しないため、漏れることはありません）は
+            # 足した言い切りなので、組の原文の文の述語で字を問わずに打ち消さない（起きない → 起きることはない は打ち消す）。
+            paired = i
+            if (name == 'ことはない' and i is not None
+                    and len(_negation_marks(body.text)) > len(_negation_marks(group.bodies[0][i].text))):
+                paired = None
+            if not _addition_cancel(group, context, sub, part, paired):
                 kept.append((sub, name, key, pos, strong))
         else:
             kept.append((sub, name, key, pos, strong))
@@ -8487,14 +8701,18 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
 
     渡された文字列をそのまま使う（BOM を外したり、改行をそろえたりしない。CLI と check は読むときに decode_source で
     そろえ、違いを encoding_notes で渡す）。stance は STANCES の値（勧め、決まり、説明）か None。
-    doc_type（文書の種類）と reader（読者）は context に残す。差分と意味が変わる恐れの判定は変えない
-    （種類と読者を指定しても同じ規則）。文体の硬化の検査（stiffness）と勢いの検査（tone）は、種類で level を決める
+    doc_type（文書の種類）と reader（読者）は context に残す。差分と、意味が変わる恐れの候補の見つけ方は変えない
+    （種類と読者を指定しても同じ規則）。事実や仕様を述べる種類（COUNTED_TYPES）だけ、能力の言い方の消え（modality の
+    ability_lost）と、確度の2つ（「場合がある」「ことがある」を消した言い切り、断定に「必ず」などを足した書き換え）を
+    --fail-on に数える側に入れる。文体の硬化の検査（stiffness）と勢いの検査（tone）は、種類で level を決める
     （paper の硬化と勢いも参考の info。mail の勢いは絵文字・見出しも review）。mail だけ敬語の度合いも検査する。値は中で正規化し、使えない値は ValueError。"""
     context = {"doc_type": normalize_doc_type(doc_type), "reader": normalize_reader(reader)}
     rules = _rule_candidates(orig_raw, rw_raw, stance)
+    # 許可・能力の言い方は、9キーの分析（_rule_candidates の type_changes）が作った範囲を使い回して比べる
+    modality = _modality_changes(normalize(orig_raw), normalize(rw_raw))
     full, sides = _build_full_diff(orig_raw, rw_raw, encoding_notes)
     groups = _sentence_pairs(sides, full)
-    risks = _meaning_risks(sides, full, rules["type_changes"], groups)
+    risks = _meaning_risks(sides, full, rules["type_changes"], groups, doc_type=context["doc_type"], modality=modality)
     if orig_raw == rw_raw and not full["encoding_notes"]:
         status, count = "no_change", 0
     else:
@@ -8545,6 +8763,9 @@ _REPORT_DISCLAIMER = ("全文差分は変わった箇所を示すだけで、意
                       "この検査では、意味の保持と読者にとっての分かりやすさは判定していません。")
 # 種類か読者を指定したときに、断りの行のすぐあとに足す1行の後半
 _REPORT_CONTEXT_TAIL = "差分と意味が変わる恐れは、種類と読者によらず同じ規則で出しています。"
+# 事実や仕様を述べる種類（COUNTED_TYPES）を指定したときに、その後ろに足す文
+_REPORT_COUNTED_TAIL = ("この種類では、能力の言い方の消えと、「場合がある」「ことがある」を消した言い切り、断定に「必ず」などを"
+                        "足した書き換えも --fail-on に数えます。")
 
 
 def detector_review_count(d):
@@ -8614,6 +8835,17 @@ def _risk_line(risk):
             "約束" if subkind == "added" else "保証")
         return "原文にない{}{}: {}。{}".format(label, _where(None, new_line),
                 "、".join("「{}」".format(p) for p in detail["phrases"]), advice)
+    if kind in ("modality", "modality_review"):
+        change = "{} → {}".format(_modality_side(detail["from"], detail["lost"]), _modality_side(detail["to"], detail["added"]))
+        if subkind == "permission_lost":
+            return ("許可の言い方が消えた{}: {}。原文は「〜してよい」と、してもよいことを伝えています。できることの説明や言い切りに"
+                    "変えていないか確かめ、変えていれば原文の言い方に戻してください。".format(where, change))
+        if subkind == "permission_added":
+            return ("原文にない許可の言い方{}: {}。原文は、してもよいとは書いていません。依頼にない許可を足していないか確かめ、"
+                    "足していれば原文の言い方に戻してください。".format(where, change))
+        note = "" if kind == "modality" else "--fail-on には数えません（事実や仕様を述べる種類の文書では数えます）。"
+        return ("能力の言い方が消えた{}: {}。{}原文は「〜できる」と、できることを伝えています。「〜する」「必ず〜する」と"
+                "言い切っていないか確かめ、言い切っていれば原文の言い方に戻してください。".format(where, change, note))
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(
@@ -8688,6 +8920,19 @@ def _risk_line(risk):
         label = "資料にない数値" if subkind == "number" else "資料にない名前"
         return "{}{}: {}".format(label, _where(None, new_line) if new_line is not None else where, detail.get("text", ""))
     return "{}{}".format(kind + ("/" + subkind if subkind else ""), where)
+
+
+def _modality_side(names, items):
+    """許可・能力の候補の行の片側（「許可（てよい）」「能力（られる）」「なし（断定）」）。names は detail の from か to、
+    items はその側の印（from は detail の lost、to は added）。"""
+    if names == "断定":
+        return "なし（断定）"
+    members = dict(_MODALITY_NAMES)
+    parts = []
+    for name in names.split("・"):
+        hits = [hit for item in items if item["kind"] in members.get(name, (name,)) for hit in item["hits"]]
+        parts.append("{}（{}）".format(name, "、".join(hits)) if hits else name)
+    return "、".join(parts)
 
 
 def _risk_section(d):
@@ -9120,7 +9365,8 @@ def report(d: dict) -> str:
     head = [_REPORT_FIRST_LINE, status, _REPORT_DISCLAIMER]
     context = d.get("context") or {}
     if context.get("doc_type") is not None or context.get("reader") is not None:
-        head.append(context_label(context.get("doc_type"), context.get("reader")) + _REPORT_CONTEXT_TAIL)
+        head.append(context_label(context.get("doc_type"), context.get("reader")) + _REPORT_CONTEXT_TAIL
+                    + (_REPORT_COUNTED_TAIL if context.get("doc_type") in COUNTED_TYPES else ""))
     return "\n".join(head) + "\n\n" + "\n\n".join(body) + "\n\n" + _status_line(d, _DETECTOR_STATUS_NOTE_ABOVE)
 
 
@@ -9133,7 +9379,7 @@ def read_text(path):
 
 _EXIT_CODES = """終了コード:
   0  比べ終わり、--fail-on の条件に当たらなかった（候補の有無によらない）。--endings の正常終了、-h と --version も0
-  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印・確度・状態の語・約束の恐れが1件以上）
+  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印・確度・状態の語・約束・許可と能力の言い方の恐れが1件以上）
   2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk] 元の文 書き直した文\n"
@@ -9142,7 +9388,10 @@ _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読�
 _FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化、"
                  "確度を強めた書き換え（かもしれない → 見込み、見込み → 予定、と思われる → 断定など）、"
                  "原文の状態の語（未定、未確認、調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足しが"
-                 "1件でもあれば、終了コード1で終わります。コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
+                 "1件でもあれば、終了コード1で終わります。許可の言い方（してよい、してもよい、構わない）が消えたか増えた書き換えも数えます。"
+                 "事実や仕様を述べる種類（--doc-type が " + "、".join(COUNTED_TYPES) + "）では、能力の言い方（できる、可能だ）が消えた"
+                 "書き換え、「場合がある」「ことがある」を消して言い切った書き換え、断定に「必ず」「確実に」などを足した書き換えも数えます"
+                 "（ほかの種類と種類なしでは数えません）。コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
                  "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、"
                  "数えない語だけの確度の変化、予定の言い切り（する予定です → します）、かぎかっこの中の言葉の変化も数えません。"
                  "推量の印が同じ強さの慎重な言い方に替わっただけの文（かもしれません → 恐れがあります、と思われます → 見込みです）も数えません。"
@@ -9158,6 +9407,13 @@ def _join_doc_types(types):
     if len(types) == 2:
         return "{} と {}".format(*types)
     return "、".join(types)
+
+
+def _counted_doc_type_help():
+    """--doc-type のヘルプの、意味の検査の数え方が種類で変わる所の文。COUNTED_TYPES から作る（check run のヘルプにも同じ文を書く）。"""
+    return ("{}（事実や仕様を述べる種類）では、能力の言い方の消えと、「場合がある」「ことがある」を消した言い切り、断定に"
+            "「必ず」などを足した書き換えを --fail-on に数えます（意味の検査で種類によって変わるのはこの3つだけです）。").format(
+        "、".join(COUNTED_TYPES))
 
 
 def _detector_level_help():
@@ -9229,8 +9485,8 @@ def _build_parser():
     options.add_argument("--fail-on", action="append", dest="fail_on", metavar="meaning-risk",
                          help=_FAIL_ON_HELP + "何度でも、カンマ区切りでも指定できます。")
     options.add_argument("--doc-type", metavar="種類",
-                         help="文書の種類（値は yomiyasu_lint.py と同じ）。表示と JSON に残し、差分、意味が変わる恐れ、"
-                              "規則の見直し候補、--fail-on は変わりません（意味の検査はどの種類でも同じに行います）。"
+                         help="文書の種類（値は yomiyasu_lint.py と同じ）。表示と JSON に残します。差分、意味が変わる恐れ、"
+                              "規則の見直し候補の見つけ方は、どの種類でも同じです。" + _counted_doc_type_help()
                               + _detector_level_help() + "mail だけ敬語の度合いを検査します。値: "
                               + "、".join("{}（{}）".format(row[0], row[1]) for row in DOC_TYPES) + "。")
     options.add_argument("--reader", metavar="読者",
@@ -9286,7 +9542,8 @@ def _fail_on_line(total, counted, risks=()):
         return "終了コード1: --fail-on=meaning-risk の条件に当たりました（意味が変わる恐れ {}件）。".format(counted)
     return ("終了コード1: --fail-on=meaning-risk の条件に当たりました"
             "（意味が変わる恐れ {}件のうち、数値・否定・入れ替え・文の種類{} {}件）。".format(
-                total, "".join(label for kind, label in (("certainty", "・確度"), ("state", "・状態の語"), ("promise", "・約束"))
+                total, "".join(label for kind, label in (("certainty", "・確度"), ("state", "・状態の語"), ("promise", "・約束"),
+                                                         ("modality", "・許可と能力"))
                                if any(r["kind"] == kind for r in risks)), counted))
 
 

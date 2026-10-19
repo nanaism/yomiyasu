@@ -248,6 +248,28 @@
           "mixed": false
         },
         "basis": null
+      },
+      {
+        "kind": "modality_review",
+        "subkind": "ability_lost",
+        "old_line": 1,
+        "new_line": 1,
+        "old": "来週お届けできる見込みです。",
+        "new": "来週お届けします。",
+        "detail": {
+          "lost": [
+            {
+              "kind": "能力",
+              "hits": [
+                "できる"
+              ]
+            }
+          ],
+          "added": [],
+          "from": "能力",
+          "to": "断定"
+        },
+        "basis": null
       }
     ],
     "R1": [],
@@ -687,5 +709,8 @@
       "  差: 雪の[-ため-]{+影響で+}、配送が遅れました。",
       ""
     ]
-  }
+  },
+  "updates": [
+    "2026-10-19 v2.1.0 の許可・能力の言い方の検査を足したときの作り直し: risks の PN14（来週お届けできる見込みです。 → 来週お届けします。）に、能力の言い方の消え（kind modality_review、subkind ability_lost。種類なしなので --fail-on には数えない）を確度の候補のあとに足した。ほかの例の risks、nine、reports、keys、check_lines は今の出力と1字も変わらないことを確かめた。"
+  ]
 }

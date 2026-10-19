@@ -31,10 +31,14 @@ SUBKINDS = {
     "promise": {"added", "guarantee", "prevention"},
     "claim": {"causal", "evaluation", "general"},
     "protected": {"code", "inline_code", "url", "link", "frontmatter", "html", "quote"},
+    "modality": {"permission_lost", "permission_added", "ability_lost"},
+    "modality_review": {"ability_lost"},
 }
 # diff の詰め（10.7、追加文書 1.4）: 否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）を足した。
 # どちらも意味が変わる恐れの節に出すが、--fail-on=meaning-risk には数えない
-KINDS = {"number", "negation", "swap", "sentence_type", "protected", "contrast_reversal", "feeling", "certainty", "certainty_review", "quote", "state", "promise", "claim"}
+# v2.1.0: 許可・能力の言い方の変化（modality は数える。事実や仕様を述べる種類でない文書の能力の消えは modality_review で数えない）を足した
+KINDS = {"number", "negation", "swap", "sentence_type", "protected", "contrast_reversal", "feeling", "certainty", "certainty_review", "quote", "state", "promise", "claim",
+         "modality", "modality_review"}
 
 # 2.8 の meaning_risks の要素の例（入力は 2.7 の例A）
 EXAMPLE_A_RISK = {"kind": "number", "subkind": "replaced", "old_line": 1, "new_line": 1,
@@ -696,7 +700,12 @@ class TestCorpusWatch(RiskCase):
     # diff の詰めの直し（反証で見つけた例）で、数量を主張しない「一つ」（一つの、一つずつ、もう一つ）を
     # 単独では数値の候補にしないようにしたので、number/added を 5 から基準の 4 に戻した（合計12）
     # 評価の足しは5件を見直し候補に出す（--fail-on には数えない）。
-    MEASURED = {"claim/evaluation": 5, "negation": 1, "number/added": 4, "number/lost": 1, "number/replaced": 1, "sentence_type/marks": 5}
+    # v2.1.0 で2件増えた。どちらも原文の能力の言い方が推敲で言い切りになった所で、確かめるべき候補とみなす。
+    # promise/guarantee 1（01_tech_arch_sonnet_formal の「事態を防げる → 処理を止めることはない」。否定の数が原文より増えた
+    # 「〜ことはない」を、組の原文の文の述語で打ち消さなくなった）、modality_review/ability_lost 1（08_essay_retrospective_sonnet_formal の
+    # 「担当できるまでになっている → 担当している」。種類なしなので数えない）。
+    MEASURED = {"claim/evaluation": 5, "negation": 1, "number/added": 4, "number/lost": 1, "number/replaced": 1, "sentence_type/marks": 5,
+                "promise/guarantee": 1, "modality_review/ability_lost": 1}
 
     def test_corpus_48_pairs_kind_counts_do_not_exceed_the_measured_values(self):
         self.need_v2_diff()

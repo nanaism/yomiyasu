@@ -18,16 +18,16 @@
       "markdown_visibility.py": "c0e89e684694d9602d8ff0da5ee0ecfad23f7390fa61c326cc201870613df691"
     },
     "diff": {
-      "yomiyasu_lint.py": "73c370d607399b4408368c53785c9f9bebc5234180a4c4c1e5d4006365c3aa23",
-      "yomiyasu_diff.py": "2ea2a5d4eeed731aad93b3d2fd916fe60ef0173ccb9aa7ab2041de124eaf17f3",
-      "yomiyasu_check.py": "3f0be402b8c56591ec2e0c09ca030645948b0cd94f2cc17d569e909d7a47ae13",
-      "markdown_visibility.py": "4d296be7fc1c1cb6b908cd16cf3de51449d7902db9bc1888f095fc7a65ae843c",
+      "yomiyasu_lint.py": "60cdaeb2512d1ca3b20a297e2aa0a4b2310a0c7ac25bd264e75ac2df61a1c11c",
+      "yomiyasu_diff.py": "4e36b3bde7797f7eb6527b62f5e347715ecd761930a8deae4e95f619552e1135",
+      "yomiyasu_check.py": "89d39a22c580514b64e5a8a1052b58d20a47527b51c3ab505426c063bd63de59",
+      "markdown_visibility.py": "cfb9b26519b8a115c6d1322b33ebf5b9825a3739d0955223c812c8d47fe7ffb8",
       "references/lists/feelings.txt": "5f71a66f5e2679de04ecd30395ab74ca61962297c22ef3f4efa5c8e625446166",
       "references/lists/hedges.txt": "ed666036f63f4705d2c129d3fd30e971018d50732bbef2c18081412a61ccd771",
       "references/lists/intensifiers.txt": "3e4829226d871ce10e4ae89c49ae218b6d9ed77cafcd6ddfd0fdb6cecd1fec2e",
       "references/lists/nominalization.txt": "2f685bbcd7dfc5ea871ff5655368195d471cea6ac4ff57e75a0648aadd466048"
     },
-    "check": "3f0be402b8c56591ec2e0c09ca030645948b0cd94f2cc17d569e909d7a47ae13"
+    "check": "89d39a22c580514b64e5a8a1052b58d20a47527b51c3ab505426c063bd63de59"
   },
   "tool_version": "2.0.0",
   "python": "3.14.5",
@@ -1367,11 +1367,11 @@
       "stdin": "32f0e38d59cccff9"
     },
     "raw_ai/01_tech_arch_sonnet_formal.md|yomiyasu_rewritten/01_tech_arch_sonnet_formal.md": {
-      "plain": "a1181e7f83d23535",
-      "stance": "a1181e7f83d23535",
-      "fail_on": "35dca73762b38f79",
-      "json": "498f88d2c91459d3",
-      "stdin": "a1181e7f83d23535"
+      "plain": "25dcf1179084c7d2",
+      "stance": "25dcf1179084c7d2",
+      "fail_on": "b113c7278e70cbcc",
+      "json": "416fcba483b8d88a",
+      "stdin": "25dcf1179084c7d2"
     },
     "blacklist_ai/01_tech_arch_sonnet_formal.md|yomiyasu_rewritten/01_tech_arch_sonnet_formal_bl.md": {
       "plain": "0a1edc55d27d80ed",
@@ -1661,11 +1661,11 @@
       "stdin": "19d49f3602ca2a1c"
     },
     "raw_ai/08_essay_retrospective_sonnet_formal.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_formal.md": {
-      "plain": "81d48df7f5184341",
-      "stance": "81d48df7f5184341",
-      "fail_on": "81d48df7f5184341",
-      "json": "7a5270ad62c88d02",
-      "stdin": "81d48df7f5184341"
+      "plain": "7dcd3b3a7de9e41c",
+      "stance": "7dcd3b3a7de9e41c",
+      "fail_on": "7dcd3b3a7de9e41c",
+      "json": "7204f214fbda260f",
+      "stdin": "7dcd3b3a7de9e41c"
     },
     "blacklist_ai/08_essay_retrospective_sonnet_formal.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_formal_bl.md": {
       "plain": "be3d8ca156ec8502",
@@ -2214,11 +2214,11 @@
       "stdin": "3e08602666baa0e4"
     },
     "raw_ai/05_comparison_sonnet_formal.md|raw_ai/06_spec_draft_sonnet_casual.md": {
-      "plain": "c0b0af7e087056a9",
-      "stance": "c0b0af7e087056a9",
-      "fail_on": "229589e378e6b2b3",
-      "json": "2fc00354f74ea33d",
-      "stdin": "c0b0af7e087056a9"
+      "plain": "f43a73119ffaa9a2",
+      "stance": "f43a73119ffaa9a2",
+      "fail_on": "d3eb6fe6068a0e71",
+      "json": "6778129ff55ccdf4",
+      "stdin": "f43a73119ffaa9a2"
     },
     "raw_ai/06_spec_draft_sonnet_casual.md|raw_ai/06_spec_draft_sonnet_default.md": {
       "plain": "a7dc1cde43a4336c",
@@ -2228,18 +2228,18 @@
       "stdin": "a7dc1cde43a4336c"
     },
     "raw_ai/06_spec_draft_sonnet_default.md|raw_ai/06_spec_draft_sonnet_formal.md": {
-      "plain": "b3cebcd001ba6f19",
-      "stance": "b3cebcd001ba6f19",
-      "fail_on": "6b5d303909e77a3d",
-      "json": "9ef68ad3dc953056",
-      "stdin": "b3cebcd001ba6f19"
+      "plain": "bdc4cd2af2ea2ecc",
+      "stance": "bdc4cd2af2ea2ecc",
+      "fail_on": "7428e99b6cc50b81",
+      "json": "2a0505d8504baf09",
+      "stdin": "bdc4cd2af2ea2ecc"
     },
     "raw_ai/06_spec_draft_sonnet_formal.md|raw_ai/07_code_review_sonnet_casual.md": {
-      "plain": "50999c114f4d1497",
-      "stance": "50999c114f4d1497",
-      "fail_on": "e7464954e982e235",
-      "json": "5726ffe3a95fd788",
-      "stdin": "50999c114f4d1497"
+      "plain": "705b05929f67db86",
+      "stance": "705b05929f67db86",
+      "fail_on": "b2181330f9957ccc",
+      "json": "e04e5b6eff159376",
+      "stdin": "705b05929f67db86"
     },
     "raw_ai/07_code_review_sonnet_casual.md|raw_ai/07_code_review_sonnet_default.md": {
       "plain": "40544d019985ef44",
@@ -2337,15 +2337,15 @@
       "json": "a9bb3738f0a719fa"
     },
     "raw_ai/01_tech_arch_sonnet_formal.md|yomiyasu_rewritten/01_tech_arch_sonnet_formal.md": {
-      "run": "4981ccd23f47168b",
-      "verify": "ecbf6be717c7d4c1",
-      "replay": "475786ca8c9b4d4c",
-      "rerun": "978dcb9c76964a8d",
-      "compose": "9cfa4e1ac72c6622",
-      "stdin": "70bfc061c3f73287",
-      "fail_on": "adc8366c3b533d42",
-      "no_record": "9d50d3c70afd3b63",
-      "json": "c9efe4a26ab53663"
+      "run": "f7a182c386e74483",
+      "verify": "8d47a7dc0ce3842b",
+      "replay": "8b00a1de81574b1f",
+      "rerun": "c7dc9c0b28b6c95b",
+      "compose": "5fac67ca35bc1aed",
+      "stdin": "a588877df45edb57",
+      "fail_on": "57202b7b1033645b",
+      "no_record": "4076d68b1b5b6e9b",
+      "json": "8568b9cba9db47b8"
     },
     "blacklist_ai/01_tech_arch_sonnet_formal.md|yomiyasu_rewritten/01_tech_arch_sonnet_formal_bl.md": {
       "run": "8efe40d184ba5dc4",
@@ -2799,15 +2799,15 @@
       "json": "b23f0d188e6e15c8"
     },
     "raw_ai/08_essay_retrospective_sonnet_formal.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_formal.md": {
-      "run": "4443f7c8362b7481",
-      "verify": "9189ca1ba23ebbc9",
-      "replay": "1421bc2a2127ecf1",
-      "rerun": "2c068ff52506316b",
-      "compose": "a66c0bede5cf9b3e",
-      "stdin": "a12cd3b9277b9e83",
-      "fail_on": "4443f7c8362b7481",
-      "no_record": "01a9507678303c9d",
-      "json": "1c5aa5711ababeca"
+      "run": "6ac6e05ad7b235ae",
+      "verify": "e4aa0f9a724527a5",
+      "replay": "67e1404e2a470c64",
+      "rerun": "6a0e6c76b52cf5cf",
+      "compose": "64c7310f241c4e98",
+      "stdin": "eaf47d9ff86aa048",
+      "fail_on": "6ac6e05ad7b235ae",
+      "no_record": "22fa0474a6ac1ee0",
+      "json": "5ad38e145dde3c18"
     },
     "blacklist_ai/08_essay_retrospective_sonnet_formal.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_formal_bl.md": {
       "run": "957505cb42fc166a",
@@ -3129,7 +3129,7 @@
       "verify": "90d748fcf3721a5b"
     },
     "raw_ai/05_comparison_sonnet_formal.md|raw_ai/06_spec_draft_sonnet_casual.md": {
-      "run": "bc213f5d6922bf09",
+      "run": "bfd0010c4cfe17bf",
       "verify": "79554696bc165ce6"
     },
     "raw_ai/06_spec_draft_sonnet_casual.md|raw_ai/06_spec_draft_sonnet_default.md": {
@@ -3137,12 +3137,12 @@
       "verify": "8ebaab395934846c"
     },
     "raw_ai/06_spec_draft_sonnet_default.md|raw_ai/06_spec_draft_sonnet_formal.md": {
-      "run": "82baa537bb605526",
-      "verify": "0718df6b6f2c0fb8"
+      "run": "02c5e8b9c73fe876",
+      "verify": "b912d9191d4dc4c4"
     },
     "raw_ai/06_spec_draft_sonnet_formal.md|raw_ai/07_code_review_sonnet_casual.md": {
-      "run": "599f8fdc243a6c3f",
-      "verify": "1c6968b63fa17e40"
+      "run": "e87e022ebd3f989e",
+      "verify": "f8eeb3aaf6a25a60"
     },
     "raw_ai/07_code_review_sonnet_casual.md|raw_ai/07_code_review_sonnet_default.md": {
       "run": "af434af14eae7772",
@@ -3214,6 +3214,7 @@
     "事実の復元の道具: check の資料つき新規作成48組を変更前と比較し、照合の節の外の出力・終了コードは不変。照合の該当行と確度の注意を追加した組だけ compose の要約を更新した。JSON は追加キー fact_gaps を除いて比較する。lint、diff、資料なしの出力の要約は更新していない。",
     "2026-10-16 事実の復元の道具を、見直し候補の行と直した箇所の節のあとに入れたときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは check の compose の2組だけ（raw_ai/04 と blacklist_ai/07。照合の節に「資料にあった確度の語が最終稿にない」の行が1行足された）。diff の行、check のほかの使い方、終了コード、lint の行は1字も変わらなかった。source_sha256 の diff と check は今のスクリプトの値にした。",
     "2026-10-16 run --stdin の1行目の {仕上げ} を、ファイルのときと同じく返す直前の verify（最終稿だけを verify --final - に渡す）の案内にしたときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは check の stdin の48組だけ（推敲の48組のすべて。1行目の「本文はこのままで返答し、完了報告を付けるときは、この出力の2行目を写してください。」が「提出の直前に、本文を変えずに、最終稿だけを標準入力から verify --state-dir … --final - に渡して1回実行してください。」になった）。diff の行、check のほかの使い方、終了コード、lint の行は1字も変わらなかった。source_sha256 の diff の yomiyasu_check.py と check は今のスクリプトの値にした。",
-    "2026-10-16 diff で、推量の印が同じ強さの慎重な言い方に替わっただけの文（かもしれません → 恐れがあります など）を、意味が変わる恐れの候補（文の種類の印）と --fail-on から外したときの確かめ: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、lint、diff、check の行、終了コードは1字も変わらなかった（この組には当たる文がない）。値は作り直さず、source_sha256 の diff の yomiyasu_diff.py だけを今のスクリプトの値にした。"
+    "2026-10-16 diff で、推量の印が同じ強さの慎重な言い方に替わっただけの文（かもしれません → 恐れがあります など）を、意味が変わる恐れの候補（文の種類の印）と --fail-on から外したときの確かめ: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、lint、diff、check の行、終了コードは1字も変わらなかった（この組には当たる文がない）。値は作り直さず、source_sha256 の diff の yomiyasu_diff.py だけを今のスクリプトの値にした。",
+    "2026-10-19 v2.1.0 で、diff に許可・能力の言い方の検査（meaning_risks の kind modality と modality_review）を足し、常体の「保証する」「保証される」と、否定の数が組の原文の文より増えた「〜ことはない」を保証の足しとして出すようにしたときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは diff の5組（25行）と check の5組（23行）だけだった。推敲の48組では2組。raw_ai/01_tech_arch_sonnet_formal → yomiyasu_rewritten/01_tech_arch_sonnet_formal に保証の足しの候補（「事態を防げる」→「処理を止めることはない」）が1件足され、raw_ai/08_essay_retrospective_sonnet_formal → yomiyasu_rewritten/08_essay_retrospective_sonnet_formal に能力の言い方の消えの候補（「担当できるまでになっている」→「担当している」。種類なしなので数えない modality_review）が1件足された。別の文書を並べた組では3組。raw_ai/05_comparison_sonnet_formal → raw_ai/06_spec_draft_sonnet_casual の約束の候補が、常体の「保証する」を保証として拾うようになって promise/added から promise/guarantee に替わり、raw_ai/06_spec_draft_sonnet_default → raw_ai/06_spec_draft_sonnet_formal と raw_ai/06_spec_draft_sonnet_formal → raw_ai/07_code_review_sonnet_casual に能力の言い方の消えの候補（modality_review）が1件ずつ足された。--fail-on meaning-risk の終了コードは、どの組も変わらなかった（01_tech_arch は前から1で、ほかに足した候補は数えない）。lint の行は作り直さず、今の出力と1字も違わないことを確かめた。source_sha256 の diff と check は今のスクリプトの値にした。"
   ]
 }
