@@ -27,34 +27,34 @@ import yomiyasu_diff  # noqa: E402
 PERMISSION_LOST = [("modality", "permission_lost")]
 # (名前, 元の文, 書き直した文, 種類なしで出る候補, formal で出る候補, 種類なしの --fail-on の数, formal の数)
 TABLE = [
-    ("許可→能力1", "同じ Pull Request に含めてよい。", "同じ Pull Request に含められる。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
-    ("許可→能力2", "安全で元に戻せる小さな判断は、仮定を明示して進めてよい。",
-     "安全で元に戻せる小さな判断は、仮定を明示して進められる。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
+    ("許可→能力1", "同じ変更の単位に収めてよい。", "同じ変更の単位に収められる。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
+    ("許可→能力2", "影響の小さい変更は、理由を残して先に入れてよい。",
+     "影響の小さい変更は、理由を残して先に入れられる。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
     ("許可→能力3", "この値は管理者だけが変更してよい。", "この値は管理者だけが変更できる。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
-    ("許可→説明", "`accepted` は、この成果物を公開または完了判断に進めてよいことを表す。",
-     "`accepted` は、この成果物を公開または完了判断に進めることを表す。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
+    ("許可→説明", "`approved` は、この申請を次の承認に進めてよいことを表す。",
+     "`approved` は、この申請を次の承認に進めることを表す。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
     ("許可→言い切り", "この値は管理者が変更してもよい。", "この値は管理者が変更する。", PERMISSION_LOST, PERMISSION_LOST, 1, 1),
-    ("能力→言い切り", "ほかの完了条件を満たしていればTaskを完了できます。", "ほかの完了条件を満たしていればTaskを完了します。",
+    ("能力→言い切り", "ほかの完了条件を満たしていれば申請を完了できます。", "ほかの完了条件を満たしていれば申請を完了します。",
      [("modality_review", "ability_lost")], [("modality_review", "ability_lost")], 0, 0),
-    ("可能性→言い切り", "同じ文字列でも記録の種類が違う場合がある。", "同じ文字列でも記録の種類が違う。",
+    ("可能性→言い切り", "同じ名前でも中身の形式が違う場合がある。", "同じ名前でも中身の形式が違う。",
      [("certainty_review", "strengthened")], [("certainty", "strengthened")], 0, 1),
-    ("説明→必ず", "どのArtifactを対象にしているかを照合する。", "どのArtifactを対象にしているかを必ず照合する。",
+    ("説明→必ず", "どの版を対象にしているかを照合する。", "どの版を対象にしているかを必ず照合する。",
      [("certainty_review", "strengthened")], [("certainty", "strengthened")], 0, 1),
-    ("説明→保証（敬体）", "実行してよいものだけを実行へ渡します。", "実行してよいものだけが実行されることを保証します。",
+    ("説明→保証（敬体）", "公開してよいものだけを配信へ回します。", "公開してよいものだけが配信されることを保証します。",
      [("promise", "guarantee")], [("promise", "guarantee")], 1, 1),
-    ("説明→保証（常体）1", "両方を通過した値だけを実行へ渡す。", "両方を通過した値だけを実行へ渡すことで、安全な実行を保証する。",
+    ("説明→保証（常体）1", "両方の検査を通った値だけを保存する。", "両方の検査を通った値だけを保存することで、安全な保存を保証する。",
      [("promise", "guarantee")], [("promise", "guarantee")], 1, 1),
     ("説明→保証（常体）2", "設定を変えても結果は変わらない。", "設定を変えても結果が変わらないことを保証する。",
      [("promise", "guarantee")], [("promise", "guarantee")], 1, 1),
-    ("説明→保証（否定の言い切り）", "秘密情報を含む可能性のある設定ファイル全文は複製しません。",
-     "設定ファイル全文は複製しないため、秘密情報が漏れることはありません。", [("promise", "guarantee")], [("promise", "guarantee")], 1, 1),
+    ("説明→保証（否定の言い切り）", "個人情報を含む可能性のあるログの全文は送りません。",
+     "ログの全文は送らないため、個人情報が漏れることはありません。", [("promise", "guarantee")], [("promise", "guarantee")], 1, 1),
     ("許可→義務", "この処理は再実行してよい。", "この処理は再実行しなければならない。",
      [("sentence_type", "marks")], [("sentence_type", "marks")], 1, 1),
-    ("文を分けた再現", "レビューは任意です。監督Codexはレビュー証拠なしに成果物を判断し、ほかの完了条件を満たしていればTaskを完了できます。",
-     "レビューは任意です。監督Codexはレビュー証拠がなくても成果物を判断できます。ほかの完了条件を満たしていれば、Taskを必ず完了します。",
+    ("文を分けた再現", "確認は任意です。担当者は確認の記録なしに成果物を判断し、ほかの完了条件を満たしていれば申請を完了できます。",
+     "確認は任意です。担当者は確認の記録がなくても成果物を判断できます。ほかの完了条件を満たしていれば、申請を必ず完了します。",
      [("certainty_review", "strengthened")], [("certainty", "strengthened")], 0, 1),
-    ("分けない", "レビューは任意です。監督Codexはレビュー証拠なしに成果物を判断し、ほかの完了条件を満たしていればTaskを完了できます。",
-     "レビューは任意です。監督Codexはレビュー証拠なしに成果物を判断し、ほかの完了条件を満たしていればTaskを必ず完了します。",
+    ("分けない", "確認は任意です。担当者は確認の記録なしに成果物を判断し、ほかの完了条件を満たしていれば申請を完了できます。",
+     "確認は任意です。担当者は確認の記録なしに成果物を判断し、ほかの完了条件を満たしていれば申請を必ず完了します。",
      [("certainty_review", "strengthened"), ("modality_review", "ability_lost")],
      [("certainty", "strengthened"), ("modality_review", "ability_lost")], 0, 1),
     # 正しい直し（意味の恐れに出さない）
@@ -219,7 +219,7 @@ class RequestTableTest(unittest.TestCase):
                     self.assertEqual(result["fail_on_meaning_risk_count"], count)
 
     def test_permission_detail(self):
-        result = run("同じ Pull Request に含めてよい。", "同じ Pull Request に含められる。")
+        result = run("同じ変更の単位に収めてよい。", "同じ変更の単位に収められる。")
         self.assertEqual(result["meaning_risks"][0]["detail"], {
             "lost": [{"kind": "許可", "hits": ["てよい"]}], "added": [{"kind": "能力（弱い印）", "hits": ["られる"]}],
             "from": "許可", "to": "能力"})
@@ -229,8 +229,8 @@ class RequestTableTest(unittest.TestCase):
 
     def test_counted_steps_name_the_doc_type(self):
         """formal で数えた確度の段にだけ counted_by を付ける。種類なしでは付けない。"""
-        for before, after in (("同じ文字列でも記録の種類が違う場合がある。", "同じ文字列でも記録の種類が違う。"),
-                              ("どのArtifactを対象にしているかを照合する。", "どのArtifactを対象にしているかを必ず照合する。")):
+        for before, after in (("同じ名前でも中身の形式が違う場合がある。", "同じ名前でも中身の形式が違う。"),
+                              ("どの版を対象にしているかを照合する。", "どの版を対象にしているかを必ず照合する。")):
             with self.subTest(before=before):
                 step = run(before, after, "formal")["meaning_risks"][0]["detail"]["steps"][0]
                 self.assertEqual((step["counted"], step["counted_by"]), (True, "doc_type"))
@@ -245,7 +245,7 @@ class RequestTableTest(unittest.TestCase):
     def test_counted_doc_types(self):
         """事実や仕様を述べる種類だけが数え方を変える。essay、promo、mail、minutes、slides は種類なしと同じ。"""
         self.assertEqual(yomiyasu_diff.COUNTED_TYPES, ("pr", "article", "incident", "proposal", "manual", "formal", "paper"))
-        before, after = "同じ文字列でも記録の種類が違う場合がある。", "同じ文字列でも記録の種類が違う。"
+        before, after = "同じ名前でも中身の形式が違う場合がある。", "同じ名前でも中身の形式が違う。"
         for doc_type in yomiyasu_diff.COUNTED_TYPES:
             self.assertEqual(run(before, after, doc_type)["fail_on_meaning_risk_count"], 1, doc_type)
         for doc_type in ("essay", "promo", "mail", "minutes", "slides"):
@@ -315,13 +315,13 @@ class ExamplesTest(unittest.TestCase):
                 self.assertEqual(result["fail_on_meaning_risk_count"], 0)
 
     def test_human_lines(self):
-        labels = (("同じ Pull Request に含めてよい。", "同じ Pull Request に含められる。", None,
+        labels = (("同じ変更の単位に収めてよい。", "同じ変更の単位に収められる。", None,
                    "- 許可の言い方が消えた（1行目）: 許可（てよい） → 能力（られる）。"),
                   ("古い設定は削除する。", "古い設定は削除してもよい。", None,
                    "- 原文にない許可の言い方（1行目）: なし（断定） → 許可（てもよい）。"),
-                  ("ほかの完了条件を満たしていればTaskを完了できます。", "ほかの完了条件を満たしていればTaskを完了します。", None,
+                  ("ほかの完了条件を満たしていれば申請を完了できます。", "ほかの完了条件を満たしていれば申請を完了します。", None,
                    "- 能力の言い方が消えた（1行目）: 能力（できます） → なし（断定）。--fail-on には数えません"),
-                  ("ほかの完了条件を満たしていればTaskを完了できます。", "ほかの完了条件を満たしていればTaskを完了します。", "formal",
+                  ("ほかの完了条件を満たしていれば申請を完了できます。", "ほかの完了条件を満たしていれば申請を完了します。", "formal",
                    "- 能力の言い方が消えた（1行目）: 能力（できます） → なし（断定）。--fail-on には数えません。原文は「〜できる」"))
         for before, after, doc_type, label in labels:
             with self.subTest(label=label):
@@ -342,7 +342,7 @@ class ContractsTest(unittest.TestCase):
     def test_public_function_takes_doc_type(self):
         """meaning_risks() は doc_type を受け、確度の数え方を diff() とそろえる。type_changes が None なら許可・能力の候補を
         足さず、範囲も作らない。"""
-        before, after = "同じ文字列でも記録の種類が違う場合がある。\n", "同じ文字列でも記録の種類が違う。\n"
+        before, after = "同じ名前でも中身の形式が違う場合がある。\n", "同じ名前でも中身の形式が違う。\n"
         found = yomiyasu_diff.meaning_risks(before, after, type_changes=[], doc_type="formal")
         self.assertEqual([(r["kind"], r["subkind"]) for r in found], [("certainty", "strengthened")])
         found = yomiyasu_diff.meaning_risks(before, after, type_changes=[])

@@ -177,7 +177,7 @@ SUMMARY_HEADING_ONLY = "# 報告\n\n作業は終わりました。\n\n## まと�
 BOLD_ERROR_ONLY = "これは**「重要」**です。\n"
 EMOJI_ONLY = "新作のケーキが並びました\U0001F370\n"
 FRAGMENT_RUN_ONLY = "安い。うまい。早い。\n"
-CLEFT_LIST_ONLY = "書き換えの中で変動したのは、確かさ、引用、語調。\n"
+CLEFT_LIST_ONLY = "書き換えの中で変動したのは、画面、帳票、通知。\n"
 RULE_SAMPLES = {
     "emoji_prohibited": EMOJI_ONLY,
     "fragment_run": FRAGMENT_RUN_ONLY,
