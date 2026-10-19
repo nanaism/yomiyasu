@@ -1124,33 +1124,118 @@ _SHORT_MOCHIRON = re.compile(r"^(もちろん|勿論)、[^。！？!?、「」�
 # 問いや依頼への答えの定型（「もちろん、大丈夫です。」）は先回りの認めではない
 _MOCHIRON_ANSWER = re.compile(r"^(もちろん|勿論)、(大丈夫|構いません|かまいません|いいですよ|いいよ|できます|可能です|です|だ)")
 # 文頭の「〜(連体形)のは、」のあとに名詞を並べ、述語を書かずに終える文（「書き換えで変わったのは、確かさ、引用、語調。」）。
-# 項目は格助詞（を・が・は・に・で・へ・から・まで・より）を含まず、名詞らしい字で終わる。読点だけで並べるなら3つ以上、
-# 「と・や・および」を交えるなら2つ以上。「〜など。」「〜の3つ。」「〜の3点。」で終わる形も当てる。
-# 述語まで書いた文（です、だ、でした、に限る）とダッシュで終わる文は、最後の項目が名詞の字で終わらないので当たらない。
-_CLEFT_LIST_HEAD = r"^[^。！？!?]{0,60}?(?:[るたいうくすつぬむぶぐ]|な)のは、"
-_CLEFT_LIST_NOUN_END = r"[一-龥々〆ヵヶァ-ヴーｦ-ﾟA-Za-z0-9０-９Ａ-Ｚａ-ｚ%％さみ]"
-# 読点だけで区切る項目（項目の中の「と・や」はそのまま項目の字として読む）
-_CLEFT_LIST_COMMA_ITEM = (r"(?:(?!から|より)[^、，,。！？!?「」『』（）()\[\]\sをがはにでへ]){0,14}"
-                          r"(?:" + _CLEFT_LIST_NOUN_END + r"|もの|こと)")
+# 項目は格助詞（を・が・は・に・で・へ・から・まで・より）を含まず、名詞らしい字で終わる。読点（、，・）だけで並べるなら
+# 3つ以上、「と・や・および」を交えるなら2つ以上。「〜など。」「〜の3つ。」「〜の3点。」で終わる形も当てる。
+# 述語まで書いた文（です、だ、でした、に限る）、ダッシュで終わる文、限定の「〜のみ。」「〜だけ。」「〜ばかり。」は、
+# 最後の項目が名詞の字で終わらないので当たらない。
+_CLEFT_LIST_HEAD = r"^(?P<head>[^。！？!?]{0,60}?(?:[るたいうくすつぬむぶぐ]|な|[んい]だ))のは、"
+_CLEFT_LIST_NOUN_END = r"(?:[一-龥々〆ヵヶァ-ヴーｦ-ﾟA-Za-z0-9０-９Ａ-Ｚａ-ｚ%％さ]|(?<!の)み)"
+# 読点だけで区切る項目（項目の中の「と・や」はそのまま項目の字として読む）。動詞から作った名詞（言い回し、流れ、
+# 見直し、書き出し）で終わる項目も認める。
+_CLEFT_LIST_COMMA_ITEM = (r"(?:(?!から|より)[^、，,・。！？!?「」『』（）()\[\]\sをがはにでへ]){0,14}"
+                          r"(?:" + _CLEFT_LIST_NOUN_END + r"|もの|こと|[しきれえげぎちせ]|(?<!ばか)り)")
 # 「と・や・および」でも区切る項目（区切りの語を項目に含めず、区切り方を1つに決める）
-_CLEFT_LIST_MIXED_ITEM = (r"(?:(?!から|より|および)[^、，,。！？!?「」『』（）()\[\]\sをがはにでへとや]){0,14}"
+_CLEFT_LIST_MIXED_ITEM = (r"(?:(?!から|より|および)[^、，,・。！？!?「」『』（）()\[\]\sをがはにでへとや]){0,14}"
                           r"(?:" + _CLEFT_LIST_NOUN_END + r"|もの)")
 _CLEFT_LIST_TAIL = r"(?:など|の[0-9０-９一二三四五六七八九十]+[つ点])?[。！!]?$"
 _CLEFT_LIST_COMMA = re.compile(_CLEFT_LIST_HEAD + _CLEFT_LIST_COMMA_ITEM
-                               + r"(?:、" + _CLEFT_LIST_COMMA_ITEM + r"){2,}" + _CLEFT_LIST_TAIL)
-_CLEFT_LIST_MIXED = re.compile(_CLEFT_LIST_HEAD + r"(" + _CLEFT_LIST_MIXED_ITEM
-                               + r"(?:(?:、|と|や|および)" + _CLEFT_LIST_MIXED_ITEM + r")+)" + _CLEFT_LIST_TAIL)
+                               + r"(?:[、，・]" + _CLEFT_LIST_COMMA_ITEM + r"){2,}" + _CLEFT_LIST_TAIL)
+_CLEFT_LIST_MIXED = re.compile(_CLEFT_LIST_HEAD + r"(?P<items>" + _CLEFT_LIST_MIXED_ITEM
+                               + r"(?:(?:[、，・]|と|や|および)" + _CLEFT_LIST_MIXED_ITEM + r")+)" + _CLEFT_LIST_TAIL)
 _CLEFT_LIST_JOINER = re.compile(r"[とや]|および")
+_CLEFT_LIST_COMMA_MARK = re.compile(r"[、，・]")
+# コード、リンク、脚注は空白に伏せてあるので、2字以上の空白の並びを名詞の仮の字に置き換え、ほかの空白は除いてから照合する
+_CLEFT_LIST_MASKED_RUN = re.compile(r"\s{2,}")
+_CLEFT_LIST_SPACE = re.compile(r"\s")
+# 「のは」の前の動詞の語幹の漢字の並び（「変動したのは」なら「変動」）
+_CLEFT_LIST_STEM = re.compile(r"[一-龥々〆ヵヶ]+(?=[ぁ-ん]*$)")
+# 直前の文を探すときの文の終わりの字
+_CLEFT_LIST_STOPS = "。！？!?"
 
 
-def _is_cleft_list_ending(sentence):
+def _cleft_list_head(sentence):
+    """「〜のは、A、B、C。」の形なら「のは」の前までを返す。当たらなければ None。"""
     if "のは、" not in sentence:
-        return False
-    if _CLEFT_LIST_COMMA.match(sentence):
-        return True
+        return None
+    sentence = _CLEFT_LIST_SPACE.sub("", _CLEFT_LIST_MASKED_RUN.sub("Ｘ", sentence))
+    comma = _CLEFT_LIST_COMMA.match(sentence)
+    if comma:
+        return comma.group("head")
     mixed = _CLEFT_LIST_MIXED.match(sentence)
+    if not mixed:
+        return None
+    items = mixed.group("items")
+    joiners = len(_CLEFT_LIST_JOINER.findall(items))
     # 読点だけの2項目（「目指したのは、速さ、軽さ。」）は当てない
-    return bool(mixed and _CLEFT_LIST_JOINER.search(mixed.group(1)))
+    if not joiners:
+        return None
+    # 読点がなく「と・や」で1回つなぎ、最後の項目に「の」がある形（「父と母の笑顔」）は、1つの名詞句として当てない
+    if (joiners == 1 and not _CLEFT_LIST_COMMA_MARK.search(items)
+            and "の" in items[_CLEFT_LIST_JOINER.search(items).end():]):
+        return None
+    return mixed.group("head")
+
+
+def _cleft_list_premise(head, previous):
+    """直前の文が問いか、「のは」の前の動詞の語幹の漢字を含めば、前提を書いてあるとみる。"""
+    end = _question_content_end(previous)
+    if end and (previous[end - 1] in "？?" or previous.endswith(("か。", "か"), 0, end)):
+        return True
+    stem = _CLEFT_LIST_STEM.search(head)
+    return bool(stem) and any(char in previous for char in stem.group())
+
+
+def _cleft_list_join(analysis, rows, position, text):
+    """rows[:position] の行を後ろから text の前につなぐ（改行で折り返した文を1つの文として読む）。
+    最後の文が分かるだけ（句点などが2つになるまで）つなぐ。"""
+    marks = sum(map(text.count, _CLEFT_LIST_STOPS))
+    while position and marks < 2:
+        position -= 1
+        piece = _prose_visible_text(analysis, rows[position]["line"]).replace("__", "").replace("*", "").strip()
+        marks += sum(map(piece.count, _CLEFT_LIST_STOPS))
+        text = piece + text
+    return text
+
+
+def _cleft_list_previous(analysis, line_no, before):
+    """「〜のは、」の文の直前の文。同じ段落の前の文、なければ前の段落の最後の文、なければ直前の見出し。
+
+    before はその行で「〜のは、」の文より前にある字。表、コード、引用などを挟んだときは前の文はないとみる。"""
+    blocks = analysis["blocks"]
+    places = analysis.get("_cleft_list_places")
+    if places is None:
+        places = analysis["_cleft_list_places"] = {
+            row["line"]: (number, position) for number, block in enumerate(blocks)
+            if block["kind"] in ("paragraph", "list") for position, row in enumerate(block["lines"])}
+    number, position = places[line_no]
+    text = _cleft_list_join(analysis, blocks[number]["lines"], position, before)
+    end = max(map(text.rfind, _CLEFT_LIST_STOPS))
+    if end >= 0:
+        return _last_context_sentence(text[:end + 1])
+    if not number or blocks[number - 1]["kind"] not in ("paragraph", "list", "heading"):
+        return ""
+    rows = blocks[number - 1]["lines"]
+    return _last_context_sentence(_cleft_list_join(analysis, rows, len(rows), ""))
+
+
+def _has_cleft_list_ending(analysis, line_no, contexts, line_sentences, filler_patterns):
+    """行の文のどれかが、前提を書かずに「〜のは、A、B、C。」で終えていれば True。
+
+    contexts は _rule9_context の行の文（引用を伏せた文と、同じブロックの次の文）。引用を伏せた文と伏せていない文の
+    数が同じ行では、前の文を伏せていない文で見る（「」の中の語も前提に数える）。"""
+    for index, (sentence, following) in enumerate(contexts):
+        # 句点で終わらない文は、改行で折り返した文の途中でありうるので、ブロックの最後の文のときだけ当てる
+        if following and not sentence.endswith(("。", "！", "!")):
+            continue
+        head = _cleft_list_head(sentence)
+        # 頭が meta_filler の型の文（「重要なのは、」）は、そちらだけを出す
+        if head is None or any(_may_match_literals(required, sentence) and pattern.search(sentence)
+                               for pattern, _, required in filler_patterns):
+            continue
+        before = line_sentences if len(line_sentences) == len(contexts) else [item[0] for item in contexts]
+        if not _cleft_list_premise(head, _cleft_list_previous(analysis, line_no, "".join(before[:index]))):
+            return True
+    return False
 
 
 # 否定のあとに「でもある」と続ける文（「AではなくBでもある」）は、元の言い方のまま残す
@@ -3016,12 +3101,9 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
                 "message": "評価の語だけの短い文が3つ以上続いています（「効く。重い。安い。」など）。何がどうなのかが前後から分かる場合は、対象と評価を述語までつないでください。分からない場合は主語や理由を作らず、原文を残して書き手に確かめてください。小説の語りや詩など、書き手が意図した表現は残してかまいません。",
                 "snippet": stripped
             })
-        # 「〜のは、A、B、C。」（引用の中は伏せた文で見る）。頭が meta_filler の型の文（「重要なのは、」）は、そちらだけを出す。
-        if "のは、" in plain_text and any(
-                _is_cleft_list_ending(sentence)
-                and not any(_may_match_literals(required, sentence) and pattern.search(sentence)
-                            for pattern, _, required in filler_patterns)
-                for sentence, _ in rule9_context.get(line_no, ())):
+        # 「〜のは、A、B、C。」（引用の中は伏せた文で見る）。直前の文が問いか同じ動詞の漢字を含むときは、前提があるとみて出さない。
+        if "のは、" in plain_text and _has_cleft_list_ending(
+                analysis, line_no, rule9_context.get(line_no, ()), line_sentences, filler_patterns):
             findings.append({
                 "rule": "cleft_list_ending",
                 "line": line_no,
