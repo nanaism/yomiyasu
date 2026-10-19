@@ -180,9 +180,11 @@ class InfoTypeReasonTest(unittest.TestCase):
 
 class DocTypeHelpOpeningTest(unittest.TestCase):
     def test_diff_help_does_not_say_only_kept(self):
+        # v2.1.0: 事実や仕様を述べる種類では --fail-on の数え方が変わるので、「--fail-on は変わりません」を、
+        # 見つけ方は同じで数え方の変わる所を書く文にした
         text = help_text(SCRIPTS / "yomiyasu_diff.py", "-h")
         self.assertNotIn("表示とJSONに残すだけで、差分", text)
-        self.assertIn("表示とJSONに残し、差分、意味が変わる恐れ、規則の見直し候補、--fail-onは変わりません", text)
+        self.assertIn("表示とJSONに残します。差分、意味が変わる恐れ、規則の見直し候補の見つけ方は、どの種類でも同じです。", text)
 
 
 # ---- T4: 記録の diff の summary の見直し候補の数 ----
