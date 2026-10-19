@@ -4,6 +4,7 @@
 from pathlib import Path
 from unittest import mock
 import json
+import re
 import subprocess
 import sys
 import tempfile
@@ -307,19 +308,44 @@ class Contracts(unittest.TestCase):
             self.assertEqual((ROOT / relative).read_bytes(), (ROOT / 'skills/yomiyasu' / relative).read_bytes())
 
     def test_new_detectors_full_rewrite_speed(self):
-        old, new = EXAMPLES['C2']
-        repeats = 60000 // min(len(old), len(new)) + 1
-        old, new = old * repeats, new * repeats
-        full, sides = diff._build_full_diff(old, new, None)
-        groups = diff._sentence_pairs(sides, full)
-        durations = []
-        for _ in range(3):
-            start = time.perf_counter()
-            diff._certainty_risks(sides, groups, [])
-            diff._quote_risks(sides, groups)
-            diff._register_changes(sides, groups, {})
-            durations.append(time.perf_counter() - start)
-        self.assertLess(sorted(durations)[1], 0.3, durations)
+        # 6万字の全面書き換えで、確度・かぎかっこ・文体の検査を動かす。壁時計の決まった秒数だけで見ると、実装が同じでも遅い機械で
+        # 落ちるので、test_v200_diff_full の性能の試験と同じく2つを見る。1つ目は、4分の1の大きさからの時間の伸び（8倍未満。
+        # 大きさの2乗で伸びる処理なら約16倍）。2つ目は、0.3秒の上限を、基準の処理（test_v200_diff_full の pace）の遅さの比で
+        # 延ばした値。時間は CPU 時間で測る（Windows は刻みが粗いので壁時計）。
+        clock = time.perf_counter if sys.platform == "win32" else time.process_time
+        source = (ROOT / "tests" / "test_v200_diff_full.py").read_text(encoding="utf-8")
+        pace_seconds = float(re.search(r"^PACE_SECONDS = ([0-9.]+)$", source, re.M).group(1))
+        start = source.index("# pace は yomiyasu を使わない")
+        end = source.index("\ndef sample(", start)
+        namespace = {}
+        exec(compile("import difflib\nimport re\nfrom bisect import bisect_left\nfrom collections import Counter\n"
+                     + source[start:end], "pace", "exec"), namespace)
+
+        def best_time(work):
+            times = []
+            for _ in range(3):
+                started = clock()
+                work()
+                times.append(clock() - started)
+            return min(times)
+
+        def detectors(size):
+            old, new = EXAMPLES['C2']
+            repeats = size // min(len(old), len(new)) + 1
+            full, sides = diff._build_full_diff(old * repeats, new * repeats, None)
+            groups = diff._sentence_pairs(sides, full)
+
+            def work():
+                diff._certainty_risks(sides, groups, [])
+                diff._quote_risks(sides, groups)
+                diff._register_changes(sides, groups, {})
+            return best_time(work)
+
+        quarter, whole = detectors(15000), detectors(60000)
+        scale = max(1.0, best_time(namespace["pace"]) / pace_seconds)
+        detail = "%.3f秒（4分の1の大きさで %.4f秒）。上限 %.3f秒（0.3秒 × この機械の遅さ %.2f）" % (whole, quarter, 0.3 * scale, scale)
+        self.assertLess(whole, 0.3 * scale, detail)
+        self.assertLess(whole, 8 * quarter, "文書を4倍にすると時間が8倍以上に伸びる（大きさの2乗で伸びる処理の疑い）\n" + detail)
 
 
 class ReviewFixes(unittest.TestCase):
