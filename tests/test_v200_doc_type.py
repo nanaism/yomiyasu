@@ -134,11 +134,12 @@ _DETECTOR_HELP = ("文体の硬化の検査は incident、formal、paper のと�
                   "勢いの検査の見出しに数えます。")
 # 2回目の反証の直し（反証で見つけた例）: 種類で硬化と勢いの level と promo の見出しの数え方が
 # 変わるので、冒頭の「残すだけで」を「残し、」にした
-# v2.1.0: 事実や仕様を述べる種類では、能力の言い方の消えと確度の2つの強まりを --fail-on に数えるようにしたので、
+# v2.1.0: 事実や仕様を述べる種類では、確度の2つの強まりを --fail-on に数えるようにしたので、
 # 「--fail-on は変わりません（意味の検査はどの種類でも同じに行います）」を、変わる所を書く文にした
-_COUNTED_HELP = ("pr、article、incident、proposal、manual、formal、paper（事実や仕様を述べる種類）では、能力の言い方の消えと、"
-                 "「場合がある」「ことがある」を消した言い切り、断定に「必ず」などを足した書き換えを --fail-on に数えます"
-                 "（意味の検査で種類によって変わるのはこの3つだけです）。")
+# （能力の言い方の消えは、実際の推敲で誤検知が多かったので、どの種類でも数えない候補にとどめた）
+_COUNTED_HELP = ("pr、article、incident、proposal、manual、formal、paper（事実や仕様を述べる種類）では、"
+                 "「場合がある」「ことがある」を消した言い切りと、断定に「必ず」などを足した書き換えを --fail-on に数えます"
+                 "（意味の検査で種類によって変わるのはこの2つだけです）。")
 DIFF_DOC_TYPE_HELP = ("文書の種類（値は yomiyasu_lint.py と同じ）。表示と JSON に残します。差分、意味が変わる恐れ、規則の見直し候補の"
                       "見つけ方は、どの種類でも同じです。" + _COUNTED_HELP + _DETECTOR_HELP + "mail だけ敬語の度合いを検査します。値: "
                       + DOC_TYPE_CHOICES + "。")
@@ -153,10 +154,11 @@ CHECK_READER_HELP = "想定する読者の知識。lint と diff に渡し、記
 # 9.3 と 9.4 の1行
 LINT_NO_SKIP = "この種類で外す規則はありません。"
 LINT_READER_NOTE = "読者では候補を変えていません。"
-DIFF_CONTEXT_TAIL = "差分と意味が変わる恐れは、種類と読者によらず同じ規則で出しています。"
+# v2.1.0: 事実や仕様を述べる種類では数える候補が変わるので、「同じ規則で出しています」を、候補の見つけ方が同じという文にした
+DIFF_CONTEXT_TAIL = "候補の見つけ方は種類と読者によらず同じです。"
 # v2.1.0: 事実や仕様を述べる種類を指定したときだけ、その後ろに足す文
-DIFF_COUNTED_TAIL = ("この種類では、能力の言い方の消えと、「場合がある」「ことがある」を消した言い切り、断定に「必ず」などを"
-                     "足した書き換えも --fail-on に数えます。")
+DIFF_COUNTED_TAIL = ("この種類では、「場合がある」「ことがある」を消した言い切りと、断定に「必ず」などを足した書き換えも"
+                     " --fail-on に数えます。")
 LINT_HEADER = [
     "表現・書式の検査を実行しました。",
     "見直し候補: {}件",
@@ -819,9 +821,9 @@ class OptionTest(DocTypeCase):
         diff の詰めの直しで、硬化の参考に incident を足し、promo 以外の種類では勢いの
         絵文字と見出しを参考にした（候補ごとの level）。promo では、番号つき項目の行と太字だけの行も勢いの見出しの字数に数える
         （反証で見つけた例）ので、promo だけは見出しの字数と見出しの候補を除いて比べ、違いがそこだけであることを見る。
-        v2.1.0 で、事実や仕様を述べる種類（COUNTED_TYPES。ここでは pr、formal、incident）では、能力の言い方の消え
-        （modality_review → modality）と、確度の2つの段（"counted_by": "doc_type"）を --fail-on に数えるようにした。
-        候補の位置と中身は同じなので、その2つを種類なしの形に戻してから比べ、違いがそこだけであることを見る。"""
+        v2.1.0 で、事実や仕様を述べる種類（COUNTED_TYPES。ここでは pr、formal、incident）では、確度の2つの段
+        （"counted_by": "doc_type"）を --fail-on に数えるようにした。候補の位置と中身は同じなので、その段を種類なしの形に
+        戻してから比べ、違いがそこだけであることを見る（能力の言い方の消えは、どの種類でも数えない modality_review のまま）。"""
         pairs = list(PAIRS_22) + [((CORPUS / a).read_text(encoding="utf-8"), (CORPUS / b).read_text(encoding="utf-8"))
                                   for a, b in corpus_pairs()[:48]]
         options = ({"doc_type": "slides", "reader": "general"}, {"doc_type": "essay", "reader": "expert"},
@@ -857,8 +859,6 @@ class OptionTest(DocTypeCase):
             risks = []
             for risk in result["meaning_risks"]:
                 risk = copy.deepcopy(risk)
-                if (risk["kind"], risk["subkind"]) == ("modality", "ability_lost"):
-                    risk["kind"] = "modality_review"
                 if risk["kind"] in ("certainty", "certainty_review"):
                     for step in risk["detail"]["steps"]:
                         if step.pop("counted_by", None) == "doc_type":

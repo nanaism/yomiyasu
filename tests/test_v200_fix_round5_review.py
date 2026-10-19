@@ -238,12 +238,13 @@ class KnownLimitsRound5ReviewTest(unittest.TestCase):
         """評価の語や（下書き）を消した推敲、範囲の言い換え、する側と受ける側の交代、「にくい」を否定にした
         推敲は、意味が変わる恐れに出ない。「にくい」でなく肯定を否定にした推敲は否定の候補になる。
         v2.1.0 で、できる → している（能力の言い方の消え）は、数えない候補（modality_review）として出すようにした。
-        事実や仕様を述べる種類（formal など）では数える（modality）。"""
+        事実や仕様を述べる種類（formal など）でも数えない。"""
         before, after = "見習いは一人で検品を担当できるまでになっている。", "見習いは一人で検品を担当している。"
         self.assertEqual(risk_kinds(before, after), ["modality_review/ability_lost"])
         self.assertEqual(result_of(before, after)["fail_on_meaning_risk_count"], 0)
         formal = result_of(before, after, "formal")
-        self.assertEqual([(r["kind"], r["subkind"]) for r in formal["meaning_risks"]], [("modality", "ability_lost")])
+        self.assertEqual([(r["kind"], r["subkind"]) for r in formal["meaning_risks"]], [("modality_review", "ability_lost")])
+        self.assertEqual(formal["fail_on_meaning_risk_count"], 0)
         cases = (
             ("既定の設定で記録、通知、集計が容易である。", "既定の設定で記録し、通知し、集計できる。"),
             ("# 帳票の出力の手順（下書き）\n\n本文。", "# 帳票の出力の手順\n\n本文。"),
