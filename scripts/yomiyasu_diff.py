@@ -5386,11 +5386,11 @@ def _logic_risks(sides, changes):
 
 # ---- 数に付いた概数と範囲の印（kind number_qualifier）----
 # 同じ数（値と単位が同じ。_find_numbers の key）の前後の印が、組の文で消えたり増えたりしたら出す。「約120人 → 120人」は概数を
-# 数えた数に、「100人以上 → 100人」は範囲を1つの数に変える。印は3つの家族に分ける。概数（約、およそ、ほど、程度、前後、
-# くらい、ごろ など）、下限（以上、以降、超、を超える、を上回る）、上限（以下、以内、以前、未満、を下回る、を超えない）。
-# 同じ家族の中の言い換え（約120人 → 120人ほど、3日以内 → 3日以下）は出さない。下限と上限は、その数を含むか（以上・以下・以内・
-# 以降・以前）含まないか（超、未満、を超える、を上回る、を下回る）も比べ、入れ替わったら（以上 → 超、以下 → 未満）出す。
-# 下限と上限の入れ替わり（以上 → 以下）も出す。数と印はすぐ隣り合うものだけを見る（約束、程度の差、前後関係、文末の「以上です」、
+# 数えた数に、「100人以上 → 100人」は範囲を1つの数に変える。印は家族に分ける。概数（約、およそ、ほど、程度、前後、
+# くらい、ごろ など）、下限（以上、以降、超）、上限（以下、以内、以前、未満）、動詞の範囲の言い方（を超える、を上回る、を下回る。
+# 下限と上限のどちらとも同じとみなす）。同じ家族の中の言い換え（約120人 → 120人ほど、3日以内 → 3日以下）は出さない。
+# 下限と上限は、その数を含むか（以上・以下・以内・以降・以前）含まないか（超、未満）も比べ、入れ替わったら（以上 → 超、
+# 以下 → 未満）出す。下限と上限の入れ替わり（以上 → 以下）も出す。数と印はすぐ隣り合うものだけを見る（約束、程度の差、前後関係、文末の「以上です」、
 # 「以下のとおり」「以上の3点」のような、数に付かない語は見ない）。数の前の「約」は、直前が漢字なら見ない（契約3件、予約2件）。
 # 範囲（3〜5日、3日から5日）は、まとまりの数の印を合わせて1つにする（約3〜5日 → 3〜5日程度 を同じ概数にする）。
 # 相手の側の、同じ数のすぐ隣の、印に近い語（まで、最大、上限、少なくとも、最低、規模）と、相手の文の、見積もりを言う語
@@ -5409,11 +5409,10 @@ _QUALIFIER_AFTER = re.compile(
     r"|弱(?![" + _QUALIFIER_KANJI + r"いくかさめまっ])|強(?![" + _QUALIFIER_KANJI + r"いくかさめまっ]))"
     r"|(?P<upper_in>以下|以内|以前)|(?P<lower_in>以上|以降|以後)"
     r"|(?P<lower_ex>超え|超(?![過" + _QUALIFIER_KANJI + r"]))|(?P<upper_ex>未満)"
-    r"|(?P<upper_vn>を超[えさ](?:な|ず|ませ|ぬ)|を上回(?:らな|らず|りませ))|(?P<lower_vn>を下回(?:らな|らず|りませ))"
-    r"|(?P<lower_vb>を超[えすし]|を上回)|(?P<upper_vb>を下回))")
-# 動詞の言い方（を超える、を上回る、を下回る、を超えない）は家族だけを持ち、含むかは比べない（「2秒を超え → 2秒以上かかり」の
-# ように、文章では含むかを気にせずに言い換えることが多い。測って決めた）
-_QUALIFIER_VERB = {"lower_vb": "lower_verb", "lower_vn": "lower_verb", "upper_vb": "upper_verb", "upper_vn": "upper_verb"}
+    r"|(?P<bound_verb>を超[えすさし]|を上回|を下回))")
+# 動詞の言い方（を超える、を上回る、を下回る）は、範囲の印があることだけを見る（bound の家族）。下限か上限かは、あとの打ち消し
+# （を超えて使えません、を下回らない）で入れ替わり、印のすぐ隣だけでは決まらないので、下限と上限のどちらとも同じとみなす。
+# 含むかも比べない（「2秒を超え → 2秒以上かかり」のように、文章では含むかを気にせずに言い換えることが多い。測って決めた）
 # 数のすぐ前の印（直前の字を見る範囲は _QUALIFIER_BEFORE_REACH）
 _QUALIFIER_BEFORE = re.compile(r"(?:(?P<approx>約|およそ|おおよそ|凡そ|概ね|おおむね|ほぼ|推定|大体|だいたい))"
                                r"(?:で|、)?[ 　]*\*{0,2}$")
@@ -5433,10 +5432,11 @@ _QUALIFIER_SENTENCE = {
     "lower": re.compile(r"以上|以降|超え|超す|超し|超過|上回|少なくとも|最低|下限"),
     "upper": re.compile(r"以下|以内|未満|下回|上限|最大|最長|超えな|超えず|超えませ|まで"),
 }
-_QUALIFIER_FAMILIES = ("approx", "lower", "upper")
+_QUALIFIER_FAMILIES = ("approx", "lower", "upper", "bound")
+_QUALIFIER_BOUNDS = frozenset(("lower", "upper", "bound"))
 _QUALIFIER_LABELS = {"approx": "概数", "lower_in": "下限（その数を含む）", "lower_ex": "下限（その数を含まない）",
-                     "upper_in": "上限（その数を含む）", "upper_ex": "上限（その数を含まない）", "lower_verb": "下限",
-                     "upper_verb": "上限"}
+                     "upper_in": "上限（その数を含む）", "upper_ex": "上限（その数を含まない）",
+                     "bound_verb": "範囲（を超える・を下回る など）"}
 _QUALIFIER_STRICT = frozenset(("lower_in", "lower_ex", "upper_in", "upper_ex"))
 
 
@@ -5470,7 +5470,7 @@ def _qualifier_marks(text, start, end, number):
         word = found.group(found.lastgroup)
         if seismic and word in ("弱", "強"):
             continue      # 震度5弱、震度6強（印ではなく、震度の段階の名前）
-        names.add(_QUALIFIER_VERB.get(found.lastgroup, found.lastgroup))
+        names.add(found.lastgroup)
         words.append(word)
     near_after = _QUALIFIER_NEAR_AFTER.match(text, at, end)
     if near_after is not None:
@@ -5510,12 +5510,19 @@ def _qualifier_states(sides, side, sentence, numbers):
 def _qualifier_change(old_names, new_names, old_near, new_near, old_words, new_words):
     """1つの数の印の比べ。(消えた家族, 増えた家族, 含むかが変わった家族) を返す。相手の側の隣の語（near）と、相手の文の
     その家族の語（old_words と new_words。_QUALIFIER_SENTENCE が当たった家族の集合）があれば、その家族は消えた・増えたに
-    しない。含むかは、元と後の両方がその家族の名詞の印（以上、超、以下、未満 など）1つずつのときだけ比べる。"""
+    しない。動詞の言い方（bound）は下限と上限のどちらとも同じとみなす。含むかは、元と後の両方がその家族の名詞の印（以上、超、
+    以下、未満 など）1つずつのときだけ比べる。"""
     def families(names):
         return set(name.split("_")[0] for name in names)
+
+    def present(family, fams, near, words):
+        has = fams | near | words
+        if family == "bound":
+            return bool(has & _QUALIFIER_BOUNDS)
+        return family in has or (family in _QUALIFIER_BOUNDS and "bound" in fams)
     old_f, new_f = families(old_names), families(new_names)
-    lost = [f for f in _QUALIFIER_FAMILIES if f in old_f and f not in new_f and f not in new_near and f not in new_words]
-    added = [f for f in _QUALIFIER_FAMILIES if f in new_f and f not in old_f and f not in old_near and f not in old_words]
+    lost = [f for f in _QUALIFIER_FAMILIES if f in old_f and not present(f, new_f, new_near, new_words)]
+    added = [f for f in _QUALIFIER_FAMILIES if f in new_f and not present(f, old_f, old_near, old_words)]
     strict = []
     for family in ("lower", "upper"):
         olds = set(name for name in old_names if name.startswith(family))
