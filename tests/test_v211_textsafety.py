@@ -327,7 +327,8 @@ class NonUtf8NameEndToEndTests(_Case):
 
     def test_hook_registers_and_run_finds_it(self):
         output = self.hook({"hook_event_name": "UserPromptSubmit", "prompt": "/yomiyasu " + BAD_NAME})
-        self.assertIn("additionalContext", output)
+        # 登録の知らせは平文で、読めないバイトは \udcff のようなエスケープで書く
+        self.assertIn("原稿 bad-\\udcff.md を登録しました", output)
         self.assertEqual(self.errors_log(), "")
         armed = self.state / "armed"
         entries = [json.loads(p.read_text(encoding="ascii")) for p in armed.glob("*.json")]
