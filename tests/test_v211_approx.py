@@ -17,6 +17,7 @@
 """
 
 from pathlib import Path
+import os
 import subprocess
 import sys
 import tempfile
@@ -508,6 +509,19 @@ class ContractsTest(unittest.TestCase):
         self.assertEqual((ROOT / "scripts" / "yomiyasu_diff.py").read_bytes(),
                          (ROOT / "skills" / "yomiyasu" / "scripts" / "yomiyasu_diff.py").read_bytes())
 
+
+
+class HelpMentionsQualifiersTest(unittest.TestCase):
+    """diff と check run の --help の --fail-on の説明に、数に付いた概数や範囲の印の消えと足しを数えると書いてある。"""
+
+    def test_help_texts(self):
+        root = Path(__file__).resolve().parents[1]
+        for argv in (["scripts/yomiyasu_diff.py", "--help"], ["scripts/yomiyasu_check.py", "run", "--help"]):
+            with self.subTest(argv=argv[0]):
+                out = subprocess.run([sys.executable, "-B"] + argv, cwd=str(root), capture_output=True,
+                                     env=dict(os.environ, COLUMNS="2000"))
+                text = out.stdout.decode("utf-8")
+                self.assertIn("概数や範囲の印（約、ほど、以上、未満 など）が消えたか増えた書き換え", text)
 
 if __name__ == "__main__":
     unittest.main()

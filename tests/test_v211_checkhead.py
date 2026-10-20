@@ -87,6 +87,14 @@ class HeadLinesTest(CheckCase):
         self.assertEqual(lines[3], "diff の候補: 後1行目 number")
         self.assertIn("- 数値が変わった（1行目）: 3日 → 30日", lines)
 
+    def test_heading_structure_candidates_carry_line_numbers(self):
+        """見出しの変化の構造の候補は、最初に挙げた行の番号を添えて並べる。行のない構造の文（見出しの数）は名前だけ。"""
+        a, b, lines = self.run_pair("# 手順\n\n**前提条件**\n\n設定を確認します。\n\n**作業内容**\n\n値を更新します。\n",
+                                    "# 手順\n\n#### 前提条件\n\n設定を確認します。\n\n#### 作業内容\n\n値を更新します。\n")
+        self.assert_head(lines)
+        self.assertEqual(lines[3], "diff の候補: 後3行目 構造、構造")
+        self.assertTrue(any(line.startswith("■ 太字の行を見出しにした（元3行目") for line in lines), lines)
+
     def test_detector_reviews_are_listed(self):
         """lint と diff の規則の候補がなく、勢いの見直し候補だけがあるときも、節の行を一覧に出す。"""
         a, b, lines = self.run_pair(*TONE)

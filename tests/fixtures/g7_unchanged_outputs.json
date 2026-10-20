@@ -2370,14 +2370,14 @@
       "json": "3d178b154c84d9b3"
     },
     "blacklist_ai/02_incident_report_sonnet_casual.md|yomiyasu_rewritten/02_incident_report_sonnet_casual_bl.md": {
-      "run": "acccbcea43a0cefd",
+      "run": "573a04d73fa81bc5",
       "verify": "a93ed3805dad5a94",
       "replay": "ae5826c59c1bd9a1",
-      "rerun": "08c58cad4ee7a5dd",
-      "compose": "e495329e892577e0",
-      "stdin": "5e47e5eff44f916e",
-      "fail_on": "acccbcea43a0cefd",
-      "no_record": "1d265efcd6e7d0b7",
+      "rerun": "77d4606610e49703",
+      "compose": "6a3c5830cbdc7068",
+      "stdin": "ffe6f9fc736c127d",
+      "fail_on": "573a04d73fa81bc5",
+      "no_record": "d1087054f2fdda9d",
       "json": "604ab88408d8a424"
     },
     "raw_ai/02_incident_report_sonnet_default.md|yomiyasu_rewritten/02_incident_report_sonnet_default.md": {
@@ -2414,14 +2414,14 @@
       "json": "b1af3443a40bdacd"
     },
     "blacklist_ai/02_incident_report_sonnet_formal.md|yomiyasu_rewritten/02_incident_report_sonnet_formal_bl.md": {
-      "run": "f2b087ea1aacfa2e",
+      "run": "dda44931683829a0",
       "verify": "aabb1300ed5a4120",
       "replay": "d37165da605f77b7",
-      "rerun": "62a55080e6bf16c6",
-      "compose": "d431b18a8a6e5dc8",
-      "stdin": "728f6a188d8039f8",
-      "fail_on": "f2b087ea1aacfa2e",
-      "no_record": "78485911141bbbc6",
+      "rerun": "d3c020811dfc5b73",
+      "compose": "816fce2eaf3cc39a",
+      "stdin": "db930981c65618f5",
+      "fail_on": "dda44931683829a0",
+      "no_record": "00a67248a869d6cb",
       "json": "674044f75a1edc3b"
     },
     "raw_ai/03_pr_description_sonnet_casual.md|yomiyasu_rewritten/03_pr_description_sonnet_casual.md": {
@@ -3219,6 +3219,7 @@
     "2026-10-19 v2.1.0 の見直しのあとの直しで、能力の言い方の消え（ability_lost）をどの種類でも数えない候補にし、保証の型に「担保する」「保証している」「保証されている」を足したときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは diff の4組（17行）と check の4組（10行）だけだった。3組（raw_ai/06_spec_draft_sonnet_default → raw_ai/06_spec_draft_sonnet_formal、raw_ai/06_spec_draft_sonnet_formal → raw_ai/07_code_review_sonnet_casual、raw_ai/08_essay_retrospective_sonnet_formal → yomiyasu_rewritten/08_essay_retrospective_sonnet_formal）は、能力の言い方の消えの候補（modality_review）の人が読む行から「（事実や仕様を述べる種類の文書では数えます）」を外しただけで、候補と JSON は変わらない。raw_ai/01_tech_arch_sonnet_default → raw_ai/01_tech_arch_sonnet_formal（別の文書を並べた組）は、「整合性は、トランザクショナルアウトボックスパターンで担保する。」が保証の足しの候補（promise/guarantee）になって意味が変わる恐れが2件から3件になった。--fail-on meaning-risk の終了コードは、どの組も変わらなかった（01_tech_arch の組は前から1）。lint の行は作り直さず、今の出力と1字も違わないことを確かめた。source_sha256 の diff と check は今のスクリプトの値にした。",
     "2026-10-20 v2.1.1 で、diff の「構造」の見直し候補（structure）に見出しの変化（見出しの数の増減、太字の行や本文の行を見出しにした、見出しを本文の行にした、見出しの段を変えた）の文を足したときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは diff の16組（80行）と check の16組（28行）だけだった。推敲の48組では2組（blacklist_ai/02_incident_report_sonnet_casual → yomiyasu_rewritten/02_incident_report_sonnet_casual_bl と blacklist_ai/02_incident_report_sonnet_formal → yomiyasu_rewritten/02_incident_report_sonnet_formal_bl）で、どちらも太字の行を ## の見出しにした推敲（見出しの数 1 → 4 と 0 → 5）。この2組は diff の5通りと check の7通りの行が変わった。別の文書を並べた14組は、見出しの数の違う文書を並べた組で「見出しの数が変わった」の1文が足され、diff の5通りと check の run の行が変わった。意味が変わる恐れ、--fail-on の数、終了コード、lint の行は1字も変わらなかった。source_sha256 は作り直していない。",
     "2026-10-20 v2.1.1 で、check run の人が読む出力の3行目のあとに、候補があるときだけ候補の短い一覧（「lint の候補: …」「diff の候補: …」など）と「候補の中身は下の節にあります。出力を切らずに読んでください。」の2行を足したときの作り直し（上の見出しの変化の直しを入れた木で作った）: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の136組（376行）で、どれも run の人が読む出力の使い方（run、rerun、compose、stdin、fail_on、no_record）だけだった。推敲の48組では48組（どの組にも候補がある）。verify と verify --replay の出力、run --json の値、lint と diff の行は変わらなかった。",
-    "2026-10-20 v2.1.1 の見直しのあとの直しで、check run の頭の候補の一覧を行の順に並べてから3件で切り、資料との照合の候補が節の見直し候補の行だけのときに件数でなく名前（資料に基づく補足など）を出すようにしたときの作り直し: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の26組（31行）で、どれも run の人が読む出力の4行目だけだった（推敲の48組では2組）。diff と lint の行、verify と verify --replay の出力、run --json の値は変わらなかった。"
+    "2026-10-20 v2.1.1 の見直しのあとの直しで、check run の頭の候補の一覧を行の順に並べてから3件で切り、資料との照合の候補が節の見直し候補の行だけのときに件数でなく名前（資料に基づく補足など）を出すようにしたときの作り直し: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の26組（31行）で、どれも run の人が読む出力の4行目だけだった（推敲の48組では2組）。diff と lint の行、verify と verify --replay の出力、run --json の値は変わらなかった。",
+    "2026-10-21 v2.1.1 の最後の見直しのあとの直しで、check run の頭の候補の一覧の構造の候補（見出しの変化の文）に、最初に挙げた行の番号を添えて行の順に並べるようにしたときの作り直し: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の2組（12行）で、どれも run の人が読む出力の4行目だけだった（推敲の48組では2組）。diff と lint の行、verify と verify --replay の出力、run --json の値は変わらなかった。"
   ]
 }

@@ -1903,6 +1903,8 @@ _HEAD_LIMIT = 3
 # 候補があるときに、頭の一覧のすぐ下に置く文（出力の頭だけを読んで、下の節を読まずに終えないため）
 _HEAD_NOTE = "候補の中身は下の節にあります。出力を切らずに読んでください。"
 # diff の規則の見直し候補の、頭の一覧での名前（行番号を持たない候補。同じ名前はまとめて件数を付ける）
+# 構造の文の中の行番号（「後3行目」を先に、なければ「元3行目」）
+_HEAD_STRUCTURE_LINE = (re.compile(r"(後)(\d+)行目"), re.compile(r"(元)(\d+)行目"))
 _HEAD_RULE_NAMES = (("structure", "構造"), ("logic", "つながり"), ("endings.changes", "文末の種類"),
                     ("type_changes", "文の種類の印"), ("endings.flags", "文末の立場"), ("bold", "太字"))
 
@@ -1987,6 +1989,20 @@ def _head_lines(ctx, diff_module):
             if key in ("logic", "endings.flags", "bold") and not rewritten_only:
                 continue
             items = endings.get(key.split(".")[1]) if key.startswith("endings.") else result.get(key)
+            if items and key == "structure":
+                # 見出しの変化の文は行番号を持つので、最初に挙げた行を添えて行の順に並べる。行のない文はまとめる
+                plain = []
+                for item in items:
+                    found = None
+                    if isinstance(item, str):
+                        found = _HEAD_STRUCTURE_LINE[0].search(item) or _HEAD_STRUCTURE_LINE[1].search(item)
+                    if found is None:
+                        plain.append(item)
+                        continue
+                    side, number = found.group(1), int(found.group(2))
+                    old_line, new_line = (number, None) if side == "元" else (None, number)
+                    entries.append((_head_where(old_line, new_line) + name, 1, number))
+                items = plain
             if items:
                 entries.append((name + ("{}件".format(len(items)) if len(items) > 1 else ""), len(items), None))
         total = sum(weight for _, weight, _ in entries)
@@ -4496,7 +4512,8 @@ _FAIL_ON_HELP = ("指定した条件に当たれば、記録を残したうえ�
                  "変化、引用の印の変化、確度を強めた書き換え（見込み → 予定、と思われる → 断定など）、原文の状態の語（未定、未確認、"
                  "調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足し、許可の言い方（してよい、"
                  "してもよい、構わない）が消えたか増えた書き換え、関連・相関を述べた原文の文に因果の言い方（因果、原因、引き起こす など）を"
-                 "足した書き換え、選ぶ範囲が入れ替わった書き換え（または・どちらか → 両方・すべて、またはその逆）、"
+                 "足した書き換え、選ぶ範囲が入れ替わった書き換え（または・どちらか → 両方・すべて、またはその逆）、同じ数に付いた"
+                 "概数や範囲の印（約、ほど、以上、未満 など）が消えたか増えた書き換え、"
                  "--doc-type が pr、article、incident、proposal、manual、formal、paper の"
                  "ときは「場合がある」の言い切りと「必ず」などの足し（ここまでは diff の "
                  "--fail-on=meaning-risk と同じ）と、新規作成で資料にない数値。コード・URL・引用ブロックなど変えない箇所の変化と、資料にない名前は数えません。"
