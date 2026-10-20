@@ -162,6 +162,93 @@ class NoHeadingChangeTest(unittest.TestCase):
         self.assertEqual(result["status"], "no_change")
 
 
+class HeadingPairingTest(unittest.TestCase):
+    """見出しの組の作り方。見出しどうしの組を先に作り、同じ位置で段と文字を一緒に変えた見出しも段の変化として出す。"""
+
+    def test_bold_line_with_same_text_does_not_hide_level_change(self):
+        """同じ文字の太字の行を見出しの前に足し、見出しの段も変えた組で、見出しと太字の行を組にしない。"""
+        src = "# 手順\n\n## 準備\n\n道具をそろえる。\n\n## 注意\n\n電源を切る。\n"
+        dst = "# 手順\n\n## 準備\n\n道具をそろえる。\n\n**注意**\n\n手袋を付ける。\n\n### 注意\n\n電源を切る。\n"
+        result = yomiyasu_diff.diff(src, dst)
+        self.assertEqual(heading_entries(result),
+                         ["見出しの段を変えた（元7行目 段2「## 注意」→ 後11行目 段3「### 注意」）"])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+
+    def test_same_text_headings_pair_inside_their_own_hunk(self):
+        """同じ文字の見出しが並ぶ文書でも、同じ hunk の中の見出しどうしを先に組にする。"""
+        src = "## 注意\n\n本文です。\n\n## 注意\n\n本文です。\n"
+        dst = "**注意**\n\n本文です。\n\n### 注意\n\n本文です。\n"
+        self.assertEqual(heading_entries(yomiyasu_diff.diff(src, dst)), [
+            "見出しの数が変わった（2 → 1）。節の分け方が元と同じでよいか見る",
+            "見出しを本文の行にした（元1行目「## 注意」→ 後1行目「**注意**」）",
+            "見出しの段を変えた（元5行目 段2「## 注意」→ 後5行目 段3「### 注意」）",
+        ])
+
+    def test_level_and_unrelated_text_changed_at_same_position(self):
+        """同じ位置の見出しの段と文字を一緒に変えた組は、文字が似ていなくても段の変化として出す。"""
+        src = "# 手順\n\n## 前提\n\n本文です。\n"
+        dst = "# 手順\n\n### 準備するもの\n\n本文です。\n"
+        result = yomiyasu_diff.diff(src, dst)
+        self.assertEqual(heading_entries(result),
+                         ["見出しの段を変えた（元3行目 段2「## 前提」→ 後3行目 段3「### 準備するもの」）"])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+        src = "# 手順\n\n## 前提\n\n本文です。\n\n## 作業\n\n値を更新します。\n"
+        dst = "# 手順\n\n### 必要なもの\n\n本文です。\n\n## 作業\n\n値を更新します。\n"
+        self.assertEqual(heading_entries(yomiyasu_diff.diff(src, dst)),
+                         ["見出しの段を変えた（元3行目 段2「## 前提」→ 後3行目 段3「### 必要なもの」）"])
+
+    def test_unrelated_text_at_same_level_is_not_a_level_change(self):
+        src = "# 手順\n\n## 前提\n\n本文です。\n"
+        dst = "# 手順\n\n## 準備するもの\n\n本文です。\n"
+        self.assertEqual(heading_entries(yomiyasu_diff.diff(src, dst)), [])
+
+    def test_headings_of_other_sections_in_one_hunk_are_not_paired(self):
+        """行の対応がずれて、別の節の見出し（文書の中で何番目かが違う見出し）が同じ hunk に入っても、段の変化にしない。"""
+        src = ("# 手順\n\n### 一. 準備\n道具をそろえる。\n\n### 二. 作業\n値を更新する。\n\n## まとめ\n\n"
+               "以上で作業は終わりです。\n\n次回もこの手順で進めます。\n")
+        dst = ("# 手順\n\n### 一. 道具の準備\n\n道具をそろえます。\n\n### 二. 値の更新\n\n値を更新します。\n\n"
+               "## 今後の進め方\n\n次回もこの手順で進めます。\n")
+        result = yomiyasu_diff.diff(src, dst)
+        hunks = [(h["old_lines"], h["new_lines"]) for h in result["full_diff"]["hunks"]]
+        self.assertIn((["## まとめ"], ["### 二. 値の更新"]), hunks)
+        self.assertEqual(heading_entries(result), [])
+
+    def test_section_rewritten_with_its_body_is_not_paired_by_position(self):
+        """見出しと節の本文をまとめて別の中身に書き換えた組は、文字の似ていない見出しを位置だけで組にしない。"""
+        src = "# 週報\n\n今週は設定を見直しました。\n"
+        dst = "## お知らせ\n\n来週の作業はお休みです。\n"
+        self.assertEqual(heading_entries(yomiyasu_diff.diff(src, dst)), [])
+
+    def test_removed_setext_underline(self):
+        """setext の下線の行だけを消して太字の行に戻した組で、どの行かを挙げる。"""
+        src = "# 手順\n\n**前提**\n----\n\n本文です。\n"
+        dst = "# 手順\n\n**前提**\n\n本文です。\n"
+        self.assertEqual(heading_entries(yomiyasu_diff.diff(src, dst)), [
+            "見出しの数が変わった（2 → 1）。節の分け方が元と同じでよいか見る",
+            "見出しを本文の行にした（元3行目「**前提**」と4行目「----」→ 後3行目「**前提**」）",
+        ])
+        self.assertEqual(heading_entries(yomiyasu_diff.diff(dst, src)), [
+            "見出しの数が変わった（1 → 2）。節の分け方が元と同じでよいか見る",
+            "太字の行を見出しにした（元3行目「**前提**」→ 後3行目「**前提**」と4行目「----」）",
+        ])
+
+    def test_setext_underline_changed_level(self):
+        src = "# 手順\n\n前提\n----\n\n本文です。\n"
+        self.assertEqual(heading_entries(yomiyasu_diff.diff(src, src.replace("----", "===="))),
+                         ["見出しの段を変えた（元3行目 段2「前提」→ 後3行目 段1「前提」）"])
+        self.assertEqual(heading_entries(yomiyasu_diff.diff(src, src.replace("----", "------"))), [])
+
+    def test_fail_on_exit_code_for_new_pairs(self):
+        cases = (("# 手順\n\n## 前提\n\n本文です。\n", "# 手順\n\n### 準備するもの\n\n本文です。\n"),
+                 ("# 手順\n\n**前提**\n----\n\n本文です。\n", "# 手順\n\n**前提**\n\n本文です。\n"))
+        for src, dst in cases:
+            proc = run_cli(src, dst, "--fail-on=meaning-risk", "--json")
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            data = json.loads(proc.stdout)
+            self.assertGreaterEqual(len(heading_entries(data)), 1)
+            self.assertEqual(data["fail_on_meaning_risk_count"], 0)
+
+
 class FailOnTest(unittest.TestCase):
     def test_fail_on_meaning_risk_exit_code_is_unchanged(self):
         """見出しの候補は意味が変わる恐れに数えないので、--fail-on=meaning-risk の終了コードは0のまま。"""
