@@ -646,6 +646,60 @@ def _emoji_matches(text):
             previous_end = matched.end()
     return matches
 
+
+# 文末に固定した規則は、文の終わりの後ろに続く飾りを読み飛ばして判定する。
+# 飾りは、空白（全角も）、絵文字（異体字セレクタ、ZWJ、肌の色、タグ、キーキャップを含む）と、☆♪✓のような記号。
+# 絵文字そのものは emoji_prohibited で別に拾う。句点、感嘆符、疑問符は飾りではないので、除かずに位置だけを詰める
+# （「見ていきましょう🚀！」は「見ていきましょう！」として読み、「見ていきましょう？🚀」は「見ていきましょう？」として読む）。
+# 閉じかっこ（）)】〕〉》］）を飾りに数えるかは規則ごとに決める。閉じかぎと引用符（」』"'）は、語への言及や会話の
+# 引用の終わりのことが多いので、どの規則でも飾りに数えない。
+_END_DECORATION_CHARS = ("\u2600-\u27bf\u2b05-\u2b07\u2b1b\u2b1c\u2b50\u2b55\u231a\u231b\u23e9-\u23fa"
+                         "\u2934\u2935\u3297\u3299\U0001f000-\U0001faff\ufe0e\ufe0f\u200d\U000e0020-\U000e007f")
+_END_DECORATION_CHAR = re.compile("[" + _END_DECORATION_CHARS + "]")
+# 正規表現の中で、文末の前に置ける飾りの並び（空でもよい）
+_END_DECORATION_RUN = r"(?:[0-9#*]\ufe0f?\u20e3|[\s" + _END_DECORATION_CHARS + r"])*"
+_END_CLOSERS = "）)】〕〉》］"
+_END_MARKS = "。．！？!?"
+
+
+def _strip_end_decoration(text, closers=""):
+    """文の終わりの後ろの飾りを除いた文を返す。飾りがなければ text をそのまま返す。
+
+    句点、感嘆符、疑問符は残し、飾りとの並びの順も保つ。closers の字（閉じかっこ）も飾りとして除く。"""
+    position = len(text)
+    marks = []
+    removed = False
+    while position:
+        char = text[position - 1]
+        if char in _END_MARKS:
+            marks.append(char)
+            position -= 1
+        elif char == "\u20e3":
+            removed = True
+            position -= 1
+            if position and text[position - 1] == "\ufe0f":
+                position -= 1
+            if position and text[position - 1] in "0123456789#*":
+                position -= 1
+        elif char.isspace() or char in closers or _END_DECORATION_CHAR.match(char):
+            removed = True
+            position -= 1
+        else:
+            break
+    if not removed:
+        return text
+    return text[:position] + "".join(reversed(marks))
+
+
+def _with_undecorated(sentences, closers=_END_CLOSERS):
+    """文の並びに、文末の飾りを除いた文を足す（飾りのない文はそのまま）。"""
+    result = list(sentences)
+    for sentence in sentences:
+        core = _strip_end_decoration(sentence, closers)
+        if core is not sentence:
+            result.append(core)
+    return result
+
 # 文脈を確かめる語の一覧。含まれていることだけでは誤りとしない。
 SLOP_WORDS = [
     # 質感を装う疑似具体語
@@ -732,7 +786,7 @@ _DIAGRAM_CHARS = re.compile(r"[│┃├┣└┗┌┏┐┓┘┛┬┳┴┻�
 # 短い語を読点で3つ以上並べ、ダッシュで閉じて文を終える形（「速さ、軽さ、静けさ──。」）。文ごとに見る。
 _LIST_ITEM = r"[^、。！？!?\s" + DASH_CHARS + "]{1,12}"
 _DASH_LIST_ENDING = re.compile(
-    r"(?:^|(?<=[。！？!?]))\s*" + _LIST_ITEM + "(?:、[ \t　]*" + _LIST_ITEM + "){2,}[ \t　]*[" + DASH_CHARS + "]+(?:[。．.]|$)")
+    r"(?:^|(?<=[。！？!?]))\s*" + _LIST_ITEM + "(?:、[ \t　]*" + _LIST_ITEM + "){2,}[ \t　]*[" + DASH_CHARS + "]+" + _END_DECORATION_RUN + "(?:[。．.]|$)")
 # 出典ラベル、著者と書名、英語の著者名と書誌情報を手掛かりにする。短い行というだけでは除外しない。
 _ATTRIBUTION_LABEL = re.compile(r"^(?:出典|引用元|著者|Source|Author)\s*[:：]", re.IGNORECASE)
 _ATTRIBUTION_BOOK = re.compile(r"^[一-龥々ァ-ヴーA-Za-z .・'’-]+『[^』]+』(?:[ \t　]*(?:（[^）]*）|\([^)]*\)))*[。.]?$")
@@ -855,7 +909,8 @@ _WH_QUESTION = re.compile(
 
 def _question_content_end(sentence):
     end = len(sentence)
-    while end and (sentence[end - 1].isspace() or sentence[end - 1] in _QUESTION_CLOSERS):
+    while end and (sentence[end - 1].isspace() or sentence[end - 1] in _QUESTION_CLOSERS
+                   or _END_DECORATION_CHAR.match(sentence[end - 1])):
         end -= 1
     return end
 
@@ -924,7 +979,7 @@ _MOMENT_ABSTRACT = (r"(?:品質|価値|信頼|指標|意味|目的|本質|理解
                     r"|情熱|やる気|モチベーション|創造性|(?<!お)それ)(?:は|が|も)")
 _MOMENT_PATTERN = (r"(?:手|目|口|耳)にした瞬間"
                    r"|(?:目的|目標|ゴール|指標|手段)にした瞬間|(?:優先|目指|追求|追い求め)した瞬間"
-                   r"|(?:^|(?<=[。．！？!?]))(?:(?!のは)[^。．！？!?])*?した瞬間(?:だった|でした)(?=[。．！？!?」』）)]|$)"
+                   r"|(?:^|(?<=[。．！？!?]))(?:(?!のは)[^。．！？!?])*?した瞬間(?:だった|でした)(?=" + _END_DECORATION_RUN + r"(?:[。．！？!?」』）)]|$))"
                    r"|した瞬間(?:に|から)?(?:は|も)?[、，,]?"
                    r"(?:(?:わか|分か)(?:る|り|った|ら)|悟|実感|確信|理解(?:する|した|でき)|崩れ|崩壊)"
                    r"|した瞬間(?:に|から)?(?:は|も)?[、，,]?[^、，,。！？!?]{0,40}?"
@@ -1176,8 +1231,8 @@ _NEGATION_NEGATIVE_END = (
 _NEGATION_EXTRA = re.compile(
     r"(?:[^。、]{1,15}(?:では|じゃ)ない。[^。]{0,15}|[^。、]{1,15}(?<!それ)(?<!今)(?<!いつ)(?<!誰)(?<!何)でも、[^。、]{1,15})"
     + _NOT_IDIOM + r"でもない。"
-    + r"(?![^。！？!?]{0,40}" + _NEGATION_NEGATIVE_END + r"[。！!])"
-    + r"[^。！？!?]{1,40}" + _NEGATION_CONCLUSION_END + r"[。！!]")
+    + r"(?![^。！？!?]{0,40}" + _NEGATION_NEGATIVE_END + _END_DECORATION_RUN + r"[。！!])"
+    + r"[^。！？!?]{1,40}" + _NEGATION_CONCLUSION_END + _END_DECORATION_RUN + r"[。！!]")
 # 「これは努力じゃない、仕組みです。」（文ごとに見る）
 _NEGATION_JANAI = re.compile(
     r"^(?:(?:でも|しかし|つまり|ただ|ただし|けれども?|けど|だが|それでも|だから)、)?"
@@ -1293,8 +1348,12 @@ def _has_cleft_list_ending(analysis, line_no, contexts, line_sentences, filler_p
         if following and not sentence.endswith(("。", "！", "!")):
             continue
         head = _cleft_list_head(sentence)
+        # 文末の後ろの飾り（「画面、帳票、通知 🚀」）を除いて読む
+        core = _strip_end_decoration(sentence, _END_CLOSERS)
+        if head is None and core is not sentence:
+            head = _cleft_list_head(core)
         # 頭が meta_filler の型の文（「重要なのは、」）は、そちらだけを出す
-        if head is None or any(_may_match_literals(required, sentence) and pattern.search(sentence)
+        if head is None or any(_may_match_literals(required, sentence) and (pattern.search(sentence) or pattern.search(core))
                                for pattern, _, required in filler_patterns):
             continue
         before = line_sentences if len(line_sentences) == len(contexts) else [item[0] for item in contexts]
@@ -1415,6 +1474,13 @@ def _sentence_end_findings(sentences, source_sentences=None, paragraph_groups=No
             clean = re.sub(r"(?<![。！？\s])[。！？\s]+$", "", s)
         else:
             clean = s[:end]
+        # 文末の後ろの絵文字や空白（「〜です 🚀」）は除いて語尾を見る。閉じかっこと閉じかぎは除かない（会話や補足の終わり）。
+        core = _strip_end_decoration(clean)
+        if core is not clean:
+            end = len(core)
+            while end and (core[end - 1] in "。！？" or core[end - 1].isspace()):
+                end -= 1
+            clean = core[:end]
         end_type = "その他"
         if clean.endswith("です"):
             end_type = "です"
@@ -2504,6 +2570,12 @@ def _has_instruction_residue(sentence, following):
                 or _SCOPE_REFERENCE.search(sentence) or _SCOPE_REFERENCE.search(following))
 
 
+def _has_instruction_residue_core(sentence, following):
+    """文末の後ろの飾り（「〜書いていきます 🚀」）を除いた文で、もう一度確かめる。飾りがなければ確かめない。"""
+    core = _strip_end_decoration(sentence, _END_CLOSERS)
+    return core is not sentence and _has_instruction_residue(core, following)
+
+
 # 短い主語・主題の読点。判定は a〜t の順で、当てはまる除外条件があれば残す。
 _PAUSE_KANJI = r"一-龥々〆ヵヶ"
 _PAUSE_WORD = re.compile(r"[" + _PAUSE_KANJI + r"ぁ-んァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ]")
@@ -3054,7 +3126,8 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
                     "message": "見出しが「Xとは：Y」の形になっています。コロンの後の語句を落とさずに、「Xの仕組みと使い方」のような名詞句にしてください。",
                     "snippet": stripped
                 })
-            if _SUMMARY_HEADING.match(stripped) and metrics["char_count"] < 2000:
+            if ((_SUMMARY_HEADING.match(stripped) or _SUMMARY_HEADING.match(_strip_end_decoration(stripped)))
+                    and metrics["char_count"] < 2000):
                 findings.append({
                     "rule": "short_summary_heading",
                     "line": line_no,
@@ -3113,11 +3186,24 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
             })
 
         # フィラーパターン（文ごとに見て、同じ型は1行1件）
+        # 文末に固定した型（$）は、文末の後ろの飾りを除いた文にも当てる
+        line_cores = None
+        context_cores = None
         for pattern, desc, required in filler_patterns:
+            if not _may_match_literals(required, plain_text):
+                continue
             # Do not change quote handling for any of the pre-existing fillers.
-            filler_sentences = (tuple(sentence for sentence, _ in rule9_context.get(line_no, ()))
-                                if pattern.pattern == _OVERSTATEMENT_PATTERN else line_sentences)
-            if _may_match_literals(required, plain_text) and any(pattern.search(sentence) for sentence in filler_sentences):
+            if pattern.pattern == _OVERSTATEMENT_PATTERN:
+                if context_cores is None:
+                    context_cores = _with_undecorated(tuple(sentence for sentence, _ in rule9_context.get(line_no, ())))
+                filler_sentences = context_cores
+            elif "$" in pattern.pattern:
+                if line_cores is None:
+                    line_cores = _with_undecorated(line_sentences)
+                filler_sentences = line_cores
+            else:
+                filler_sentences = line_sentences
+            if any(pattern.search(sentence) for sentence in filler_sentences):
                 findings.append({
                     "rule": "meta_filler",
                     "line": line_no,
@@ -3132,6 +3218,7 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
                 findings.append({"rule": rule, "line": line_no, "severity": "info", "message": message, "snippet": stripped})
 
         if any(_has_instruction_residue(sentence, following)
+               or _has_instruction_residue_core(sentence, following)
                for sentence, following in rule9_context.get(line_no, ())):
             findings.append({
                 "rule": "instruction_residue",
@@ -3144,7 +3231,8 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
         for index, sentence in enumerate(line_sentences):
             if ("もちろん、" not in plain_text and "勿論、" not in plain_text):
                 break
-            if not _SHORT_MOCHIRON.match(sentence) or _MOCHIRON_ANSWER.match(sentence):
+            if (not (_SHORT_MOCHIRON.match(sentence) or _SHORT_MOCHIRON.match(_strip_end_decoration(sentence, _END_CLOSERS)))
+                    or _MOCHIRON_ANSWER.match(sentence)):
                 continue
             if _ends_with_question(line_sentences[index - 1] if index else _last_context_sentence(sentence_before_line)):
                 continue
@@ -3185,7 +3273,7 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
         elif (line_no in extra_negation_lines
               or ("でもない。" in plain_text and _NEGATION_EXTRA.search(plain_text))
               or ("じゃない、" in plain_text
-                  and any(_NEGATION_JANAI.match(sentence) for sentence in line_sentences))):
+                  and any(_NEGATION_JANAI.match(sentence) for sentence in _with_undecorated(line_sentences)))):
             negation_message = "否定を重ねてから言い切る構文（「AでもBでもない。Cだ。」「Aじゃない、Bです。」）が検出されました。否定している内容を誰も主張していないなら、言い切る文だけにしてください。読み手の思い込みを正す否定なら、一つの文にまとめて残してください。直前で挙げた二つ（問いなど）を両方とも打ち消すだけなら、「どちらでもない。」（敬体なら「どちらでもありません。」）と短く受けてもかまいません。打ち消すほかに、問いにない強めの語や限定、なぜ違うかの説明を含む否定は短くしないでください。"
         else:
             negation_message = None
