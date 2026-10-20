@@ -10,6 +10,8 @@
   名前を作らずに済む関数の試験は、どこでも動く。
 - run --stdin は、ファイル入力と同じく LF、CRLF、CR のどの改行でも区切りの行を見つける（2.1.0 は CR だけの入力を
   区切りの誤りとして止めていた）。CRLF と LF の入力は、各部分のバイト列も記録も前と同じ。
+- check run の頭の候補の一覧は、行のある項目を行の順に並べてから上限で切る。資料との照合の候補が節の見直し候補の行だけの
+  ときは、件数だけでなく候補の名前（資料に基づく補足など）を出す。2行目、3行目、--json は変えない。
 
 文はすべて合成。
 """
@@ -388,6 +390,64 @@ class StdinLineEndTests(_Case):
         pieces, problem = check._split_stdin(data)
         self.assertIsNone(pieces)
         self.assertIn("3行目", problem)
+
+
+class RunHeadTests(_Case):
+    """check run の4行目（候補の短い一覧）の並びと、資料との照合の候補の名前。"""
+
+    def run_lines(self, *args):
+        result = self.check("run", "--no-record", *args)
+        self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8", "replace"))
+        return result.stdout.decode("utf-8").splitlines()
+
+    def write(self, name, text):
+        (self.project / name).write_text(text, encoding="utf-8")
+
+    def test_head_part_orders_lines_before_limit(self):
+        """行のある項目を行の順に先に並べてから上限で切る。行のない項目と同じ行の項目は元の順のまま。"""
+        check = load(CHECK, "_yomiyasu_check_v211_textsafety_head")
+        entries = [("後7行目 number", 1, 7), ("後3行目 choice", 1, 3), ("元の文にない語", 1, None),
+                   ("元2行目 negation", 1, 2), ("後3行目 quote", 1, 3)]
+        self.assertEqual(check._head_part("diff の候補", entries, 5),
+                         "diff の候補: 元2行目 negation、後3行目 choice、後3行目 quote（ほか2件）")
+        self.assertEqual(check._head_part("diff の候補", [("消えた語", 1, None), ("後9行目 number", 1, 9)], 2),
+                         "diff の候補: 後9行目 number、消えた語")
+
+    def test_diff_candidates_in_line_order(self):
+        """足した kind（choice など）の候補が、前の行でも、既存の kind の候補のあとに回らない。"""
+        self.write("o.md", "# 手順\n\n設定はファイルか環境変数で渡します。\n\n手順を順に進めます。\n\n処理は3秒で終わります。\n")
+        self.write("r.md", "# 手順\n\n設定はファイルと環境変数の両方で渡せます。\n\n手順を順に進めます。\n\n処理は30秒で終わります。\n")
+        lines = self.run_lines("--source", "o.md", "--final", "r.md")
+        head = lines[3]
+        self.assertIn("後3行目 choice", head)
+        self.assertIn("後7行目 number", head)
+        self.assertLess(head.index("後3行目 choice"), head.index("後7行目 number"))
+
+    def test_materials_review_line_is_named(self):
+        """照合の候補が「資料に基づく補足」の行だけのとき、件数だけでなく名前を出す。件数は照合の candidate_count と合う。"""
+        self.write("a.md", "リリースは来週です。\n")
+        self.write("m.md", "リリースは10月27日、担当は佐藤です。\n")
+        self.write("b.md", "リリースは10月27日です。担当は鈴木です。\n")
+        args = ("--source", "a.md", "--material", "m.md", "--final", "b.md")
+        lines = self.run_lines(*args)
+        self.assertTrue(lines[2].endswith("資料との照合（資料1件）資料にない数値・名前0件"), lines[2])
+        self.assertTrue(lines[3].endswith("。資料との照合の候補: 資料に基づく補足"), lines[3])
+        self.assertIn("- 資料に基づく補足の候補: 10月、27日、担当", lines)
+        result = json.loads(self.check("run", "--no-record", "--json", *args).stdout)
+        self.assertEqual((result["materials"]["candidate_count"], result["materials"]["meaning_risk_count"]), (1, 0))
+
+    def test_materials_names_follow_ground_count(self):
+        """名前の付け方は ground の candidate_count の数え方と同じ（新規作成の資料にない語、確度の語、推敲の補足）。"""
+        check = load(CHECK, "_yomiyasu_check_v211_textsafety_materials")
+        diff = load(ROOT / "scripts" / "yomiyasu_diff.py", "_yomiyasu_diff_v211_textsafety_materials")
+        cases = (("値は2秒です。\n", ["値は2秒の予定です。\n"], "値は1秒です。\n"),
+                 ("接続の再試行について書く。\n再試行は最大3回です。\n", ["接続の再試行は未確認です。\n"], None),
+                 ("値は2秒です。\n", ["値は2秒です。\n"], "値は2秒です。\n"))
+        for final, materials, original in cases:
+            with self.subTest(final=final, original=original):
+                result = diff.ground(final, materials, original)
+                names = check._materials_line_names(result)
+                self.assertEqual(len(result["meaning_risks"]) + len(names), result["candidate_count"])
 
 
 if __name__ == "__main__":

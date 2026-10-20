@@ -1438,7 +1438,7 @@ class TestComposeAndMaterials(CheckCase):
             line1,
             line2,
             "実行した検査: lint（最終稿）候補0件、資料との照合（資料2件→最終稿）資料にない数値・名前1件",
-            "資料との照合の候補: 後4行目 資料にない数値（ほか2件）",
+            "資料との照合の候補: 後4行目 資料にない数値、資料にない語、最終稿にない確度の語",
             RUN_HEAD_NOTE,
             RUN_DISCLAIMER,
             "記録: " + str(self.state / "runs" / run_id / "attempt-1.json"),
