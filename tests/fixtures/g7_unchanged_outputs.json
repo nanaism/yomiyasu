@@ -2304,14 +2304,14 @@
       "json": "624c8551ece008be"
     },
     "blacklist_ai/01_tech_arch_sonnet_casual.md|yomiyasu_rewritten/01_tech_arch_sonnet_casual_bl.md": {
-      "run": "be79d6fe659d1e45",
+      "run": "787825acf38bdc49",
       "verify": "cd177b97cc6f1df8",
       "replay": "a83c2f4beb8f19c0",
-      "rerun": "e4fa1d2dca9d2b76",
-      "compose": "629dc21803bca577",
-      "stdin": "162fe136d2d68391",
-      "fail_on": "1a94c0608e3e8735",
-      "no_record": "defd9512f9fcc10d",
+      "rerun": "4ab1d33c32dcd0dd",
+      "compose": "2176d23e2c76c0f4",
+      "stdin": "463bf45fc53958a4",
+      "fail_on": "4e0c1c9f4694b870",
+      "no_record": "645f380a1fa87128",
       "json": "f531972fba6340dd"
     },
     "raw_ai/01_tech_arch_sonnet_default.md|yomiyasu_rewritten/01_tech_arch_sonnet_default.md": {
@@ -2737,7 +2737,7 @@
       "verify": "4d1f487b9c094142",
       "replay": "9fabedc36a7da6f4",
       "rerun": "3c6580905d9f77a5",
-      "compose": "edd21b40e4f3ce07",
+      "compose": "9aa6bbca88247223",
       "stdin": "a12b1404a0b3ded2",
       "fail_on": "99868b6a3a4d2034",
       "no_record": "53cf080c16f14430",
@@ -2969,11 +2969,11 @@
       "verify": "476f5ffd75c10ce2"
     },
     "edge_cases/edge_tokasu_28.md|edge_cases/edge_v111_keep_01.md": {
-      "run": "e7c6ddb293632937",
+      "run": "9454ead542cf05ab",
       "verify": "04fc68c172b13d09"
     },
     "edge_cases/edge_v111_keep_01.md|edge_cases/edge_waru_29.md": {
-      "run": "bc6e8ffcbe3de916",
+      "run": "780f2e63d5ca2bc3",
       "verify": "6495a52c536e6a41"
     },
     "edge_cases/edge_waru_29.md|edge_cases/edge_waru_30.md": {
@@ -3017,11 +3017,11 @@
       "verify": "11a171ce6ca4e4cf"
     },
     "human/human_doc_10.md|human/human_doc_11.md": {
-      "run": "e438dc40b2a026d6",
+      "run": "e06aa176d1ccdd72",
       "verify": "baedebb4a4606b93"
     },
     "human/human_doc_11.md|human/human_doc_12.md": {
-      "run": "0e54911c100931a5",
+      "run": "a2161ef7bf1f29f7",
       "verify": "967d89d0d6b01274"
     },
     "human/human_doc_12.md|human/human_doc_13.md": {
@@ -3033,15 +3033,15 @@
       "verify": "be913403e716b4d8"
     },
     "human/human_doc_14.md|human/human_doc_15.md": {
-      "run": "fe2cc732dc999cb8",
+      "run": "7381e9800c5c46c5",
       "verify": "a77bf197d710ef0c"
     },
     "human/human_doc_15.md|human/human_doc_16.md": {
-      "run": "44dd2cd07889da93",
+      "run": "e335cf64fdf321de",
       "verify": "a1080d7ed1290490"
     },
     "human/human_doc_16.md|human/human_oga_01.md": {
-      "run": "4d5085bc18f55729",
+      "run": "e1fb419348cf4edc",
       "verify": "da4a1f0aa8a8bfcb"
     },
     "human/human_oga_01.md|human/human_oga_02.md": {
@@ -3057,7 +3057,7 @@
       "verify": "46a72ca90bd2ecc3"
     },
     "human/human_oga_04.md|human/human_oga_05.md": {
-      "run": "ff3dc03e00c2a88f",
+      "run": "ecb4a4e7289030e5",
       "verify": "258fc3a9cd2e4e08"
     },
     "human/human_oga_05.md|human/human_oga_06.md": {
@@ -3065,15 +3065,15 @@
       "verify": "2c6ff4ba3009096b"
     },
     "human/human_oga_06.md|human/human_oga_07.md": {
-      "run": "abd97f36be9572c6",
+      "run": "68066322b12b38ed",
       "verify": "686c0083496a5718"
     },
     "human/human_oga_07.md|human/human_oga_08.md": {
-      "run": "ef0a7b064b5e54fb",
+      "run": "992e75cd872434ec",
       "verify": "9a0505afe5eee6b8"
     },
     "raw_ai/01_tech_arch_sonnet_casual.md|raw_ai/01_tech_arch_sonnet_default.md": {
-      "run": "cf34e4bb6fe1b46f",
+      "run": "e099f052c5863ce3",
       "verify": "6c06e8d8ab046366"
     },
     "raw_ai/01_tech_arch_sonnet_default.md|raw_ai/01_tech_arch_sonnet_formal.md": {
@@ -3081,11 +3081,11 @@
       "verify": "b3583be54e35cbac"
     },
     "raw_ai/01_tech_arch_sonnet_formal.md|raw_ai/02_incident_report_sonnet_casual.md": {
-      "run": "3bd4a9cee42af0e2",
+      "run": "76f6087142047a86",
       "verify": "b1de0824c58ff114"
     },
     "raw_ai/02_incident_report_sonnet_casual.md|raw_ai/02_incident_report_sonnet_default.md": {
-      "run": "512dc99c7fa73d63",
+      "run": "24030a52cf5059d1",
       "verify": "93e1e9347b93854e"
     },
     "raw_ai/02_incident_report_sonnet_default.md|raw_ai/02_incident_report_sonnet_formal.md": {
@@ -3097,7 +3097,7 @@
       "verify": "57c2bf0e41f0b14e"
     },
     "raw_ai/03_pr_description_sonnet_casual.md|raw_ai/03_pr_description_sonnet_default.md": {
-      "run": "53c07749e7346332",
+      "run": "4434b4ee73530bdb",
       "verify": "889334d9062d81c6"
     },
     "raw_ai/03_pr_description_sonnet_default.md|raw_ai/03_pr_description_sonnet_formal.md": {
@@ -3125,31 +3125,31 @@
       "verify": "61760de9ce3ac41a"
     },
     "raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md": {
-      "run": "9869dbe0f75de261",
+      "run": "6488602bd8a39117",
       "verify": "90d748fcf3721a5b"
     },
     "raw_ai/05_comparison_sonnet_formal.md|raw_ai/06_spec_draft_sonnet_casual.md": {
-      "run": "ac4c7b87d2a988ca",
+      "run": "66a6d0506242f0dc",
       "verify": "79554696bc165ce6"
     },
     "raw_ai/06_spec_draft_sonnet_casual.md|raw_ai/06_spec_draft_sonnet_default.md": {
-      "run": "4e8542ad6b816e77",
+      "run": "0d3c309c0508c251",
       "verify": "8ebaab395934846c"
     },
     "raw_ai/06_spec_draft_sonnet_default.md|raw_ai/06_spec_draft_sonnet_formal.md": {
-      "run": "0b1e3a5d681676f9",
+      "run": "24c957ec5e1276df",
       "verify": "b912d9191d4dc4c4"
     },
     "raw_ai/06_spec_draft_sonnet_formal.md|raw_ai/07_code_review_sonnet_casual.md": {
-      "run": "b397495bb62520ad",
+      "run": "543f0021f62ed77b",
       "verify": "f8eeb3aaf6a25a60"
     },
     "raw_ai/07_code_review_sonnet_casual.md|raw_ai/07_code_review_sonnet_default.md": {
-      "run": "23b0baa73d222715",
+      "run": "d53d9425e9d60858",
       "verify": "37b1f061d32d044f"
     },
     "raw_ai/07_code_review_sonnet_default.md|raw_ai/07_code_review_sonnet_formal.md": {
-      "run": "9c12bae3967eb60d",
+      "run": "8671b1dd59f7b71e",
       "verify": "94ed4c39ee72dd31"
     },
     "raw_ai/07_code_review_sonnet_formal.md|raw_ai/08_essay_retrospective_sonnet_casual.md": {
@@ -3157,7 +3157,7 @@
       "verify": "935e0b0a04e450ed"
     },
     "raw_ai/08_essay_retrospective_sonnet_casual.md|raw_ai/08_essay_retrospective_sonnet_default.md": {
-      "run": "81f5a6b235ceac4a",
+      "run": "0c1d49dd70d37ebb",
       "verify": "6248045a0ffdf368"
     },
     "raw_ai/08_essay_retrospective_sonnet_default.md|raw_ai/08_essay_retrospective_sonnet_formal.md": {
@@ -3165,11 +3165,11 @@
       "verify": "92235c5b459a3fe1"
     },
     "raw_ai/08_essay_retrospective_sonnet_formal.md|raw_ai/09_listicle_patterns.md": {
-      "run": "847190c4e094274e",
+      "run": "bda08978fbf6c283",
       "verify": "84df8c0101b5277c"
     },
     "raw_ai/09_listicle_patterns.md|raw_ai/10_essay_fragments.md": {
-      "run": "ade38d108cb3feda",
+      "run": "a538b5e16efd5878",
       "verify": "5499e4f8c774de82"
     }
   },
@@ -3218,6 +3218,7 @@
     "2026-10-19 v2.1.0 で、diff に許可・能力の言い方の検査（meaning_risks の kind modality と modality_review）を足し、常体の「保証する」「保証される」と、否定の数が組の原文の文より増えた「〜ことはない」を保証の足しとして出すようにしたときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは diff の5組（25行）と check の5組（23行）だけだった。推敲の48組では2組。raw_ai/01_tech_arch_sonnet_formal → yomiyasu_rewritten/01_tech_arch_sonnet_formal に保証の足しの候補（「事態を防げる」→「処理を止めることはない」）が1件足され、raw_ai/08_essay_retrospective_sonnet_formal → yomiyasu_rewritten/08_essay_retrospective_sonnet_formal に能力の言い方の消えの候補（「担当できるまでになっている」→「担当している」。種類なしなので数えない modality_review）が1件足された。別の文書を並べた組では3組。raw_ai/05_comparison_sonnet_formal → raw_ai/06_spec_draft_sonnet_casual の約束の候補が、常体の「保証する」を保証として拾うようになって promise/added から promise/guarantee に替わり、raw_ai/06_spec_draft_sonnet_default → raw_ai/06_spec_draft_sonnet_formal と raw_ai/06_spec_draft_sonnet_formal → raw_ai/07_code_review_sonnet_casual に能力の言い方の消えの候補（modality_review）が1件ずつ足された。--fail-on meaning-risk の終了コードは、どの組も変わらなかった（01_tech_arch は前から1で、ほかに足した候補は数えない）。lint の行は作り直さず、今の出力と1字も違わないことを確かめた。source_sha256 の diff と check は今のスクリプトの値にした。",
     "2026-10-19 v2.1.0 の見直しのあとの直しで、能力の言い方の消え（ability_lost）をどの種類でも数えない候補にし、保証の型に「担保する」「保証している」「保証されている」を足したときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは diff の4組（17行）と check の4組（10行）だけだった。3組（raw_ai/06_spec_draft_sonnet_default → raw_ai/06_spec_draft_sonnet_formal、raw_ai/06_spec_draft_sonnet_formal → raw_ai/07_code_review_sonnet_casual、raw_ai/08_essay_retrospective_sonnet_formal → yomiyasu_rewritten/08_essay_retrospective_sonnet_formal）は、能力の言い方の消えの候補（modality_review）の人が読む行から「（事実や仕様を述べる種類の文書では数えます）」を外しただけで、候補と JSON は変わらない。raw_ai/01_tech_arch_sonnet_default → raw_ai/01_tech_arch_sonnet_formal（別の文書を並べた組）は、「整合性は、トランザクショナルアウトボックスパターンで担保する。」が保証の足しの候補（promise/guarantee）になって意味が変わる恐れが2件から3件になった。--fail-on meaning-risk の終了コードは、どの組も変わらなかった（01_tech_arch の組は前から1）。lint の行は作り直さず、今の出力と1字も違わないことを確かめた。source_sha256 の diff と check は今のスクリプトの値にした。",
     "2026-10-20 v2.1.1 で、diff の「構造」の見直し候補（structure）に見出しの変化（見出しの数の増減、太字の行や本文の行を見出しにした、見出しを本文の行にした、見出しの段を変えた）の文を足したときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは diff の16組（80行）と check の16組（28行）だけだった。推敲の48組では2組（blacklist_ai/02_incident_report_sonnet_casual → yomiyasu_rewritten/02_incident_report_sonnet_casual_bl と blacklist_ai/02_incident_report_sonnet_formal → yomiyasu_rewritten/02_incident_report_sonnet_formal_bl）で、どちらも太字の行を ## の見出しにした推敲（見出しの数 1 → 4 と 0 → 5）。この2組は diff の5通りと check の7通りの行が変わった。別の文書を並べた14組は、見出しの数の違う文書を並べた組で「見出しの数が変わった」の1文が足され、diff の5通りと check の run の行が変わった。意味が変わる恐れ、--fail-on の数、終了コード、lint の行は1字も変わらなかった。source_sha256 は作り直していない。",
-    "2026-10-20 v2.1.1 で、check run の人が読む出力の3行目のあとに、候補があるときだけ候補の短い一覧（「lint の候補: …」「diff の候補: …」など）と「候補の中身は下の節にあります。出力を切らずに読んでください。」の2行を足したときの作り直し（上の見出しの変化の直しを入れた木で作った）: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の136組（376行）で、どれも run の人が読む出力の使い方（run、rerun、compose、stdin、fail_on、no_record）だけだった。推敲の48組では48組（どの組にも候補がある）。verify と verify --replay の出力、run --json の値、lint と diff の行は変わらなかった。"
+    "2026-10-20 v2.1.1 で、check run の人が読む出力の3行目のあとに、候補があるときだけ候補の短い一覧（「lint の候補: …」「diff の候補: …」など）と「候補の中身は下の節にあります。出力を切らずに読んでください。」の2行を足したときの作り直し（上の見出しの変化の直しを入れた木で作った）: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の136組（376行）で、どれも run の人が読む出力の使い方（run、rerun、compose、stdin、fail_on、no_record）だけだった。推敲の48組では48組（どの組にも候補がある）。verify と verify --replay の出力、run --json の値、lint と diff の行は変わらなかった。",
+    "2026-10-20 v2.1.1 の見直しのあとの直しで、check run の頭の候補の一覧を行の順に並べてから3件で切り、資料との照合の候補が節の見直し候補の行だけのときに件数でなく名前（資料に基づく補足など）を出すようにしたときの作り直し: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の26組（31行）で、どれも run の人が読む出力の4行目だけだった（推敲の48組では2組）。diff と lint の行、verify と verify --replay の出力、run --json の値は変わらなかった。"
   ]
 }
