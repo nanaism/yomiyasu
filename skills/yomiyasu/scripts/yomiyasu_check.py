@@ -987,10 +987,15 @@ def _split_material(item, first_index):
         blocks.append(block)
     return blocks, None
 
+_LINE_END = re.compile(b"\r\n|\r|\n")
+
+
 def _split_stdin(data, with_labels=False):
     """区切りの行で標準入力を分ける。([(役割, バイト列)], None) か (None, 理由)。
 
-    各部分は、区切りの行の次のバイトから、次の区切りの行の先頭まで（末尾の改行を含む）。先頭の BOM は1つ外す。"""
+    各部分は、区切りの行の次のバイトから、次の区切りの行の先頭まで（末尾の改行を含む）。先頭の BOM は1つ外す。
+    行の終わりは、ファイル入力の decode_source と同じく LF、CRLF、CR のどれでもよい。各部分のバイト列は書き換えない
+    （CRLF と LF の入力の記録は前と同じになり、CR だけの入力はファイルで渡したときと同じ eol "cr" になる）。"""
     if data.startswith(b"\xef\xbb\xbf"):
         data = data[3:]
     parts = []
@@ -998,12 +1003,10 @@ def _split_stdin(data, with_labels=False):
     position = 0
     number = 0
     while position < len(data):
-        end = data.find(b"\n", position)
-        following = len(data) if end < 0 else end + 1
+        match = _LINE_END.search(data, position)
+        following = len(data) if match is None else match.end()
         number += 1
-        bare = data[position:following].rstrip(b"\n")
-        if bare.endswith(b"\r"):
-            bare = bare[:-1]
+        bare = data[position:following if match is None else match.start()]
         role = _MARKERS.get(bare)
         label = None
         material = _material_marker(bare)
@@ -4049,8 +4052,9 @@ def start_run(state, source_path, final_path=None, run_id=None, session=None, ho
     record["record_digest"] = _record_digest(record)
     _ensure_state(state, default_place)
     _ensure_dir(state, "armed")
-    # 同じ原文の start を直列にする。登録用のロックも同じ方式で取得する。
-    source_lock = _sha256(_armed_place(source.path).encode("utf-8"))
+    # 同じ原文の start を直列にする。登録用のロックも同じ方式で取得する。UTF-8 で読めないバイトを含むファイル名
+    # （'\udcff' として届く）でも止まらないように、ほかのキーと同じく surrogateescape でバイト列にする
+    source_lock = _sha256(_armed_place(source.path).encode("utf-8", "surrogateescape"))
     with _ArmedLock(state, source_lock, source=True):
         with _ArmedLock(state, run_id):
             if os.path.lexists(os.path.join(state, "runs", run_id)) or os.path.lexists(os.path.join(state, "armed", run_id + ".json")):
