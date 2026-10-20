@@ -48,6 +48,29 @@ class SlopTruthDeviceTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual([w for w in slop_words(text) if w in ("真理", "装置")], [])
 
+    def test_metaphor_compounds_still_fire(self):
+        """機器の名前を作る語のほかと結んだ比喩の複合語は、今までどおり拾う。"""
+        for text in ("SNSは承認欲求の増幅装置だ。\n", "会議は、組織の意思を固める思考装置として働く。\n",
+                     "物語は、読者の記憶を呼び起こす演出装置である。\n", "祭りは共同体をつなぐ文化装置だ。\n",
+                     "軍は国家の暴力装置である。\n", "国家のイデオロギー装置として機能する。\n",
+                     "会議は舞台装置にすぎない。\n"):
+            with self.subTest(text=text):
+                self.assertEqual(slop_words(text), ["装置"])
+
+    def test_literal_device_compounds_do_not_fire(self):
+        for text in ("安全装置を外さないでください。\n", "入力装置と測定装置をつなぐ。\n",
+                     "冷却装置と照明装置を点検する。\n", "通信装置と医療装置を区別する。\n",
+                     "実験装置と警報装置を並べる。\n", "放射線装置を導入した。\n", "読み取り装置を置く。\n"):
+            with self.subTest(text=text):
+                self.assertEqual([w for w in slop_words(text) if w == "装置"], [])
+
+    def test_standalone_device_with_operation_does_not_fire(self):
+        """単独の「装置」でも、同じ文で後ろに電源や起動など機器の操作が続くときは、文字どおりの機器として除く。"""
+        for text in ("この装置は、毎朝9時に自動で起動します。\n", "装置の電源を切ってから、ケーブルを抜く。\n",
+                     "点検前に装置の電源を切ること。\n"):
+            with self.subTest(text=text):
+                self.assertEqual([w for w in slop_words(text) if w == "装置"], [])
+
     def test_standalone_metaphor_still_fires(self):
         for text, word in (("走ることを通して、私は人生の真理に気づかされた。\n", "真理"),
                            ("失敗こそが人を育てるという真理がある。\n", "真理"),
@@ -85,6 +108,40 @@ class MomentTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(len(moment_hits(text)), 1)
 
+    def test_abstract_aphorisms_fire(self):
+        """一般論の前置きや、抽象的な主語が続く「〜した瞬間に」は、結果の動詞を問わず拾う。"""
+        for text in ("効率を優先した瞬間に、品質は下がる。\n",
+                     "指標を目的にした瞬間に、それは指標として機能しなくなる。\n",
+                     "完璧を目指した瞬間に、プロジェクトは止まる。\n",
+                     "目標を数字にした瞬間に、本来の目的は消える。\n",
+                     "学びを言語化した瞬間に、理解は深まる。\n",
+                     "売上を目標にした瞬間に、顧客は見えなくなる。\n",
+                     "体験した瞬間にわかる。\n"):
+            with self.subTest(text=text):
+                self.assertEqual(len(moment_hits(text)), 1)
+
+    def test_literal_results_do_not_fire(self):
+        """文字どおりの結果（データが失われる、内容がわかる、すべてが再読み込みされる）が続く時刻の表現は拾わない。"""
+        for text in ("保存せずに終了した瞬間に、編集内容は失われます。\n",
+                     "電源をオフにした瞬間に、未保存のデータは失われる。\n",
+                     "キャッシュを削除した瞬間に、すべてが再読み込みされる。\n",
+                     "ディスクを取り外した瞬間に、ファイルシステムが崩れることがある。\n",
+                     "Enterキーを押した瞬間に、入力した内容がわかる。\n",
+                     "いつ止まるかというと、保存ボタンを押した瞬間です。\n",
+                     "ログを確認した瞬間に原因がわかった。\n",
+                     "接続した瞬間に、認証が失われる不具合がある。\n",
+                     "ファイルを削除した瞬間に、データを失うおそれがある。\n",
+                     "障害が起きたのは、設定を変更した瞬間だった。\n",
+                     "エラーが出たのは、保存ボタンを押した瞬間でした。\n"):
+            with self.subTest(text=text):
+                self.assertEqual(moment_hits(text), [])
+
+    def test_many_moments_in_one_line_stay_fast(self):
+        import time
+        start = time.perf_counter()
+        yomiyasu_lint.lint_text("した瞬間" * 5000 + "\n")
+        self.assertLess(time.perf_counter() - start, 1.0)
+
     def test_one_finding_per_line(self):
         text = "手にした瞬間、すべてが変わった。目にした瞬間に理解した。\n"
         self.assertEqual(len(moment_hits(text)), 1)
@@ -117,6 +174,31 @@ class PublicationVersionTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual(len(findings(text, "translated_term")), 1)
 
+    def test_more_publication_words(self):
+        for text in ("本書の次の版では、索引を足す。\n", "原書の次の版では、図が増える。\n", "訳書の次の版では、注を足す。\n",
+                     "この冊子の次の版では、地図を新しくする。\n", "小冊子の次の版では、地図を足す。\n",
+                     "この写真集は、次の版で判型を変える。\n", "この画集の次の版では、色を見直す。\n",
+                     "この詩集の次の版では、二編を足す。\n", "この作品集の次の版では、図版を足す。\n",
+                     "この論文集の次の版では、注を足す。\n", "この新書の次の版では、章を分ける。\n",
+                     "英和辞書の次の版では、例文を足す。\n", "改訂版を出したあと、次の版で直す。\n",
+                     "文庫化のあと、次の版で解説を足す。\n", "増刷時に、次の版で表記をそろえる。\n"):
+            with self.subTest(text=text):
+                self.assertEqual(findings(text, "translated_term"), [])
+
+    def test_software_compounds_still_fire(self):
+        """出版物の語がソフトウェアの複合語の一部のときは、出版物の語として数えない。"""
+        for text in ("辞書型の扱いは、次の版で変えます。\n", "ユーザー辞書の取り込みは、次の版で対応します。\n",
+                     "システム辞書の更新は、次の版で行います。\n", "辞書ファイルの形式は、次の版で変えます。\n",
+                     "辞書順の並べ替えは、次の版で直します。\n", "日本語の辞書アプリは、次の版で検索を速くする。\n",
+                     "新聞記事のクローラーは、次の版で対応します。\n", "出版社向けの管理画面は、次の版で直します。\n",
+                     "初版リリースでは未対応でしたが、次の版で対応します。\n",
+                     "新版のアプリでは、次の版で設定を見直します。\n", "本APIの次の版では、認証を変えます。\n",
+                     "第2版リリースのあと、次の版で直します。\n", "日本書紀の研究は、次の版でまとめます。\n",
+                     # 全角のピリオドも文の区切りとして見る
+                     "この辞書を更新した．次の版では索引を足す。\n"):
+            with self.subTest(text=text):
+                self.assertEqual(len(findings(text, "translated_term")), 1)
+
     def test_publication_word_after_does_not_hide(self):
         """出版物の語が「版」より後ろにあるときは、除かない。"""
         self.assertEqual(len(findings("次の版では、辞書の読み込みを速くします。\n", "translated_term")), 1)
@@ -129,6 +211,9 @@ class ScanPathTest(unittest.TestCase):
         "プログラムでは真理値を使う。人生の真理に気づいた。安全装置と、つなぐ装置。\n",
         "ボタンを押した瞬間に画面が消える。目的にした瞬間に品質は崩れる。\n",
         "この辞書の次の版では表記を変える。この版では読み込みを速くした。\n",
+        "辞書型の扱いは、次の版で変えます。本書の次の版では、索引を足す。\n",
+        "効率を優先した瞬間に、品質は下がる。電源をオフにした瞬間に、データは失われる。\n",
+        "SNSは承認欲求の増幅装置だ。冷却装置と照明装置を点検する。装置の電源を切る。\n",
     )
 
     def test_narrowed_and_full_scan_agree(self):
