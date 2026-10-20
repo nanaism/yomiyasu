@@ -738,85 +738,255 @@ def _modality_changes(o: str, r: str):
 # ---- 選ぶ範囲と因果の言い方 ----
 # 「AまたはBのどちらか」（どれか一つを選ぶ）と「AとBの両方」（全部を含む）は、入れ替わると文の真偽が逆になる。「関連がある」
 # 「相関がある」を「因果関係がある」「原因である」に変えると、関わりを述べた文が原因と結果を述べる文に強まる。どちらも
-# 許可・能力の言い方と同じく、文の種類の印とは別の表に置き、文の種類の印と同じ範囲（_type_ranges）で種類があるかないかを比べる
+# 許可・能力の言い方と同じく、文の種類の印とは別の表に置き、文の種類の印と同じ範囲（_type_ranges）で比べる
 # （語の抽出の CONTENT は平仮名だけの「または」「どちらか」を拾わないので、決まった語の対で見る）。
-# 選ぶ範囲（kind choice）は、元の範囲にどれか一つの言い方があって全部の言い方がなく、後の範囲に全部の言い方があって
-# どれか一つの言い方がないとき（one_to_all）と、その逆（all_to_one）に出す。同じ側の中の言い換え（または → か、
-# どちらか → いずれか、両方 → どちらも）は種類が変わらないので出さない。因果（kind causality）は、元の範囲に関連・相関の
-# 言い方があって因果の言い方がなく、後の範囲に因果の言い方があるとき（relation_to_cause）に出す。どちらも --fail-on に数える。
+# 選ぶ範囲（kind choice）は、元の範囲にどれか一つの言い方があり、後の範囲で全部の言い方が元より多く、どれか一つの言い方が
+# 残っていないとき（one_to_all）と、元の範囲に全部の言い方があってどれか一つの言い方がなく、後の範囲にどれか一つの言い方が
+# あって全部の言い方が残っていないとき（all_to_one）に出す。同じ側の中の言い換え（または → か、どちらか → いずれか、
+# 両方 → どちらも）は出さない。one_to_all は範囲の中の数で比べるので、変わらずに残る「すべてを保存し」のような全部の言い方は
+# 打ち消し合う。「どちらでも」「どちらからでも」「AでもBでも」（どれを選んでもよい）は、どれか一つの側に残った言い方として扱う。
+# 因果（kind causality）は、元の範囲に関連・相関の言い方があって因果の言い方がなく、後の範囲に因果の言い方があるとき
+# （relation_to_cause）に出す。元の範囲の因果は広く見る（〜による、影響する、〜で起きた、〜のため、理由 など。_LOGIC_PATTERNS の
+# 「因果（広い）」）。どちらも --fail-on に数える。
+# 因果は、範囲のすぐあとに足した文（原文のどの文にも対応しない文。同じ行の2文まで）も後の範囲に含める（文を分けて、原因を
+# 2文目に書いた書き換え）。選ぶ範囲は含めない（足した文の「どちらも無料です」のような全部の言い方と分けられないため）。
 # 「AかB」の「か」は、漢字・片仮名・英字の語の間にあり、あとの語に助詞が続くものだけを当てる。問いの「か」（必要か確認する、
-# 原因か調べる）、何か・誰か・何度か・数回か、「か否か」、数のあとの「か月」「か所」は当てない。「どちらかといえば」
-# 「いずれから」「どれから」、「双方向」「両方向」、「Aとともに」も当てない。「ともに」は「は」「が」「も」のすぐあと
-# （AとBはともに）だけにする。全部の言い方には「AもBも」「どちらの鍵も」の形も入れる。
-# 関連の言い方は、関わりがあると述べる形（関連がある、関連している、相関、関係がある、結びついている、関わりがある）だけに
-# し、「関連する設定」「関連記事」のような名詞を修飾する形と、「成果に結びつく」「成果に結びついている」（因果に近い）は
-# 当てない。「因果関係がある」は関連の言い方にも当たるが、因果の言い方もあるので、元の範囲にあれば出さない。
+# 原因か調べる、設定が有効か管理者に確認する、各端末が最新版か担当者に聞く）、何か・誰か・何度か・数回か、「か否か」、数のあとの
+# 「か月」「か所」は当てない。「どちらかといえば」「いずれから」「どれから」、「双方向」「両方向」、「Aとともに」も当てない。
+# 「ともに」は「は」「が」「も」のすぐあと（AとBはともに）だけにする。全部の言い方には「AもBも」「AにもBにも」「どちらの鍵も」
+# 「二つとも」の形も入れる。「すべて」「全て」「全部」は、選ぶものを指す形（AとBのすべて、すべてを、すべてに）だけを当て、
+# 別の名詞に掛かる「すべての項目」は、原文の「いずれかの項目」のように同じ名詞を選ぶ言い方があるときだけ全部の言い方にする
+# （「全項目」は「すべての項目」と同じ側）。「かつ」「および」は入れない。
+# 関連の言い方は、関わりがあると述べる形（関連がある、関連している、相関がある、関係がある、結びついている、関わりがある、
+# AとBは関連する）だけにし、打ち消し（関係はありません、相関は見られなかった）、問い（関係があるか調べる）、
+# 名詞を修飾する形（関係のある部署、関連性の高い記事、関連する設定、関連記事、相関係数）と、「成果に結びつく」
+# 「成果に結びついている」（因果に近い）は当てない。「因果関係がある」は関連の言い方にも当たるが、因果の言い方もあるので、
+# 元の範囲にあれば出さない。
 _CHOICE_NOUN = r"[一-龥々ァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９]"
+# 「AもBも」の項（「の」でつないだ名詞句。「住民票の写し」のように、漢字のあとの送りがな1字も含める）
+_CHOICE_ITEM = (_CHOICE_NOUN + r"{1,15}(?:[しりきみちえけせてめれ](?<=[一-龥][しりきみちえけせてめれ])(?=[もの]))?")
+_CHOICE_PHRASE = _CHOICE_ITEM + r"(?:の" + _CHOICE_ITEM + r"){0,2}"
+# 「AもBも」の最初の「も」の前（名詞の字か、漢字のあとの送りがな）
+_CHOICE_BEFORE = r"(?:(?<=" + _CHOICE_NOUN + r")|(?<=[一-龥][しりきみちえけせてめれ]))"
+# 関連の言い方の述語。打ち消し（ありません、見られなかった、認められない）、問い（関係があるか調べる）、名詞を修飾する形
+# （関係がある部署）は当てない。「かもしれない」は当てる。
+_RELATION_END = r"(?![一-龥々ァ-ヴー]|か(?!も)|とは(?:言|い)え|とは限ら|わけでは)"
+_RELATION_PRED = (r"(?:が|は|も)?(?:ある" + _RELATION_END + r"|あり(?!ませ|えな)|あった" + _RELATION_END
+                  + r"|(?:見られ|みられ|認められ|指摘され|示され|確認され)(?!な|ず|ませ)"
+                  + r"|(?:強い|深い|高い)" + _RELATION_END + r")")
+_RELATION_STATE = r"(?:(?:いる|いた)" + _RELATION_END + r"|います|おり|いました)"
+# 「〜につながる」の前（漢字か片仮名の語。サーバーやネットワーク、回線などにつながる、ひとつにつながる、のような
+# 接続の意味は除く）
+_CAUSE_LEAD = (r"(?<=[一-龥々ァ-ヴー])"
+               + "".join(r"(?<!{})".format(word) for word in ("サーバー", "ネット", "ネットワーク", "回線", "電源", "環境", "端末",
+                                                             "ホスト", "ポート", "ノード", "機器", "拠点", "外部", "社内",
+                                                             "電話", "窓口", "担当")))
 _LOGIC_PATTERNS = (
     ("どれか一つ", r"または|もしくは|あるいは|どちらか(?!ら|と(?:いえば|言えば|いうと|言うと))|いずれか(?!ら)|どれか(?!ら)"
                  r"|片方(?:だけ|のみ)|択一"
                  r"|か(?<=[一-龥々ァ-ヴーA-Za-zＡ-Ｚａ-ｚ]か)(?<![何誰数幾]か)(?<![何数幾][一-龥]か)(?<![0-9０-９一二三四五六七八九十百千]か)"
                  r"(?!所|箇所|ヵ所|月|国|条|年|日|否|確|判|検|調|評|決|点|把|見極|吟味|試|迷|問|尋|分か|明|心配|不安|気)"
                  r"(?=" + _CHOICE_NOUN + r"{1,15}(?:[をがでにのはもと、。]|か|$))"),
-    ("全部", r"両方(?!向)|双方(?!向)|どちらも|いずれも|どれも|両者とも|すべて|全て|全部"
+    # どれを選んでもよい言い方（どちらでも、いずれからでも、AでもBでも）。どれか一つの側に残った言い方として、one_to_all を止める
+    ("どれでも", r"(?:どちら|いずれ|どれ)(?:から|で|に|を)?でも"
+               r"|" + _CHOICE_BEFORE + r"(?:で|から)も、?" + _CHOICE_PHRASE + r"(?:で|から)も"),
+    # 名詞を修飾する「いずれかの条件」（同じ名詞の「すべての条件」と組にするため）
+    ("どれか一つ（連体）", r"(?:いずれ|どれ|どちら)か(?:一つ|ひとつ|1つ|１つ|一方)?の" + _CHOICE_NOUN + r"{1,10}"),
+    ("全部", r"両方(?!向)|双方(?!向)|どちらも|いずれも|どれも|両者とも|[二三2-3２-３]つとも"
+           r"|どちらとも(?!言|い|取|と|つ|決|判|限|不|評)|(?:どちら|いずれ|どれ)(?:に|へ)も"
+           r"|(?<=の)(?:すべて|全て|全部)(?!の)|(?:すべて|全て|全部)(?=[をがも]|に(?!おい|わた|渡))"
            r"|ともに(?<=[はがも]ともに)|共に(?<=[はがも]共に)|(?:どちら|いずれ|どれ)の" + _CHOICE_NOUN + r"{1,10}も(?![のう])"
-           r"|も(?<=" + _CHOICE_NOUN + r"も)、?" + _CHOICE_NOUN + r"{1,15}も(?![のう])"),
-    ("関連", r"相関|関連(?:性)?(?:が|は|も|の)?(?:ある|あり|あった|見られ|みられ|認められ|強い|深い|高い|指摘され|示され)"
-           r"|関連して(?:いる|います|おり|いた|いました)"
-           r"|関係(?:性)?(?:が|は|も|の)?(?:ある|あり|あった|見られ|みられ|認められ|強い|深い|指摘され|示され)"
-           r"|関係して(?:いる|います|おり|いた|いました)|結び(?<!に結び)(?:つ|付)いて(?:いる|います|おり|いた|いました)"
-           r"|(?:関わり|かかわり)が(?:ある|あり|あった|深い|強い)"),
+           r"|" + _CHOICE_BEFORE + r"(?:に|と|へ)?も、?" + _CHOICE_PHRASE + r"(?:に|と|へ)?も(?![のう])"),
+    # 名詞を修飾する「すべての条件」「全項目」（原文に同じ名詞の「いずれかの条件」があるときだけ全部の言い方にする）
+    ("全部（連体）", r"(?:すべて|全て|全部)の" + _CHOICE_NOUN + r"{1,10}|(?<![一-龥々])全(?!部)[一-龥々ァ-ヴー]{1,8}"),
+    ("関連", r"相関(?=(?:関係|性)?" + _RELATION_PRED + r"|して" + _RELATION_STATE + r")"
+           + r"|関連(?:性)?" + _RELATION_PRED + r"|関連して" + _RELATION_STATE
+           + r"|関係(?:性)?" + _RELATION_PRED + r"|関係して" + _RELATION_STATE
+           + r"|(?<=[とは])(?<!には)関(?:連|係)(?:する|します)(?=[。！!]|$|と(?:され|考えられ|いわれ|言われ|みられ|見られ))"
+           r"|結び(?<!に結び)(?:つ|付)いて" + _RELATION_STATE
+           + r"|(?:関わり|かかわり)(?:が|は|も)?(?:ある" + _RELATION_END + r"|あり(?!ませ)|あった" + _RELATION_END
+           + r"|(?:深い|強い)" + _RELATION_END + r")"),
     ("因果", r"因果|原因|起因|要因|引き起こ[すしさせそ]|ひき起こ[すしさせそ]|もたら[すしさ]|誘発"
-           r"|(?:によって|により|ことで)[^。、]{0,12}?(?:生じ|起こ|起き|発生)|せい(?<=のせい|たせい|るせい|いせい)(?:で|だ|です|である)"
-           r"|影響を(?:与え|及ぼ)"),
+           r"|(?:によって|により|ことで)[^。、]{0,12}?(?:生じ|起こ|起き|発生|増え(?:る|た|て)|増加(?:し|す)|減(?:る|った|って|り)"
+           r"|減少(?:し|す)|伸び(?:る|た|て)|向上(?:し|す)|改善(?:し|す)|低下(?:し|す)|上昇(?:し|す)|悪化(?:し|す))"
+           r"|せい(?<=のせい|たせい|るせい|いせい)(?:で|だ|です|である)|おかげ(?:で|だ|です|である)"
+           r"|影響を(?:与え|及ぼ)|" + _CAUSE_LEAD + r"につなが(?:る|り|った|ります|りました)|(?<![者師客様人員長氏家生方])を招(?:く|き|いた)"
+           r"|(?<![査析験討認議論測定計証審票断索選較トそこあ])の結果、"),
+    # 元の範囲の因果を広く見る言い方（元の範囲にあれば relation_to_cause を出さない。後の範囲では使わない）
+    ("因果（広い）", r"によ(?:る|り|って)|影響|で(?:起き|起こ|生じ|発生)|から(?:生じ|起き|起こ|来)|ため|理由|せい|おかげ|結果"
+                  r"|につなが|招|由来|きっかけ|引き金|(?<!も)ので(?![はす])|だから|ゆえ|故に"
+                  r"|で[^。、]{0,8}?(?:増え|減っ|減り|増加|減少|伸び|落ち|下が|上が)"),
 )
 LOGIC_MARKERS = OrderedDict((kind, re.compile(pattern, re.M)) for kind, pattern in _LOGIC_PATTERNS)
 # 種類ごとに、印の正規表現が当たるために必ず含まれる文字列（_TYPE_LITERALS と同じ使い方）
 _LOGIC_LITERALS = {
     "どれか一つ": ("または", "もしくは", "あるいは", "どちらか", "いずれか", "どれか", "片方", "択一", "か"),
-    "全部": ("両方", "双方", "どちらも", "いずれも", "どれも", "両者とも", "すべて", "全て", "全部", "ともに", "共に", "も"),
+    "どれでも": ("でも", "も"),
+    "どれか一つ（連体）": ("かの", "一つの", "ひとつの", "1つの", "１つの", "一方の"),
+    "全部": ("両方", "双方", "どちらも", "いずれも", "どれも", "両者とも", "つとも", "どちらとも", "すべて", "全て", "全部", "ともに",
+           "共に", "も"),
+    "全部（連体）": ("すべての", "全ての", "全部の", "全"),
     "関連": ("相関", "関連", "関係", "結び", "関わり", "かかわり"),
-    "因果": ("因果", "原因", "起因", "要因", "起こ", "もたら", "誘発", "生じ", "起き", "発生", "せい", "影響を"),
+    "因果": ("因果", "原因", "起因", "要因", "起こ", "もたら", "誘発", "生じ", "起き", "発生", "増", "減", "伸び", "向上", "改善", "低下",
+           "上昇", "悪化", "せい", "おかげ", "影響を", "つなが", "招", "結果"),
+    "因果（広い）": ("によ", "影響", "で", "から", "ため", "理由", "せい", "おかげ", "結果", "つなが", "招", "由来", "きっかけ", "引き金",
+                "ので", "だから", "ゆえ", "故に"),
 }
 # 変化の向き → (subkind, kind, 元の種類, 後の種類)
 _LOGIC_CHANGES = (("one_to_all", "choice", "どれか一つ", "全部"), ("all_to_one", "choice", "全部", "どれか一つ"),
                   ("relation_to_cause", "causality", "関連", "因果"))
+# 問いの「か」: 「設定が有効か管理者に確認する」「各端末が最新版か担当者に聞く」。「か」の左が「が＋語」か状態を表す語で、
+# 右の語のあとに確かめる・聞く言い方が続くもの。「木曜か金曜に確認する」「上長か人事部に確認する」は選ぶ「か」として残す。
+_QUESTION_KA_LEFT = re.compile(r"(?:が" + _CHOICE_NOUN + r"{1,15}|有効|無効|正常|異常|最新版?|必要|不要|可能|不可|適切|妥当|正確"
+                               r"|完了|対象|該当|安全|十分|問題|適用|OK|NG)$")
+_QUESTION_KA_RIGHT = re.compile(_CHOICE_PHRASE + r"(?:に|へ|で|が|から|まで)?(?:確認|問い合わせ|問合せ|聞|尋|相談|確か|照会|伺|質問"
+                                r"|判断|判定|調べ|調査|検証|点検|チェック|見極|報告|連絡|回答)")
+# 「AもBも」の印を、人が読む行で「AもBも」と出すため、最初の項を左に広げる字（名詞の字と、名詞をつなぐ「の」、送りがな）
+_CHOICE_NOUN_CHAR = re.compile(_CHOICE_NOUN)
+_CHOICE_HEAD = re.compile(r"(?:に|と|へ|で|から)?も")
+
+
+def _choice_item_start(text, start):
+    """「AもBも」の印の開始位置 start（最初の「も」か、その前の助詞）から、最初の項 A の頭まで戻った位置。"""
+    i, floor = start, max(0, start - 30)
+    while i > floor:
+        ch = text[i - 1]
+        if _CHOICE_NOUN_CHAR.match(ch):
+            i -= 1
+        elif ch == "の" and i < start and i - 2 >= 0 and _CHOICE_NOUN_CHAR.match(text[i - 2]):
+            i -= 1
+        elif ch in "しりきみちえけせてめれ" and i == start and i - 2 >= 0 and "一" <= text[i - 2] <= "龥":
+            i -= 1
+        else:
+            break
+    return i
 
 
 def _logic_positions(text):
-    """文章全体に選ぶ範囲と因果の印の正規表現を1回ずつ当て、(開始位置, 種類, 印) を位置の順に返す。"""
-    found = [(m.start(), kind, m.group(0)) for kind, pattern in LOGIC_MARKERS.items()
-             if any(literal in text for literal in _LOGIC_LITERALS[kind]) for m in pattern.finditer(text)]
+    """文章全体に選ぶ範囲と因果の印の正規表現を1回ずつ当て、(開始位置, 種類, 印) を位置の順に返す。
+    問いの「か」は除き、「AもBも」「AでもBでも」の印は最初の項から書く（開始位置は変えない）。"""
+    found = []
+    for kind, pattern in LOGIC_MARKERS.items():
+        if not any(literal in text for literal in _LOGIC_LITERALS[kind]):
+            continue
+        for m in pattern.finditer(text):
+            start, hit = m.start(), m.group(0)
+            if kind == "どれか一つ" and hit == "か":
+                if (_QUESTION_KA_LEFT.search(text, max(0, start - 16), start)
+                        and _QUESTION_KA_RIGHT.match(text, start + 1)):
+                    continue
+            elif kind in ("全部", "どれでも") and _CHOICE_HEAD.match(hit) and start and not hit.startswith("とも"):
+                head = _choice_item_start(text, start)
+                if head < start:
+                    hit = text[head:start] + hit
+            found.append((start, kind, hit))
     found.sort(key=lambda item: item[0])
     return found
+
+
+def _logic_hits(positions, spans, keys):
+    """範囲（開始, 終了）の中から始まる印を {種類: [印, ...]} にまとめる（同じ印も数の分だけ並べる）。"""
+    marks = {}
+    for start, end in spans:
+        for _, kind, hit in positions[bisect_left(keys, start):bisect_left(keys, end)]:
+            marks.setdefault(kind, []).append(hit)
+    return marks
+
+
+def _logic_tails(r, ranges):
+    """各範囲のすぐあとに足した文（書き直した文章のどの範囲にも重ならない文。同じ行の2文まで）の (開始, 終了) の並び。"""
+    spans = _sentence_spans(r)
+    starts = [s for s, _ in spans]
+    owned = [False] * len(spans)
+    for _, _, a, b in ranges:
+        k = max(0, bisect_right(starts, a) - 1)
+        while k < len(spans) and spans[k][0] < b:
+            if spans[k][1] > a:
+                owned[k] = True
+            k += 1
+    tails = []
+    for _, _, a, b in ranges:
+        extra, k, end = [], bisect_left(starts, b), b
+        while k < len(spans) and len(extra) < 2 and not owned[k] and "\n" not in r[end:spans[k][0]]:
+            extra.append(spans[k])
+            end = spans[k][1]
+            k += 1
+        tails.append(extra)
+    return tails
+
+
+def _adnominal_noun(hit):
+    """「いずれかの条件」「すべての条件」「全項目」の名詞（条件、項目）。"""
+    return hit[hit.index("の") + 1:] if "の" in hit else hit[1:]
+
+
+def _unique(hits):
+    out = []
+    for hit in hits:
+        if hit not in out:
+            out.append(hit)
+    return out
 
 
 def _logic_changes(o: str, r: str):
     """選ぶ範囲（どれか一つ ↔ 全部）と、関連から因果への言い方が変わった範囲。正規化した元と後の文章を受け取り、
     [{"orig", "rewrite", "kind", "subkind", "from", "to", "old_hits", "new_hits"}] を返す（kind は choice か causality、
-    subkind は one_to_all、all_to_one、relation_to_cause。old_hits は元の範囲の from の印、new_hits は後の範囲の to の印）。
-    範囲は文の種類の印と同じ（_type_ranges）で、作った範囲があれば使い回す。"""
+    subkind は one_to_all、all_to_one、relation_to_cause。old_hits は元の範囲の from の印、new_hits は後の範囲で増えた to の印）。
+    範囲は文の種類の印と同じ（_type_ranges）で、作った範囲があれば使い回す。因果の後の範囲には、そのすぐあとに足した文も含める。"""
     if o == r:
         return []
     o_pos, r_pos = _logic_positions(o), _logic_positions(r)
     o_kinds, r_kinds = {kind for _, kind, _ in o_pos}, {kind for _, kind, _ in r_pos}
+    if "全部（連体）" in o_kinds:
+        o_kinds.add("全部")
+    if "全部（連体）" in r_kinds:
+        r_kinds.add("全部")
     if not any(source in o_kinds and target in r_kinds for _, _, source, target in _LOGIC_CHANGES):
         return []
     ranges = _shared_ranges(o, r)[0]
     keys = [item[0] for item in o_pos], [item[0] for item in r_pos]
+    # 因果の比べに使う、範囲のすぐあとに足した文（関連と因果の印がそろう文章でだけ作る）
+    tails = _logic_tails(r, ranges) if "関連" in o_kinds and "因果" in r_kinds else [[] for _ in ranges]
     out = []
-    for texts, spans, a, b in ranges:
-        before = _marks_in(o_pos, spans, LOGIC_MARKERS, keys[0])
-        after = _marks_in(r_pos, [(a, b)], LOGIC_MARKERS, keys[1])
+    for (texts, spans, a, b), extra in zip(ranges, tails):
+        before = _logic_hits(o_pos, spans, keys[0])
+        after = _logic_hits(r_pos, [(a, b)], keys[1])
+        # 名詞を修飾する「すべての条件」は、もう一方の側に同じ名詞の「いずれかの条件」があり、同じ側に同じ名詞の全部の言い方
+        # （すべての条件、全条件）がないときだけ、全部の言い方として数える（印は「すべて」「全条件」と書く）
+        nouns = {side: {_adnominal_noun(hit) for hit in hits.get("どれか一つ（連体）", ())}
+                 for side, hits in (("o", before), ("r", after))}
+        alls = {side: {_adnominal_noun(hit) for hit in hits.get("全部（連体）", ())} for side, hits in (("o", before), ("r", after))}
+        promoted = {side: [hit.split("の")[0] if "の" in hit else hit for hit in hits.get("全部（連体）", ())
+                           if _adnominal_noun(hit) in nouns[other] and _adnominal_noun(hit) not in alls[other]]
+                    for side, other, hits in (("o", "r", before), ("r", "o", after))}
+        alls = {"o": before.get("全部", []) + promoted["o"], "r": after.get("全部", []) + promoted["r"]}
         for subkind, kind, source, target in _LOGIC_CHANGES:
-            if source not in before or target not in after or target in before:
-                continue
-            # 選ぶ範囲は、後の範囲に元の側の言い方が残っていれば出さない（両方の言い方を並べた書き換え）。因果は、後に関連の
-            # 言い方が残っていても出す（関連があり、原因でもある、と強めた書き換え）
-            if kind == "choice" and source in after:
-                continue
-            out.append({"orig": "".join(texts), "rewrite": _range_sentences(r, a, b), "kind": kind, "subkind": subkind,
-                        "from": source, "to": target, "old_hits": before[source], "new_hits": after[target]})
+            end = b
+            if subkind == "one_to_all":
+                # どれか一つの言い方が後の範囲から消え（どれでもよい言い方も残らず）、全部の言い方が元より増えたとき。
+                # 変わらずに残る「すべてを保存し」のような全部の言い方は、数で打ち消し合う
+                old = before.get(source, [])
+                if (not old or len(alls["r"]) <= len(alls["o"]) or source in after or "どれでも" in after):
+                    continue
+                new_hits = [hit for hit in _unique(alls["r"]) if hit not in alls["o"]] or _unique(alls["r"])
+            elif subkind == "all_to_one":
+                # 全部の言い方が後の範囲から消え、元の範囲になかったどれか一つの言い方が現れたとき（元の範囲にどれか一つの言い方が
+                # あれば、「CかD → CかDのいずれか」のような言い換えと分けられないので出さない）
+                old = alls["o"]
+                if not old or target not in after or target in before or alls["r"]:
+                    continue
+                new_hits = _unique(after[target])
+            else:
+                # 因果は、範囲のすぐあとに足した文も後の範囲に含める
+                tail = _logic_hits(r_pos, extra, keys[1]) if extra else {}
+                found = after.get(target, []) + tail.get(target, [])
+                old = before.get(source, [])
+                if not old or not found or target in before or "因果（広い）" in before:
+                    continue
+                new_hits = _unique(found)
+                end = b if target in after else extra[-1][1]
+            out.append({"orig": "".join(texts), "rewrite": _range_sentences(r, a, end), "kind": kind, "subkind": subkind,
+                        "from": source, "to": target, "old_hits": _unique(old), "new_hits": new_hits})
     return out
 
 
