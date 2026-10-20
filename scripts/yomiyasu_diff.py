@@ -5391,25 +5391,40 @@ def _logic_risks(sides, changes):
 # 下限と上限のどちらとも同じとみなす）。同じ家族の中の言い換え（約120人 → 120人ほど、3日以内 → 3日以下）は出さない。
 # 下限と上限は、その数を含むか（以上・以下・以内・以降・以前）含まないか（超、未満）も比べ、入れ替わったら（以上 → 超、
 # 以下 → 未満）出す。下限と上限の入れ替わり（以上 → 以下）も出す。数と印はすぐ隣り合うものだけを見る（約束、程度の差、前後関係、文末の「以上です」、
-# 「以下のとおり」「以上の3点」のような、数に付かない語は見ない）。数の前の「約」は、直前が漢字なら見ない（契約3件、予約2件）。
-# 範囲（3〜5日、3日から5日）は、まとまりの数の印を合わせて1つにする（約3〜5日 → 3〜5日程度 を同じ概数にする）。
-# 相手の側の、同じ数のすぐ隣の、印に近い語（まで、最大、上限、少なくとも、最低、規模）と、相手の文の、見積もりを言う語
-# （推定、推計、概算、見込み、目安、想定、と見られる など）は、その家族の印があるとみなす（消えた・増えたにしない）。
+# 「以下のとおり」「以上の3点」のような、数に付かない語は見ない）。数の前の「約」は、「約」で終わる語（契約3件、予約2件）の
+# 「約」なら見ない（利用者約120人、人口約120万人の「約」は見る）。
+# 範囲（3〜5日、3日から5日）と、万・億・兆を挟んだ数（1万5000人、2億3000万円、3万〜5万円）は、まとまりの数の印を合わせて
+# 1つにする（約3〜5日 → 3〜5日程度、約1万5000人 → 1万5000人ほど を同じ概数にする）。
+# 相手の側の、同じ数のすぐ隣の、印に近い語（まで、最大、上限、少なくとも、最低、規模、に満たない、より前 など）と、相手の文の、
+# 見積もりを言う語（推定、推計、概算、見込み、目安、想定、と見られる など）は、その家族の印があるとみなす（消えた・増えたにしない）。
 # 数量を主張しない「一つ」（weak の値）と、元と後で同じ数の数が違う値（数値の候補 number が扱う）は見ない。
 _QUALIFIER_JOIN = re.compile(r"[ \t]*(?:[~〜]|から)[ \t]*|[-/:‐-–−]")
 # 数のあとに読み飛ばすもの（強調の記号、万・億・兆と単位、「3日間」の「間」、片仮名の単位）
 _QUALIFIER_SKIP = re.compile(r"\*{0,2}(?:[万億兆](?:" + _unit_pattern(_UNITS) + r")?)?間?")
+# 人が読む数の書き方に含める、数のあとの万・億・兆と単位（10万円、3億円）
+_QUALIFIER_SHOWN = re.compile(r"[万億兆](?:" + _unit_pattern(_UNITS) + r")?")
 _QUALIFIER_KATAKANA_UNIT = re.compile(r"[ァ-ヴー]{1,6}")
-_QUALIFIER_KANJI = "一-龥々〆"
-# 数のすぐあとの印。名前は 家族_含むか（approx は概数、lower は下限、upper は上限。in は含む、ex は含まない）
+# 単位のある数のあとの、時期と半端を言う語（10月中旬ごろ、15時半ごろ、3月末ごろ、2年半ほど）。読み飛ばしてから印を見る
+_QUALIFIER_PART = re.compile(r"上旬|中旬|下旬|初旬|半ば|半|末")
+# 数のすぐあとの印。名前は 家族_含むか（approx は概数、lower は下限、upper は上限。in は含む、ex は含まない）。
+# 弱・強・余は、あとに続けて語を作る字（弱点、強化、強制、余裕、余計）と、動詞の活用（弱い、強める、余る、余ります）なら
+# 印にしない（5分弱かかる、1時間弱要した、3年余働いた は印）
 _QUALIFIER_AFTER = re.compile(
     r"[ 　]?(?:"
-    r"(?P<approx>ほど|程度|程(?![度遠])|前後(?!関係|左右|不覚|逆|差|し|の関係|の文脈)|ぐらい|くらい|ごろ|頃|余り|余(?![" + _QUALIFIER_KANJI
-    + r"りっすせ])|あまり(?![にな良よ多])|近く|足らず|内外"
-    r"|弱(?![" + _QUALIFIER_KANJI + r"いくかさめまっ])|強(?![" + _QUALIFIER_KANJI + r"いくかさめまっ]))"
+    r"(?P<approx>ほど|程度|程(?![度遠])|前後(?!関係|左右|不覚|逆|差|し|の関係|の文脈)|ぐらい|くらい|位(?![置相階牌取])|ごろ|頃"
+    r"|余り(?!ま[すしせ]|そう)|余(?![裕計地分白剰談韻波興震熱力命暇生罪念儀所程技病勢光香情弊禄話聞部事日人りるっすせられさし])"
+    r"|あまり(?![にな良よ多]|ま[すしせ]|そう)|近く|足らず|内外|かそこら|やそこら"
+    r"|弱(?![点化体者小気音酸腰冷火毒視肉虫電震いさみめまるりっ]|く(?!らい))"
+    r"|強(?![化制調度力固烈硬気行豪盗敵者風弱靭要引奪迫権大国健壮打欲情いさみめまるりっ]|く(?!らい)))"
     r"|(?P<upper_in>以下|以内|以前)|(?P<lower_in>以上|以降|以後)"
-    r"|(?P<lower_ex>超え|超(?![過" + _QUALIFIER_KANJI + r"]))|(?P<upper_ex>未満)"
+    r"|(?P<lower_ex>超え|超(?![過一-龥々〆]))|(?P<upper_ex>未満)"
     r"|(?P<bound_verb>を超[えすさし]|を上回|を下回))")
+# 単位のある数にだけ付ける印（ベスト4強、16強、震度5弱、震度は6強、3位 の 強・弱・位 は印ではない）
+_QUALIFIER_UNIT_ONLY = frozenset(("弱", "強", "位"))
+# 文書の中の場所を言う単位のあとの「以下」は「それより後」（第3章以下、第5条以下）。下限として読む
+_QUALIFIER_PLACE_UNITS = frozenset(("章", "節", "項", "条", "号"))
+# 版の数（v2.0前後、バージョン2.0前後）のあとの「前後」は「その版の前と後」。印にしない
+_QUALIFIER_VERSION_BEFORE = re.compile(r"(?:[vV]|[Vv]er\.?|[Vv]ersion|バージョン)[ 　]?$")
 # 動詞の言い方（を超える、を上回る、を下回る）は、範囲の印があることだけを見る（bound の家族）。下限か上限かは、あとの打ち消し
 # （を超えて使えません、を下回らない）で入れ替わり、印のすぐ隣だけでは決まらないので、下限と上限のどちらとも同じとみなす。
 # 含むかも比べない（「2秒を超え → 2秒以上かかり」のように、文章では含むかを気にせずに言い換えることが多い。測って決めた）
@@ -5417,11 +5432,21 @@ _QUALIFIER_AFTER = re.compile(
 _QUALIFIER_BEFORE = re.compile(r"(?:(?P<approx>約|およそ|おおよそ|凡そ|概ね|おおむね|ほぼ|推定|大体|だいたい))"
                                r"(?:で|、)?[ 　]*\*{0,2}$")
 _QUALIFIER_BEFORE_REACH = 8
-# 「約」の直前にあってよい漢字（合計約、平均約、総額約、期間約、全長約、重量約。ほかの漢字なら契約、予約などの語の一部）
-_QUALIFIER_YAKU_AFTER_KANJI = frozenset("計均額間長量")
-# 相手の側の、同じ数のすぐ隣の、印に近い語（消えた・増えたの比べで、その家族の印があるとみなす。家族だけを見る）
-_QUALIFIER_NEAR_AFTER = re.compile(r"[ 　]?(?:(?P<upper>まで|より少|を上限|が上限|を限度|を最大)|(?P<lower>から|より(?!少)|を下限|が下限|を最低)"
-                                   r"|(?P<approx>規模|見当|ちょっと|ちょい|そこそこ))")
+# 「約」で終わる語（契約3件、予約2件、要約3行）。この語の「約」は印にしない。人口、取引先 のほうが多いので 口約、先約 は入れない
+_QUALIFIER_YAKU_WORDS = frozenset(("契約", "予約", "集約", "要約", "節約", "制約", "公約", "条約", "特約", "規約", "確約",
+                                   "誓約", "倹約", "婚約", "盟約", "協約", "密約", "違約", "解約", "成約", "新約", "旧約",
+                                   "黙約", "簡約", "縮約", "締約"))
+# 上の語の頭の字で終わる名詞（所要約30分、主要約10社、作成約3時間、体制約50人、募集約50名）。この「約」は印にする
+_QUALIFIER_YAKU_NOUNS = frozenset(("所要", "必要", "主要", "需要", "重要", "作成", "構成", "完成", "達成", "形成", "編成",
+                                   "生成", "結成", "更新", "最新", "刷新", "体制", "募集", "収集", "編集", "結婚", "猶予"))
+# 相手の側の、同じ数のすぐ隣の、印に近い語（消えた・増えたの比べで、その家族の印があるとみなす。家族だけを見る）。
+# より古い、より新しい は、版（3.9より古い）なら上限、日数（90日より古い）なら下限なので、下限と上限のどちらともみなす
+_QUALIFIER_NEAR_AFTER = re.compile(
+    r"[ 　]?(?:(?P<both>より古|より新)"
+    r"|(?P<upper>まで|より(?:少|前|下|短|低|早|小|手前|若)|に満たな|に届かな|を切[りっるらろれ]|を割[りっるらろれ]|のうちに"
+    r"|を上限|が上限|を限度|を最大)"
+    r"|(?P<lower>から|より|を下限|が下限|を最低|でも|過ぎ|すぎ|はかか|は必要|は要)"
+    r"|(?P<approx>規模|見当|ちょっと|ちょい|そこそこ|ばかり|に迫|に近))")
 _QUALIFIER_NEAR_BEFORE = re.compile(r"(?:(?P<upper>最大|最長|最高|最多|多くて|多くとも|多い時で|上限|最大限)"
                                     r"|(?P<lower>最低|最小|最短|少なくとも|少なくて|下限)|(?P<approx>ざっと|およそ))"
                                     r"(?:で|は|、)?[ 　]*\*{0,2}$")
@@ -5430,14 +5455,75 @@ _QUALIFIER_NEAR_BEFORE = re.compile(r"(?:(?P<upper>最大|最長|最高|最多|�
 _QUALIFIER_SENTENCE = {
     "approx": re.compile(r"推定|推計|概算|見込|見積|目安|想定|概数|大まか|おおまか|ざっと|と見られ|とみられ"),
     "lower": re.compile(r"以上|以降|超え|超す|超し|超過|上回|少なくとも|最低|下限"),
-    "upper": re.compile(r"以下|以内|未満|下回|上限|最大|最長|超えな|超えず|超えませ|まで"),
+    "upper": re.compile(r"以下|以内|未満|下回|上限|最大|最長|超えな|超えず|超えませ|まで|満たな"),
 }
 _QUALIFIER_FAMILIES = ("approx", "lower", "upper", "bound")
 _QUALIFIER_BOUNDS = frozenset(("lower", "upper", "bound"))
-_QUALIFIER_LABELS = {"approx": "概数", "lower_in": "下限（その数を含む）", "lower_ex": "下限（その数を含まない）",
-                     "upper_in": "上限（その数を含む）", "upper_ex": "上限（その数を含まない）",
-                     "bound_verb": "範囲（を超える・を下回る など）"}
+_QUALIFIER_LABELS = {"approx": "概数", "lower_in": "その数を含む下限", "lower_ex": "その数を含まない下限",
+                     "upper_in": "その数を含む上限", "upper_ex": "その数を含まない上限",
+                     "bound_verb": "動詞で言う範囲"}
 _QUALIFIER_STRICT = frozenset(("lower_in", "lower_ex", "upper_in", "upper_ex"))
+
+
+def _qualifier_yaku_ok(text, start, at):
+    """text の at の「約」（文は start から）を概数の印として読むか。直前の字と合わせて「約」で終わる語（契約、予約）なら読まない。
+    ただし、その頭の字で終わる名詞（所要、主要、作成）のあとなら読む。"""
+    if at <= start or text[at - 1:at + 1] not in _QUALIFIER_YAKU_WORDS:
+        return True
+    return at - 2 >= start and text[at - 2:at] in _QUALIFIER_YAKU_NOUNS
+
+
+def _qualifier_tail(text, number, end):
+    """数 number のあとの、読み飛ばす続き（強調の記号、万・億・兆と単位、「間」、片仮名の単位）の終わりと、単位があるかを返す。"""
+    at = _QUALIFIER_SKIP.match(text, number.end, end).end()
+    unit = bool(number.unit) or any(char in "万億兆" for char in text[number.end:at])
+    if not number.unit and at == number.end:
+        katakana = _QUALIFIER_KATAKANA_UNIT.match(text, at, end)
+        if katakana is not None:
+            at, unit = katakana.end(), True
+    return at, unit
+
+
+def _qualifier_shown_end(text, number, end):
+    """人が読む数の書き方の終わり（10万円、3億円、5パーセント、10月中旬、15時半。強調の記号と「間」は含めない）。"""
+    at, unit = number.end, bool(number.unit)
+    shown = _QUALIFIER_SHOWN.match(text, at, end)
+    if shown is not None:
+        at, unit = shown.end(), True
+    elif not number.unit:
+        katakana = _QUALIFIER_KATAKANA_UNIT.match(text, at, end)
+        if katakana is not None:
+            at, unit = katakana.end(), True
+    part = _QUALIFIER_PART.match(text, at, end) if unit else None
+    return part.end() if part is not None else at
+
+
+def _qualifier_after(text, at, end, number, unit, names, words):
+    """数のあとの印を2つまで読み、names と words に足す。終わりの位置を返す。数と印の間の「前」「後」は読み飛ばす
+    （3年前ぐらい、1時間前ほど は 3年ぐらい前、1時間ほど前 と同じ概数）。"""
+    if unit:
+        part = _QUALIFIER_PART.match(text, at, end)
+        if part is not None:
+            at = part.end()
+    for _ in range(2):
+        found = _QUALIFIER_AFTER.match(text, at, end)
+        if found is None and text.startswith(("前", "後"), at) and at + 1 < end:
+            found = _QUALIFIER_AFTER.match(text, at + 1, end)
+        if found is None:
+            break
+        at = found.end()
+        name, word = found.lastgroup, found.group(found.lastgroup)
+        if word in _QUALIFIER_UNIT_ONLY and not unit:
+            continue      # ベスト4強、16強、震度5弱、震度は6強、3位（印ではなく、順位や段階の名前）
+        if word == "前後" and not unit and _QUALIFIER_VERSION_BEFORE.search(text, 0, number.start):
+            continue      # v2.0前後、バージョン2.0前後（その版の前と後）
+        if word == "近く" and number.unit == "号":
+            continue      # 国道1号近く（場所）
+        if word == "以下" and number.unit in _QUALIFIER_PLACE_UNITS:
+            name = "lower_in"     # 第3章以下（第3章から後）
+        names.add(name)
+        words.append(word)
+    return at
 
 
 def _qualifier_marks(text, start, end, number):
@@ -5449,46 +5535,45 @@ def _qualifier_marks(text, start, end, number):
     if before is not None:
         at = number.start - len(head) + before.start()
         word = before.group("approx")
-        if not (word == "約" and at > start and _KANJI.match(text[at - 1])
-                and text[at - 1] not in _QUALIFIER_YAKU_AFTER_KANJI):
+        if word != "約" or _qualifier_yaku_ok(text, start, at):
             names.add("approx")
             words.append(word)
     near_before = _QUALIFIER_NEAR_BEFORE.search(head)
     if near_before is not None:
         near.add(near_before.lastgroup)
-    at = _QUALIFIER_SKIP.match(text, number.end, end).end()
-    if not number.unit and at == number.end:
-        unit = _QUALIFIER_KATAKANA_UNIT.match(text, at, end)
-        if unit is not None:
-            at = unit.end()
-    seismic = text.endswith("震度", max(start, number.start - 2), number.start)
-    for _ in range(2):
-        found = _QUALIFIER_AFTER.match(text, at, end)
-        if found is None:
-            break
-        at = found.end()
-        word = found.group(found.lastgroup)
-        if seismic and word in ("弱", "強"):
-            continue      # 震度5弱、震度6強（印ではなく、震度の段階の名前）
-        names.add(found.lastgroup)
-        words.append(word)
+    at, unit = _qualifier_tail(text, number, end)
+    at = _qualifier_after(text, at, end, number, unit, names, words)
     near_after = _QUALIFIER_NEAR_AFTER.match(text, at, end)
     if near_after is not None:
-        near.add(near_after.lastgroup)
+        near.update(("lower", "upper") if near_after.lastgroup == "both" else (near_after.lastgroup,))
     return names, words, near
+
+
+def _qualifier_joined(text, previous, number, end):
+    """前の数 previous と数 number が1つのまとまり（範囲の 3〜5日、3日から5日、3万円程度から5万円程度、万・億・兆を挟んだ
+    1万5000人、2億3000万円、3万〜5万円）か。前の数のあとの万・億・兆と単位と印を読み飛ばし、残りがなにもないか、つなぎ
+    （〜、から、-、/、:）だけなら真。"""
+    if previous.end == number.start:
+        return True
+    at, unit = _qualifier_tail(text, previous, number.start)
+    compound = any(char in "万億兆" for char in text[previous.end:at])
+    at = _qualifier_after(text, at, number.start, previous, unit, set(), [])
+    between = text[at:number.start].translate(_HALF_WIDTH)
+    if not between:
+        return compound or at == previous.end
+    return "\n" not in between and _QUALIFIER_JOIN.fullmatch(between) is not None
 
 
 def _qualifier_states(sides, side, sentence, numbers):
     """組の文の数ごとの (key, 印の名前の集合, 印の語の並び, 隣の語の家族の集合, 書かれた形) の並び。範囲・日付・時刻の
-    まとまり（3〜5日、3日から5日）は、まとまりの数の印を合わせて1つにする（key は数の並びと最後の単位）。数量を主張しない値
-    （weak）は入れない。"""
+    まとまり（3〜5日、3日から5日）と、万・億・兆を挟んだ数（1万5000人）は、まとまりの数の印を合わせて1つにする（key は数の
+    並びと最後の単位）。数量を主張しない値（weak）は入れない。"""
     text = sides.texts[side]
     start, end = sentence.start, sentence.start + len(sentence.text)
     marks = [_qualifier_marks(text, start, end, number) for number in numbers]
     groups = list(range(len(numbers)))
     for index in range(1, len(numbers)):
-        between = text[numbers[index - 1].end:numbers[index].start].translate(_HALF_WIDTH)
-        if "\n" not in between and (not between or _QUALIFIER_JOIN.fullmatch(between)):
+        if _qualifier_joined(text, numbers[index - 1], numbers[index], end):
             groups[index] = groups[index - 1]
     merged = OrderedDict()
     for index, (names, words, near) in enumerate(marks):
@@ -5503,7 +5588,8 @@ def _qualifier_states(sides, side, sentence, numbers):
     for members, names, words, near in merged.values():
         # まとまりは1つの値にする。key は数の並びと最後の単位（3〜5日 と 3日から5日 を同じにする）
         key = members[0].key if len(members) == 1 else (tuple(m.value for m in members), members[-1].unit)
-        out.append((key, frozenset(names), tuple(words), frozenset(near), text[members[0].start:members[-1].end]))
+        shown = text[members[0].start:_qualifier_shown_end(text, members[-1], end)].replace("**", "")
+        out.append((key, frozenset(names), tuple(words), frozenset(near), shown))
     return out
 
 
