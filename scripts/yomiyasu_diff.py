@@ -675,6 +675,22 @@ def _modality_names(kinds, fallback):
     return "・".join(names) if names else fallback
 
 
+def _shared_ranges(o: str, r: str):
+    """文の種類の印と同じ範囲（_type_ranges）と、元と後の文の種類の印の位置。直前の _type_changes か、この関数が同じ文章で
+    作った範囲があれば使い回し、なければ作って _LAST_TYPE_RANGES に置く（許可・能力の比べと、選ぶ範囲・因果の比べが
+    同じ範囲を作り直さないため。diff() と meaning_risks() は使い終えたら空に戻す）。"""
+    last = _LAST_TYPE_RANGES[0]
+    if last is not None and last[0] == o and last[1] == r:
+        opcodes, ranges, o_marks, r_marks = last[2:]
+    else:
+        opcodes = _ExactSequenceMatcher(None, o, r, autojunk=False).get_opcodes()
+        ranges, o_marks, r_marks = None, _mark_positions(o), _mark_positions(r)
+    if ranges is None:
+        ranges = _type_ranges(o, r, opcodes)
+        _LAST_TYPE_RANGES[0] = (o, r, opcodes, ranges, o_marks, r_marks)
+    return ranges, o_marks, r_marks
+
+
 def _modality_changes(o: str, r: str):
     """許可・能力の言い方が変わった範囲。正規化した元と後の文章を受け取り、
     [{"orig", "rewrite", "subkind", "from", "to", "lost", "added"}] を返す（subkind は permission_lost、permission_added、
@@ -687,14 +703,7 @@ def _modality_changes(o: str, r: str):
     o_pos, r_pos = _modality_positions(o), _modality_positions(r)
     if not any(kind in ("許可", "能力") for _, kind, _ in o_pos) and not any(kind == "許可" for _, kind, _ in r_pos):
         return []
-    last = _LAST_TYPE_RANGES[0]
-    if last is not None and last[0] == o and last[1] == r:
-        opcodes, ranges, o_marks, r_marks = last[2:]
-    else:
-        opcodes = _ExactSequenceMatcher(None, o, r, autojunk=False).get_opcodes()
-        ranges, o_marks, r_marks = None, _mark_positions(o), _mark_positions(r)
-    if ranges is None:
-        ranges = _type_ranges(o, r, opcodes)
+    ranges, o_marks, r_marks = _shared_ranges(o, r)
     keys = [item[0] for item in o_pos], [item[0] for item in r_pos]
     type_keys = [item[0] for item in o_marks], [item[0] for item in r_marks]
     out = []
@@ -723,6 +732,91 @@ def _modality_changes(o: str, r: str):
             out.append({"orig": orig, "rewrite": rewrite, "subkind": subkind, "from": source, "to": target,
                         "lost": [{"kind": kind, "hits": before[kind]} for kind in lost],
                         "added": [{"kind": kind, "hits": after[kind]} for kind in added]})
+    return out
+
+
+# ---- 選ぶ範囲と因果の言い方 ----
+# 「AまたはBのどちらか」（どれか一つを選ぶ）と「AとBの両方」（全部を含む）は、入れ替わると文の真偽が逆になる。「関連がある」
+# 「相関がある」を「因果関係がある」「原因である」に変えると、関わりを述べた文が原因と結果を述べる文に強まる。どちらも
+# 許可・能力の言い方と同じく、文の種類の印とは別の表に置き、文の種類の印と同じ範囲（_type_ranges）で種類があるかないかを比べる
+# （語の抽出の CONTENT は平仮名だけの「または」「どちらか」を拾わないので、決まった語の対で見る）。
+# 選ぶ範囲（kind choice）は、元の範囲にどれか一つの言い方があって全部の言い方がなく、後の範囲に全部の言い方があって
+# どれか一つの言い方がないとき（one_to_all）と、その逆（all_to_one）に出す。同じ側の中の言い換え（または → か、
+# どちらか → いずれか、両方 → どちらも）は種類が変わらないので出さない。因果（kind causality）は、元の範囲に関連・相関の
+# 言い方があって因果の言い方がなく、後の範囲に因果の言い方があるとき（relation_to_cause）に出す。どちらも --fail-on に数える。
+# 「AかB」の「か」は、漢字・片仮名・英字の語の間にあり、あとの語に助詞が続くものだけを当てる。問いの「か」（必要か確認する、
+# 原因か調べる）、何か・誰か・何度か・数回か、「か否か」、数のあとの「か月」「か所」は当てない。「どちらかといえば」
+# 「いずれから」「どれから」、「双方向」「両方向」、「Aとともに」も当てない。「ともに」は「は」「が」「も」のすぐあと
+# （AとBはともに）だけにする。全部の言い方には「AもBも」「どちらの鍵も」の形も入れる。
+# 関連の言い方は、関わりがあると述べる形（関連がある、関連している、相関、関係がある、結びついている、関わりがある）だけに
+# し、「関連する設定」「関連記事」のような名詞を修飾する形と、「成果に結びつく」「成果に結びついている」（因果に近い）は
+# 当てない。「因果関係がある」は関連の言い方にも当たるが、因果の言い方もあるので、元の範囲にあれば出さない。
+_CHOICE_NOUN = r"[一-龥々ァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９]"
+_LOGIC_PATTERNS = (
+    ("どれか一つ", r"または|もしくは|あるいは|どちらか(?!ら|と(?:いえば|言えば|いうと|言うと))|いずれか(?!ら)|どれか(?!ら)"
+                 r"|片方(?:だけ|のみ)|択一"
+                 r"|か(?<=[一-龥々ァ-ヴーA-Za-zＡ-Ｚａ-ｚ]か)(?<![何誰数幾]か)(?<![何数幾][一-龥]か)(?<![0-9０-９一二三四五六七八九十百千]か)"
+                 r"(?!所|箇所|ヵ所|月|国|条|年|日|否|確|判|検|調|評|決|点|把|見極|吟味|試|迷|問|尋|分か|明|心配|不安|気)"
+                 r"(?=" + _CHOICE_NOUN + r"{1,15}(?:[をがでにのはもと、。]|か|$))"),
+    ("全部", r"両方(?!向)|双方(?!向)|どちらも|いずれも|どれも|両者とも|すべて|全て|全部"
+           r"|ともに(?<=[はがも]ともに)|共に(?<=[はがも]共に)|(?:どちら|いずれ|どれ)の" + _CHOICE_NOUN + r"{1,10}も(?![のう])"
+           r"|も(?<=" + _CHOICE_NOUN + r"も)、?" + _CHOICE_NOUN + r"{1,15}も(?![のう])"),
+    ("関連", r"相関|関連(?:性)?(?:が|は|も|の)?(?:ある|あり|あった|見られ|みられ|認められ|強い|深い|高い|指摘され|示され)"
+           r"|関連して(?:いる|います|おり|いた|いました)"
+           r"|関係(?:性)?(?:が|は|も|の)?(?:ある|あり|あった|見られ|みられ|認められ|強い|深い|指摘され|示され)"
+           r"|関係して(?:いる|います|おり|いた|いました)|結び(?<!に結び)(?:つ|付)いて(?:いる|います|おり|いた|いました)"
+           r"|(?:関わり|かかわり)が(?:ある|あり|あった|深い|強い)"),
+    ("因果", r"因果|原因|起因|要因|引き起こ[すしさせそ]|ひき起こ[すしさせそ]|もたら[すしさ]|誘発"
+           r"|(?:によって|により|ことで)[^。、]{0,12}?(?:生じ|起こ|起き|発生)|せい(?<=のせい|たせい|るせい|いせい)(?:で|だ|です|である)"
+           r"|影響を(?:与え|及ぼ)"),
+)
+LOGIC_MARKERS = OrderedDict((kind, re.compile(pattern, re.M)) for kind, pattern in _LOGIC_PATTERNS)
+# 種類ごとに、印の正規表現が当たるために必ず含まれる文字列（_TYPE_LITERALS と同じ使い方）
+_LOGIC_LITERALS = {
+    "どれか一つ": ("または", "もしくは", "あるいは", "どちらか", "いずれか", "どれか", "片方", "択一", "か"),
+    "全部": ("両方", "双方", "どちらも", "いずれも", "どれも", "両者とも", "すべて", "全て", "全部", "ともに", "共に", "も"),
+    "関連": ("相関", "関連", "関係", "結び", "関わり", "かかわり"),
+    "因果": ("因果", "原因", "起因", "要因", "起こ", "もたら", "誘発", "生じ", "起き", "発生", "せい", "影響を"),
+}
+# 変化の向き → (subkind, kind, 元の種類, 後の種類)
+_LOGIC_CHANGES = (("one_to_all", "choice", "どれか一つ", "全部"), ("all_to_one", "choice", "全部", "どれか一つ"),
+                  ("relation_to_cause", "causality", "関連", "因果"))
+
+
+def _logic_positions(text):
+    """文章全体に選ぶ範囲と因果の印の正規表現を1回ずつ当て、(開始位置, 種類, 印) を位置の順に返す。"""
+    found = [(m.start(), kind, m.group(0)) for kind, pattern in LOGIC_MARKERS.items()
+             if any(literal in text for literal in _LOGIC_LITERALS[kind]) for m in pattern.finditer(text)]
+    found.sort(key=lambda item: item[0])
+    return found
+
+
+def _logic_changes(o: str, r: str):
+    """選ぶ範囲（どれか一つ ↔ 全部）と、関連から因果への言い方が変わった範囲。正規化した元と後の文章を受け取り、
+    [{"orig", "rewrite", "kind", "subkind", "from", "to", "old_hits", "new_hits"}] を返す（kind は choice か causality、
+    subkind は one_to_all、all_to_one、relation_to_cause。old_hits は元の範囲の from の印、new_hits は後の範囲の to の印）。
+    範囲は文の種類の印と同じ（_type_ranges）で、作った範囲があれば使い回す。"""
+    if o == r:
+        return []
+    o_pos, r_pos = _logic_positions(o), _logic_positions(r)
+    o_kinds, r_kinds = {kind for _, kind, _ in o_pos}, {kind for _, kind, _ in r_pos}
+    if not any(source in o_kinds and target in r_kinds for _, _, source, target in _LOGIC_CHANGES):
+        return []
+    ranges = _shared_ranges(o, r)[0]
+    keys = [item[0] for item in o_pos], [item[0] for item in r_pos]
+    out = []
+    for texts, spans, a, b in ranges:
+        before = _marks_in(o_pos, spans, LOGIC_MARKERS, keys[0])
+        after = _marks_in(r_pos, [(a, b)], LOGIC_MARKERS, keys[1])
+        for subkind, kind, source, target in _LOGIC_CHANGES:
+            if source not in before or target not in after or target in before:
+                continue
+            # 選ぶ範囲は、後の範囲に元の側の言い方が残っていれば出さない（両方の言い方を並べた書き換え）。因果は、後に関連の
+            # 言い方が残っていても出す（関連があり、原因でもある、と強めた書き換え）
+            if kind == "choice" and source in after:
+                continue
+            out.append({"orig": "".join(texts), "rewrite": _range_sentences(r, a, b), "kind": kind, "subkind": subkind,
+                        "from": source, "to": target, "old_hits": before[source], "new_hits": after[target]})
     return out
 
 
@@ -2931,7 +3025,7 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
 # 同じ塊の中で並べる順
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
-               "promise_review": 13, "modality": 14, "modality_review": 15}
+               "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17}
 # 状態の語の消え（state）と約束の足し（promise）も数える。因果の足し（claim）と、書き手の印のない
 # 「〜します」の足し（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の印の変化、確度の強まり）。
@@ -2939,7 +3033,9 @@ _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "prote
 # diff の詰めで足した否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）も数えない（どちらも
 # 見直しの候補を出すだけで、点数や合否には使わない）
 # 許可の言い方の変化（modality）も数える。能力の言い方の消え（modality_review）は、どの文書の種類でも数えない。
-FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty", "state", "promise", "modality")
+# 選ぶ範囲の入れ替え（choice。どれか一つ ↔ 全部）と、関連から因果への強まり（causality）も数える。
+FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty", "state", "promise", "modality",
+                 "choice", "causality")
 
 
 def fail_on_count(risks):
@@ -4859,29 +4955,42 @@ def _modality_risks(sides, changes):
     return out
 
 
+def _logic_risks(sides, changes):
+    """選ぶ範囲と因果の言い方の変化（_logic_changes の各項目）を候補にする。kind は choice か causality（どちらも数える）。
+    detail は from と to（どれか一つ、全部、関連、因果）と、元の範囲の from の印（old_hits）、後の範囲の to の印（new_hits）。"""
+    return [_risk(change["kind"], change["subkind"], _find_line(sides, 0, change["orig"]), _find_line(sides, 1, change["rewrite"]),
+                  change["orig"], change["rewrite"],
+                  {"from": change["from"], "to": change["to"], "old_hits": change["old_hits"], "new_hits": change["new_hits"]})
+            for change in changes or ()]
+
+
 def meaning_risks(orig, rw, full=None, type_changes=None, *, doc_type=None):
     """意味が変わる恐れ（JSON の meaning_risks）。
 
     full は full_diff(orig, rw) の戻り値（渡さなければ作る）。type_changes は diff() の type_changes で、
     None か [] なら文の種類の印（sentence_type/marks）を含めない。この関数の中で9キーの分析は作らない。
-    type_changes を渡したとき（[] も含む）は、diff() と同じく許可・能力の言い方の候補（modality、modality_review）も足すので、
+    type_changes を渡したとき（[] も含む）は、diff() と同じく許可・能力の言い方の候補（modality、modality_review）と、
+    選ぶ範囲・因果の言い方の候補（choice、causality）も足すので、
     同じ文章の diff() の type_changes を渡せば diff() の meaning_risks と同じになる。そのときだけ、許可・能力の印があれば
     文字の対応と範囲をこの関数の中で作る。None なら許可・能力の候補を足さない。
     doc_type は diff() と同じ文書の種類（事実や仕様を述べる種類では、確度の2つの強まりを数える側に入れる）。"""
     doc_type = normalize_doc_type(doc_type)
     if full is None:
         full = full_diff(orig, rw)
-    modality = None
+    modality = logic = None
     if type_changes is not None:
         try:
-            modality = _modality_changes(normalize(orig), normalize(rw))
+            o, r = normalize(orig), normalize(rw)
+            modality = _modality_changes(o, r)
+            logic = _logic_changes(o, r)
         finally:
             _LAST_TYPE_RANGES[0] = None
-    return _meaning_risks(_Sides(orig, rw), full, type_changes, doc_type=doc_type, modality=modality)
+    return _meaning_risks(_Sides(orig, rw), full, type_changes, doc_type=doc_type, modality=modality, logic=logic)
 
 
-def _meaning_risks(sides, full, type_changes, groups=None, doc_type=None, modality=None):
-    """意味が変わる恐れを集める。doc_type は正規化した文書の種類、modality は _modality_changes の戻り値（diff() と meaning_risks() が渡す）。"""
+def _meaning_risks(sides, full, type_changes, groups=None, doc_type=None, modality=None, logic=None):
+    """意味が変わる恐れを集める。doc_type は正規化した文書の種類、modality は _modality_changes の戻り値、logic は
+    _logic_changes の戻り値（diff() と meaning_risks() が渡す）。"""
     if groups is None:
         groups = _sentence_pairs(sides, full)
     found = (_number_risks(sides, full, groups) + _negation_risks(sides, groups) + _swap_risks(sides, groups)
@@ -4921,8 +5030,8 @@ def _meaning_risks(sides, full, type_changes, groups=None, doc_type=None, modali
                  + [mark for mark in all_marks if id(mark) not in quiet_ids] + citations)
         certainty = _certainty_risks(sides, groups, risks, masks, doc_type=doc_type)
     sides.quiet_marks = [mark for mark in quiet if id(mark) in quiet_ids]
-    # 許可・能力の言い方の候補も、確度とかぎかっこの候補と同じく、既存の候補の後ろに行の順で並べる。
-    added = certainty + _quote_risks(sides, groups, masks) + _modality_risks(sides, modality)
+    # 許可・能力の言い方の候補と、選ぶ範囲・因果の言い方の候補も、確度とかぎかっこの候補と同じく、既存の候補の後ろに行の順で並べる。
+    added = certainty + _quote_risks(sides, groups, masks) + _modality_risks(sides, modality) + _logic_risks(sides, logic)
     added.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                               r["new_line"] if r["new_line"] is not None else 0))
     risks += added
@@ -8760,13 +8869,17 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
     context = {"doc_type": normalize_doc_type(doc_type), "reader": normalize_reader(reader)}
     try:
         rules = _rule_candidates(orig_raw, rw_raw, stance)
-        # 許可・能力の言い方は、9キーの分析（_rule_candidates の type_changes）が作った範囲を使い回して比べる
-        modality = _modality_changes(normalize(orig_raw), normalize(rw_raw))
+        # 許可・能力の言い方と、選ぶ範囲・因果の言い方は、9キーの分析（_rule_candidates の type_changes）が作った範囲を
+        # 使い回して比べる
+        o, r = normalize(orig_raw), normalize(rw_raw)
+        modality = _modality_changes(o, r)
+        logic = _logic_changes(o, r)
     finally:
         _LAST_TYPE_RANGES[0] = None
     full, sides = _build_full_diff(orig_raw, rw_raw, encoding_notes)
     groups = _sentence_pairs(sides, full)
-    risks = _meaning_risks(sides, full, rules["type_changes"], groups, doc_type=context["doc_type"], modality=modality)
+    risks = _meaning_risks(sides, full, rules["type_changes"], groups, doc_type=context["doc_type"], modality=modality,
+                           logic=logic)
     if orig_raw == rw_raw and not full["encoding_notes"]:
         status, count = "no_change", 0
     else:
@@ -8900,6 +9013,18 @@ def _risk_line(risk):
         note = "" if kind == "modality" else "--fail-on には数えません。"
         return ("能力の言い方が消えた{}: {}。{}原文は「〜できる」と、できることを伝えています。「〜する」「必ず〜する」と"
                 "言い切っていないか確かめ、言い切っていれば原文の言い方に戻してください。".format(where, change, note))
+    if kind == "choice":
+        change = "{}（{}） → {}（{}）".format(detail["from"], "、".join(detail["old_hits"]), detail["to"], "、".join(detail["new_hits"]))
+        if subkind == "one_to_all":
+            return ("選ぶ範囲が「どれか一つ」から「全部」に変わった{}: {}。原文は、どれか一つでよい・どれか一つに当てはまると"
+                    "伝えています。全部が要る・全部に当てはまる意味に変えていないか確かめ、変えていれば原文の言い方に戻してください。"
+                    .format(where, change))
+        return ("選ぶ範囲が「全部」から「どれか一つ」に変わった{}: {}。原文は、全部が要る・全部に当てはまると伝えています。"
+                "どれか一つでよい意味に変えていないか確かめ、変えていれば原文の言い方に戻してください。".format(where, change))
+    if kind == "causality":
+        return ("関連の言い方が因果の言い方に変わった{}: {}（{}） → {}（{}）。原文は、関連や相関があると述べているだけで、"
+                "原因と結果とは書いていません。因果の主張に強めていないか確かめ、強めていれば原文の言い方に戻してください。".format(
+                    where, detail["from"], "、".join(detail["old_hits"]), detail["to"], "、".join(detail["new_hits"])))
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(
@@ -9433,7 +9558,7 @@ def read_text(path):
 
 _EXIT_CODES = """終了コード:
   0  比べ終わり、--fail-on の条件に当たらなかった（候補の有無によらない）。--endings の正常終了、-h と --version も0
-  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印・確度・状態の語・約束・許可の言い方の恐れが1件以上）
+  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印・確度・状態の語・約束・許可の言い方・選ぶ範囲・因果の恐れが1件以上）
   2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk] 元の文 書き直した文\n"
@@ -9452,6 +9577,8 @@ _FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語�
                  "推量の印が同じ強さの慎重な言い方に替わっただけの文（かもしれません → 恐れがあります、と思われます → 見込みです）も数えません。"
                  "原文にない因果のつながりの足しと、書き手の行為と読む印（いたします、今後・改めて、"
                  "弊社などの主語）のない「〜します」の足し（説明や手順の文かもしれないもの）も数えません。"
+                 "ただし、関連・相関を述べた原文の文に因果の言い方（因果、原因、引き起こす など）を足した書き換えと、"
+                 "選ぶ範囲が入れ替わった書き換え（または・どちらか → 両方・すべて、またはその逆）は数えます。"
                  "候補は確かめる場所で、意味が変わったという判定ではありません。"
                  "条件に当たらなくても、意味が同じだという証明にはなりません。")
 
@@ -9598,7 +9725,8 @@ def _fail_on_line(total, counted, risks=()):
     return ("終了コード1: --fail-on=meaning-risk の条件に当たりました"
             "（意味が変わる恐れ {}件のうち、数値・否定・入れ替え・文の種類{} {}件）。".format(
                 total, "".join(label for kind, label in (("certainty", "・確度"), ("state", "・状態の語"), ("promise", "・約束"),
-                                                         ("modality", "・許可の言い方"))
+                                                         ("modality", "・許可の言い方"), ("choice", "・選ぶ範囲"),
+                                                         ("causality", "・因果"))
                                if any(r["kind"] == kind for r in risks)), counted))
 
 
