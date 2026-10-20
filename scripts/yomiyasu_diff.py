@@ -3443,7 +3443,8 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
 # 同じ塊の中で並べる順
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
-               "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17}
+               "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17,
+               "number_qualifier": 18}
 # 状態の語の消え（state）と約束の足し（promise）も数える。因果の足し（claim）と、書き手の印のない
 # 「〜します」の足し（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の印の変化、確度の強まり）。
@@ -3452,8 +3453,9 @@ _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "prote
 # 見直しの候補を出すだけで、点数や合否には使わない）
 # 許可の言い方の変化（modality）も数える。能力の言い方の消え（modality_review）は、どの文書の種類でも数えない。
 # 選ぶ範囲の入れ替え（choice。どれか一つ ↔ 全部）と、関連から因果への強まり（causality）も数える。
+# 数に付いた概数と範囲の印の増減（number_qualifier。約120人 → 120人、100人以上 → 100人）も、数値の恐れとして数える。
 FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty", "state", "promise", "modality",
-                 "choice", "causality")
+                 "choice", "causality", "number_qualifier")
 
 
 def fail_on_count(risks):
@@ -5382,6 +5384,207 @@ def _logic_risks(sides, changes):
             for change in changes or ()]
 
 
+# ---- 数に付いた概数と範囲の印（kind number_qualifier）----
+# 同じ数（値と単位が同じ。_find_numbers の key）の前後の印が、組の文で消えたり増えたりしたら出す。「約120人 → 120人」は概数を
+# 数えた数に、「100人以上 → 100人」は範囲を1つの数に変える。印は3つの家族に分ける。概数（約、およそ、ほど、程度、前後、
+# くらい、ごろ など）、下限（以上、以降、超、を超える、を上回る）、上限（以下、以内、以前、未満、を下回る、を超えない）。
+# 同じ家族の中の言い換え（約120人 → 120人ほど、3日以内 → 3日以下）は出さない。下限と上限は、その数を含むか（以上・以下・以内・
+# 以降・以前）含まないか（超、未満、を超える、を上回る、を下回る）も比べ、入れ替わったら（以上 → 超、以下 → 未満）出す。
+# 下限と上限の入れ替わり（以上 → 以下）も出す。数と印はすぐ隣り合うものだけを見る（約束、程度の差、前後関係、文末の「以上です」、
+# 「以下のとおり」「以上の3点」のような、数に付かない語は見ない）。数の前の「約」は、直前が漢字なら見ない（契約3件、予約2件）。
+# 範囲（3〜5日、3日から5日）は、まとまりの数の印を合わせて1つにする（約3〜5日 → 3〜5日程度 を同じ概数にする）。
+# 相手の側の、同じ数のすぐ隣の、印に近い語（まで、最大、上限、少なくとも、最低、規模）と、相手の文の、見積もりを言う語
+# （推定、推計、概算、見込み、目安、想定、と見られる など）は、その家族の印があるとみなす（消えた・増えたにしない）。
+# 数量を主張しない「一つ」（weak の値）と、元と後で同じ数の数が違う値（数値の候補 number が扱う）は見ない。
+_QUALIFIER_JOIN = re.compile(r"[ \t]*(?:[~〜]|から)[ \t]*|[-/:‐-–−]")
+# 数のあとに読み飛ばすもの（強調の記号、万・億・兆と単位、「3日間」の「間」、片仮名の単位）
+_QUALIFIER_SKIP = re.compile(r"\*{0,2}(?:[万億兆](?:" + _unit_pattern(_UNITS) + r")?)?間?")
+_QUALIFIER_KATAKANA_UNIT = re.compile(r"[ァ-ヴー]{1,6}")
+_QUALIFIER_KANJI = "一-龥々〆"
+# 数のすぐあとの印。名前は 家族_含むか（approx は概数、lower は下限、upper は上限。in は含む、ex は含まない）
+_QUALIFIER_AFTER = re.compile(
+    r"[ 　]?(?:"
+    r"(?P<approx>ほど|程度|程(?![度遠])|前後(?!関係|左右|不覚|逆|差|し|の関係|の文脈)|ぐらい|くらい|ごろ|頃|余り|余(?![" + _QUALIFIER_KANJI
+    + r"りっすせ])|あまり(?![にな良よ多])|近く|足らず|内外"
+    r"|弱(?![" + _QUALIFIER_KANJI + r"いくかさめまっ])|強(?![" + _QUALIFIER_KANJI + r"いくかさめまっ]))"
+    r"|(?P<upper_in>以下|以内|以前)|(?P<lower_in>以上|以降|以後)"
+    r"|(?P<lower_ex>超え|超(?![過" + _QUALIFIER_KANJI + r"]))|(?P<upper_ex>未満)"
+    r"|(?P<upper_vn>を超[えさ](?:な|ず|ませ|ぬ)|を上回(?:らな|らず|りませ))|(?P<lower_vn>を下回(?:らな|らず|りませ))"
+    r"|(?P<lower_vb>を超[えすし]|を上回)|(?P<upper_vb>を下回))")
+# 動詞の言い方（を超える、を上回る、を下回る、を超えない）は家族だけを持ち、含むかは比べない（「2秒を超え → 2秒以上かかり」の
+# ように、文章では含むかを気にせずに言い換えることが多い。測って決めた）
+_QUALIFIER_VERB = {"lower_vb": "lower_verb", "lower_vn": "lower_verb", "upper_vb": "upper_verb", "upper_vn": "upper_verb"}
+# 数のすぐ前の印（直前の字を見る範囲は _QUALIFIER_BEFORE_REACH）
+_QUALIFIER_BEFORE = re.compile(r"(?:(?P<approx>約|およそ|おおよそ|凡そ|概ね|おおむね|ほぼ|推定|大体|だいたい))"
+                               r"(?:で|、)?[ 　]*\*{0,2}$")
+_QUALIFIER_BEFORE_REACH = 8
+# 「約」の直前にあってよい漢字（合計約、平均約、総額約、期間約、全長約、重量約。ほかの漢字なら契約、予約などの語の一部）
+_QUALIFIER_YAKU_AFTER_KANJI = frozenset("計均額間長量")
+# 相手の側の、同じ数のすぐ隣の、印に近い語（消えた・増えたの比べで、その家族の印があるとみなす。家族だけを見る）
+_QUALIFIER_NEAR_AFTER = re.compile(r"[ 　]?(?:(?P<upper>まで|より少|を上限|が上限|を限度|を最大)|(?P<lower>から|より(?!少)|を下限|が下限|を最低)"
+                                   r"|(?P<approx>規模|見当|ちょっと|ちょい|そこそこ))")
+_QUALIFIER_NEAR_BEFORE = re.compile(r"(?:(?P<upper>最大|最長|最高|最多|多くて|多くとも|多い時で|上限|最大限)"
+                                    r"|(?P<lower>最低|最小|最短|少なくとも|少なくて|下限)|(?P<approx>ざっと|およそ))"
+                                    r"(?:で|は|、)?[ 　]*\*{0,2}$")
+# 相手の文のどこかにあれば、その家族の印があるとみなす語。概数は見積もりを言う語。下限と上限は、範囲の語と、指す語で数を受けた
+# 言い方（タイムアウトは30秒で、待ちがこれを超えた → 待ちが30秒を超えた。測って決めた）
+_QUALIFIER_SENTENCE = {
+    "approx": re.compile(r"推定|推計|概算|見込|見積|目安|想定|概数|大まか|おおまか|ざっと|と見られ|とみられ"),
+    "lower": re.compile(r"以上|以降|超え|超す|超し|超過|上回|少なくとも|最低|下限"),
+    "upper": re.compile(r"以下|以内|未満|下回|上限|最大|最長|超えな|超えず|超えませ|まで"),
+}
+_QUALIFIER_FAMILIES = ("approx", "lower", "upper")
+_QUALIFIER_LABELS = {"approx": "概数", "lower_in": "下限（その数を含む）", "lower_ex": "下限（その数を含まない）",
+                     "upper_in": "上限（その数を含む）", "upper_ex": "上限（その数を含まない）", "lower_verb": "下限",
+                     "upper_verb": "上限"}
+_QUALIFIER_STRICT = frozenset(("lower_in", "lower_ex", "upper_in", "upper_ex"))
+
+
+def _qualifier_marks(text, start, end, number):
+    """文 text（[start, end) が文の範囲）の数 number に付いた印。(印の名前の集合, 印の語の並び, 隣の語の家族の集合) を返す。
+    印の名前は _QUALIFIER_AFTER と _QUALIFIER_BEFORE の名前（approx、lower_in、lower_ex、upper_in、upper_ex）。"""
+    names, words, near = set(), [], set()
+    head = text[max(start, number.start - _QUALIFIER_BEFORE_REACH):number.start]
+    before = _QUALIFIER_BEFORE.search(head)
+    if before is not None:
+        at = number.start - len(head) + before.start()
+        word = before.group("approx")
+        if not (word == "約" and at > start and _KANJI.match(text[at - 1])
+                and text[at - 1] not in _QUALIFIER_YAKU_AFTER_KANJI):
+            names.add("approx")
+            words.append(word)
+    near_before = _QUALIFIER_NEAR_BEFORE.search(head)
+    if near_before is not None:
+        near.add(near_before.lastgroup)
+    at = _QUALIFIER_SKIP.match(text, number.end, end).end()
+    if not number.unit and at == number.end:
+        unit = _QUALIFIER_KATAKANA_UNIT.match(text, at, end)
+        if unit is not None:
+            at = unit.end()
+    seismic = text.endswith("震度", max(start, number.start - 2), number.start)
+    for _ in range(2):
+        found = _QUALIFIER_AFTER.match(text, at, end)
+        if found is None:
+            break
+        at = found.end()
+        word = found.group(found.lastgroup)
+        if seismic and word in ("弱", "強"):
+            continue      # 震度5弱、震度6強（印ではなく、震度の段階の名前）
+        names.add(_QUALIFIER_VERB.get(found.lastgroup, found.lastgroup))
+        words.append(word)
+    near_after = _QUALIFIER_NEAR_AFTER.match(text, at, end)
+    if near_after is not None:
+        near.add(near_after.lastgroup)
+    return names, words, near
+
+
+def _qualifier_states(sides, side, sentence, numbers):
+    """組の文の数ごとの (key, 印の名前の集合, 印の語の並び, 隣の語の家族の集合, 書かれた形) の並び。範囲・日付・時刻の
+    まとまり（3〜5日、3日から5日）は、まとまりの数の印を合わせて1つにする（key は数の並びと最後の単位）。数量を主張しない値
+    （weak）は入れない。"""
+    text = sides.texts[side]
+    start, end = sentence.start, sentence.start + len(sentence.text)
+    marks = [_qualifier_marks(text, start, end, number) for number in numbers]
+    groups = list(range(len(numbers)))
+    for index in range(1, len(numbers)):
+        between = text[numbers[index - 1].end:numbers[index].start].translate(_HALF_WIDTH)
+        if "\n" not in between and (not between or _QUALIFIER_JOIN.fullmatch(between)):
+            groups[index] = groups[index - 1]
+    merged = OrderedDict()
+    for index, (names, words, near) in enumerate(marks):
+        if numbers[index].weak:
+            continue
+        members, names_all, words_all, near_all = merged.setdefault(groups[index], ([], set(), [], set()))
+        members.append(numbers[index])
+        names_all.update(names)
+        words_all.extend(words)
+        near_all.update(near)
+    out = []
+    for members, names, words, near in merged.values():
+        # まとまりは1つの値にする。key は数の並びと最後の単位（3〜5日 と 3日から5日 を同じにする）
+        key = members[0].key if len(members) == 1 else (tuple(m.value for m in members), members[-1].unit)
+        out.append((key, frozenset(names), tuple(words), frozenset(near), text[members[0].start:members[-1].end]))
+    return out
+
+
+def _qualifier_change(old_names, new_names, old_near, new_near, old_words, new_words):
+    """1つの数の印の比べ。(消えた家族, 増えた家族, 含むかが変わった家族) を返す。相手の側の隣の語（near）と、相手の文の
+    その家族の語（old_words と new_words。_QUALIFIER_SENTENCE が当たった家族の集合）があれば、その家族は消えた・増えたに
+    しない。含むかは、元と後の両方がその家族の名詞の印（以上、超、以下、未満 など）1つずつのときだけ比べる。"""
+    def families(names):
+        return set(name.split("_")[0] for name in names)
+    old_f, new_f = families(old_names), families(new_names)
+    lost = [f for f in _QUALIFIER_FAMILIES if f in old_f and f not in new_f and f not in new_near and f not in new_words]
+    added = [f for f in _QUALIFIER_FAMILIES if f in new_f and f not in old_f and f not in old_near and f not in old_words]
+    strict = []
+    for family in ("lower", "upper"):
+        olds = set(name for name in old_names if name.startswith(family))
+        news = set(name for name in new_names if name.startswith(family))
+        if len(olds) == 1 and len(news) == 1 and olds != news and (olds | news) <= _QUALIFIER_STRICT:
+            strict.append(family)
+    return lost, added, strict
+
+
+def _qualifier_risks(sides, groups):
+    """数に付いた概数と範囲の印の変化（kind number_qualifier。--fail-on に数える）。組の文で、同じ値と単位の数が元と後に
+    同じ数だけあり、その印の家族が消えたか（lost）、増えたか（added）、家族や含むかが入れ替わったか（changed）を見る。
+    detail は old_number と new_number（数の書かれた形）、from と to（印の名前の並び。印がなければ空）、old_markers と new_markers（印の語）。"""
+    out = []
+    for group in groups:
+        for i, j in group["pairs"]:
+            old, new = group["old"][i], group["new"][j]
+            if old.text == new.text:
+                continue
+            old_numbers = _sentence_numbers(sides, 0, old)
+            if not old_numbers:
+                continue
+            new_numbers = _sentence_numbers(sides, 1, new)
+            if not new_numbers:
+                continue
+            olds = _qualifier_states(sides, 0, old, old_numbers)
+            news = _qualifier_states(sides, 1, new, new_numbers)
+            old_count = Counter(state[0] for state in olds)
+            new_count = Counter(state[0] for state in news)
+            words = [None, None]
+            for key in old_count:
+                if old_count[key] != new_count.get(key):
+                    continue
+                old_states = [state for state in olds if state[0] == key]
+                new_states = [state for state in news if state[0] == key]
+                if Counter(s[1] for s in old_states) == Counter(s[1] for s in new_states):
+                    continue
+                if len(old_states) > 1:
+                    # 同じ値が2つ以上あるときは、印の名前が同じものを先に外し、残りを位置の順に組にする
+                    rest = Counter(s[1] for s in new_states)
+                    kept_old = []
+                    for state in old_states:
+                        if rest[state[1]] > 0:
+                            rest[state[1]] -= 1
+                        else:
+                            kept_old.append(state)
+                    rest = Counter(s[1] for s in old_states)
+                    kept_new = []
+                    for state in new_states:
+                        if rest[state[1]] > 0:
+                            rest[state[1]] -= 1
+                        else:
+                            kept_new.append(state)
+                    old_states, new_states = kept_old, kept_new
+                for before, after in zip(old_states, new_states):
+                    if words[0] is None:
+                        words = [set(f for f, regex in _QUALIFIER_SENTENCE.items() if regex.search(old.text)),
+                                    set(f for f, regex in _QUALIFIER_SENTENCE.items() if regex.search(new.text))]
+                    lost, added, strict = _qualifier_change(before[1], after[1], before[3], after[3], words[0], words[1])
+                    if not (lost or added or strict):
+                        continue
+                    subkind = "lost" if lost and not added and not strict else (
+                        "added" if added and not lost and not strict else "changed")
+                    out.append(_risk("number_qualifier", subkind, old.line, new.line, old.text, new.text,
+                                     {"old_number": before[4], "new_number": after[4], "from": sorted(before[1]), "to": sorted(after[1]),
+                                      "old_markers": list(before[2]), "new_markers": list(after[2])}))
+    return out
+
+
 def meaning_risks(orig, rw, full=None, type_changes=None, *, doc_type=None):
     """意味が変わる恐れ（JSON の meaning_risks）。
 
@@ -5448,8 +5651,10 @@ def _meaning_risks(sides, full, type_changes, groups=None, doc_type=None, modali
                  + [mark for mark in all_marks if id(mark) not in quiet_ids] + citations)
         certainty = _certainty_risks(sides, groups, risks, masks, doc_type=doc_type)
     sides.quiet_marks = [mark for mark in quiet if id(mark) in quiet_ids]
-    # 許可・能力の言い方の候補と、選ぶ範囲・因果の言い方の候補も、確度とかぎかっこの候補と同じく、既存の候補の後ろに行の順で並べる。
-    added = certainty + _quote_risks(sides, groups, masks) + _modality_risks(sides, modality) + _logic_risks(sides, logic)
+    # 許可・能力の言い方の候補と、選ぶ範囲・因果の言い方の候補、数に付いた概数と範囲の印の候補も、確度とかぎかっこの候補と同じく、
+    # 既存の候補の後ろに行の順で並べる。
+    added = (certainty + _quote_risks(sides, groups, masks) + _modality_risks(sides, modality) + _logic_risks(sides, logic)
+             + _qualifier_risks(sides, groups))
     added.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                               r["new_line"] if r["new_line"] is not None else 0))
     risks += added
@@ -9445,6 +9650,22 @@ def _risk_line(risk):
         return ("関連の言い方が因果の言い方に変わった{}: {}（{}） → {}（{}）。原文は、関連や相関があると述べているだけで、"
                 "原因と結果とは書いていません。因果の主張に強めていないか確かめ、強めていれば原文の言い方に戻してください。".format(
                     where, detail["from"], "、".join(detail["old_hits"]), detail["to"], "、".join(detail["new_hits"])))
+    if kind == "number_qualifier":
+        def side(number, names, markers):
+            label = "・".join(_QUALIFIER_LABELS[name] for name in names) or "印なし"
+            return "{}（{}）".format(number, label) if not markers else "{}（{}: {}）".format(number, label, "、".join(markers))
+        change = "{} → {}".format(side(detail["old_number"], detail["from"], detail["old_markers"]),
+                                  side(detail["new_number"], detail["to"], detail["new_markers"]))
+        if subkind == "lost":
+            advice = ("原文は、数に概数か範囲の印を付けています。印を落として、ちょうどその数と読める書き方に変えていないか"
+                      "確かめ、変えていれば原文の印を戻してください。")
+        elif subkind == "added":
+            advice = ("原文は、数に概数や範囲の印を付けていません。依頼にない印を足して、数の意味を変えていないか確かめ、"
+                      "足していれば外してください。")
+        else:
+            advice = ("原文と印の種類が違います（以上と超、以下と未満は、その数を含むかどうかが違います）。数の範囲を"
+                      "変えていないか確かめ、変えていれば原文の印に戻してください。")
+        return "数に付いた概数・範囲の印が変わった{}: {}。{}".format(where, change, advice)
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(
@@ -9987,7 +10208,9 @@ _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読�
 _FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化、"
                  "確度を強めた書き換え（かもしれない → 見込み、見込み → 予定、と思われる → 断定など）、"
                  "原文の状態の語（未定、未確認、調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足しが"
-                 "1件でもあれば、終了コード1で終わります。許可の言い方（してよい、してもよい、構わない）が消えたか増えた書き換えも数えます。"
+                 "1件でもあれば、終了コード1で終わります。数値には、同じ数に付いた概数や範囲の印（約、ほど、程度、以上、以下、未満 など）が"
+                 "消えたか増えた書き換え（約120人 → 120人、100人以上 → 100人）も含めます。"
+                 "許可の言い方（してよい、してもよい、構わない）が消えたか増えた書き換えも数えます。"
                  "事実や仕様を述べる種類（--doc-type が " + "、".join(COUNTED_TYPES) + "）では、「場合がある」「ことがある」を消して"
                  "言い切った書き換えと、断定に「必ず」「確実に」などを足した書き換えも数えます（ほかの種類と種類なしでは数えません）。"
                  "能力の言い方（できる、可能だ）が消えた書き換えは、どの種類でも数えません。"
