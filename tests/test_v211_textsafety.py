@@ -80,8 +80,8 @@ class _Case(unittest.TestCase):
         return path.read_text(encoding="ascii") if path.exists() else ""
 
 
-class HookBrokenFieldTests(_Case):
-    """フックの本文の欄に対になっていないサロゲートがあっても、ほかの欄の本文を確かめる。"""
+class _RegisteredCase(_Case):
+    """s.md を登録し、最終稿 f.md が検査記録と照合できない状態にする。"""
 
     def setUp(self):
         super().setUp()
@@ -97,6 +97,10 @@ class HookBrokenFieldTests(_Case):
 
     def decision(self, output):
         return json.loads(output)["hookSpecificOutput"]["permissionDecision"] if output else None
+
+
+class HookBrokenFieldTests(_RegisteredCase):
+    """フックの本文の欄に対になっていないサロゲートがあっても、ほかの欄の本文を確かめる。"""
 
     def test_broken_field_does_not_hide_registered_body(self):
         """壊れた欄が先にあっても、同じ tool_input の登録した本文で deny が出る（2.1.0 は空の出力＝許可）。"""
@@ -134,6 +138,73 @@ class HookBrokenFieldTests(_Case):
         with self.assertRaises(UnicodeError):
             check.text_sha256_of(bodies[0][0])
         self.assertEqual(check.text_sha256_of(bodies[1][0]), check.text_sha256_of(FINAL_TEXT.encode("utf-8")))
+
+
+class HookBrokenPathTests(_RegisteredCase):
+    """gh の本文のファイルの名前に、ファイルの名前にできない文字（JSON の "\\ud800"）があっても、その1件だけを
+    照合できない本文として飛ばし、ほかの本文はいつもどおり確かめる（2.1.0 は realpath の UnicodeEncodeError で
+    フック全体が何も出さずに終わり、ホストは許可とみなしていた）。"""
+
+    def test_broken_body_file_does_not_hide_registered_body(self):
+        body = FINAL_TEXT.rstrip("\n")
+        commands = (
+            "gh pr comment 1 --body-file 'bad-\ud800.md'; gh pr create --title t --body-file f.md",
+            "gh pr comment 1 --body-file 'x\ud800.md'; gh pr comment 1 --body '{}'".format(body),
+            "gh pr comment 1 --body-file=f\ud800; gh pr comment 1 --body '{}'".format(body),
+            "gh api repos/o/r/issues/1/comments -F body=@\ud800.md; gh pr comment 1 --body '{}'".format(body),
+            "gh api repos/o/r/issues/1/comments -F body=@\ud800.md -f body='{}'".format(body),
+            "gh release create v1 -F 'n\ud800'; gh pr comment 1 --body '{}'".format(body),
+        )
+        for command in commands:
+            with self.subTest(command=ascii(command)):
+                self.assertEqual(self.decision(self.pre("Bash", {"command": command})), "deny")
+        self.assertEqual(self.errors_log(), "")
+
+    def test_broken_body_file_alone_is_not_an_error(self):
+        """壊れた名前のファイルだけを渡すコマンドは、登録した原稿と関係のない本文として通し、例外を出さない。"""
+        for command in ("gh pr comment 1 --body-file 'bad-\ud800.md'",
+                        "gh api repos/o/r/issues/1/comments -F body=@\ud800.md",
+                        "gh release create v1 -F 'n\ud800'"):
+            with self.subTest(command=ascii(command)):
+                self.assertEqual(self.pre("Bash", {"command": command}), "")
+        self.assertEqual(self.errors_log(), "")
+
+    def test_broken_name_with_registered_name_is_still_unextractable(self):
+        """登録した原稿の名前を含む壊れた名前は、ほかの読めないファイルと同じく、取り出せない本文として扱う。"""
+        output = self.pre("Bash", {"command": "gh pr comment 1 --body-file 'f.md\ud800'"})
+        self.assertEqual(self.decision(output), "ask")
+        self.assertEqual(self.errors_log(), "")
+
+    def test_place_and_paths_skip_unnamable_path(self):
+        hook = load(HOOK, "_yomiyasu_hook_v211_textsafety_place")
+        project = str(self.project)
+        broken = os.path.join(project, "x\ud800.md")
+        try:
+            expected = os.path.normcase(os.path.realpath(broken))
+        except ValueError:
+            # Python 3.14 などの realpath は UnicodeEncodeError を出す。そのときは照合に使わない None
+            expected = None
+        self.assertEqual(hook._place(broken), expected)
+        self.assertEqual(hook._place(os.path.join(project, "f.md")),
+                         os.path.normcase(os.path.realpath(os.path.join(project, "f.md"))))
+        self.assertEqual(hook._paths("\ud800 f.md", project), [os.path.join(project, "f.md")])
+        self.assertEqual(hook._paths("下書き\ud83d を f.md で直して", project), [os.path.join(project, "f.md")])
+        self.assertEqual(hook._paths("x\ud800.md", project), [])
+
+
+class HookBrokenPromptTests(_Case):
+    """依頼の文に、ファイルの名前にできない語があっても、ほかの名前の原稿を登録する。"""
+
+    def test_prompt_with_broken_word_registers_good_file(self):
+        (self.project / "f.md").write_text(FINAL_TEXT, encoding="utf-8")
+        for number, prompt in enumerate(("/yomiyasu 下書き\ud83d を f.md で直して", "/yomiyasu x\ud800.md f.md")):
+            with self.subTest(prompt=ascii(prompt)):
+                state = self.root / ("st" + str(number))
+                output = self.hook({"hook_event_name": "UserPromptSubmit", "prompt": prompt}, state=state)
+                self.assertIn("f.md", output)
+                entries = [json.loads(p.read_text(encoding="ascii")) for p in (state / "armed").glob("*.json")]
+                self.assertEqual([os.path.basename(e["targets"]["source"]["path"]) for e in entries], ["f.md"])
+                self.assertEqual(self.errors_log(state), "")
 
 
 class NonUtf8NameKeyTests(unittest.TestCase):
