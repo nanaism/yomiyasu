@@ -27,8 +27,8 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_v200_check import (  # noqa: E402
-    CHECK, CheckCase, FINALIZE_STATE_DIR, RUN_REWRITE_FIRST, RUN_REWRITE_FIRST_NO_CANDIDATES, ROOT, SCRIPTS, SKILL_MD,
-    TOOL_NAMES, VERIFY_LINE1, sha256_file, split_lines)
+    CHECK, CheckCase, FINALIZE_STATE_DIR, RUN_HEAD_NOTE, RUN_REWRITE_FIRST, RUN_REWRITE_FIRST_NO_CANDIDATES, ROOT, SCRIPTS,
+    SKILL_MD, TOOL_NAMES, VERIFY_LINE1, sha256_file, split_lines)
 
 sys.path.insert(0, str(SCRIPTS))
 import yomiyasu_diff  # noqa: E402
@@ -381,8 +381,10 @@ class ListProblemTest(unittest.TestCase):
         stiff = lines.index("■ 文体の硬化（一覧の注意）")
         self.assertEqual(lines[stiff + 1], LIST_PROBLEM_LINE.format(LIST_LABELS["nominalization"], "nominalization",
                                                                      "UTF-8 として読めません"))
-        # 6行目と7行目（完了報告に写す値）は候補の数のまま
-        self.assertEqual(lines[5:7], ["硬化の検査: 候補なし", "勢いの検査: 候補なし"])
+        # 記録の行のあとの2行（完了報告に写す値。候補がなければ6行目と7行目、候補の一覧と案内の2行があれば8行目と9行目）は候補の数のまま
+        index = 6 if lines[4] == RUN_HEAD_NOTE else 4
+        self.assertTrue(lines[index].startswith("記録: "), lines[:index + 1])
+        self.assertEqual(lines[index + 1:index + 3], ["硬化の検査: 候補なし", "勢いの検査: 候補なし"])
 
 
 # ---- regress の R8: BOM つきの UTF-8 ----

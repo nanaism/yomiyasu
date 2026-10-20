@@ -347,8 +347,8 @@ class CheckRunLinesTest(CheckCase):
     """check run の「勢いの検査:」の行も、diff の detector_summary と同じ値（完了報告の確認の記録に写す値）。"""
 
     def detector_lines(self, lines):
-        self.assertTrue(lines[4].startswith("記録: "), lines[:6])
-        return lines[5:7]
+        index = self.record_index(lines)
+        return lines[index + 1:index + 3]
 
     def test_typed_info_only_and_mixed(self):
         a, b, lines = self.run_pair(EMOJI_SLIDE[0] + "\n", EMOJI_SLIDE[1] + "\n", "--doc-type", "slides")

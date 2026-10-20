@@ -3,7 +3,8 @@
 
 - run の人が読む出力は、5行目（記録）のすぐあとに「硬化の検査: …」「勢いの検査: …」の2行を足す。値は「候補なし」か
   「候補{n}件」（参考だけなら「参考{n}件」）。完了報告の確認の記録の2行にそのまま写せる形。diff を実行しなかったとき
-  （新規作成で資料を原文とみなさないとき、diff が止まったとき）は出さない。1〜5行目の位置は変えない。
+  （新規作成で資料を原文とみなさないとき、diff が止まったとき）は出さない。1〜5行目の位置は変えない（2.1.1 から、候補が
+  あるときは3行目のあとに候補の一覧と案内の2行が入り、記録の行と、そのあとの行が2行下がる）。
 - 記録の checks の diff の summary に、stiffness_candidate_count、stiffness_level、tone_candidate_count、tone_level を足す。
 - run --json に stiffness_check と tone_check（上と同じ文字列。diff を実行しなかったときは null）を足す。
 - 硬化と勢いの候補は節（■ 文体の硬化、■ 勢い）に出す。1行目の「候補あり／なし」と --fail-on には数えない。
@@ -29,14 +30,15 @@ COMPOSED = "来週の定例は木曜の10時からです。\n"
 
 class RunLinesTest(CheckCase):
     def detector_lines(self, lines):
-        self.assertTrue(lines[4].startswith("記録: "), lines[:6])
-        return lines[5:7]
+        index = self.record_index(lines)
+        return lines[index + 1:index + 3]
 
     def test_no_candidates(self):
         a, b, lines = self.run_pair(*PLAIN)
-        self.assertEqual(lines[3], RUN_DISCLAIMER)
+        index = self.record_index(lines)
+        self.assertEqual(lines[index - 1], RUN_DISCLAIMER)
         self.assertEqual(self.detector_lines(lines), ["硬化の検査: 候補なし", "勢いの検査: 候補なし"])
-        self.assertEqual(lines[7:11], ["慎重表現の検査: 候補なし", "値の検査: 候補なし",
+        self.assertEqual(lines[index + 3:index + 7], ["慎重表現の検査: 候補なし", "値の検査: 候補なし",
                                       "見直し候補: 原文 0件 → 最終稿 0件（lint の規則に当たった数で、点数ではありません。増えても減っても読みやすさの良し悪しは示しません）", ""])
 
     def test_stiffness_candidate(self):
@@ -66,9 +68,9 @@ class RunLinesTest(CheckCase):
         material = self.write("memo.md", MEMO)
         final = self.write("final.md", COMPOSED)
         process, lines = self.check_ok("run", "--material", material, "--final", final)
-        self.assertTrue(lines[4].startswith("記録: "))
-        self.assertEqual(lines[5], "見直し候補: 最終稿 0件（新規作成なので原文の件数はありません。lint の規則に当たった数で、点数ではありません）")
-        self.assertEqual(lines[6], "")
+        index = self.record_index(lines)
+        self.assertEqual(lines[index + 1], "見直し候補: 最終稿 0件（新規作成なので原文の件数はありません。lint の規則に当たった数で、点数ではありません）")
+        self.assertEqual(lines[index + 2], "")
         self.assertFalse([line for line in lines if line.startswith(("硬化の検査:", "勢いの検査:"))])
 
 

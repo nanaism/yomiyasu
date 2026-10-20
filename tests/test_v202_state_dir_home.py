@@ -35,6 +35,15 @@ HOOK = ROOT / "scripts" / "yomiyasu_hook.py"
 KEPT_VALUES = ("~user/state", "~x", "~~/state", "~.", "~state", "./~/state", "sub/~", "sub/~/state", " ~/state",
                "state", "../state", ".", "${HOME}/state", "~${HOME}", "~\\state" if os.sep == "/" else "~x\\state")
 
+# check run の出力で、候補があるときに3行目のあとの候補の一覧に続けて出る案内（その2行のぶん、記録の行が2行下がる）
+RUN_HEAD_NOTE = "候補の中身は下の節にあります。出力を切らずに読んでください。"
+
+
+def record_line(output):
+    """check run の出力の記録の行（5行目。候補があるときは7行目）。"""
+    lines = output.splitlines()
+    return lines[6 if len(lines) > 6 and lines[4] == RUN_HEAD_NOTE else 4]
+
 
 def load(path, name):
     """スクリプトを同じプロセスで読む。フックが書き換える sys.dont_write_bytecode は元に戻す。"""
@@ -237,7 +246,8 @@ class HomeStateFolder(unittest.TestCase):
                 process = self.check("run", "--source", "a.md", "--final", "b.md", *option, env=env)
                 lines = process.stdout.splitlines()
                 self.assertTrue(lines[1].startswith("yomiyasu-check: executed "), process.stdout)
-                self.assertTrue(lines[4].startswith("記録: " + str(state / "runs") + os.sep), lines[4])
+                self.assertTrue(record_line(process.stdout).startswith("記録: " + str(state / "runs") + os.sep),
+                                process.stdout)
                 self.assertIn('verify --state-dir "{}"'.format(state), lines[0])
                 verify = self.check("verify", "--final", "b.md", *option, env=env)
                 self.assertTrue(verify.stdout.splitlines()[1].startswith("yomiyasu-check: executed via=verify "),
@@ -289,7 +299,7 @@ class HomeStateFolder(unittest.TestCase):
                 env = self.env(YOMIYASU_STATE_DIR=value)
                 state = Path(os.path.abspath(os.path.join(str(self.work), value)))
                 process = self.check("run", "--source", "a.md", "--final", "b.md", env=env)
-                self.assertTrue(process.stdout.splitlines()[4].startswith("記録: " + str(state / "runs") + os.sep),
+                self.assertTrue(record_line(process.stdout).startswith("記録: " + str(state / "runs") + os.sep),
                                 process.stdout)
                 self.assertIn("登録しました", self.hook("/yomiyasu b.md を直して", env=env))
                 self.assertEqual(len(self.armed(state)), 1)
@@ -305,7 +315,7 @@ class HomeStateFolder(unittest.TestCase):
         env = self.env(HOME="", YOMIYASU_STATE_DIR="~/state-empty-home")
         state = self.work / "~" / "state-empty-home"
         process = self.check("run", "--source", "a.md", "--final", "b.md", env=env)
-        self.assertTrue(process.stdout.splitlines()[4].startswith("記録: " + str(state / "runs") + os.sep),
+        self.assertTrue(record_line(process.stdout).startswith("記録: " + str(state / "runs") + os.sep),
                         process.stdout)
         verify = self.check("verify", "--final", "b.md", env=env)
         self.assertTrue(verify.stdout.splitlines()[1].startswith("yomiyasu-check: executed via=verify "),

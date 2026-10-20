@@ -199,6 +199,8 @@ PAIRS_22 = (("田中が佐藤を承認した。\n", "佐藤が田中を承認し
             ("保存期間は3日です。\n", "保存期間は30日です。\n"),
             ("データを保存します。\n", "データを保存しません。\n"))
 STATUS_LINE = re.compile(r"^yomiyasu-check: ([a-z_]+)((?: [a-z_]+=\S+)*)$")
+# check run の出力で、候補があるときに3行目のあとの候補の一覧に続けて出る案内（その2行のぶん、記録の行が2行下がる）
+RUN_HEAD_NOTE = "候補の中身は下の節にあります。出力を切らずに読んでください。"
 
 
 # ---- 補助 ----
@@ -392,9 +394,15 @@ class DocTypeCase(unittest.TestCase):
         self.assertIsNotNone(match, line)
         return match.group(1), [part.split("=", 1) for part in match.group(2).split()]
 
+    def record_index(self, lines):
+        """run の出力の記録の行の位置。記録の行は5行目で、候補があるときは、3行目のあとに候補の一覧と案内の2行が入るので7行目。"""
+        index = 6 if len(lines) > 6 and lines[4] == RUN_HEAD_NOTE else 4
+        self.assertTrue(lines[index].startswith("記録: "), lines[:index + 1])
+        return index
+
     def record(self, lines):
-        self.assertTrue(lines[4].startswith("記録: "), lines[:5])
-        path = Path(lines[4][len("記録: "):])
+        index = self.record_index(lines)
+        path = Path(lines[index][len("記録: "):])
         return path, json.loads(path.read_text(encoding="utf-8"))
 
 

@@ -1898,6 +1898,101 @@ def _summary_line(ctx, diff_module=None):
     return summary
 
 
+# 頭の一覧で、検査ごとに並べる候補の数の上限（残りは「ほかN件」）
+_HEAD_LIMIT = 3
+# 候補があるときに、頭の一覧のすぐ下に置く文（出力の頭だけを読んで、下の節を読まずに終えないため）
+_HEAD_NOTE = "候補の中身は下の節にあります。出力を切らずに読んでください。"
+# diff の規則の見直し候補の、頭の一覧での名前（行番号を持たない候補。同じ名前はまとめて件数を付ける）
+_HEAD_RULE_NAMES = (("structure", "構造"), ("logic", "つながり"), ("endings.changes", "文末の種類"),
+                    ("type_changes", "文の種類の印"), ("endings.flags", "文末の立場"), ("bold", "太字"))
+
+
+def _head_where(old_line, new_line):
+    """頭の一覧の行番号（最終稿の行があれば「後N行目」、消えた行なら「元N行目」）。行がなければ空。"""
+    if new_line is not None:
+        return "後{}行目 ".format(new_line)
+    if old_line is not None:
+        return "元{}行目 ".format(old_line)
+    return ""
+
+
+def _head_part(label, entries, total):
+    """頭の一覧の1つの検査の分（「lint の候補: 」に「L」と行番号と規則の名前を並べ、残りを「（ほか2件）」とする形）。
+    entries は（表示、件数）の並び。上限を超えた分と、並べられない候補は「ほかN件」にする。"""
+    shown = entries[:_HEAD_LIMIT]
+    rest = total - sum(weight for _, weight in shown)
+    if not shown:
+        return "{}: {}件".format(label, total)
+    text = "{}: {}".format(label, "、".join(name for name, _ in shown))
+    if rest > 0:
+        text += "（ほか{}件）".format(rest)
+    return text
+
+
+def _head_lines(ctx, diff_module):
+    """run の3行目のすぐあとに足す行（候補の短い一覧と、下の節を読む案内の2行）。出力の頭だけを読んでも、どの行の
+    どの規則に当たったかが分かるようにする。候補がない、または途中で最終稿が変わったときは何も足さない。
+    lint、diff（意味が変わる恐れと規則の見直し候補）、文体の硬化などの見直し候補、資料との照合、事実の穴の順に並べ、
+    数え方は下の節と同じにする（diff の候補の数は3行目の「候補N件」と同じ）。"""
+    if ctx.final_changed:
+        return []
+    parts = []
+    lint = ctx.lint_result
+    if lint is not None and lint.get("candidate_count"):
+        entries = [("L{} {}".format(finding.get("line"), finding.get("rule")), 1)
+                   for finding in lint.get("findings") or []]
+        parts.append(_head_part("lint の候補", entries, lint["candidate_count"]))
+    result = ctx.diff_result
+    if result is not None and ctx.diff_parts is not None:
+        entries = []
+        risks = ctx.diff_risks if ctx.diff_risks is not None else result.get("meaning_risks") or []
+        for risk in risks:
+            if (risk.get("kind"), risk.get("subkind")) == ("sentence_type", "marks"):
+                continue
+            entries.append((_head_where(risk.get("old_line"), risk.get("new_line")) + str(risk.get("kind")), 1))
+        for marker in result.get("markers") or []:
+            entries.append(("{}の増減".format(marker.get("kind")), 1))
+        if result.get("new_words"):
+            entries.append(("元の文にない語", 1))
+        if result.get("lost_words"):
+            entries.append(("消えた語", 1))
+        rewritten_only = diff_module._shows_rewritten_only(result)
+        endings = result.get("endings") or {}
+        for key, name in _HEAD_RULE_NAMES:
+            if key in ("logic", "endings.flags", "bold") and not rewritten_only:
+                continue
+            items = endings.get(key.split(".")[1]) if key.startswith("endings.") else result.get(key)
+            if items:
+                entries.append((name + ("{}件".format(len(items)) if len(items) > 1 else ""), len(items)))
+        total = sum(weight for _, weight in entries)
+        if total:
+            parts.append(_head_part("diff の候補", entries, total))
+        entries = []
+        for key in ("stiffness", "tone", "hedges", "immutable", "politeness", "register"):
+            section = result.get(key)
+            if not isinstance(section, dict) or not isinstance(section.get("candidates"), list):
+                continue
+            for candidate in section["candidates"]:
+                if isinstance(candidate, dict) and candidate.get("level") == "review":
+                    entries.append((_head_where(candidate.get("old_line"), candidate.get("new_line")) + key, 1))
+        if entries:
+            parts.append(_head_part("文体などの候補", entries, len(entries)))
+    materials = ctx.materials_result
+    if materials is not None and materials.get("candidate_count"):
+        names = {"number": "資料にない数値", "name": "資料にない名前"}
+        entries = [(_head_where(risk.get("old_line"), risk.get("new_line"))
+                    + names.get(risk.get("subkind"), str(risk.get("kind"))), 1)
+                   for risk in materials.get("meaning_risks") or []]
+        parts.append(_head_part("資料との照合の候補", entries, materials["candidate_count"]))
+    gaps = ctx.fact_gaps
+    if gaps is not None and not gaps["skipped"] and gaps["count"]:
+        entries = [("後{}行目「{}」".format(item["line"], item["match"]), 1) for item in gaps["items"]]
+        parts.append(_head_part("事実の穴の候補", entries, gaps["count"]))
+    if not parts:
+        return []
+    return ["。".join(parts), _HEAD_NOTE]
+
+
 def _detector_value(ctx, diff_module, key):
     """硬化の検査（stiffness）と勢いの検査（tone）の結果の値（「候補なし」「候補{n}件」「参考{n}件」）。diff が最後まで
     動かなかったとき（新規作成で diff を実行しない、diff が止まった、途中で最終稿が変わった）は None。"""
@@ -2562,9 +2657,11 @@ def _run_impl(args, parser):
         else:
             record_line = "記録: なし（{}）".format("--no-record" if ctx.no_record else write_problem)
         sections = changed_sections + _sections(ctx, lint_module, diff_module)
-        # 記録を書かないときの4行目は「この結果は」（記録がないため）
+        # 記録を書かないときの断りの行（候補がなければ4行目）は「この結果は」（記録がないため）
         disclaimer = _DISCLAIMER if recording else _UNRECORDED_DISCLAIMER
-        text = "\n".join([line, token, _summary_line(ctx, diff_module), disclaimer, record_line]
+        # 候補があるときは、3行目のすぐあとに候補の短い一覧と案内を足す（2行目の状態の行と3行目は動かさない）
+        text = "\n".join([line, token, _summary_line(ctx, diff_module)] + _head_lines(ctx, diff_module)
+                         + [disclaimer, record_line]
                          + _detector_lines(ctx, diff_module) + _candidate_lines(ctx, candidate_counts)) + "\n\n"
         if sections:
             text += "\n\n".join(sections) + "\n\n"

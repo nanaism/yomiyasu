@@ -85,6 +85,8 @@ RUN_PARTIAL_HEAD = "検査の一部を実行できませんでした（"
 PARTIAL_TAIL = "verify は実行せず、完了報告にこの出力の2行目を写してください。"
 RUN_UNRECORDED_PART = "記録を書けませんでした"
 RUN_DISCLAIMER = "この記録は検査を実行したことを示すだけで、意味が保たれたことや読みやすさの合格を示すものではありません。"
+# 候補があるときに、3行目のあとの候補の一覧に続けて出る案内（その2行のぶん、4行目からあとの行が2行下がる）
+RUN_HEAD_NOTE = "候補の中身は下の節にあります。出力を切らずに読んでください。"
 FAIL_ON_HEAD = "--fail-on={} の条件に当たりました（終了コード1）。"
 MATERIALS_DISCLAIMER = ("照らしたのは数値、名前、語、確度の語だけです。主張、条件、担当が資料どおりかは判定していません。"
                         "資料と読み比べてください。")
@@ -432,9 +434,15 @@ class CheckCase(unittest.TestCase):
         self.assertEqual(positions, sorted(set(positions)), line)
         return match.group(1), dict(pairs)
 
+    def record_index(self, lines):
+        """run の出力の記録の行の位置。記録の行は5行目で、候補があるときは、3行目のあとに候補の一覧と案内の2行が入るので7行目。"""
+        index = 6 if len(lines) > 6 and lines[4] == RUN_HEAD_NOTE else 4
+        self.assertTrue(lines[index].startswith("記録: "), lines[:index + 1])
+        return index
+
     def record_from(self, lines):
-        self.assertTrue(lines[4].startswith("記録: "), lines[:5])
-        path = Path(lines[4][len("記録: "):])
+        index = self.record_index(lines)
+        path = Path(lines[index][len("記録: "):])
         self.assertTrue(path.is_file(), str(path))
         return path, json.loads(path.read_text(encoding="utf-8"))
 
@@ -483,9 +491,12 @@ class TestK1RecordAndOutput(CheckCase):
             line1,
             line2,
             "実行した検査: lint（最終稿）候補0件、diff（原文→最終稿）変更あり 候補1件（うち意味が変わる恐れ1件）",
+            # 候補があるときは、3行目のあとに候補の短い一覧と、下の節を読む案内を出す
+            "diff の候補: 後1行目 number",
+            RUN_HEAD_NOTE,
             RUN_DISCLAIMER,
             "記録: " + str(record),
-            # diff の詰め: 5行目のあとに硬化の検査と勢いの検査の結果（完了報告の確認の記録に写す2行）
+            # diff の詰め: 記録の行のあとに硬化の検査と勢いの検査の結果（完了報告の確認の記録に写す2行）
             "硬化の検査: 候補なし",
             "勢いの検査: 候補なし",
             "慎重表現の検査: 候補なし",
@@ -704,7 +715,7 @@ class TestRunThenVerify(CheckCase):
                   "checks=lint,diff meaning_risk=1 replay=").format(fields["run"], sha256_file(b)[:12])
         verify_lines, _ = self.assert_verify(self.check("verify", "--final", b), "executed", code=0)
         self.assertEqual(verify_lines, [VERIFY_LINE1["executed"].format(checks="lint、diff"),
-                                        common + "skipped", lines[4],
+                                        common + "skipped", lines[self.record_index(lines)],
                                         "記録の中身: 見直し候補 最終稿 0件、直した箇所 1か所（原文の件数と元と後は run の出力にあります）"])
         verify_lines, _ = self.assert_verify(self.check("verify", "--final", b, "--replay"), "executed", code=0)
         self.assertEqual(verify_lines[1], common + "ok")
@@ -806,6 +817,8 @@ class TestRunThenVerify(CheckCase):
             line1,
             line2,
             "実行した検査: lint（最終稿）候補0件、diff（原文→最終稿）変更あり 候補1件（うち意味が変わる恐れ0件）",
+            "diff の候補: 元の文にない語",
+            RUN_HEAD_NOTE,
             RUN_DISCLAIMER,
             "記録: " + str(record),
             "硬化の検査: 候補なし",
@@ -1368,7 +1381,7 @@ class TestRunOptions(CheckCase):
         other = self.root / "other-state"
         process, lines = self.check_ok("run", "--source", a, "--final", b, "--state-dir", other)
         run_id = self.status(lines[1])[1]["run"]
-        self.assertEqual(lines[4], "記録: " + str(other / "runs" / run_id / "attempt-1.json"))
+        self.assertEqual(lines[self.record_index(lines)], "記録: " + str(other / "runs" / run_id / "attempt-1.json"))
         self.assertTrue((other / "runs" / run_id / "attempt-1.json").is_file())
         self.assertFalse(self.state.exists(), "YOMIYASU_STATE_DIR の場所には書かない")
         _, fields = self.assert_verify(self.check("verify", "--final", b, "--state-dir", other), "executed", code=0)
@@ -1425,6 +1438,8 @@ class TestComposeAndMaterials(CheckCase):
             line1,
             line2,
             "実行した検査: lint（最終稿）候補0件、資料との照合（資料2件→最終稿）資料にない数値・名前1件",
+            "資料との照合の候補: 後4行目 資料にない数値（ほか2件）",
+            RUN_HEAD_NOTE,
             RUN_DISCLAIMER,
             "記録: " + str(self.state / "runs" / run_id / "attempt-1.json"),
             "見直し候補: 最終稿 0件（新規作成なので原文の件数はありません。lint の規則に当たった数で、点数ではありません）",
@@ -1664,7 +1679,7 @@ class TestRecordingFailures(CheckCase):
                          r"もう一度実行するか、完了報告の「実行しなかった検査」に「記録（(.+)）」と書いてください。$", lines[0])
         self.assertIsNotNone(match, lines[0])
         self.assertEqual(match.group(1), match.group(2))
-        self.assertEqual(lines[4], "記録: なし（{}）".format(match.group(1)))
+        self.assertEqual(lines[self.record_index(lines)], "記録: なし（{}）".format(match.group(1)))
         self.assertEqual((fields["run"], fields["attempt"], fields.get("reason")), ("-", "-", "not_writable"))
         self.assertEqual(lines[-2:], lines[:2])
         self.assertIn("■ 全文差分（変更 1か所。省略していません）", lines)  # 検査は実行した
@@ -1680,9 +1695,9 @@ class TestRecordingFailures(CheckCase):
         process, lines = self.check_ok("run", "--source", a, "--final", b, "--no-record")
         status, fields = self.status(lines[1])
         self.assertEqual(status, "unrecorded")
-        # 10.4 S11: 1行目は表のとおりの文で、{仕上げ} を --no-record の文にする。5行目は「記録: なし（--no-record）」
+        # 10.4 S11: 1行目は表のとおりの文で、{仕上げ} を --no-record の文にする。記録の行（候補がなければ5行目）は「記録: なし（--no-record）」
         self.assertEqual(lines[0], RUN_REWRITE_FIRST + FINALIZE_NO_RECORD)
-        self.assertEqual(lines[4], "記録: なし（--no-record）")
+        self.assertEqual(lines[self.record_index(lines)], "記録: なし（--no-record）")
         self.assertEqual(lines[-2:], lines[:2])
         # 記録がないので実行IDと回は「-」。理由は reason= に書く
         # check の固め（勧め59）: verify の状態の名前 no_record と重ならない値にした
@@ -2129,7 +2144,7 @@ class TestStateFolderPlace(CheckCase):
                 status, fields = self.status(lines[1])
                 self.assertEqual(status, "executed")
                 expected = top / ".yomiyasu" / "runs" / fields["run"] / "attempt-1.json"
-                self.assertEqual(lines[4], "記録: " + str(expected))
+                self.assertEqual(lines[self.record_index(lines)], "記録: " + str(expected))
                 self.assertTrue(expected.is_file())
                 self.assertEqual((top / ".yomiyasu" / ".gitignore").read_text(encoding="utf-8").rstrip("\n").split("\n"),
                                  GITIGNORE_LINES)
@@ -2148,7 +2163,7 @@ class TestStateFolderPlace(CheckCase):
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         lines = split_lines(process.stdout)
         run_id = self.status(lines[1])[1]["run"]
-        self.assertEqual(lines[4], "記録: " + str(work / ".yomiyasu" / "runs" / run_id / "attempt-1.json"))
+        self.assertEqual(lines[self.record_index(lines)], "記録: " + str(work / ".yomiyasu" / "runs" / run_id / "attempt-1.json"))
 
 
 class TestCommonPromises(CheckCase):
@@ -2562,7 +2577,7 @@ class TestReviewFixes(CheckCase):
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         lines = split_lines(process.stdout)
         run_id = self.status(lines[1])[1]["run"]
-        self.assertEqual(lines[4], "記録: " + str(repo / ".yomiyasu" / "runs" / run_id / "attempt-1.json"))
+        self.assertEqual(lines[self.record_index(lines)], "記録: " + str(repo / ".yomiyasu" / "runs" / run_id / "attempt-1.json"))
         self.assert_verify(self.check("verify", "--final", b, cwd=docs, env=env), "executed", code=0)
         status = subprocess.run(["git", "status", "--porcelain", "--untracked-files=all"], cwd=str(repo),
                                 env=git_env, capture_output=True, encoding="utf-8", timeout=30)
@@ -2738,7 +2753,7 @@ class TestReviewFixes(CheckCase):
                 self.assertNotIn("BLOCKED-WRITES", process.stderr)
                 self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
                 lines = split_lines(process.stdout)
-                self.assertTrue(lines[4].startswith("記録: " + str(top / ".yomiyasu" / "runs") + os.sep), lines[4])
+                self.assertTrue(lines[self.record_index(lines)].startswith("記録: " + str(top / ".yomiyasu" / "runs") + os.sep), lines[self.record_index(lines)])
                 self.assertEqual(sorted(path.name for path in docs.iterdir()), ["a.md", "b.md"])
 
     # --- robust R11: 作業ディレクトリがない ---

@@ -921,7 +921,8 @@ class TestOutputWording(CheckCase):
         b = self.write("b.md", "保存期間は30日です。\n")
         process, lines = self.check_ok("run", "--source", a, "--final", b, "--no-record")
         self.assertEqual(lines[0], RUN_REWRITE_FIRST + FINALIZE_NO_RECORD_NEW)
-        self.assertEqual(lines[3], UNRECORDED_DISCLAIMER)
+        # 断りの行は記録の行のすぐ上（候補がなければ4行目。候補があると、候補の一覧と案内の2行のぶん下がる）
+        self.assertEqual(lines[self.record_index(lines) - 1], UNRECORDED_DISCLAIMER)
         self.assertEqual(self.status(lines[1])[1]["reason"], "no_record_option")
 
 
