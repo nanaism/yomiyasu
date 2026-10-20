@@ -3179,10 +3179,10 @@ _HEADING_LINE_WIDTH = 30        # 行を挙げるときの字数の上限（超�
 
 
 def _heading_rows(analysis):
-    """見出しのブロックごとの {最初の行の位置（0から）: (段, 印と空白を除いた文字)} と、見出しのブロックの行の位置の集合
-    （setext の下線の行を含む）。段は ATX なら # の数、setext なら = は1、- は2。"""
+    """見出しのブロックごとの {最初の行の位置（0から）: (段, 印と空白を除いた文字)} と、見出しのブロックの行の位置から
+    その見出しの最初の行の位置への対応（setext の下線の行を含む）。段は ATX なら # の数、setext なら = は1、- は2。"""
     rows = analysis["lines"]
-    heads, inside = {}, set()
+    heads, inside = {}, {}
     for block in analysis["blocks"]:
         if block["kind"] != "heading":
             continue
@@ -3200,7 +3200,7 @@ def _heading_rows(analysis):
                 continue
             indexes.append(after)
             level = 1 if rows[after]["content"].strip().startswith("=") else 2
-        inside.update(indexes)
+        inside.update(dict.fromkeys(indexes, indexes[0]))
         text = "".join(row["content"] for row in block["lines"])
         heads[indexes[0]] = (level, _heading_key(text))
     return heads, inside
@@ -3224,6 +3224,18 @@ def _heading_key(text):
 def _heading_shown(line):
     line = line.strip()
     return line if len(line) <= _HEADING_LINE_WIDTH else line[:_HEADING_LINE_WIDTH] + "…"
+
+
+def _heading_counterpart(hunks, side, index):
+    """hunk の外の行（side の側の位置 index、0から）が、相手の側で何行目（0から）に当たるか。"""
+    start, end = ("old_start", "old_end") if side == 0 else ("new_start", "new_end")
+    other_end = "new_end" if side == 0 else "old_end"
+    found = index
+    for hunk in hunks:
+        if hunk[start] - 1 > index:
+            break
+        found = hunk[other_end] + (index - hunk[end])
+    return found
 
 
 def _heading_structure(sides, hunks):
@@ -3254,39 +3266,119 @@ def _heading_structure(sides, hunks):
             changed[0].extend(range(hunk["old_start"] - 1, hunk["old_end"]))
         if hunk["tag"] in ("replace", "insert"):
             changed[1].extend(range(hunk["new_start"] - 1, hunk["new_end"]))
+    # setext の下線の行だけが変わったときは、見出しの最初の行（変わっていない行）と、相手の側でそれに当たる行も見る
+    # （下線を消して太字の行に戻したとき、- を = にして段を変えたとき）
+    hunk_set = (set(changed[0]), set(changed[1]))
+    for side in (0, 1):
+        inside = old_inside if side == 0 else new_inside
+        for index in list(changed[side]):
+            first = inside.get(index)
+            if first is None or first in hunk_set[side]:
+                continue
+            other = _heading_counterpart(hunks, side, first)
+            for target, at in ((side, first), (1 - side, other)):
+                if at not in hunk_set[target]:
+                    hunk_set[target].add(at)
+                    changed[target].append(at)
+    changed = (sorted(hunk_set[0]), sorted(hunk_set[1]))
     rows = ([], [])
     for side in (0, 1):
         for index in changed[side]:
             found = role(side, index)
             if found is not None:
                 rows[side].append((index, found))
-    heading_keys = [{r[2] for _, r in rows[side] if r[0] == "heading"} for side in (0, 1)]
-    all_keys = [{r[2] for _, r in rows[side]} for side in (0, 1)]
-    # 相手の側に同じ文字の行がない行は外す（本文の行は、相手の側に同じ文字の見出しがあるときだけ残す。組にする並びを短くする）
-    for side in (0, 1):
-        other = 1 - side
-        rows[side][:] = [(i, r) for i, r in rows[side]
-                         if r[2] in (all_keys[other] if r[0] == "heading" else heading_keys[other])]
     pairs, paired_old, paired_new = [], set(), set()
-    matcher = difflib.SequenceMatcher(None, [r[2] for _, r in rows[0]], [r[2] for _, r in rows[1]], autojunk=False)
-    for a, b, size in matcher.get_matching_blocks():
-        for k in range(size):
-            (i, old), (j, new) = rows[0][a + k], rows[1][b + k]
-            if "heading" in (old[0], new[0]):
-                pairs.append((i, old, j, new))
-                paired_old.add(i)
-                paired_new.add(j)
-    # 同じ置き換えの hunk の中で組にならなかった見出しは、両側の数が同じで、文字が似ていれば順に組にする（段と文字を一緒に変えた見出し）
+
+    def pair_rows(old_rows, new_rows, heading_only):
+        """2つの並びを、比べる文字が同じ行どうしで順を保って組にする（見出しを含む組だけを残す）。heading_only なら見出しの行だけ。
+        相手の側に同じ文字の行がない行は外す（本文の行は、相手の側に同じ文字の見出しがあるときだけ残す。組にする並びを短くする）。"""
+        both = [old_rows, new_rows]
+        if heading_only:
+            both = [[(i, r) for i, r in side_rows if r[0] == "heading"] for side_rows in both]
+        heading_keys = [{r[2] for _, r in side_rows if r[0] == "heading"} for side_rows in both]
+        all_keys = [{r[2] for _, r in side_rows} for side_rows in both]
+        for side in (0, 1):
+            other = 1 - side
+            both[side] = [(i, r) for i, r in both[side]
+                          if r[2] in (all_keys[other] if r[0] == "heading" else heading_keys[other])]
+        found = []
+        matcher = difflib.SequenceMatcher(None, [r[2] for _, r in both[0]], [r[2] for _, r in both[1]], autojunk=False)
+        for a, b, size in matcher.get_matching_blocks():
+            for k in range(size):
+                (i, old), (j, new) = both[0][a + k], both[1][b + k]
+                if "heading" in (old[0], new[0]):
+                    found.append((i, old, j, new))
+        return found
+
+    def take(found):
+        for i, old, j, new in found:
+            pairs.append((i, old, j, new))
+            paired_old.add(i)
+            paired_new.add(j)
+
+    def between_pairs(heading_only):
+        """すでにある組の間ごとに、組になっていない行を組にする（組どうしが交差しないようにする）。"""
+        bounds = sorted((i, j) for i, _, j, _ in pairs)
+        bounds = [(-1, -1)] + bounds + [(len(sides.lines[0]), len(sides.lines[1]))]
+        rest = ([(i, r) for i, r in rows[0] if i not in paired_old], [(j, r) for j, r in rows[1] if j not in paired_new])
+        at_old = at_new = 0
+        found = []
+        for (_, _), (hi_i, hi_j) in zip(bounds, bounds[1:]):
+            seg_old, seg_new = [], []
+            while at_old < len(rest[0]) and rest[0][at_old][0] < hi_i:
+                seg_old.append(rest[0][at_old])
+                at_old += 1
+            while at_new < len(rest[1]) and rest[1][at_new][0] < hi_j:
+                seg_new.append(rest[1][at_new])
+                at_new += 1
+            if seg_old and seg_new:
+                found.extend(pair_rows(seg_old, seg_new, heading_only))
+        take(found)
+
+    # 見出しどうしの組を先に作る（相手の側に同じ文字の太字の行と見出しがあれば、見出しと組にして段の変化を見る）。
+    # 同じ hunk の中の見出しどうし、文書の中の見出しどうし、残った行（本文の行や太字の行と見出し）の順に組にする
+    found = []
+    row_at = ([i for i, _ in rows[0]], [j for j, _ in rows[1]])
     for hunk in hunks:
         if hunk["tag"] != "replace":
             continue
+        hunk_old = rows[0][bisect_left(row_at[0], hunk["old_start"] - 1):bisect_left(row_at[0], hunk["old_end"])]
+        hunk_new = rows[1][bisect_left(row_at[1], hunk["new_start"] - 1):bisect_left(row_at[1], hunk["new_end"])]
+        if hunk_old and hunk_new:
+            found.extend(pair_rows(hunk_old, hunk_new, True))
+    take(found)
+    between_pairs(True)
+    between_pairs(False)
+    # 同じ置き換えの hunk の中で組にならなかった見出しは、両側の数が同じなら順に組にする（段と文字を一緒に変えた見出し。
+    # 文字の変化は語の候補と全文差分に出る）。文字が似ていないときは、hunk の中の行が両側とも見出しと空行だけで、
+    # 次の空行でない行が両側とも変わっていない（節の本文を変えていない）、文書の中で何番目の見出しかが両側で同じ組だけにする
+    # （行の対応がずれて別の節の見出しどうしが同じ hunk に入ったときや、節の中身ごと書き換えたときは組にしない）
+    ordinal = ({at: n for n, at in enumerate(sorted(old_heads))}, {at: n for n, at in enumerate(sorted(new_heads))})
+
+    def local_heading_hunk(hunk):
+        for side, lo, hi in ((0, hunk["old_start"] - 1, hunk["old_end"]), (1, hunk["new_start"] - 1, hunk["new_end"])):
+            lines, inside = sides.lines[side], (old_inside if side == 0 else new_inside)
+            if not all(_is_blank(lines[at]) or at in inside for at in range(lo, hi)):
+                return False
+            after = hi
+            while after < len(lines) and _is_blank(lines[after]):
+                after += 1
+            if after < len(lines) and after in hunk_set[side]:
+                return False
+        return True
+
+    for hunk in hunks:
+        if hunk["tag"] != "replace":
+            continue
+        headings_only = local_heading_hunk(hunk)
         rest_old = [(i, role(0, i)) for i in range(hunk["old_start"] - 1, hunk["old_end"]) if i not in paired_old]
         rest_new = [(j, role(1, j)) for j in range(hunk["new_start"] - 1, hunk["new_end"]) if j not in paired_new]
         rest_old = [(i, r) for i, r in rest_old if r is not None and r[0] == "heading"]
         rest_new = [(j, r) for j, r in rest_new if r is not None and r[0] == "heading"]
         if rest_old and len(rest_old) == len(rest_new):
             for (i, old), (j, new) in zip(rest_old, rest_new):
-                if difflib.SequenceMatcher(None, old[2], new[2], autojunk=False).ratio() >= 0.5:
+                if ((headings_only and ordinal[0][i] == ordinal[1][j])
+                        or difflib.SequenceMatcher(None, old[2], new[2], autojunk=False).ratio() >= 0.5):
                     pairs.append((i, old, j, new))
     groups = OrderedDict((("bold", []), ("body", []), ("to_body", []), ("level", [])))
     for i, old, j, new in sorted(pairs, key=lambda pair: pair[0]):
@@ -3308,7 +3400,18 @@ def _heading_structure(sides, hunks):
             if name == "level":
                 shown.append("元{}行目 段{}「{}」→ 後{}行目 段{}「{}」".format(i + 1, old_level, old_text, j + 1, new_level, new_text))
             else:
-                shown.append("元{}行目「{}」→ 後{}行目「{}」".format(i + 1, old_text, j + 1, new_text))
+                old_desc, new_desc = "元{}行目「{}」".format(i + 1, old_text), "後{}行目「{}」".format(j + 1, new_text)
+                if old_text == new_text:
+                    # 文字の行は同じで、setext の下線だけを足したか消した。下線の行も挙げる
+                    side, at = (0, i) if name == "to_body" else (1, j)
+                    inside = old_inside if side == 0 else new_inside
+                    last = at
+                    while inside.get(last + 1) == at:
+                        last += 1
+                    if last != at:
+                        underline = "と{}行目「{}」".format(last + 1, _heading_shown(sides.lines[side][last]))
+                        old_desc, new_desc = (old_desc + underline, new_desc) if side == 0 else (old_desc, new_desc + underline)
+                shown.append("{}→ {}".format(old_desc, new_desc))
         if len(items) > _HEADING_SHOWN:
             shown.append("ほか{}か所".format(len(items) - _HEADING_SHOWN))
         out.append("{}（{}）".format(labels[name], "、".join(shown)))
