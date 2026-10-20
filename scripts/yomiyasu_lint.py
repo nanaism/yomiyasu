@@ -1132,33 +1132,110 @@ _MOMENT_PATTERN = (r"(?:手|目|口|耳)にした瞬間"
                    r"|(?:世界|景色|人生|価値観|見え方)が(?:一変|変わ)"
                    r"|(?:すべて|全て|何もかも)が?(?:変わ|動き出|始ま|一変|つなが|繋が|報われ|輝))")
 
-# 比喩の「効く」（何がどう良くなるのかを書かない「効く」）。文ごとに見て、次の3つの形を拾う。
-# - 「地味に」「じわじわ」「後から」などの副詞のあとの「効く」
-# - 効き目がだんだん表れることを言う「効いてくる」「効いてきます」「効いてきた」「効いてくれる」（主語が分からなくても拾う）
-# - 見直し、工夫、改善、施策、設定 などの手順や取り組みを主語にした「効く」「効いた」（読点をまたがず12字まで。打ち消しの「効かない」は除く）
-# 同じ文か直前の文に、薬、冷房や暖房、ブレーキ、調味料や味、キャッシュのような、文字どおり効き目が出るものの語があるときは拾わない。
-# 「融通が効く」「気が効く」「小回りが効く」のような「利く」の慣用句も、ぼやけた比喩ではないので拾わない
-# （表記の「効く」と「利く」の違いは、この規則では扱わない）。
+# 比喩の「効く」（何がどう良くなるのかを書かない「効く」）。
+# 表の正規表現は動詞の「効く」（効か・効き・効く・効け・効い）を見つけるだけで、拾うかどうかは _kiku_metaphor_in_line が
+# 文ごとに決める（語の表で文を絞る速い経路でも、すべての文に当てる経路でも、同じ関数を通す）。拾うのは次の3つの形。
+# - v2.1.0 から拾っている「地味に」「よく」「じわじわ」の直後の「効く」（「よく効かない」も今までどおり拾う）
+# - 見直し、工夫、改善、施策 などの手順や取り組みを主語にした「効く」「効いた」。主語の語と助詞のあとに読点を1つまで挟んでよい。
+#   「見直したのが」「工夫したことが」のような名詞にした主語、「改善から効く」、「見直しの効き目が出る」も拾う
+#   （主語の分からない「効き目が出る」は拾わない）。
+# - 効き目がだんだん表れることを言う「効いてくる」「効いてきます」「効いてきた」「効いてくれる」「効き始める」と、
+#   「後から」「後で」「後になって」「徐々に」などの副詞のあとの「効く」
+# 次のときは拾わない。
+# - 「効く」の主語や対象に当たる位置（語のすぐあとの「が」「は」「の」「に」「、」などから10字まで）に、薬、冷房、ブレーキ、
+#   わさびや辛さ、圧縮や最適化のような、文字どおり効き目が出るものの語があるとき（どの形でも）
+# - 「融通が効く」「気が効く」のような「利く」の慣用句（どの形でも。「効く」と「利く」の表記の違いはこの規則では扱わない）
+# - 2つ目と3つ目の形の打ち消し（「効かない」「効いていない」「効いてこない」）
+# - 3つ目の形だけに当たる文で、同じ文、同じ行の前の文、前の3行のどこかに文字どおりの語（服用、飲んで、サプリ、コーヒー など）が
+#   あるときと、同じ文に「30分ほど」「1時間後」のような分や時間の長さがあるとき（薬や冷房の効き方の説明）
+# 文字どおりの語は、すぐあとに漢字やカタカナが続く所では語とみなさない（「塩谷さん」「酒井さん」「居酒屋」「毒舌」
+# 「製剤チーム」「治療方針」「キャッシュ戦略」「インデックス投資」）。
 _KIKU_END = "。．！？!?"
-_KIKU_LITERAL = (r"薬|剤|抗生物質|ワクチン|注射|点滴|麻酔|湿布|漢方|治療|鍼|ツボ|マッサージ|カフェイン|アルコール|酒|毒"
-                 r"|冷房|暖房|エアコン|クーラー|ヒーター|空調|除湿|床暖|ストーブ|冷蔵|冷凍|扇風機"
-                 r"|ブレーキ|制動|サスペンション|キャッシュ|インデックス|日焼け止め|保湿|肥料"
-                 r"|わさび|ワサビ|山葵|塩|胡椒|こしょう|コショウ|スパイス|辛子|からし|カラシ|出汁|香辛料|調味料|酢"
-                 r"|生姜|しょうが|ショウガ|山椒|唐辛子|七味|柚子|ゆず|ハーブ|ミント|にんにく|ニンニク|レモン"
-                 r"|隠し味|酸味|辛味|辛み|苦味|苦み|旨味|うま味|風味|香り|味付け")
-_KIKU_IDIOM = (r"(?:融通|小回り|応用|機転|睨み|にらみ|潰し|つぶし|保存|無理|ごまかし|誤魔化し|押し|抑え|見通し|見晴らし"
-               r"|保険|割引|学割|(?<![一-龥々])(?:気|目|鼻|口|顔|腕|足))[がのはもを]効")
-_KIKU_ABSTRACT = (r"(?:見直し|工夫|改善|施策|対策|習慣|設定|仕組み|しくみ|積み重ね|経験|努力|ルール|変更"
+_KIKU_PATTERN = r"効[かきくけいた]"
+_KIKU_LITERAL = (
+    # 薬と体
+    r"薬|剤|(?<=[0-9０-９数一二三四五六])錠|抗生物質|ワクチン|注射|点滴|麻酔|湿布|漢方|治療|鍼|ツボ|マッサージ|サプリメント|サプリ"
+    r"|服用|服薬|内服|接種|症状|頭痛|腰痛|肩こり|肩凝り|花粉症|風邪|二日酔い|鼻炎|乾燥肌|肌荒れ|便秘|むくみ|筋肉痛|痛み"
+    r"|日焼け止め|保湿|肥料|カフェイン|コーヒー|アルコール|酒|(?<!気の)毒"
+    # 冷房や暖房、風呂
+    r"|冷房|暖房|エアコン|クーラー|ヒーター|空調|除湿|床暖房|床暖|ストーブ|冷蔵|冷凍|扇風機|冷え|入浴|湯船|風呂|温泉"
+    # 車、ソフトウェアの仕組み、設定の反映
+    r"|ブレーキ|制動|サスペンション|グリップ|(?<![A-Za-z])(?:ABS|JIT)|キャッシュ|インデックス|圧縮|最適化|プリフェッチ|チューニング"
+    r"|設定の変更|設定変更"
+    # 調味料と味
+    r"|わさび|ワサビ|山葵|塩加減|塩気|塩味|塩分|塩|胡椒|こしょう|コショウ|スパイス|辛子|カラシ|出汁|香辛料|調味料|酢"
+    r"|生姜|ショウガ|山椒|唐辛子|七味|柚子|ハーブ|ミント|にんにく|ニンニク|レモン|炭酸"
+    r"|隠し味|酸味|辛味|辛み|辛さ|甘さ|甘み|甘味|酸っぱさ|苦味|苦み|旨味|うま味|風味|香り(?!づけ|付け)|味付け|味つけ"
+    r"|(?<![一-龥々])味")
+# 主語の位置でなくても、近くにあれば文字どおりとみなす語（薬の飲み方の言い方）
+_KIKU_CONTEXT = (r"飲んで|飲んだ|飲む|飲め|飲み(?:始め|はじめ|続け)|飲ませ|飲み物|飲み方|食後|食前|就寝前|用法|用量"
+                 r"|効き目は個人差|個人差")
+_KIKU_ABSTRACT = (r"(?:見直し|工夫|改善|施策|対策|習慣|仕組み|しくみ|積み重ね|経験|努力|ルール|変更"
                   r"|取り組み|取組み|修正|調整|改修|方針|戦略|準備|練習|勉強|投資|配慮)")
-_KIKU_PLAIN = r"(?![^" + _KIKU_END + r"]*?(?:" + _KIKU_LITERAL + r"|" + _KIKU_IDIOM + r"))"
-_KIKU_FORMS = (r"[^" + _KIKU_END + r"]*?"
-               r"(?:(?:地味に|よく|じわじわ|じわりと|じんわり|ジワジワ|徐々に|後から|あとから|後々|あとあと)と?効[かきくけいた]"
-               r"|効いて(?:く[るれ]|き[たてまそ]|こな)"
-               r"|" + _KIKU_ABSTRACT + r"(?:が|は|も|こそ)[^、，," + _KIKU_END + r"]{0,12}?効(?:[きくけ](?!目)|い[てた]))")
-# 行の最初の文はその文だけを、2文目からは直前の文も見る（「薬を飲んだ。30分ほどで効いてきた。」を拾わない）。
-_KIKU_PATTERN = (r"^" + _KIKU_PLAIN + _KIKU_FORMS
-                 + r"|(?:^|(?<=[" + _KIKU_END + r"]))" + _KIKU_PLAIN + r"[^" + _KIKU_END + r"]*[" + _KIKU_END + r"]"
-                 + _KIKU_PLAIN + _KIKU_FORMS)
+_KIKU_STOP = "、，," + _KIKU_END
+_KIKU_RE = {
+    "literal_subject": re.compile(r"(?:" + _KIKU_LITERAL + r")(?:(?:が|は|も|こそ|の|に|って|として)[、，,]?|[、，,])"
+                                  r"[^" + _KIKU_STOP + r"を]{0,10}$"),
+    "idiom": re.compile(r"(?:融通|小回り|応用|機転|睨み|にらみ|潰し|つぶし|保存|無理|ごまかし|誤魔化し|押し|抑え|見通し|見晴らし"
+                        r"|保険|割引|学割|(?<![一-龥々])(?:気|目|鼻|口|顔|腕|足))[がのはもを](?:よく|地味に|じわじわ)?$"),
+    "v210": re.compile(r"(?:地味に|よく|じわじわ)$"),
+    "negation": re.compile(r"か|きませ|けな|けませ|いて(?:い)?な|いていませ|いてませ|いてこ|いてきませ|いてくれ(?:な|ませ)"
+                           r"|き(?:始め|はじめ)(?:な|ませ)|き出さ"),
+    "abstract_subject": re.compile(_KIKU_ABSTRACT + r"(?:し?(?:た|ておいた|ていた)(?:の|こと))?(?:が|は|も|こそ|から)[、，,]?"
+                                   r"[^" + _KIKU_STOP + r"]{0,12}$"),
+    "verb": re.compile(r"く|き(?!目)|け|い[てた]"),
+    "effect_owner": re.compile(_KIKU_ABSTRACT + r"の$"),
+    "effect": re.compile(r"き目(?:が|は|も)(?:出|表れ|現れ|あらわれ)"),
+    "gradual": re.compile(r"いて(?:く[るれ]|き[たてまそ])|き(?:始め|はじめ|出[しすせ])"),
+    "adverb": re.compile(r"(?:後から|あとから|後々|あとあと|徐々に|次第に|じわりと|じんわりと?|じわじわと|ジワジワと?|じわっと"
+                         r"|後で|あとで|後になって|あとになって)$"),
+    "context": re.compile(r"(?:" + _KIKU_LITERAL + r"|" + _KIKU_CONTEXT + r")(?![一-龥々ァ-ヴーA-Za-z])"),
+    "timing": re.compile(r"(?:[0-9０-９]+|数|半)\s*(?:分|時間)(?:間)?"
+                         r"(?=ほど|くらい|ぐらい|程度|後|以内|経|たつ|たっ|で|もすると|もしないうち)"),
+    "sentence": re.compile(r"[^" + _KIKU_END + r"]+[" + _KIKU_END + r"]*|[" + _KIKU_END + r"]+"),
+}
+_KIKU_CANDIDATE = re.compile(_KIKU_PATTERN)
+_KIKU_WINDOW_LINES = 3
+
+
+def _kiku_metaphor_in_line(text, before_lines=()):
+    """行の中に比喩の「効く」として拾う文があれば True。before_lines は同じ文書の前の行（新しい行が後ろ）。"""
+    patterns = _KIKU_RE
+    earlier = []
+    window = None
+    for sentence_match in patterns["sentence"].finditer(text):
+        sentence = sentence_match.group()
+        loose = None
+        for match in _KIKU_CANDIDATE.finditer(sentence):
+            start = match.start()
+            prefix = sentence[max(0, start - 48):start]
+            suffix = sentence[start + 1:start + 13]
+            if patterns["idiom"].search(prefix) or patterns["literal_subject"].search(prefix):
+                continue
+            if patterns["v210"].search(prefix):
+                return True
+            if patterns["negation"].match(suffix):
+                continue
+            if patterns["verb"].match(suffix) and patterns["abstract_subject"].search(prefix):
+                return True
+            if patterns["effect"].match(suffix) and patterns["effect_owner"].search(prefix):
+                return True
+            if not (patterns["gradual"].match(suffix)
+                    or (patterns["verb"].match(suffix) and patterns["adverb"].search(prefix))):
+                continue
+            if loose is None:
+                loose = bool(patterns["context"].search(sentence) or patterns["timing"].search(sentence))
+            if loose:
+                continue
+            if window is None:
+                nearby = list(before_lines)[-_KIKU_WINDOW_LINES:] + earlier
+                window = bool(patterns["context"].search("\n".join(nearby)))
+            if window:
+                continue
+            return True
+        earlier.append(sentence)
+    return False
+
 
 # 比喩動詞・AI偏愛動詞パターン
 METAPHOR_VERB_PATTERNS = [
@@ -3196,6 +3273,8 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
     dash_possible = (_dash_finding is not _DASH_FINDING_DEFAULT or _DASH_RUN is not _DASH_RUN_DEFAULT
                      or any(char in text for char in "—―─━"))
     previous_sentence = ""
+    kiku_lines = []
+    kiku_before = []
     negation_lines = []
     bold_label_lines = []
 
@@ -3283,6 +3362,9 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
                 continue
 
             m = pattern.search(plain_text)
+            if m and pattern.pattern == _KIKU_PATTERN and not _kiku_metaphor_in_line(plain_text, kiku_before):
+                # 比喩の「効く」は、文字どおりの「効く」や慣用句を除いて、文ごとに決める
+                m = None
             if m:
                 if desc == "比喩動詞「壊れる」":
                     kowareru_span = (m.start(), m.end())
@@ -3314,6 +3396,9 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
         sentence_before_line = previous_sentence
         plain_text = scan_text.replace("__", "").replace("*", "")
         previous_sentence = plain_text
+        # 比喩の「効く」で、前の行の文字どおりの語（薬、エアコン など）を見るための窓
+        kiku_before = kiku_lines[-_KIKU_WINDOW_LINES:]
+        kiku_lines = kiku_before + [plain_text]
 
         # Glyphs inside code, URI data and HTML tokens are not prose decoration.
         emoji_matches = _emoji_matches(scan_text)
