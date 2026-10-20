@@ -648,24 +648,80 @@ def _emoji_matches(text):
 
 
 # 文末に固定した規則は、文の終わりの後ろに続く飾りを読み飛ばして判定する。
-# 飾りは、空白（全角も）、絵文字（異体字セレクタ、ZWJ、肌の色、タグ、キーキャップを含む）と、☆♪✓のような記号。
-# 絵文字そのものは emoji_prohibited で別に拾う。句点、感嘆符、疑問符は飾りではないので、除かずに位置だけを詰める
+# 飾りは、空白（全角も）と、emoji_prohibited が絵文字として拾う字（EMOJI_PATTERN の元の表から作る。異体字セレクタ、
+# ZWJ、肌の色、タグ、旗、キーキャップを含む）と、☆♪✓のような記号。絵文字そのものは emoji_prohibited で別に拾う。
+# 句点、感嘆符、疑問符は飾りではないので、除かずに位置だけを詰める
 # （「見ていきましょう🚀！」は「見ていきましょう！」として読み、「見ていきましょう？🚀」は「見ていきましょう？」として読む）。
-# 閉じかっこ（）)】〕〉》］）を飾りに数えるかは規則ごとに決める。閉じかぎと引用符（」』"'）は、語への言及や会話の
-# 引用の終わりのことが多いので、どの規則でも飾りに数えない。
-_END_DECORATION_CHARS = ("\u2600-\u27bf\u2b05-\u2b07\u2b1b\u2b1c\u2b50\u2b55\u231a\u231b\u23e9-\u23fa"
-                         "\u2934\u2935\u3297\u3299\U0001f000-\U0001faff\ufe0e\ufe0f\u200d\U000e0020-\U000e007f")
+# 閉じかっこ（）)】〕〉》］）、矢印（←↑→↓）、波線（〜～）を飾りに数えるのは、文の型を見る規則だけ（_END_CLOSERS）。
+# 閉じかっこは、対の開きかっこが文の頭か、句点か述語（です、ます、た など）の直後にあるとき
+# （「（見ていきましょう）」「〜まとめました（後半で見ていきましょう）」）だけ除く。目次の副題（「実践編（〜）」）は除かない。
+# 閉じかぎと引用符（」』”’"'）は、同じ段落のその行までに対の開きがない行でだけ除く（_end_quote_closers）。
+# リンクの文字列の終わりになる ASCII の ] は、どの規則でも飾りに数えない。
+def _merged_ranges(ranges):
+    merged = []
+    for low, high in sorted(ranges):
+        if merged and low <= merged[-1][1] + 1:
+            merged[-1] = (merged[-1][0], max(merged[-1][1], high))
+        else:
+            merged.append((low, high))
+    return tuple(merged)
+
+
+# 文末の後ろに置かれる記号（絵文字の表にない ☆♪✓ などを含む）と、絵文字の並びをつなぐ字
+_END_SYMBOL_RANGES = ((0x2600, 0x27BF), (0x2B05, 0x2B07), (0x2B1B, 0x2B1C), (0x2B50, 0x2B50), (0x2B55, 0x2B55),
+                      (0x231A, 0x231B), (0x23E9, 0x23FA), (0x2934, 0x2935), (0x3297, 0x3297), (0x3299, 0x3299),
+                      (0x1F000, 0x1FAFF))
+_END_JOINER_RANGES = ((0xFE0E, 0xFE0F), (0x200D, 0x200D), (0xE0020, 0xE007F))
+# 絵文字の判定（EMOJI_PATTERN）の元の表と、旗の地域指示子を足す。手で写さず同じ表から作るので、範囲がずれない
+_END_VISIBLE_RANGES = _merged_ranges(_END_SYMBOL_RANGES + _EMOJI_EXPLICIT_VARIATION_BASES
+                                     + _EMOJI_REGISTERED_TEXT_BASES + _EMOJI_OTHER_BASES + ((0x1F1E6, 0x1F1FF),))
+_END_VISIBLE_CHARS = _emoji_character_class(_END_VISIBLE_RANGES)[1:-1]
+_END_JOINER_CHARS = _emoji_character_class(_END_JOINER_RANGES)[1:-1]
+_END_DECORATION_CHARS = _END_VISIBLE_CHARS + _END_JOINER_CHARS
 _END_DECORATION_CHAR = re.compile("[" + _END_DECORATION_CHARS + "]")
+_END_KEYCAP = r"[0-9#*]\ufe0f?\u20e3"
 # 正規表現の中で、文末の前に置ける飾りの並び（空でもよい）
-_END_DECORATION_RUN = r"(?:[0-9#*]\ufe0f?\u20e3|[\s" + _END_DECORATION_CHARS + r"])*"
-_END_CLOSERS = "）)】〕〉》］"
+_END_DECORATION_RUN = r"(?:" + _END_KEYCAP + r"|[\s" + _END_DECORATION_CHARS + r"])*"
+_END_BRACKETS = {"）": "（", ")": "(", "】": "【", "〕": "〔", "〉": "〈", "》": "《", "］": "［"}
+_END_CLOSERS = "".join(_END_BRACKETS) + "←↑→↓〜～"
+_END_QUOTES = {"」": "「", "』": "『", "”": "“", "’": "‘", '"': '"', "'": "'"}
 _END_MARKS = "。．！？!?"
+_END_BRACKET_AFTER_PREDICATE = re.compile(r"(?:です|ます|でした|ました|ません|ない|だ|た|る)$")
+
+
+def _bracket_opens_sentence(text, position, closer):
+    """text[position] の閉じかっこと対の開きかっこが、文の頭か、句点か述語の直後にあるか。
+
+    見るのは閉じかっこの前の256字まで。そこで分からなければ除かない（長い行でも手間を抑える）。"""
+    opener = _END_BRACKETS[closer]
+    floor = max(0, position - 256)
+    depth = 0
+    index = position
+    while index > floor:
+        index -= 1
+        char = text[index]
+        if char == closer:
+            depth += 1
+        elif char == opener:
+            if depth:
+                depth -= 1
+                continue
+            before = index
+            while before > floor and (text[before - 1].isspace() or _END_DECORATION_CHAR.match(text[before - 1])):
+                before -= 1
+            if not before:
+                return True
+            return before > floor and (text[before - 1] in _END_MARKS
+                                       or bool(_END_BRACKET_AFTER_PREDICATE.search(text, max(0, before - 3), before)))
+    return False
 
 
 def _strip_end_decoration(text, closers=""):
     """文の終わりの後ろの飾りを除いた文を返す。飾りがなければ text をそのまま返す。
 
-    句点、感嘆符、疑問符は残し、飾りとの並びの順も保つ。closers の字（閉じかっこ）も飾りとして除く。"""
+    句点、感嘆符、疑問符は残し、飾りとの並びの順も保つ。closers の字（閉じかっこ、矢印、波線と、
+    呼び出し側が確かめた閉じ引用符）も飾りとして除く。閉じかっこは、対の開きかっこが文の頭か、句点か述語の直後に
+    あるときだけ除く。"""
     position = len(text)
     marks = []
     removed = False
@@ -681,7 +737,10 @@ def _strip_end_decoration(text, closers=""):
                 position -= 1
             if position and text[position - 1] in "0123456789#*":
                 position -= 1
-        elif char.isspace() or char in closers or _END_DECORATION_CHAR.match(char):
+        elif char.isspace() or _END_DECORATION_CHAR.match(char):
+            removed = True
+            position -= 1
+        elif char in closers and (char not in _END_BRACKETS or _bracket_opens_sentence(text, position - 1, char)):
             removed = True
             position -= 1
         else:
@@ -691,14 +750,100 @@ def _strip_end_decoration(text, closers=""):
     return text[:position] + "".join(reversed(marks))
 
 
+# 文の途中で、句点の代わりに置いた絵文字の並び（「いかがでしたか😊 次回も…」）。並びは見える飾りの字で始まる。
+_END_BREAK_RUN = re.compile(r"(?:" + _END_KEYCAP + r"|[" + _END_VISIBLE_CHARS + r"])"
+                            r"(?:" + _END_KEYCAP + r"|[\s" + _END_DECORATION_CHARS + r"])*")
+# 並びのあとが助詞なら、文が続いている（「いかがでしたか🚀という結び」「🍎を買う」）。
+# 並びのあとが字（かな、漢字、英数字）でなく、かっこや記号のときも分けない（「〜です♪（笑）」）
+_END_BREAK_CONTINUES = re.compile(
+    r"(?:と|って|の|を|が|は|に|へ|や|か|から|まで|より|など|だけ|で(?![はも])|も(?!ちろん|し|っと|う)|ー)")
+# 並びの前が助詞や読点なら、絵文字が語の代わりになっている（「設定は⚙ボタンから」）
+_END_BREAK_HEAD_CHARS = "はがをのにでとへやも、，,：:"
+_END_BREAK_PAIRS = (("「", "」"), ("『", "』"), ("（", "）"), ("(", ")"), ("【", "】"), ("“", "”"),
+                    ("［", "］"), ("[", "]"))
+
+
+def _decoration_breaks(sentence):
+    """句点の代わりに絵文字の並びを置いて次の文を続けた所で分けた文の並びを返す。分けられなければ None。
+
+    分けた文は後ろに絵文字の並びを残す（呼び出し側が _strip_end_decoration で除く）。
+    かっこや引用の中と、助詞や記号が続く所では分けない。"""
+    if not _END_DECORATION_CHAR.search(sentence):
+        return None
+    pieces = []
+    start = scanned = 0
+    # 分けた所からのかっこの開きの数（開き − 閉じ）と、空白でない字があるか。長い行でも1回なめるだけにする
+    balance = dict.fromkeys(_END_BREAK_PAIRS, 0)
+    has_text = False
+    length = len(sentence)
+    for run in _END_BREAK_RUN.finditer(sentence):
+        segment = sentence[scanned:run.start()]
+        scanned = run.start()
+        if segment:
+            has_text = has_text or not segment.isspace()
+            for pair in _END_BREAK_PAIRS:
+                balance[pair] += segment.count(pair[0]) - segment.count(pair[1])
+        end = run.end()
+        word = end
+        while word < length and sentence[word] in "*_":
+            word += 1
+        if word >= length or not sentence[word].isalnum() or _END_BREAK_CONTINUES.match(sentence, word):
+            continue
+        last = run.start()
+        while last > start and sentence[last - 1].isspace():
+            last -= 1
+        if (not has_text or last == start or sentence[last - 1] in _END_BREAK_HEAD_CHARS
+                or any(value > 0 for value in balance.values())):
+            continue
+        pieces.append(sentence[start:end])
+        start = scanned = end
+        balance = dict.fromkeys(_END_BREAK_PAIRS, 0)
+        has_text = False
+    if not pieces:
+        return None
+    pieces.append(sentence[start:])
+    return pieces
+
+
 def _with_undecorated(sentences, closers=_END_CLOSERS):
-    """文の並びに、文末の飾りを除いた文を足す（飾りのない文はそのまま）。"""
+    """文の並びに、文末の飾りを除いた文と、句点の代わりの絵文字で分けた文を足す（飾りのない文はそのまま）。"""
     result = list(sentences)
     for sentence in sentences:
         core = _strip_end_decoration(sentence, closers)
         if core is not sentence:
             result.append(core)
+        for piece in _decoration_breaks(sentence) or ():
+            result.append(_strip_end_decoration(piece, closers))
     return result
+
+
+def _end_quote_closers(analysis):
+    """行ごとに、文末の飾りとして除いてよい閉じ引用符を返す。
+
+    同じ段落（箇条書きは項目ごと）のその行までに対の開き（「『“‘）がない閉じかぎと閉じ引用符だけを除く。
+    "' は、その行までに1つしかなく、それがその行にあるときだけ除く。対になった引用（語への言及や会話）は除かない。"""
+    allowed = {}
+    for block in analysis["blocks"]:
+        if block["kind"] not in ("paragraph", "list"):
+            continue
+        counts = dict.fromkeys(_END_QUOTES.values(), 0)
+        for row in block["lines"]:
+            visible = _prose_visible_text(analysis, row["line"])
+            for opener in counts:
+                counts[opener] += visible.count(opener)
+            chars = "".join(closer for closer, opener in _END_QUOTES.items()
+                            if closer in visible and counts[opener] == (1 if closer == opener else 0))
+            if chars:
+                allowed[row["line"]] = chars
+    return allowed
+
+
+def _end_closers_for(analysis, line_no):
+    """文の型を見る規則が、その行の文末で飾りとして除く字（閉じかっこ、矢印、波線と、対のない閉じ引用符）。"""
+    allowed = analysis.get("_end_quote_closers")
+    if allowed is None:
+        allowed = analysis["_end_quote_closers"] = _end_quote_closers(analysis)
+    return _END_CLOSERS + allowed.get(line_no, "")
 
 # 文脈を確かめる語の一覧。含まれていることだけでは誤りとしない。
 SLOP_WORDS = [
@@ -1349,7 +1494,7 @@ def _has_cleft_list_ending(analysis, line_no, contexts, line_sentences, filler_p
             continue
         head = _cleft_list_head(sentence)
         # 文末の後ろの飾り（「画面、帳票、通知 🚀」）を除いて読む
-        core = _strip_end_decoration(sentence, _END_CLOSERS)
+        core = _strip_end_decoration(sentence, _end_closers_for(analysis, line_no))
         if head is None and core is not sentence:
             head = _cleft_list_head(core)
         # 頭が meta_filler の型の文（「重要なのは、」）は、そちらだけを出す
@@ -1458,49 +1603,86 @@ def check_sentence_end_repetitions(sentences: List[Tuple[int, str]]) -> List[Dic
     return _sentence_end_findings(sentences)
 
 
+def _sentence_end_type(s):
+    """sentence_end_repetition が数える語尾の種類。数えない文は「その他」。"""
+    # Scan ordinary short suffixes directly. Bound Python-level work for
+    # long removable suffixes; the guarded regex starts only at run edges.
+    end = len(s)
+    floor = max(0, end - 64)
+    while end > floor and (s[end - 1] in "。！？" or s[end - 1].isspace()):
+        end -= 1
+    if end == floor and end and (s[end - 1] in "。！？" or s[end - 1].isspace()):
+        clean = re.sub(r"(?<![。！？\s])[。！？\s]+$", "", s)
+    else:
+        clean = s[:end]
+    # 文末の後ろの絵文字や空白（「〜です 🚀」）は除いて語尾を見る。閉じかっこと閉じかぎは除かない（会話や補足の終わり）。
+    core = _strip_end_decoration(clean)
+    if core is not clean:
+        end = len(core)
+        while end and (core[end - 1] in "。！？" or core[end - 1].isspace()):
+            end -= 1
+        clean = core[:end]
+    end_type = "その他"
+    if clean.endswith("です"):
+        end_type = "です"
+    elif clean.endswith("ます"):
+        end_type = "ます"
+    elif clean.endswith("でした"):
+        end_type = "でした"
+    elif clean.endswith("ました"):
+        end_type = "ました"
+    elif clean.endswith("である"):
+        end_type = "である"
+    elif clean.endswith("だ"):
+        end_type = "だ"
+    elif clean.endswith("だろう"):
+        end_type = "だろう"
+    elif clean.endswith("でしょう"):
+        end_type = "でしょう"
+    elif clean.endswith("ですね"):
+        end_type = "ですね"
+    return end_type
+
+
+def _split_decoration_breaks(sentences, source_sentences, paragraph_groups):
+    """句点の代わりに絵文字を置いて続けた文（「これはAです🚀これはBです🚀」）を、句点で分けたときと同じように分ける。
+
+    分けるのは、前後とも4字以上あるときだけ（句点で分けた文と同じく、3字以下の文は数えない）。
+    語尾が数えない種類の文も分ける。分けないと、次の文の語尾を引き継いで続きを誤って数えるため。"""
+    if not any(_END_DECORATION_CHAR.search(sentence) for _, sentence in sentences):
+        return sentences, source_sentences, paragraph_groups
+    split_sentences, split_sources, split_groups = [], [], []
+    for (line_no, sentence), (_, source), group in zip(sentences, source_sentences, paragraph_groups):
+        pieces = _decoration_breaks(sentence)
+        cuts = []
+        if pieces:
+            # 分けた所の後ろは空白で始まらない（空白は前の絵文字の並びに含める）ので、残りの字数は引き算で分かる
+            text_end = len(sentence.rstrip())
+            position = 0
+            start = 0
+            for piece in pieces[:-1]:
+                position += len(piece)
+                # 4字以上あるかは前の文の終わりの方だけで分かる（分けない所が続く長い行でも手間を抑える）
+                if len(sentence[max(start, position - 8):position].strip()) > 3 and text_end - position > 3:
+                    cuts.append(position)
+                    start = position
+        if not cuts:
+            split_sentences.append((line_no, sentence))
+            split_sources.append((line_no, source))
+            split_groups.append(group)
+            continue
+        same_width = len(source) == len(sentence)
+        for start, end in zip([0] + cuts, cuts + [len(sentence)]):
+            split_sentences.append((line_no, sentence[start:end].strip()))
+            split_sources.append((line_no, source[start:end].strip() if same_width else source))
+            split_groups.append(group)
+    return split_sentences, split_sources, split_groups
+
+
 def _sentence_end_findings(sentences, source_sentences=None, paragraph_groups=None):
     """Keep visible ending decisions and original finding snippets separate."""
     findings = []
-    end_types = []
-
-    for line_no, s in sentences:
-        # Scan ordinary short suffixes directly. Bound Python-level work for
-        # long removable suffixes; the guarded regex starts only at run edges.
-        end = len(s)
-        floor = max(0, end - 64)
-        while end > floor and (s[end - 1] in "。！？" or s[end - 1].isspace()):
-            end -= 1
-        if end == floor and end and (s[end - 1] in "。！？" or s[end - 1].isspace()):
-            clean = re.sub(r"(?<![。！？\s])[。！？\s]+$", "", s)
-        else:
-            clean = s[:end]
-        # 文末の後ろの絵文字や空白（「〜です 🚀」）は除いて語尾を見る。閉じかっこと閉じかぎは除かない（会話や補足の終わり）。
-        core = _strip_end_decoration(clean)
-        if core is not clean:
-            end = len(core)
-            while end and (core[end - 1] in "。！？" or core[end - 1].isspace()):
-                end -= 1
-            clean = core[:end]
-        end_type = "その他"
-        if clean.endswith("です"):
-            end_type = "です"
-        elif clean.endswith("ます"):
-            end_type = "ます"
-        elif clean.endswith("でした"):
-            end_type = "でした"
-        elif clean.endswith("ました"):
-            end_type = "ました"
-        elif clean.endswith("である"):
-            end_type = "である"
-        elif clean.endswith("だ"):
-            end_type = "だ"
-        elif clean.endswith("だろう"):
-            end_type = "だろう"
-        elif clean.endswith("でしょう"):
-            end_type = "でしょう"
-        elif clean.endswith("ですね"):
-            end_type = "ですね"
-        end_types.append((line_no, s, end_type))
+    end_types = [(line_no, s, _sentence_end_type(s)) for line_no, s in sentences]
 
     # 3連続チェック
     count = 1
@@ -2570,10 +2752,19 @@ def _has_instruction_residue(sentence, following):
                 or _SCOPE_REFERENCE.search(sentence) or _SCOPE_REFERENCE.search(following))
 
 
-def _has_instruction_residue_core(sentence, following):
-    """文末の後ろの飾り（「〜書いていきます 🚀」）を除いた文で、もう一度確かめる。飾りがなければ確かめない。"""
-    core = _strip_end_decoration(sentence, _END_CLOSERS)
-    return core is not sentence and _has_instruction_residue(core, following)
+def _has_instruction_residue_core(sentence, following, closers=_END_CLOSERS):
+    """文末の後ろの飾り（「〜書いていきます 🚀」）を除いた文で、もう一度確かめる。飾りがなければ確かめない。
+
+    句点の代わりに絵文字を置いて続けた文（「〜扱いません🙏 詳しくは〜」）は、分けた文ごとに次の文と合わせて確かめる。"""
+    core = _strip_end_decoration(sentence, closers)
+    if core is not sentence and _has_instruction_residue(core, following):
+        return True
+    pieces = _decoration_breaks(sentence)
+    if not pieces:
+        return False
+    return any(_has_instruction_residue(_strip_end_decoration(piece, closers),
+                                        pieces[index + 1] if index + 1 < len(pieces) else following)
+               for index, piece in enumerate(pieces))
 
 
 # 短い主語・主題の読点。判定は a〜t の順で、当てはまる除外条件があれば残す。
@@ -3007,7 +3198,8 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
             })
 
     # 2. 文末重複検査
-    findings.extend(_sentence_end_findings(sentences, source_sentences, paragraph_groups))
+    # 句点の代わりに絵文字を置いて続けた文は、句点で分けたときと同じように分けて数える
+    findings.extend(_sentence_end_findings(*_split_decoration_breaks(sentences, source_sentences, paragraph_groups)))
 
     # 2.5 太字が表示されるか（GitHub などの Markdown で ** がそのまま出ることがある箇所）
     for p in _bold_problems_with_analysis(text, analysis):
@@ -3195,11 +3387,12 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
             # Do not change quote handling for any of the pre-existing fillers.
             if pattern.pattern == _OVERSTATEMENT_PATTERN:
                 if context_cores is None:
-                    context_cores = _with_undecorated(tuple(sentence for sentence, _ in rule9_context.get(line_no, ())))
+                    context_cores = _with_undecorated(tuple(sentence for sentence, _ in rule9_context.get(line_no, ())),
+                                                      _end_closers_for(analysis, line_no))
                 filler_sentences = context_cores
             elif "$" in pattern.pattern:
                 if line_cores is None:
-                    line_cores = _with_undecorated(line_sentences)
+                    line_cores = _with_undecorated(line_sentences, _end_closers_for(analysis, line_no))
                 filler_sentences = line_cores
             else:
                 filler_sentences = line_sentences
@@ -3218,7 +3411,7 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
                 findings.append({"rule": rule, "line": line_no, "severity": "info", "message": message, "snippet": stripped})
 
         if any(_has_instruction_residue(sentence, following)
-               or _has_instruction_residue_core(sentence, following)
+               or _has_instruction_residue_core(sentence, following, _end_closers_for(analysis, line_no))
                for sentence, following in rule9_context.get(line_no, ())):
             findings.append({
                 "rule": "instruction_residue",
@@ -3231,7 +3424,8 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
         for index, sentence in enumerate(line_sentences):
             if ("もちろん、" not in plain_text and "勿論、" not in plain_text):
                 break
-            if (not (_SHORT_MOCHIRON.match(sentence) or _SHORT_MOCHIRON.match(_strip_end_decoration(sentence, _END_CLOSERS)))
+            if (not (_SHORT_MOCHIRON.match(sentence)
+                     or _SHORT_MOCHIRON.match(_strip_end_decoration(sentence, _end_closers_for(analysis, line_no))))
                     or _MOCHIRON_ANSWER.match(sentence)):
                 continue
             if _ends_with_question(line_sentences[index - 1] if index else _last_context_sentence(sentence_before_line)):
@@ -3273,7 +3467,8 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
         elif (line_no in extra_negation_lines
               or ("でもない。" in plain_text and _NEGATION_EXTRA.search(plain_text))
               or ("じゃない、" in plain_text
-                  and any(_NEGATION_JANAI.match(sentence) for sentence in _with_undecorated(line_sentences)))):
+                  and any(_NEGATION_JANAI.match(sentence)
+                          for sentence in _with_undecorated(line_sentences, _end_closers_for(analysis, line_no))))):
             negation_message = "否定を重ねてから言い切る構文（「AでもBでもない。Cだ。」「Aじゃない、Bです。」）が検出されました。否定している内容を誰も主張していないなら、言い切る文だけにしてください。読み手の思い込みを正す否定なら、一つの文にまとめて残してください。直前で挙げた二つ（問いなど）を両方とも打ち消すだけなら、「どちらでもない。」（敬体なら「どちらでもありません。」）と短く受けてもかまいません。打ち消すほかに、問いにない強めの語や限定、なぜ違うかの説明を含む否定は短くしないでください。"
         else:
             negation_message = None
