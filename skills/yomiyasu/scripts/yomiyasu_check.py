@@ -1916,10 +1916,17 @@ def _head_where(old_line, new_line):
     return ""
 
 
+def _head_line_of(old_line, new_line):
+    """頭の一覧で並べる順に使う行（最終稿の行、なければ原文の行）。どちらもなければ None。"""
+    return new_line if new_line is not None else old_line
+
+
 def _head_part(label, entries, total):
     """頭の一覧の1つの検査の分（「lint の候補: 」に「L」と行番号と規則の名前を並べ、残りを「（ほか2件）」とする形）。
-    entries は（表示、件数）の並び。上限を超えた分と、並べられない候補は「ほかN件」にする。"""
-    shown = entries[:_HEAD_LIMIT]
+    entries は（表示、件数、行）の並び。行のある項目を行の順に先に並べ（同じ行と、行のない項目どうしは元の順のまま）、
+    上限で切る。前のほうの行が「ほかN件」に隠れないため。上限を超えた分と、並べられない候補は「ほかN件」にする。"""
+    entries = sorted(entries, key=lambda entry: (entry[2] is None, entry[2] if entry[2] is not None else 0))
+    shown = [(name, weight) for name, weight, _ in entries[:_HEAD_LIMIT]]
     rest = total - sum(weight for _, weight in shown)
     if not shown:
         return "{}: {}件".format(label, total)
@@ -1927,6 +1934,22 @@ def _head_part(label, entries, total):
     if rest > 0:
         text += "（ほか{}件）".format(rest)
     return text
+
+
+def _materials_line_names(result):
+    """照合の candidate_count に数える、節の見直し候補の行の頭の一覧での名前（ground と同じ条件で、行の順に）。
+    新規作成の「資料にない語」、確度の語、推敲の「資料に基づく補足の候補」の3つ。「参考」の行は数えない。"""
+    items = result.get("items") or []
+    rewrite = result.get("mode") == "rewrite"
+    names = []
+    if any(item.get("classification") == "from_materials" for item in items) and rewrite:
+        names.append("資料に基づく補足")
+    if not rewrite and any(item.get("kind") == "word" and item.get("classification") == "not_in_sources"
+                           for item in items):
+        names.append("資料にない語")
+    if any(item.get("classification") == "dropped_certainty" for item in items):
+        names.append("最終稿にない確度の語")
+    return names
 
 
 def _head_lines(ctx, diff_module):
@@ -1939,7 +1962,8 @@ def _head_lines(ctx, diff_module):
     parts = []
     lint = ctx.lint_result
     if lint is not None and lint.get("candidate_count"):
-        entries = [("L{} {}".format(finding.get("line"), finding.get("rule")), 1)
+        entries = [("L{} {}".format(finding.get("line"), finding.get("rule")), 1,
+                    finding.get("line") if isinstance(finding.get("line"), int) else None)
                    for finding in lint.get("findings") or []]
         parts.append(_head_part("lint の候補", entries, lint["candidate_count"]))
     result = ctx.diff_result
@@ -1949,13 +1973,14 @@ def _head_lines(ctx, diff_module):
         for risk in risks:
             if (risk.get("kind"), risk.get("subkind")) == ("sentence_type", "marks"):
                 continue
-            entries.append((_head_where(risk.get("old_line"), risk.get("new_line")) + str(risk.get("kind")), 1))
+            entries.append((_head_where(risk.get("old_line"), risk.get("new_line")) + str(risk.get("kind")), 1,
+                            _head_line_of(risk.get("old_line"), risk.get("new_line"))))
         for marker in result.get("markers") or []:
-            entries.append(("{}の増減".format(marker.get("kind")), 1))
+            entries.append(("{}の増減".format(marker.get("kind")), 1, None))
         if result.get("new_words"):
-            entries.append(("元の文にない語", 1))
+            entries.append(("元の文にない語", 1, None))
         if result.get("lost_words"):
-            entries.append(("消えた語", 1))
+            entries.append(("消えた語", 1, None))
         rewritten_only = diff_module._shows_rewritten_only(result)
         endings = result.get("endings") or {}
         for key, name in _HEAD_RULE_NAMES:
@@ -1963,8 +1988,8 @@ def _head_lines(ctx, diff_module):
                 continue
             items = endings.get(key.split(".")[1]) if key.startswith("endings.") else result.get(key)
             if items:
-                entries.append((name + ("{}件".format(len(items)) if len(items) > 1 else ""), len(items)))
-        total = sum(weight for _, weight in entries)
+                entries.append((name + ("{}件".format(len(items)) if len(items) > 1 else ""), len(items), None))
+        total = sum(weight for _, weight, _ in entries)
         if total:
             parts.append(_head_part("diff の候補", entries, total))
         entries = []
@@ -1974,19 +1999,24 @@ def _head_lines(ctx, diff_module):
                 continue
             for candidate in section["candidates"]:
                 if isinstance(candidate, dict) and candidate.get("level") == "review":
-                    entries.append((_head_where(candidate.get("old_line"), candidate.get("new_line")) + key, 1))
+                    entries.append((_head_where(candidate.get("old_line"), candidate.get("new_line")) + key, 1,
+                                    _head_line_of(candidate.get("old_line"), candidate.get("new_line"))))
         if entries:
             parts.append(_head_part("文体などの候補", entries, len(entries)))
     materials = ctx.materials_result
     if materials is not None and materials.get("candidate_count"):
         names = {"number": "資料にない数値", "name": "資料にない名前"}
         entries = [(_head_where(risk.get("old_line"), risk.get("new_line"))
-                    + names.get(risk.get("subkind"), str(risk.get("kind"))), 1)
+                    + names.get(risk.get("subkind"), str(risk.get("kind"))), 1,
+                    _head_line_of(risk.get("old_line"), risk.get("new_line")))
                    for risk in materials.get("meaning_risks") or []]
+        # candidate_count の残りは照合の節の見直し候補の行（ground の数え方と同じ。1行を1件）。名前で並べる
+        entries.extend((name, 1, None) for name in _materials_line_names(materials))
         parts.append(_head_part("資料との照合の候補", entries, materials["candidate_count"]))
     gaps = ctx.fact_gaps
     if gaps is not None and not gaps["skipped"] and gaps["count"]:
-        entries = [("後{}行目「{}」".format(item["line"], item["match"]), 1) for item in gaps["items"]]
+        entries = [("後{}行目「{}」".format(item["line"], item["match"]), 1,
+                    item["line"] if isinstance(item.get("line"), int) else None) for item in gaps["items"]]
         parts.append(_head_part("事実の穴の候補", entries, gaps["count"]))
     if not parts:
         return []
