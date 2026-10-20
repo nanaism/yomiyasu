@@ -38,6 +38,8 @@ TOP_KEYS = (["format", "format_version", "tool_version", "status", "changed", "c
              "fail_on_meaning_risk_count", "not_judged", "context", "meaning_risks"] + NINE_KEYS
             + ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register"])
 FIRST_LINE = "差分の検査を実行しました。"
+# v2.1.1: v1.1.2 の合成20組のうち、見出しを変えた組で structure の後ろに足す見出しの変化の文
+HEADING_ADDED = {"heading_and_code": ["見出しの段を変えた（元1行目 段2「## 手順」→ 後1行目 段3「### 手順」）"]}
 DISCLAIMER = ("全文差分は変わった箇所を示すだけで、意味が同じだという証明ではありません。"
               "この検査では、意味の保持と読者にとっての分かりやすさは判定していません。")
 NO_CANDIDATE_STATUS = "状態: 変更はあるが、専用の規則に当たる見直し候補はない（変更"
@@ -1128,7 +1130,8 @@ class TestExistingKeys(DiffCase):
     """6.3 既存の9キー: v1.1.2 で作った合成20組（BOM なし）の9キーと同じ（v1.1.2 でも通る後戻り防止）。"""
 
     def test_nine_keys_match_v112_fixture(self):
-        """合成20組の9キーが v1.1.2 の fixture と同じ（v1.1.2 でも通る後戻り防止）。"""
+        """合成20組の9キーが v1.1.2 の fixture と同じ（v1.1.2 でも通る後戻り防止）。v2.1.1 で structure の後ろに足した
+        見出しの変化の文は除いて比べ、足した文は HEADING_ADDED と照らす。"""
         data = json.loads(FIXTURE.read_text(encoding="utf-8"))
         self.assertEqual(data["keys"], NINE_KEYS)
         self.assertEqual(len(data["cases"]), 20)
@@ -1138,7 +1141,11 @@ class TestExistingKeys(DiffCase):
                 result = yomiyasu_diff.diff(case["orig"], case["rewrite"], case["stance"])
                 self.assertEqual([key for key in result if key in NINE_KEYS], NINE_KEYS, "9キーの間の順を保つ（2.8）")
                 actual = json.loads(json.dumps({key: result[key] for key in NINE_KEYS}, ensure_ascii=False))
+                # v2.1.1 で structure の後ろに見出しの変化の文を足した。v1.1.2 の文は前にそのまま並び、足した文は見出しの文だけ
+                added = actual["structure"][len(case["expected"]["structure"]):]
+                actual["structure"] = actual["structure"][:len(case["expected"]["structure"])]
                 self.assertEqual(actual, case["expected"])
+                self.assertEqual(added, HEADING_ADDED.get(case["id"], []))
 
 
 class TestArguments(DiffCase):

@@ -3000,6 +3000,151 @@ def _mark_moved(hunks):
                 break
 
 
+# 見出しの変化（「構造」の見直し候補の文。意味が変わる恐れには入れず、--fail-on にも数えない）。見出しの数の増減と、
+# 行ごとの変化（太字だけの行や本文の行を見出しにした、見出しを本文の行にした、見出しの段を変えた）を見る。行ごとの変化は、
+# 全文差分の hunk の中の行（変わった行）で、印（#、太字、末尾のコロン）と空白を除いた文字が同じ行の組だけを見る（文字の違う行は、
+# 見出しを足したか消したかで、見出しの数の増減に出る）。同じ置き換えの hunk の中の見出しどうしは、文字が少し違っても似ていれば組にする。
+_HEADING_SHOWN = 3              # 1つの文に挙げる行の組の数（ほかは「ほか N か所」）
+_HEADING_LINE_WIDTH = 30        # 行を挙げるときの字数の上限（超えたら「…」で切る）
+
+
+def _heading_rows(analysis):
+    """見出しのブロックごとの {最初の行の位置（0から）: (段, 印と空白を除いた文字)} と、見出しのブロックの行の位置の集合
+    （setext の下線の行を含む）。段は ATX なら # の数、setext なら = は1、- は2。"""
+    rows = analysis["lines"]
+    heads, inside = {}, set()
+    for block in analysis["blocks"]:
+        if block["kind"] != "heading":
+            continue
+        first = block["lines"][0]
+        indexes = [row["line"] - 1 for row in block["lines"]]
+        match = _ATX.match(first["content"]) if len(block["lines"]) == 1 else None
+        if match:
+            level = len(match.group(2))
+        else:
+            after = indexes[-1] + 1
+            if after >= len(rows) or rows[after]["kind"] != "heading_underline":
+                continue
+            # 箇条書きの項目のあとの、字下げのない「-」「---」は次の項目か区切り線で、下線ではない（数えない）
+            if rows[after]["content_start"] - rows[after]["start"] < first["content_start"] - first["start"]:
+                continue
+            indexes.append(after)
+            level = 1 if rows[after]["content"].strip().startswith("=") else 2
+        inside.update(indexes)
+        text = "".join(row["content"] for row in block["lines"])
+        heads[indexes[0]] = (level, _heading_key(text))
+    return heads, inside
+
+
+def _bold_only(content):
+    """段落の行の全体が1つの太字なら、その中の文字。そうでなければ None（「**a** と **b**」は1つの太字でない）。"""
+    match = _BOLD_ONLY_LINE.match(content)
+    if match and "**" not in match.group(1) and "__" not in match.group(1):
+        return match.group(1)
+    return None
+
+
+def _heading_key(text):
+    """見出しと本文の行を比べる文字（見出しの #、全体の太字、空白、末尾のコロンを除く）。"""
+    text = _ATX_MARKERS.sub("", text.strip())
+    inner = _bold_only(text)
+    return _SPACES.sub("", inner if inner is not None else text).rstrip("：:")
+
+
+def _heading_shown(line):
+    line = line.strip()
+    return line if len(line) <= _HEADING_LINE_WIDTH else line[:_HEADING_LINE_WIDTH] + "…"
+
+
+def _heading_structure(sides, hunks):
+    """見出しの変化を、「構造」の見直し候補の文の並びにする（_rule_candidates の structure の後ろに足す）。"""
+    (old_heads, old_inside), (new_heads, new_inside) = _heading_rows(sides.analyses[0]), _heading_rows(sides.analyses[1])
+    out = []
+    if len(old_heads) != len(new_heads):
+        out.append("見出しの数が変わった（{} → {}）。節の分け方が元と同じでよいか見る".format(len(old_heads), len(new_heads)))
+
+    def role(side, index):
+        """行の (種類, 段, 比べる文字)。種類は heading（見出しの最初の行）、bold（太字だけの本文の行）、body（ほかの本文の行）。
+        見出しの続きの行、引用の中の本文、本文でない行、比べる文字のない行は None。"""
+        heads, inside = (old_heads, old_inside) if side == 0 else (new_heads, new_inside)
+        if index in heads:
+            return ("heading",) + heads[index] if heads[index][1] else None
+        rows = sides.analyses[side]["lines"]
+        row = rows[index] if index < len(rows) else None
+        if index in inside or row is None or row["kind"] != "paragraph" or row["quote_depth"]:
+            return None
+        key = _heading_key(row["content"])
+        return (("bold" if _bold_only(row["content"]) is not None else "body"), None, key) if key else None
+
+    # 変わった行（hunk の中の行）だけを見る。見出しの行と、相手の側の見出しと同じ文字の本文の行を、両側の順を保って組にする
+    # （行の対応がずれて、太字の行と見出しが別の hunk に入ることがある）
+    changed = ([], [])
+    for hunk in hunks:
+        if hunk["tag"] in ("replace", "delete"):
+            changed[0].extend(range(hunk["old_start"] - 1, hunk["old_end"]))
+        if hunk["tag"] in ("replace", "insert"):
+            changed[1].extend(range(hunk["new_start"] - 1, hunk["new_end"]))
+    rows = ([], [])
+    for side in (0, 1):
+        for index in changed[side]:
+            found = role(side, index)
+            if found is not None:
+                rows[side].append((index, found))
+    heading_keys = [{r[2] for _, r in rows[side] if r[0] == "heading"} for side in (0, 1)]
+    all_keys = [{r[2] for _, r in rows[side]} for side in (0, 1)]
+    # 相手の側に同じ文字の行がない行は外す（本文の行は、相手の側に同じ文字の見出しがあるときだけ残す。組にする並びを短くする）
+    for side in (0, 1):
+        other = 1 - side
+        rows[side][:] = [(i, r) for i, r in rows[side]
+                         if r[2] in (all_keys[other] if r[0] == "heading" else heading_keys[other])]
+    pairs, paired_old, paired_new = [], set(), set()
+    matcher = difflib.SequenceMatcher(None, [r[2] for _, r in rows[0]], [r[2] for _, r in rows[1]], autojunk=False)
+    for a, b, size in matcher.get_matching_blocks():
+        for k in range(size):
+            (i, old), (j, new) = rows[0][a + k], rows[1][b + k]
+            if "heading" in (old[0], new[0]):
+                pairs.append((i, old, j, new))
+                paired_old.add(i)
+                paired_new.add(j)
+    # 同じ置き換えの hunk の中で組にならなかった見出しは、両側の数が同じで、文字が似ていれば順に組にする（段と文字を一緒に変えた見出し）
+    for hunk in hunks:
+        if hunk["tag"] != "replace":
+            continue
+        rest_old = [(i, role(0, i)) for i in range(hunk["old_start"] - 1, hunk["old_end"]) if i not in paired_old]
+        rest_new = [(j, role(1, j)) for j in range(hunk["new_start"] - 1, hunk["new_end"]) if j not in paired_new]
+        rest_old = [(i, r) for i, r in rest_old if r is not None and r[0] == "heading"]
+        rest_new = [(j, r) for j, r in rest_new if r is not None and r[0] == "heading"]
+        if rest_old and len(rest_old) == len(rest_new):
+            for (i, old), (j, new) in zip(rest_old, rest_new):
+                if difflib.SequenceMatcher(None, old[2], new[2], autojunk=False).ratio() >= 0.5:
+                    pairs.append((i, old, j, new))
+    groups = OrderedDict((("bold", []), ("body", []), ("to_body", []), ("level", [])))
+    for i, old, j, new in sorted(pairs, key=lambda pair: pair[0]):
+        if old[0] == "heading" and new[0] == "heading":
+            if old[1] != new[1]:
+                groups["level"].append((i, j, old[1], new[1]))
+        elif new[0] == "heading":
+            groups[old[0]].append((i, j, None, None))
+        else:
+            groups["to_body"].append((i, j, None, None))
+    labels = {"bold": "太字の行を見出しにした", "body": "本文の行を見出しにした", "to_body": "見出しを本文の行にした",
+              "level": "見出しの段を変えた"}
+    for name, items in groups.items():
+        if not items:
+            continue
+        shown = []
+        for i, j, old_level, new_level in items[:_HEADING_SHOWN]:
+            old_text, new_text = _heading_shown(sides.lines[0][i]), _heading_shown(sides.lines[1][j])
+            if name == "level":
+                shown.append("元{}行目 段{}「{}」→ 後{}行目 段{}「{}」".format(i + 1, old_level, old_text, j + 1, new_level, new_text))
+            else:
+                shown.append("元{}行目「{}」→ 後{}行目「{}」".format(i + 1, old_text, j + 1, new_text))
+        if len(items) > _HEADING_SHOWN:
+            shown.append("ほか{}か所".format(len(items) - _HEADING_SHOWN))
+        out.append("{}（{}）".format(labels[name], "、".join(shown)))
+    return out
+
+
 # ---- 意味が変わる恐れ（v2.0.0）----
 # どれも確かめる場所で、意味が変わったという判定ではない。ここに出なかった変化も全文差分には必ず出る。
 
@@ -8877,6 +9022,8 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
     finally:
         _LAST_TYPE_RANGES[0] = None
     full, sides = _build_full_diff(orig_raw, rw_raw, encoding_notes)
+    # 見出しの数、段、見出しと本文の行の入れ替わりは、全文差分の注記だけでなく「構造」の見直し候補にも出す
+    rules["structure"].extend(_heading_structure(sides, full["hunks"]))
     groups = _sentence_pairs(sides, full)
     risks = _meaning_risks(sides, full, rules["type_changes"], groups, doc_type=context["doc_type"], modality=modality,
                            logic=logic)

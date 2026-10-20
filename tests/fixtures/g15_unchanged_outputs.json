@@ -1981,16 +1981,16 @@
   "source": "# 見出し\n\n本文です。\n",
   "final": "## 見出し\n\n本文です。\n",
   "stdin": null,
-  "stdout": "差分の検査を実行しました。\n状態: 変更はあるが、専用の規則に当たる見直し候補はない（変更 1か所）\n全文差分は変わった箇所を示すだけで、意味が同じだという証明ではありません。この検査では、意味の保持と読者にとっての分かりやすさは判定していません。\n\n■ 全文差分（変更 1か所。省略していません）\n@ 元1行目 → 後1行目（見出し、見出しの段 1 → 2）\n  元: # 見出し\n  後: ## 見出し\n  差: #{+#+} 見出し\n\n状態: 変更はあるが、専用の規則に当たる見直し候補はない（変更 1か所）\n",
+  "stdout": "差分の検査を実行しました。\n状態: 変更あり（1か所）。見直し候補 1件、うち意味が変わる恐れ 0件\n全文差分は変わった箇所を示すだけで、意味が同じだという証明ではありません。この検査では、意味の保持と読者にとっての分かりやすさは判定していません。\n\n■ 規則の見直し候補（1件）\n■ 見出しの段を変えた（元1行目 段1「# 見出し」→ 後1行目 段2「## 見出し」）\n\n■ 全文差分（変更 1か所。省略していません）\n@ 元1行目 → 後1行目（見出し、見出しの段 1 → 2）\n  元: # 見出し\n  後: ## 見出し\n  差: #{+#+} 見出し\n\n状態: 変更あり（1か所）。見直し候補 1件、うち意味が変わる恐れ 0件\n",
   "stderr": "",
   "code": 0,
   "json": {
    "format": "yomiyasu-diff",
    "format_version": 2,
    "tool_version": "2.1.0",
-   "status": "changed_without_candidates",
+   "status": "has_candidates",
    "changed": true,
-   "candidate_count": 0,
+   "candidate_count": 1,
    "meaning_risk_count": 0,
    "fail_on_meaning_risk_count": 0,
    "not_judged": [
@@ -2005,7 +2005,9 @@
    "markers": [],
    "new_words": [],
    "lost_words": [],
-   "structure": [],
+   "structure": [
+    "見出しの段を変えた（元1行目 段1「# 見出し」→ 後1行目 段2「## 見出し」）"
+   ],
    "spans": [],
    "logic": [],
    "bold": [],
@@ -2171,7 +2173,7 @@
   "source": "# 見出し\n\n本文です。\n",
   "final": "## 見出し\n\n本文です。\n",
   "stdin": "<<<yomiyasu:original>>>\n# 見出し\n\n本文です。\n<<<yomiyasu:final>>>\n## 見出し\n\n本文です。\n",
-  "stdout": "検査を実行しました（1回目）。規則に当たる候補はありません。全文差分で意図しない変更がないかを確かめ、直すなら1回まで、直さないなら完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください（記録を残さない指定なので verify はできません）。\nyomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:f2a40aa9c007 mode=rewrite checks=lint,diff meaning_risk=0 reason=no_record_option\n実行した検査: lint（最終稿）候補0件、diff（原文→最終稿）変更あり 候補0件（うち意味が変わる恐れ0件）\nこの結果は検査を実行したことを示すだけで、意味が保たれたことや読みやすさの合格を示すものではありません。\n記録: なし（--no-record）\n硬化の検査: 候補なし\n勢いの検査: 候補なし\n慎重表現の検査: 候補なし\n値の検査: 候補なし\n見直し候補: 原文 0件 → 最終稿 0件（lint の規則に当たった数で、点数ではありません。増えても減っても読みやすさの良し悪しは示しません）\n\n■ 直した箇所（1か所。元と後）\n@ 元1行目 → 後1行目（見出し、見出しの段 1 → 2）\n  元: # 見出し\n  後: ## 見出し\n- 省いていない元と後は下の「■ 全文差分」にあります。\n\n■ 全文差分（変更 1か所。省略していません）\n@ 元1行目 → 後1行目（見出し、見出しの段 1 → 2）\n  元: # 見出し\n  後: ## 見出し\n  差: #{+#+} 見出し\n\n検査を実行しました（1回目）。規則に当たる候補はありません。全文差分で意図しない変更がないかを確かめ、直すなら1回まで、直さないなら完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください（記録を残さない指定なので verify はできません）。\nyomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:f2a40aa9c007 mode=rewrite checks=lint,diff meaning_risk=0 reason=no_record_option\n",
+  "stdout": "検査を実行しました（1回目）。下の候補を原文と資料に照らして確かめてください。直すのは1回までです。直したら同じコマンドをもう一度実行し、直さないなら完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください（記録を残さない指定なので verify はできません）。\nyomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:f2a40aa9c007 mode=rewrite checks=lint,diff meaning_risk=0 reason=no_record_option\n実行した検査: lint（最終稿）候補0件、diff（原文→最終稿）変更あり 候補1件（うち意味が変わる恐れ0件）\nこの結果は検査を実行したことを示すだけで、意味が保たれたことや読みやすさの合格を示すものではありません。\n記録: なし（--no-record）\n硬化の検査: 候補なし\n勢いの検査: 候補なし\n慎重表現の検査: 候補なし\n値の検査: 候補なし\n見直し候補: 原文 0件 → 最終稿 0件（lint の規則に当たった数で、点数ではありません。増えても減っても読みやすさの良し悪しは示しません）\n\n■ 直した箇所（1か所。元と後）\n@ 元1行目 → 後1行目（見出し、見出しの段 1 → 2）\n  元: # 見出し\n  後: ## 見出し\n- 省いていない元と後は下の「■ 全文差分」にあります。\n\n■ 差分の見直し候補（diff、1件）\n■ 見出しの段を変えた（元1行目 段1「# 見出し」→ 後1行目 段2「## 見出し」）\n\n■ 全文差分（変更 1か所。省略していません）\n@ 元1行目 → 後1行目（見出し、見出しの段 1 → 2）\n  元: # 見出し\n  後: ## 見出し\n  差: #{+#+} 見出し\n\n検査を実行しました（1回目）。下の候補を原文と資料に照らして確かめてください。直すのは1回までです。直したら同じコマンドをもう一度実行し、直さないなら完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください（記録を残さない指定なので verify はできません）。\nyomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:f2a40aa9c007 mode=rewrite checks=lint,diff meaning_risk=0 reason=no_record_option\n",
   "stderr": "",
   "code": 0,
   "json": {
@@ -2181,7 +2183,7 @@
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:f2a40aa9c007 mode=rewrite checks=lint,diff meaning_risk=0 reason=no_record_option",
-   "message": "検査を実行しました（1回目）。規則に当たる候補はありません。全文差分で意図しない変更がないかを確かめ、直すなら1回まで、直さないなら完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください（記録を残さない指定なので verify はできません）。",
+   "message": "検査を実行しました（1回目）。下の候補を原文と資料に照らして確かめてください。直すのは1回までです。直したら同じコマンドをもう一度実行し、直さないなら完了報告の「実行しなかった検査」に「最終稿の照合（記録を残さない指定のため）」と書いてください（記録を残さない指定なので verify はできません）。",
    "next": "report_unrecorded",
    "run_id": null,
    "attempt": null,
@@ -2235,9 +2237,9 @@
     "format": "yomiyasu-diff",
     "format_version": 2,
     "tool_version": "2.1.0",
-    "status": "changed_without_candidates",
+    "status": "has_candidates",
     "changed": true,
-    "candidate_count": 0,
+    "candidate_count": 1,
     "meaning_risk_count": 0,
     "fail_on_meaning_risk_count": 0,
     "not_judged": [
@@ -2252,7 +2254,9 @@
     "markers": [],
     "new_words": [],
     "lost_words": [],
-    "structure": [],
+    "structure": [
+     "見出しの段を変えた（元1行目 段1「# 見出し」→ 後1行目 段2「## 見出し」）"
+    ],
     "spans": [],
     "logic": [],
     "bold": [],
