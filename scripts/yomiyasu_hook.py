@@ -505,11 +505,13 @@ def _bodies(data, cwd):
     if not isinstance(name, str) or not isinstance(tool, dict):
         return []
     bodies = []
+    # A lone surrogate (JSON "\ud800") stays as bytes that are not UTF-8, so that field alone cannot match a
+    # registered draft (_related skips it) while the other fields are still checked.
     if name.startswith('mcp__'):
         def scan(value, depth):
             for key, item in value.items():
                 if key in ('body', 'text', 'content', 'description', 'message', 'notes') and isinstance(item, str):
-                    bodies.append((item.encode('utf-8'), None, ''))
+                    bodies.append((item.encode('utf-8', 'surrogatepass'), None, ''))
                 elif isinstance(item, dict) and depth < 2:
                     scan(item, depth + 1)
         scan(tool, 1)
@@ -579,7 +581,7 @@ def _bodies(data, cwd):
                     raw = None
                 bodies.append((raw, path, context))
             else:
-                bodies.append((value.encode('utf-8'), None, context))
+                bodies.append((value.encode('utf-8', 'surrogatepass'), None, context))
             index += 1
     return bodies
 
@@ -817,7 +819,9 @@ def main(argv=None):
                     signal.signal(signal.SIGALRM, previous)
         if output:
             if hasattr(sys.stdout, 'reconfigure'):
-                sys.stdout.reconfigure(encoding='utf-8')
+                # The registration message is plain text with the draft's name. A name with bytes that are not
+                # UTF-8 (a lone surrogate such as '\udcff') is written as an escape instead of failing the hook.
+                sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
             sys.stdout.write(output + '\n')
             sys.stdout.flush()
     except BaseException as error:
