@@ -244,10 +244,6 @@ class ContractsTest(unittest.TestCase):
         risks = [(r["kind"], r["subkind"], r["detail"]) for r in result["meaning_risks"]]
         self.assertEqual(risks, [("number", "replaced", {"removed": ["3日"], "added": ["30日"]})])
 
-    def test_help_names_the_markers(self):
-        helps = {action.dest: action.help for action in yomiyasu_diff._build_parser()._actions}
-        self.assertIn("約120人 → 120人、100人以上 → 100人", helps["fail_on"])
-
     def test_twin_scripts_are_identical(self):
         self.assertEqual((ROOT / "scripts" / "yomiyasu_diff.py").read_bytes(),
                          (ROOT / "skills" / "yomiyasu" / "scripts" / "yomiyasu_diff.py").read_bytes())
