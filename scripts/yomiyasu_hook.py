@@ -264,7 +264,8 @@ def _paths(args, cwd):
             continue
         path = os.path.abspath(os.path.join(cwd, word))
         key = _place(path)
-        if key in seen:
+        # A word that cannot name a file here (a lone surrogate) is skipped; later words are still tried.
+        if key is None or key in seen:
             continue
         seen.add(key)
         try:
@@ -276,7 +277,15 @@ def _paths(args, cwd):
 
 
 def _place(path):
-    return os.path.normcase(os.path.realpath(path))
+    """The compared form of a path, or None when it cannot name a file on this system.
+
+    A lone surrogate from JSON (such as '\\ud800') cannot be encoded for the file system, and realpath then
+    raises UnicodeEncodeError (Python 3.14). Callers treat None as matching nothing.
+    """
+    try:
+        return os.path.normcase(os.path.realpath(path))
+    except ValueError:
+        return None
 
 
 def _project_root(path):
@@ -300,6 +309,8 @@ def _same_project(entry, cwd):
         return False
     root = _place(_project_root(recorded))
     here = _place(cwd)
+    if root is None or here is None:
+        return False
     return here == root or here.startswith(root.rstrip(os.sep) + os.sep)
 
 
@@ -594,10 +605,12 @@ def _related(check, state, entry, body, path, command):
     final = entry['targets']['final'] or check.latest_final_path(state, entry['run_id'])
     if final:
         paths.add(final)
-    if path:
-        placed = _place(path)
-        exports = _place(os.path.join(state, 'exports')) + os.sep
-        if placed in {_place(p) for p in paths} or placed.startswith(exports):
+    # A path that cannot name a file (None from _place) matches no registered path; its body is None, so it is
+    # judged below like any other unreadable body file, and the other bodies are still checked.
+    placed = _place(path) if path else None
+    if placed is not None:
+        exports = _place(os.path.join(state, 'exports'))
+        if placed in {_place(p) for p in paths} - {None} or (exports is not None and placed.startswith(exports + os.sep)):
             return True
     if body is None:
         for p in paths:
@@ -637,9 +650,10 @@ def _pretool(check, state, entry, bodies, host, session, cwd, started, budget):
                     continue
                 # Keep successful body matching (including copies and line-ending differences).
                 # Only refine a failure's reason when the file is a registered final.
-                if path:
+                placed = _place(path) if path else None
+                if placed is not None:
                     finals = (current['targets']['final'], check.latest_final_path(state, current['run_id']))
-                    if any(final and _place(path) == _place(final) for final in finals):
+                    if any(final and placed == _place(final) for final in finals):
                         v = check.verify_quick(state, final_path=path, final_bytes=body,
                                                run_id=current['run_id'], since=current['created_at'])
                         if v['status'] == 'executed':
@@ -669,8 +683,9 @@ def _process(check, states, invocation, data, host, event, cwd, started, budget,
     if invocation is not None:
         for path in _paths(invocation, cwd):
             remaining()
+            placed = _place(path)
             existing = [e for state in states for e in check.armed_entries(state)
-                        if _mine(e, host, session) and _place(e['targets']['source']['path']) == _place(path)]
+                        if _mine(e, host, session) and placed is not None and _place(e['targets']['source']['path']) == placed]
             if existing:
                 continue
             # First candidate follows --state-dir, environment, project priority. A project .yomiyasu/
