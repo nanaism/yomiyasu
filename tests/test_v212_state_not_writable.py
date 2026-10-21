@@ -1,4 +1,5 @@
-"""v2.1.2: 状態フォルダに書き込めないときに、check が一時ファイルの名前を試し続けて終わらなくならないことを確かめる。
+"""v2.1.2: 状態フォルダに書き込めないときに、check が一時ファイルの名前を試し続けて終わらなくならないこと、
+書き込みを拒まれたときに、ユーザーごとに別の状態フォルダを指定する案内を出すことを確かめる。
 
 Windows の tempfile（Python 3.12 まで）は、ACL で書き込みを拒まれたフォルダで os.open が PermissionError を出すと、
 同じ名前のフォルダがあるとみなして、約21億回まで次の名前を試す。check は tempfile.mkstemp と mkdtemp を使わず、
@@ -11,6 +12,7 @@ import contextlib
 import importlib.util
 import io
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -170,15 +172,25 @@ class RunEndsWhenStateIsNotWritableTest(unittest.TestCase):
     def test_denied_folder_ends_with_not_writable(self):
         code, out, err, seconds = self.run_denied(lambda path: os.path.isdir(path))
         self.assertEqual(code, 0, err)
-        self.assertIn("reason=not_writable", out.splitlines()[1])
-        self.assertIn("--state-dir に書ける場所を指定して", out.splitlines()[0])
+        lines = out.splitlines()
+        self.assertIn("reason=not_writable", lines[1])
+        # 書き込みを拒まれたときは、ほかの OS ユーザーが作った状態フォルダかもしれないことと、分ける方法を出す
+        self.assertIn(check._DENIED_STATE_NOTE, lines[0])
+        self.assertIn("--state-dir か YOMIYASU_STATE_DIR で自分が書ける場所を指定して", lines[0])
+        # 書けなかったのは一時ファイルの名前ではなく、状態フォルダとして示す
+        self.assertRegex(lines[0], "（" + re.escape(self.state) + r"[^（）]* に書けません: Permission denied）")
+        self.assertNotIn(".tmp-", lines[0])
         self.assertLess(seconds, 30)
 
     def test_even_if_every_name_looks_taken_run_ends(self):
         """拒まれた名前をすべてフォルダとみなす最悪の場合も、100回で止まって reason=not_writable で終わる。"""
         code, out, err, seconds = self.run_denied(lambda path: True)
         self.assertEqual(code, 0, err)
-        self.assertIn("reason=not_writable", out.splitlines()[1])
+        lines = out.splitlines()
+        self.assertIn("reason=not_writable", lines[1])
+        # 名前を決められなかった（拒まれたのではない）ので、ユーザーを分ける案内は足さない
+        self.assertNotIn(check._DENIED_STATE_NOTE, lines[0])
+        self.assertIn("--state-dir に書ける場所を指定して", lines[0])
         self.assertLess(seconds, 30)
 
 
@@ -208,15 +220,19 @@ class StartWithUnwritableStateTest(unittest.TestCase):
         result = self.cli("start", "--source", self.source)
         stderr = result.stderr.decode("utf-8")
         self.assertEqual(result.returncode, 3, stderr)
-        self.assertIn("原稿を登録できませんでした", stderr)
-        self.assertIn("--state-dir に書ける場所を指定して", stderr)
+        self.assertRegex(stderr, "原稿を登録できませんでした（" + re.escape(self.state) + r"[^（）]* に書けません: Permission denied）")
+        self.assertNotIn(".tmp-", stderr)
+        self.assertIn(check._DENIED_STATE_NOTE, stderr)
+        self.assertIn("--state-dir か YOMIYASU_STATE_DIR で自分が書ける場所を指定して", stderr)
         self.assertNotIn("Traceback", stderr)
         self.assertEqual(result.stdout, b"")
 
     def test_run_ends_with_not_writable(self):
         result = self.cli("run", "--source", self.source, "--final", self.final)
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
-        self.assertIn("reason=not_writable", result.stdout.decode("utf-8").splitlines()[1])
+        lines = result.stdout.decode("utf-8").splitlines()
+        self.assertIn("reason=not_writable", lines[1])
+        self.assertIn(check._DENIED_STATE_NOTE, lines[0])
 
 
 if __name__ == "__main__":

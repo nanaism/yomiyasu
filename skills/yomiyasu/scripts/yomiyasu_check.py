@@ -1790,8 +1790,10 @@ def _treated_note(ctx):
     return _TREATED_INHERITED_PENDING_NOTE if inherited else _TREATED_PENDING_NOTE
 
 
-def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0, same_as_previous=False):
-    """状態、1行目、next、状態の行を決める（1行目の表を上から当てはめる）。"""
+def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0, same_as_previous=False,
+            denied=False):
+    """状態、1行目、next、状態の行を決める（1行目の表を上から当てはめる）。denied は、記録を書けなかった理由が
+    書き込みの拒否（PermissionError）のときに真で、1行目に状態フォルダを分ける案内を足す。"""
     finalize = _finalize_text(ctx)
     failed = ctx.failed
     if ctx.final_changed:
@@ -1813,8 +1815,13 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
             "、".join(clauses), "、".join(items)) + _PARTIAL_TAIL)
         following = "report_partial"
     elif not recorded and not ctx.no_record:
-        line = ("検査を実行しましたが、記録を書けませんでした（{0}）。--state-dir に書ける場所を指定してもう一度実行するか、"
-                "完了報告の「実行しなかった検査」に「記録（{0}）」と書いてください。".format(problem))
+        if denied:
+            line = ("検査を実行しましたが、記録を書けませんでした（{0}）。" + _DENIED_STATE_NOTE + "--state-dir か "
+                    "YOMIYASU_STATE_DIR で自分が書ける場所を指定してもう一度実行するか、完了報告の「実行しなかった検査」に"
+                    "「記録（{0}）」と書いてください。").format(problem)
+        else:
+            line = ("検査を実行しましたが、記録を書けませんでした（{0}）。--state-dir に書ける場所を指定してもう一度実行するか、"
+                    "完了報告の「実行しなかった検査」に「記録（{0}）」と書いてください。".format(problem))
         following = "report_unrecorded"
     else:
         if ctx.text_unchanged() or (ctx.source is not None and ctx.diff_result is not None
@@ -2391,9 +2398,18 @@ def _put_snapshots(folder, inputs):
     return paths
 
 
+# 状態フォルダへの書き込みを拒まれたときに、1行目と start の案内に足す文。状態フォルダは作った OS ユーザーだけが
+# 書けるフォルダにする（POSIX の 0o700。Windows も Python の版によって作ったユーザーと管理者だけになる）ので、同じ
+# リポジトリをほかの OS ユーザーと使うときは、ユーザーごとに別の状態フォルダを指定してもらう
+_DENIED_STATE_NOTE = ("ほかの OS ユーザー（Codex のサンドボックスなど）が先に作った状態フォルダは、作ったユーザーしか"
+                      "書けないことがあります。")
+
+
 def _write_problem(state, error):
     """記録を書けなかった理由の文（1行目と5行目に入れる）。"""
     where = getattr(error, "filename", None) or state
+    if isinstance(where, str) and os.path.basename(where).startswith(".tmp-"):
+        where = os.path.dirname(where)  # 一時ファイルの名前ではなく、書けなかったフォルダを示す
     reason = getattr(error, "strerror", None) or str(error) or type(error).__name__
     return "{} に書けません: {}".format(where, reason)
 
@@ -2665,7 +2681,7 @@ def _run_impl(args, parser):
     # 3. 入力の写しを置き、検査はこの写しに対して行う。記録を書かないとき（--no-record、書けない）は、
     #    消す前提の一時フォルダに写しを置き、終わったら消す。ほかの場所に記録を逃がさない
     recording = state is not None
-    write_problem = None
+    write_problem, write_denied = None, False
     inputs = ([ctx.source] if ctx.source is not None else []) + list(ctx.materials) + [ctx.final]
     temporary = None
     try:
@@ -2676,6 +2692,7 @@ def _run_impl(args, parser):
                 snapshots = _put_snapshots(_ensure_dir(state, "inputs"), inputs)
             except OSError as error:
                 recording, write_problem = False, _write_problem(state, error)
+                write_denied = isinstance(error, PermissionError)
         if snapshots is None:
             temporary = _mkdtemp("yomiyasu-check-")
             snapshots = _put_snapshots(temporary, inputs)
@@ -2702,8 +2719,9 @@ def _run_impl(args, parser):
                                                               path_key, lint_module, diff_module)
         except OSError as error:
             recording, write_problem = False, _write_problem(state, error)
+            write_denied = isinstance(error, PermissionError)
     if not recording:
-        decision = _decide(ctx, False, problem=write_problem)
+        decision = _decide(ctx, False, problem=write_problem, denied=write_denied)
     status, line, following, token = decision
 
     # 6. 出力する。意味が変わる恐れを出す検査が最後まで動かなかったときは、件数を null にする（反証で見つけた例）
@@ -4468,8 +4486,9 @@ def _management(command, args, parser):
             parser.error(str(error))
         except OSError as error:
             # 状態フォルダに書けない。終了コードは今までどおり3（内部エラーと同じ）にし、トレースバックの代わりに案内を出す
-            _error("yomiyasu_check.py start: 原稿を登録できませんでした（{}）。--state-dir に書ける場所を指定して"
-                   "もう一度実行してください。".format(_write_problem(state, error)))
+            _error("yomiyasu_check.py start: 原稿を登録できませんでした（{}）。{}--state-dir か YOMIYASU_STATE_DIR で"
+                   "自分が書ける場所を指定してもう一度実行してください。".format(
+                       _write_problem(state, error), _DENIED_STATE_NOTE if isinstance(error, PermissionError) else ""))
             return 3
         run_id = entry["run_id"]
         message = ("原稿を登録しました（上限: 続けさせる{max_stop_blocks}回、run {max_runs}回、{deadline_min}分）。"
