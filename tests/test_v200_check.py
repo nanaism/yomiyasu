@@ -1674,9 +1674,12 @@ class TestRecordingFailures(CheckCase):
         status, fields = self.status(lines[1])
         self.assertEqual(status, "unrecorded")
         self.assertIn(RUN_UNRECORDED_PART, lines[0])
-        # 3.5 の表の「記録を書けなかった」の行（{理由} は実装の文）
-        match = re.match(r"^検査を実行しましたが、記録を書けませんでした（(.+)）。--state-dir に書ける場所を指定して"
-                         r"もう一度実行するか、完了報告の「実行しなかった検査」に「記録（(.+)）」と書いてください。$", lines[0])
+        # 3.5 の表の「記録を書けなかった」の行（{理由} は実装の文）。v2.1.2 から、書き込みを拒まれたときは、ほかの OS
+        # ユーザーが作った状態フォルダかもしれないことと、--state-dir か YOMIYASU_STATE_DIR で分ける案内を足す
+        match = re.match(r"^検査を実行しましたが、記録を書けませんでした（(.+)）。ほかの OS ユーザー（Codex のサンドボックスなど）が"
+                         r"先に作った状態フォルダは、作ったユーザーしか書けないことがあります。--state-dir か YOMIYASU_STATE_DIR で"
+                         r"自分が書ける場所を指定してもう一度実行するか、完了報告の「実行しなかった検査」に「記録（(.+)）」と"
+                         r"書いてください。$", lines[0])
         self.assertIsNotNone(match, lines[0])
         self.assertEqual(match.group(1), match.group(2))
         self.assertEqual(lines[self.record_index(lines)], "記録: なし（{}）".format(match.group(1)))
