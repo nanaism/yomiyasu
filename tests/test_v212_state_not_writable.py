@@ -235,5 +235,64 @@ class StartWithUnwritableStateTest(unittest.TestCase):
         self.assertIn(check._DENIED_STATE_NOTE, lines[0])
 
 
+
+class RecordingRunUsesBoundedNamesTest(unittest.TestCase):
+    """記録を残す run と start（.gitignore を置く、写しと記録を書く）も、tempfile の名前を試す関数を使わない。
+    _place_new_file か _write_atomic を tempfile.mkstemp に戻すと落ちる。"""
+
+    def test_run_and_start_with_a_writable_state(self):
+        with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder:
+            state = os.path.join(folder, "state")
+            a, b = os.path.join(folder, "a.md"), os.path.join(folder, "b.md")
+            Path(a).write_text("設定を更新します。\n", encoding="utf-8")
+            Path(b).write_text("設定を更新しました。\n", encoding="utf-8")
+            boom = mock.Mock(side_effect=AssertionError("tempfile の名前を試す関数は使わない"))
+            with mock.patch.object(check.tempfile, "mkstemp", boom), \
+                    mock.patch.object(check.tempfile, "mkdtemp", boom), \
+                    mock.patch.object(check.tempfile, "TemporaryDirectory", boom):
+                for argv in (["start", "--source", a, "--state-dir", state],
+                             ["run", "--source", a, "--final", b, "--state-dir", state]):
+                    code, out, err = call(argv)
+                    self.assertEqual(code, 0, err)
+            self.assertTrue(os.path.isfile(os.path.join(state, ".gitignore")))
+            self.assertEqual(boom.call_count, 0)
+
+
+class StartLockTimeoutTest(unittest.TestCase):
+    def test_lock_timeout_is_not_reported_as_unwritable(self):
+        """同じ原稿の登録のロックを待ちきれなかったときは、書けないとは案内せず、今までどおり内部エラーにする。"""
+        with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder:
+            a = os.path.join(folder, "a.md")
+            Path(a).write_text("原稿です。\n", encoding="utf-8")
+            with mock.patch.object(check._ArmedLock, "__enter__", side_effect=TimeoutError("armed_lock")):
+                code, out, err = call(["start", "--source", a, "--state-dir", os.path.join(folder, "state")])
+            self.assertEqual(code, 3)
+            self.assertIn("内部エラー: TimeoutError: armed_lock", err)
+            self.assertNotIn("原稿を登録できませんでした", err)
+
+
+class RemoveTemporaryTest(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "POSIX の権限で消しにくい写しを作る")
+    def test_removes_copies_without_write_permission(self):
+        path = check._mkdtemp("yomiyasu-v212-")
+        inner = os.path.join(path, "x.bin")
+        Path(inner).write_bytes(b"copy")
+        os.chmod(inner, 0o400)
+        os.chmod(path, 0o500)
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            check._remove_temporary(path)
+        self.assertFalse(os.path.exists(path))
+        self.assertEqual(err.getvalue(), "")
+
+    def test_reports_copies_left_behind(self):
+        path = check._mkdtemp("yomiyasu-v212-")
+        self.addCleanup(lambda: __import__("shutil").rmtree(path, ignore_errors=True))
+        err = io.StringIO()
+        with mock.patch.object(check.shutil, "rmtree", side_effect=PermissionError(13, "Permission denied", path)), \
+                contextlib.redirect_stderr(err):
+            check._remove_temporary(path)
+        self.assertIn("一時フォルダ {} を消せませんでした".format(path), err.getvalue())
+
 if __name__ == "__main__":
     unittest.main()

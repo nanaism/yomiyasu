@@ -449,8 +449,9 @@ def _temporary_name_taken(path):
 
 
 def _mkstemp(folder):
-    """folder に一時ファイル（.tmp-<16進>）を作って開く。(ファイル記述子, 絶対パス) を返す。開き方は tempfile.mkstemp と
-    同じ（O_EXCL、0o600、O_NOFOLLOW、Windows では O_NOINHERIT と O_BINARY）で、名前を試すのは _TEMPORARY_TRIES 回まで。"""
+    """folder に一時ファイル（.tmp-<16進>）を作って開く。(ファイル記述子, 絶対パス) を返す。フラグとモードは tempfile.mkstemp
+    と同じ（O_EXCL、0o600、O_NOFOLLOW、Windows では O_BINARY。O_NOINHERIT は Windows の os.open も足すものを明示しただけ）。
+    名前を試すのは _TEMPORARY_TRIES 回まで（tempfile は TMP_MAX 回で、Python 3.12 までの Windows では約21億回）。"""
     folder = os.path.abspath(folder)
     flags = (os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOINHERIT", 0) | getattr(os, "O_BINARY", 0)
              | getattr(os, "O_NOFOLLOW", 0))
@@ -468,8 +469,8 @@ def _mkstemp(folder):
 
 
 def _mkdtemp(prefix):
-    """システムの一時フォルダに、自分だけが使うフォルダ（<prefix><16進>、0o700）を作り、絶対パスを返す。
-    tempfile.mkdtemp と同じく、名前を試すのは _TEMPORARY_TRIES 回まで。"""
+    """システムの一時フォルダに、自分だけが使うフォルダ（<prefix><16進>、0o700。tempfile.mkdtemp と同じ）を作り、絶対パスを
+    返す。名前を試すのは _TEMPORARY_TRIES 回まで（tempfile は TMP_MAX 回）。"""
     parent = os.path.abspath(tempfile.gettempdir())
     for _ in range(_TEMPORARY_TRIES):
         path = os.path.join(parent, prefix + os.urandom(8).hex())
@@ -483,6 +484,28 @@ def _mkdtemp(prefix):
                 continue
             raise
     raise FileExistsError(errno.EEXIST, "一時フォルダの名前を{}回試して決められません".format(_TEMPORARY_TRIES), parent)
+
+
+def _remove_temporary(path):
+    """_mkdtemp で作った一時フォルダを消す。tempfile.TemporaryDirectory の後片付けと同じく、消せないものは権限（と BSD の
+    フラグ）を戻して消し直す。それでも消せなければ、原稿の写しが残っていることを標準エラーに1行で知らせる（結果の出力と
+    終了コードは変えない）。"""
+    def again(function, target, *_):
+        for item in (os.path.dirname(target), target):
+            try:
+                if hasattr(os, "chflags"):
+                    os.chflags(item, 0)
+                os.chmod(item, 0o700)
+            except OSError:
+                pass
+        function(target)
+    try:
+        if sys.version_info >= (3, 12):
+            shutil.rmtree(path, onexc=again)
+        else:
+            shutil.rmtree(path, onerror=again)
+    except OSError:
+        _error("yomiyasu_check.py: 一時フォルダ {} を消せませんでした。原稿の写しが残っているので、消してください。".format(path))
 
 
 def _write_atomic(path, data):
@@ -2699,7 +2722,7 @@ def _run_impl(args, parser):
         _run_checks(ctx, snapshots, stance, timeout)
     finally:
         if temporary is not None:
-            shutil.rmtree(temporary, ignore_errors=True)
+            _remove_temporary(temporary)
 
     # 4. 最終稿のファイルを読み直し、検査の途中で変わっていないかを確かめる（標準入力なら省く）
     if ctx.final.via == "file":
@@ -4485,6 +4508,8 @@ def _management(command, args, parser):
         except ValueError as error:
             parser.error(str(error))
         except OSError as error:
+            if isinstance(error, TimeoutError):
+                raise  # 同じ原稿の登録のロックを待ちきれなかった（書けないのではない）。今までどおり内部エラーにする
             # 状態フォルダに書けない。終了コードは今までどおり3（内部エラーと同じ）にし、トレースバックの代わりに案内を出す
             _error("yomiyasu_check.py start: 原稿を登録できませんでした（{}）。{}--state-dir か YOMIYASU_STATE_DIR で"
                    "自分が書ける場所を指定してもう一度実行してください。".format(
