@@ -423,7 +423,6 @@ def _host_value(value):
 
 def _chmod(path, mode):
     # 原稿の写しを含むので、POSIX ではフォルダを 0o700、ファイルを 0o600 にする。chmod は POSIX のときだけ
-    # （Windows の状態フォルダは親フォルダの ACL を引き継ぐ。_mkdir_state）
     if os.name == "posix":
         os.chmod(path, mode)
 
@@ -510,23 +509,13 @@ def _touch(folder, name):
     _chmod(path, 0o600)
 
 
-def _mkdir_state(path):
-    """状態フォルダとその下のフォルダを作る。POSIX では 0o700 で作る。Windows では mode を渡さず、親フォルダの ACL を
-    引き継がせる（Windows の os.mkdir は、Python 3.13 と 3.12.4・3.11.10・3.9.20 から、0o700 を渡したときだけ作った
-    ユーザーと管理者しか入れないフォルダにする。そうすると、同じリポジトリを使うほかの OS ユーザーが記録できない）。"""
-    if os.name == "nt":
-        os.mkdir(path)
-    else:
-        os.mkdir(path, 0o700)
-
-
 def _ensure_dir(base, *parts):
-    """base の下にフォルダを1段ずつ作る（作ったフォルダだけ 0o700 にする。0o700 は POSIX だけ）。作ったフォルダのパスを返す。"""
+    """base の下にフォルダを1段ずつ作る（作ったフォルダだけ 0o700 にする）。作ったフォルダのパスを返す。"""
     path = base
     for part in parts:
         path = os.path.join(path, part)
         try:
-            _mkdir_state(path)
+            os.mkdir(path, 0o700)
         except FileExistsError:
             if not os.path.isdir(path):
                 raise
@@ -634,7 +623,7 @@ def _ensure_state(state, default_place=False):
     if parent and not os.path.isdir(parent):
         os.makedirs(parent, exist_ok=True)
     try:
-        _mkdir_state(state)
+        os.mkdir(state, 0o700)
     except FileExistsError:
         if os.path.isdir(state):
             # 並列の run が作ったばかりのフォルダ。その run が .gitignore を置く前に写しを書かないよう、
@@ -4263,7 +4252,7 @@ def start_run(state, source_path, final_path=None, run_id=None, session=None, ho
                 raise ValueError("すでにある実行IDです。")
             folder = _ensure_dir(state, "runs")
             run_dir = os.path.join(folder, run_id)
-            _mkdir_state(run_dir)
+            os.mkdir(run_dir, 0o700)
             _put_snapshots(_ensure_dir(state, "inputs"), [source])
             _write_atomic(os.path.join(run_dir, "start.json"),
                           (json.dumps(record, ensure_ascii=True, indent=1) + "\n").encode("ascii"))
