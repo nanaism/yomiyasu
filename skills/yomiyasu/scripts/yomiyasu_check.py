@@ -23,7 +23,9 @@ sys.dont_write_bytecode = True
 import os  # noqa: E402
 import re  # noqa: E402
 import json  # noqa: E402
+import errno  # noqa: E402
 import stat  # noqa: E402
+import shutil  # noqa: E402
 import time  # noqa: E402
 import signal  # noqa: E402
 import hashlib  # noqa: E402
@@ -134,6 +136,7 @@ _REPORT_KEYS = {
 _LINK_SECONDS = 6 * 60 * 60     # 前の記録につなぐのは6時間以内
 _STDERR_LIMIT = 2000            # 記録に残す子の標準エラーの字数
 _REPLACE_TRIES = 6              # os.replace を PermissionError のあと50ミリ秒待って5回まで書き直す
+_TEMPORARY_TRIES = 100         # 一時ファイルと一時フォルダの名前を決めるのは100回まで
 _REPLACE_WAIT = 0.05
 _ATTEMPT_TRIES = 100            # 回の番号を確保するのは100回まで
 _NOT_JUDGED = ["meaning_preservation", "reader_comprehension"]
@@ -437,9 +440,54 @@ def _replace(source, target):
             time.sleep(_REPLACE_WAIT)
 
 
+def _temporary_name_taken(path):
+    """一時の名前を作るときに PermissionError が出たのは、同じ名前のフォルダがあるためか。Windows では、同じ名前の
+    フォルダがあっても PermissionError になる。フォルダ自体に書き込めないときも同じ例外なので、名前が本当にフォルダの
+    ときだけ次の名前を試す（tempfile は os.access で確かめるが、Windows の os.access は読み取り専用の属性しか見ず、
+    ACL で書き込みを拒まれたフォルダでも真になる。そのため Python 3.12 までの tempfile は、約21億回まで名前を試し続ける）。"""
+    return os.name == "nt" and os.path.isdir(path)
+
+
+def _mkstemp(folder):
+    """folder に一時ファイル（.tmp-<16進>）を作って開く。(ファイル記述子, 絶対パス) を返す。開き方は tempfile.mkstemp と
+    同じ（O_EXCL、0o600、O_NOFOLLOW、Windows では O_NOINHERIT と O_BINARY）で、名前を試すのは _TEMPORARY_TRIES 回まで。"""
+    folder = os.path.abspath(folder)
+    flags = (os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOINHERIT", 0) | getattr(os, "O_BINARY", 0)
+             | getattr(os, "O_NOFOLLOW", 0))
+    for _ in range(_TEMPORARY_TRIES):
+        path = os.path.join(folder, ".tmp-" + os.urandom(8).hex())
+        try:
+            return os.open(path, flags, 0o600), path
+        except FileExistsError:
+            continue
+        except PermissionError:
+            if _temporary_name_taken(path):
+                continue
+            raise
+    raise FileExistsError(errno.EEXIST, "一時ファイルの名前を{}回試して決められません".format(_TEMPORARY_TRIES), folder)
+
+
+def _mkdtemp(prefix):
+    """システムの一時フォルダに、自分だけが使うフォルダ（<prefix><16進>、0o700）を作り、絶対パスを返す。
+    tempfile.mkdtemp と同じく、名前を試すのは _TEMPORARY_TRIES 回まで。"""
+    parent = os.path.abspath(tempfile.gettempdir())
+    for _ in range(_TEMPORARY_TRIES):
+        path = os.path.join(parent, prefix + os.urandom(8).hex())
+        try:
+            os.mkdir(path, 0o700)
+            return path
+        except FileExistsError:
+            continue
+        except PermissionError:
+            if _temporary_name_taken(path):
+                continue
+            raise
+    raise FileExistsError(errno.EEXIST, "一時フォルダの名前を{}回試して決められません".format(_TEMPORARY_TRIES), parent)
+
+
 def _write_atomic(path, data):
     """同じフォルダの一時ファイルに書いてから入れ替える（読む側が書きかけを見ない）。"""
-    handle, temporary = tempfile.mkstemp(prefix=".tmp-", dir=os.path.dirname(path))
+    handle, temporary = _mkstemp(os.path.dirname(path))
     try:
         with os.fdopen(handle, "wb") as stream:
             stream.write(data)
@@ -490,7 +538,7 @@ def _place_new_file(path, data):
     （上書きしない）。同じフォルダの一時ファイルに書いてから os.link で置くので、読む側は書きかけを見ない。
     ハードリンクを作れないファイルシステムでは、O_EXCL で作ってから書く。書けなかったときは、ここで作ったファイル
     だけを消して例外を出す（ほかのプロセスが同じ名前に置き直したファイルは消さない）。"""
-    handle, temporary = tempfile.mkstemp(prefix=".tmp-", dir=os.path.dirname(path))
+    handle, temporary = _mkstemp(os.path.dirname(path))
     try:
         with os.fdopen(handle, "wb") as stream:
             stream.write(data)
@@ -2629,12 +2677,12 @@ def _run_impl(args, parser):
             except OSError as error:
                 recording, write_problem = False, _write_problem(state, error)
         if snapshots is None:
-            temporary = tempfile.TemporaryDirectory(prefix="yomiyasu-check-")
-            snapshots = _put_snapshots(temporary.name, inputs)
+            temporary = _mkdtemp("yomiyasu-check-")
+            snapshots = _put_snapshots(temporary, inputs)
         _run_checks(ctx, snapshots, stance, timeout)
     finally:
         if temporary is not None:
-            temporary.cleanup()
+            shutil.rmtree(temporary, ignore_errors=True)
 
     # 4. 最終稿のファイルを読み直し、検査の途中で変わっていないかを確かめる（標準入力なら省く）
     if ctx.final.via == "file":
@@ -4406,7 +4454,7 @@ def _management(command, args, parser):
     state = _state_dir(args.state_dir)
     if command == "start":
         limits = {key: getattr(args, key) for key in _DEFAULT_LIMITS}
-        # 読む失敗は入力の誤り。書く失敗は main の内部エラー（3）。
+        # 読む失敗は入力の誤り。書く失敗は終了コード3（状態フォルダに書けないときは、トレースバックでなく案内を出す）。
         try:
             _managed_input(args.source)
         except (OSError, ValueError) as error:
@@ -4418,6 +4466,11 @@ def _management(command, args, parser):
                               default_place=not _state_dir_given(args.state_dir))
         except ValueError as error:
             parser.error(str(error))
+        except OSError as error:
+            # 状態フォルダに書けない。終了コードは今までどおり3（内部エラーと同じ）にし、トレースバックの代わりに案内を出す
+            _error("yomiyasu_check.py start: 原稿を登録できませんでした（{}）。--state-dir に書ける場所を指定して"
+                   "もう一度実行してください。".format(_write_problem(state, error)))
+            return 3
         run_id = entry["run_id"]
         message = ("原稿を登録しました（上限: 続けさせる{max_stop_blocks}回、run {max_runs}回、{deadline_min}分）。"
                    "この原稿で run と verify を実行すると、記録がこの登録につながります。").format(**limits)
