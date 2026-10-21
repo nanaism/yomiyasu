@@ -1,4 +1,5 @@
-"""v2.1.2: 状態フォルダに書き込めないときに、check が一時ファイルの名前を試し続けて終わらなくならないことを確かめる。
+"""v2.1.2: 状態フォルダに書き込めないときに、check が一時ファイルの名前を試し続けて終わらなくならないこと、
+Windows で状態フォルダを作ったユーザーだけのフォルダにしないことを確かめる。
 
 Windows の tempfile（Python 3.12 まで）は、ACL で書き込みを拒まれたフォルダで os.open が PermissionError を出すと、
 同じ名前のフォルダがあるとみなして、約21億回まで次の名前を試す。check は tempfile.mkstemp と mkdtemp を使わず、
@@ -218,6 +219,52 @@ class StartWithUnwritableStateTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr.decode("utf-8"))
         self.assertIn("reason=not_writable", result.stdout.decode("utf-8").splitlines()[1])
 
+
+
+class StateFolderModeTest(unittest.TestCase):
+    """状態フォルダとその下のフォルダは _mkdir_state で作る。POSIX では 0o700、Windows では mode を渡さず親の ACL を
+    引き継がせる（Windows の os.mkdir は 0o700 のときだけ、作ったユーザーと管理者しか入れないフォルダにする）。"""
+
+    def setUp(self):
+        self.folder = tempfile.mkdtemp(prefix="yomiyasu-v212-")
+        self.addCleanup(lambda: __import__("shutil").rmtree(self.folder, ignore_errors=True))
+
+    def test_windows_passes_no_mode(self):
+        calls = []
+        with mock.patch.object(check.os, "name", "nt"), \
+                mock.patch.object(check.os, "mkdir", lambda *args: calls.append(args)):
+            check._mkdir_state(os.path.join(self.folder, "x"))
+        self.assertEqual(calls, [(os.path.join(self.folder, "x"),)])
+
+    @unittest.skipIf(os.name == "nt", "POSIX の権限を見る")
+    def test_posix_keeps_0700(self):
+        path = os.path.join(self.folder, "x")
+        check._mkdir_state(path)
+        self.assertEqual(stat.S_IMODE(os.stat(path).st_mode) & 0o077, 0)
+
+    def test_every_state_folder_goes_through_mkdir_state(self):
+        """start と run が作る状態フォルダ（.yomiyasu、runs、実行ごと、inputs、index、armed など）は、どれも
+        _mkdir_state を通る。os.mkdir に mode を直接渡して作る状態フォルダは残っていない。"""
+        state = os.path.join(self.folder, "state")
+        a, b = os.path.join(self.folder, "a.md"), os.path.join(self.folder, "b.md")
+        Path(a).write_text("設定を更新します。\n", encoding="utf-8")
+        Path(b).write_text("設定を更新しました。\n", encoding="utf-8")
+        with_mode = []
+        real_mkdir = os.mkdir
+
+        def spy(path, *args, **kwargs):
+            if str(path).startswith(state) and (args or kwargs):
+                with_mode.append(path)
+            return real_mkdir(path, *args, **kwargs)
+        with mock.patch.object(check.os, "mkdir", spy), \
+                mock.patch.object(check, "_mkdir_state", lambda path: real_mkdir(path)):
+            for argv in (["start", "--source", a, "--state-dir", state],
+                         ["run", "--source", a, "--final", b, "--state-dir", state]):
+                code, out, err = call(argv)
+                self.assertEqual(code, 0, err)
+        self.assertEqual(with_mode, [])
+        made = [root for root, _, _ in os.walk(state)]
+        self.assertGreaterEqual(len(made), 5, made)
 
 if __name__ == "__main__":
     unittest.main()
