@@ -5564,12 +5564,30 @@ def _qualifier_joined(text, previous, number, end):
     return "\n" not in between and _QUALIFIER_JOIN.fullmatch(between) is not None
 
 
+# 数が文の範囲を越えたときに、範囲を延ばす先の文の終わり。全角の小数点（３．５）で切れた文の終わり
+_QUALIFIER_SENTENCE_STOP = re.compile(r"[。！？!?\n]")
+_QUALIFIER_SPLIT_DECIMAL = re.compile(r"[0-9０-９]．$")
+
+
+def _qualifier_reach(sides, side, sentence, numbers):
+    """数の印を読む範囲の文字列（ふだんは文そのもの）。全角の小数点（３．５）は文の区切りにも読まれるので、数が文の範囲を
+    越えることがある。そのときは、その数を含む文の終わり（次の句点か改行）までを範囲にして、数のあとの印も読む。"""
+    text = sides.texts[side]
+    start, end = sentence.start, sentence.start + len(sentence.text)
+    reach = max([end] + [number.end for number in numbers])
+    if reach > end:
+        stop = _QUALIFIER_SENTENCE_STOP.search(text, reach)
+        end = stop.end() if stop is not None else len(text)
+    return text[start:end]
+
+
 def _qualifier_states(sides, side, sentence, numbers):
     """組の文の数ごとの (key, 印の名前の集合, 印の語の並び, 隣の語の家族の集合, 書かれた形) の並び。範囲・日付・時刻の
     まとまり（3〜5日、3日から5日）と、万・億・兆を挟んだ数（1万5000人）は、まとまりの数の印を合わせて1つにする（key は数の
     並びと最後の単位）。数量を主張しない値（weak）は入れない。"""
     text = sides.texts[side]
-    start, end = sentence.start, sentence.start + len(sentence.text)
+    start = sentence.start
+    end = start + len(_qualifier_reach(sides, side, sentence, numbers))
     marks = [_qualifier_marks(text, start, end, number) for number in numbers]
     groups = list(range(len(numbers)))
     for index in range(1, len(numbers)):
@@ -5626,7 +5644,7 @@ def _qualifier_risks(sides, groups):
     for group in groups:
         for i, j in group["pairs"]:
             old, new = group["old"][i], group["new"][j]
-            if old.text == new.text:
+            if old.text == new.text and not _QUALIFIER_SPLIT_DECIMAL.search(old.text):
                 continue
             old_numbers = _sentence_numbers(sides, 0, old)
             if not old_numbers:
@@ -5634,6 +5652,9 @@ def _qualifier_risks(sides, groups):
             new_numbers = _sentence_numbers(sides, 1, new)
             if not new_numbers:
                 continue
+            if old.text == new.text and (_qualifier_reach(sides, 0, old, old_numbers)
+                                         == _qualifier_reach(sides, 1, new, new_numbers)):
+                continue  # 全角の小数点で切れた文で、数を含む文の終わりまで見ても同じ
             olds = _qualifier_states(sides, 0, old, old_numbers)
             news = _qualifier_states(sides, 1, new, new_numbers)
             old_count = Counter(state[0] for state in olds)
