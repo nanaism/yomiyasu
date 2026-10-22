@@ -1763,7 +1763,7 @@ class TestCliContract(DiffCase):
         """2.1: main(argv=None) は終了コードを返す（CLI は sys.exit(main()) の形）。"""
         self.assertTrue(callable(getattr(yomiyasu_diff, "main", None)), "main がない")
         self.assertIn("argv", inspect.signature(yomiyasu_diff.main).parameters)
-        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_diff.py 2.1.2 (JSON format 2)\n", ""))
+        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_diff.py 2.1.3 (JSON format 2)\n", ""))
         self.assertEqual(self.call_main([str(self.a_old), str(self.a_new)]), (0, EXAMPLE_A + "\n", ""))
         self.assertEqual(self.call_main(["--fail-on=meaning-risk", str(self.a_old), str(self.a_new)]),
                          (1, EXAMPLE_A + "\n\n" + FAIL_LINE_A + "\n", ""))
