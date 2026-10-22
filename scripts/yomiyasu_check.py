@@ -532,6 +532,18 @@ def _touch(folder, name):
     _chmod(path, 0o600)
 
 
+def _raise_if_hidden(path, error):
+    """os.mkdir が FileExistsError を出したのに path がフォルダと確かめられないとき、確かめられない理由が PermissionError
+    なら、それを出す。Windows では、一覧や属性の読み取りを拒まれた名前で os.path.isdir が False になる。書き込みの拒否と
+    同じく、状態フォルダをユーザーごとに分ける案内につなげるため。"""
+    try:
+        os.lstat(path)
+    except PermissionError as denied:
+        raise denied from error
+    except OSError:
+        pass
+
+
 def _ensure_dir(base, *parts):
     """base の下にフォルダを1段ずつ作る（作ったフォルダだけ 0o700 にする）。作ったフォルダのパスを返す。"""
     path = base
@@ -539,8 +551,9 @@ def _ensure_dir(base, *parts):
         path = os.path.join(path, part)
         try:
             os.mkdir(path, 0o700)
-        except FileExistsError:
+        except FileExistsError as error:
             if not os.path.isdir(path):
+                _raise_if_hidden(path, error)
                 raise
             continue
         _chmod(path, 0o700)
@@ -647,12 +660,13 @@ def _ensure_state(state, default_place=False):
         os.makedirs(parent, exist_ok=True)
     try:
         os.mkdir(state, 0o700)
-    except FileExistsError:
+    except FileExistsError as error:
         if os.path.isdir(state):
             # 並列の run が作ったばかりのフォルダ。その run が .gitignore を置く前に写しを書かないよう、
             # すでにあるフォルダと同じ決まりで、自分でも2つを置きにいく（先に置かれていれば何もしない）
             _add_state_files(state, default_place)
             return
+        _raise_if_hidden(state, error)
         raise
     try:
         _chmod(state, 0o700)
