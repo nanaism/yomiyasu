@@ -2,7 +2,6 @@
 """Issue #5: 文末の連続を段落内で数え、元の行番号を保つ回帰テスト。"""
 
 import json
-import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -13,6 +12,8 @@ SCRIPTS_DIR = REPO_DIR / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 import yomiyasu_lint
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import run_text  # noqa: E402
 
 
 class TestSentenceEndRepetition(unittest.TestCase):
@@ -194,11 +195,10 @@ class TestSentenceEndRepetition(unittest.TestCase):
 
     def test_public_cli_strict_accepts_the_issue5_input(self):
         text = "設定を読みます。\n\n起動します。\n\n画面を確認します。"
-        result = subprocess.run(
+        result = run_text(
             [sys.executable, "-B", str(SCRIPTS_DIR / "yomiyasu_lint.py"), "--json", "--strict"],
             input=text,
             capture_output=True,
-            text=True,
             encoding="utf-8",
             check=False,
         )
@@ -211,11 +211,10 @@ class TestSentenceEndRepetition(unittest.TestCase):
 
     def test_public_cli_strict_still_rejects_three_in_one_paragraph(self):
         text = "設定を読みます。\n起動します。\n画面を確認します。"
-        result = subprocess.run(
+        result = run_text(
             [sys.executable, "-B", str(SCRIPTS_DIR / "yomiyasu_lint.py"), "--json", "--strict"],
             input=text,
             capture_output=True,
-            text=True,
             encoding="utf-8",
             check=False,
         )

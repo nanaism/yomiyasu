@@ -3,7 +3,6 @@
 
 import json
 from pathlib import Path
-import subprocess
 import sys
 import unittest
 
@@ -11,6 +10,8 @@ import unittest
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "yomiyasu_lint.py"
 sys.path.insert(0, str(SCRIPT.parent))
 import yomiyasu_lint
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import run_text  # noqa: E402
 
 
 class TestSpacingPolicy(unittest.TestCase):
@@ -52,10 +53,9 @@ class TestSpacingPolicy(unittest.TestCase):
         self.assertEqual(rendered["rule_penalty_score"], 100)
 
     def test_cli_strict_accepts_spaced_prose_with_unchanged_json_shape(self):
-        result = subprocess.run(
+        result = run_text(
             [sys.executable, "-B", str(SCRIPT), "--json", "--strict"],
             input="この README は設定を説明します。",
-            text=True,
             encoding="utf-8",
             capture_output=True,
             timeout=10,

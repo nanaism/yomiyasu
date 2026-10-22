@@ -398,8 +398,8 @@ class TestOutputShape(unittest.TestCase):
     def test_cli_json_includes_type_changes(self):
         with tempfile.TemporaryDirectory() as folder:
             before, after = Path(folder) / "a.md", Path(folder) / "b.md"
-            before.write_text("この方式は遅いと思う。\n", encoding="utf-8")
-            after.write_text("この方式は遅い。\n", encoding="utf-8")
+            before.write_bytes("この方式は遅いと思う。\n".encode("utf-8"))
+            after.write_bytes("この方式は遅い。\n".encode("utf-8"))
             process = subprocess.run([sys.executable, str(ROOT / "scripts" / "yomiyasu_diff.py"), str(before), str(after), "--json"],
                                      capture_output=True, text=True, encoding="utf-8")
         self.assertEqual(process.returncode, 0)

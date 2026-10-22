@@ -3,7 +3,6 @@
 
 import json
 from pathlib import Path
-import subprocess
 import sys
 import unittest
 
@@ -11,6 +10,8 @@ import unittest
 SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "yomiyasu_lint.py"
 sys.path.insert(0, str(SCRIPT.parent))
 import yomiyasu_lint
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import run_text  # noqa: E402
 
 
 ISSUE4_DOCUMENT = """# CIの作業手順
@@ -126,10 +127,9 @@ another:
                 self.assertEqual([f for f in findings if f["rule"] == "trailing_colon"], [])
 
     def test_cli_strict_accepts_the_issue4_document(self):
-        process = subprocess.run(
+        process = run_text(
             [sys.executable, "-B", str(SCRIPT), "--json", "--strict"],
             input=ISSUE4_DOCUMENT,
-            text=True,
             encoding="utf-8",
             capture_output=True,
             timeout=10,
@@ -151,10 +151,9 @@ another:
                 command = [sys.executable, "-B", str(SCRIPT), "--json"]
                 if strict:
                     command.append("--strict")
-                process = subprocess.run(
+                process = run_text(
                     command,
                     input="本文です。\n確認事項：",
-                    text=True,
                     encoding="utf-8",
                     capture_output=True,
                     timeout=10,

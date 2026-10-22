@@ -25,8 +25,10 @@ DIFF = SCRIPTS / "yomiyasu_diff.py"
 CORPUS = ROOT / "tests" / "corpus"
 FIXTURE = ROOT / "tests" / "fixtures" / "diff_v112_existing_keys.json"
 sys.path.insert(0, str(SCRIPTS))
+sys.path.insert(0, str(ROOT / "tests"))
 
 import yomiyasu_diff  # noqa: E402
+from portable import run_text  # noqa: E402
 
 
 NINE_KEYS = ["markers", "new_words", "lost_words", "structure", "spans", "logic", "bold", "endings", "type_changes"]
@@ -265,9 +267,10 @@ def split_lines(text):
 
 
 def run_diff(args, stdin=None, env=None):
-    """標準入力を渡さないときは空にする（親の標準入力を受け継ぐと、誤って読む実装が端末でだけ timeout まで止まる）。"""
+    """標準入力を渡さないときは空にする（親の標準入力を受け継ぐと、誤って読む実装が端末でだけ timeout まで止まる）。
+    渡す文字列は、改行を変えずに UTF-8 のバイト列で渡す（portable.run_text）。"""
     feed = {"stdin": subprocess.DEVNULL} if stdin is None else {"input": stdin}
-    return subprocess.run(
+    return run_text(
         [sys.executable, "-B", str(DIFF)] + [str(a) for a in args],
         encoding="utf-8", capture_output=True, timeout=30, env=env, **feed
     )
@@ -1633,7 +1636,7 @@ class TestCliContract(DiffCase):
         partial = self.root / "partial"
         partial.mkdir()
         (partial / "yomiyasu_diff.py").write_bytes(DIFF.read_bytes())
-        (partial / "markdown_visibility.py").write_text(OLD_VISIBILITY_STUB, encoding="utf-8")
+        (partial / "markdown_visibility.py").write_bytes(OLD_VISIBILITY_STUB.encode("utf-8"))
         with self.subTest(case="script"):
             process = subprocess.run(
                 [sys.executable, "-B", str(partial / "yomiyasu_diff.py"), "--fail-on=meaning-risk", str(self.a_old), str(self.a_new)],
@@ -1654,7 +1657,7 @@ class TestCliContract(DiffCase):
             # 同じプロセスで古い版がすでに読まれていても、spec_from_file_location で読んだ diff は隣のファイルを使う
             old = self.root / "old"
             old.mkdir()
-            (old / "markdown_visibility.py").write_text(OLD_VISIBILITY_STUB, encoding="utf-8")
+            (old / "markdown_visibility.py").write_bytes(OLD_VISIBILITY_STUB.encode("utf-8"))
             worker = "import sys\nsys.path.insert(0, sys.argv[2])\nimport markdown_visibility\nsys.argv = sys.argv[:2]\n" + LOAD_DIFF_WORKER
             process = subprocess.run(
                 [sys.executable, "-B", "-c", worker, str(DIFF), str(old)],
@@ -1670,7 +1673,7 @@ class TestCliContract(DiffCase):
             folder.mkdir()
             (folder / "yomiyasu_diff.py").write_bytes(DIFF.read_bytes())
             if content is not None:
-                (folder / "markdown_visibility.py").write_text(content, encoding="utf-8")
+                (folder / "markdown_visibility.py").write_bytes(content.encode("utf-8"))
             with self.subTest(case=case, run="script"):
                 process = subprocess.run(
                     [sys.executable, "-B", str(folder / "yomiyasu_diff.py"), "--fail-on=meaning-risk",

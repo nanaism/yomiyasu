@@ -139,8 +139,8 @@ class MkdtempTest(unittest.TestCase):
         """記録を残さない run（一時フォルダに写しを置く）も、tempfile の名前を試す関数を使わない。"""
         with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder:
             a, b = os.path.join(folder, "a.md"), os.path.join(folder, "b.md")
-            Path(a).write_text("設定を更新します。\n", encoding="utf-8")
-            Path(b).write_text("設定を更新しました。\n", encoding="utf-8")
+            Path(a).write_bytes("設定を更新します。\n".encode("utf-8"))
+            Path(b).write_bytes("設定を更新しました。\n".encode("utf-8"))
             boom = mock.Mock(side_effect=AssertionError("tempfile の名前を試す関数は使わない"))
             with mock.patch.object(check.tempfile, "mkstemp", boom), \
                     mock.patch.object(check.tempfile, "mkdtemp", boom), \
@@ -159,8 +159,8 @@ class RunEndsWhenStateIsNotWritableTest(unittest.TestCase):
         self.state = os.path.join(self.folder, "state")
         os.mkdir(self.state)
         self.a, self.b = os.path.join(self.folder, "a.md"), os.path.join(self.folder, "b.md")
-        Path(self.a).write_text("test.\n", encoding="utf-8")
-        Path(self.b).write_text("test.\n", encoding="utf-8")
+        Path(self.a).write_bytes("test.\n".encode("utf-8"))
+        Path(self.b).write_bytes("test.\n".encode("utf-8"))
 
     def run_denied(self, taken):
         started = time.monotonic()
@@ -208,9 +208,9 @@ class StartWithUnwritableStateTest(unittest.TestCase):
             __import__("shutil").rmtree(self.folder, ignore_errors=True)
         self.addCleanup(cleanup)
         self.source = os.path.join(self.folder, "a.md")
-        Path(self.source).write_text("原稿です。\n", encoding="utf-8")
+        Path(self.source).write_bytes("原稿です。\n".encode("utf-8"))
         self.final = os.path.join(self.folder, "b.md")
-        Path(self.final).write_text("原稿を直しました。\n", encoding="utf-8")
+        Path(self.final).write_bytes("原稿を直しました。\n".encode("utf-8"))
 
     def cli(self, *args):
         return subprocess.run([sys.executable, "-B", str(CHECK)] + list(args) + ["--state-dir", self.state],
@@ -244,8 +244,8 @@ class RecordingRunUsesBoundedNamesTest(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder:
             state = os.path.join(folder, "state")
             a, b = os.path.join(folder, "a.md"), os.path.join(folder, "b.md")
-            Path(a).write_text("設定を更新します。\n", encoding="utf-8")
-            Path(b).write_text("設定を更新しました。\n", encoding="utf-8")
+            Path(a).write_bytes("設定を更新します。\n".encode("utf-8"))
+            Path(b).write_bytes("設定を更新しました。\n".encode("utf-8"))
             boom = mock.Mock(side_effect=AssertionError("tempfile の名前を試す関数は使わない"))
             with mock.patch.object(check.tempfile, "mkstemp", boom), \
                     mock.patch.object(check.tempfile, "mkdtemp", boom), \
@@ -263,7 +263,7 @@ class StartLockTimeoutTest(unittest.TestCase):
         """同じ原稿の登録のロックを待ちきれなかったときは、書けないとは案内せず、今までどおり内部エラーにする。"""
         with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder:
             a = os.path.join(folder, "a.md")
-            Path(a).write_text("原稿です。\n", encoding="utf-8")
+            Path(a).write_bytes("原稿です。\n".encode("utf-8"))
             with mock.patch.object(check._ArmedLock, "__enter__", side_effect=TimeoutError("armed_lock")):
                 code, out, err = call(["start", "--source", a, "--state-dir", os.path.join(folder, "state")])
             self.assertEqual(code, 3)

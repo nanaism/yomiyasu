@@ -22,7 +22,7 @@ class BenchmarkCategoryTests(unittest.TestCase):
             group = root / "human"
             group.mkdir()
             for index, text in enumerate(documents):
-                (group / (str(index) + ".md")).write_text(text, encoding="utf-8")
+                (group / (str(index) + ".md")).write_bytes(text.encode("utf-8"))
             target = root / "results.json"
             with patch.object(BENCHMARK, "CORPUS_DIR", str(root)), patch.object(BENCHMARK, "RESULTS_PATH", str(target)):
                 with contextlib.redirect_stdout(io.StringIO()):

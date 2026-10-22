@@ -25,7 +25,6 @@ import os
 import re
 import subprocess
 import sys
-import time
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -34,6 +33,7 @@ from test_v200_check import CheckCase, ROOT, SCRIPTS, split_lines  # noqa: E402
 
 sys.path.insert(0, str(SCRIPTS))
 import yomiyasu_diff  # noqa: E402
+from portable import paced_limit, timing_clock  # noqa: E402
 
 REFERENCES = ROOT / "references"
 
@@ -616,11 +616,14 @@ class MovedValueSpeedTest(unittest.TestCase):
     def test_long_following_sentences_stay_within_the_promise(self):
         before, after = moved_document(17, 1850)
         self.assertGreater(len(after), 60000)
-        started = time.perf_counter()
+        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        clock = timing_clock()
+        started = clock()
         full = yomiyasu_diff.full_diff(before, after)
         risks = yomiyasu_diff.meaning_risks(before, after, full=full)
-        elapsed = time.perf_counter() - started
-        self.assertLess(elapsed, 3.0)
+        elapsed = clock() - started
+        limit, detail = paced_limit(3.0, elapsed)
+        self.assertLess(elapsed, limit, detail)
         self.assertEqual(Counter(r["subkind"] for r in risks if r["kind"] == "number"), Counter({"replaced": 17}))
 
     def test_ratio_is_not_computed_when_its_upper_bound_is_low(self):

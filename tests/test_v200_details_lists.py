@@ -355,8 +355,8 @@ class CheckPassesLintTest(unittest.TestCase):
     def test_check_run_has_no_excess_list_for_details_lists(self):
         with tempfile.TemporaryDirectory() as folder:
             source, final = Path(folder) / "source.md", Path(folder) / "final.md"
-            source.write_text("## 変更の概要\n\n設定の読み込みを3か所から1か所にまとめます。\n", encoding="utf-8")
-            final.write_text(PR_DOC, encoding="utf-8")
+            source.write_bytes("## 変更の概要\n\n設定の読み込みを3か所から1か所にまとめます。\n".encode("utf-8"))
+            final.write_bytes(PR_DOC.encode("utf-8"))
             env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
             env.pop("YOMIYASU_STATE_DIR", None)
             process = subprocess.run(

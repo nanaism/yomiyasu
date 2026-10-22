@@ -219,7 +219,7 @@ class ListHashTest(CheckCase):
         script = scripts / "yomiyasu_check.py"
         a, b, lines = self.run_skill(script, pair=("この店のラーメンは本当においしいです。\n", "この店のラーメンはおいしいです。\n"))
         path = lists / "intensifiers.txt"
-        path.write_text(path.read_text(encoding="utf-8").replace("本当に\n", ""), encoding="utf-8")
+        path.write_bytes(path.read_text(encoding="utf-8").replace("本当に\n", "").encode("utf-8"))
         expected = LIST_CHANGED_LINE.format("references/lists/intensifiers.txt")
         for extra in ([], ["--replay"]):
             with self.subTest(extra=extra):

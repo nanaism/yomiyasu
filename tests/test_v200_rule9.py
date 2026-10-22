@@ -3,13 +3,14 @@
 import ast
 import json
 from pathlib import Path
-import subprocess
 import sys
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import yomiyasu_lint as lint
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import run_text  # noqa: E402
 
 
 def new_findings(text, rule):
@@ -113,8 +114,8 @@ class Rule9Tests(unittest.TestCase):
             for options, expected in (([], 0), (["--fail-on=error"], 0),
                                       (["--fail-on=warn"], int(severity == "warn"))):
                 with self.subTest(text=text, options=options):
-                    result = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/yomiyasu_lint.py"),
-                                             "--json"] + options, input=text, text=True, capture_output=True)
+                    result = run_text([sys.executable, "-B", str(ROOT / "scripts/yomiyasu_lint.py"),
+                                       "--json"] + options, input=text, encoding="utf-8", capture_output=True)
                     self.assertEqual(result.returncode, expected, result.stderr)
                     self.assertTrue(json.loads(result.stdout)["findings"])
 

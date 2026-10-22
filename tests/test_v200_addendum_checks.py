@@ -19,7 +19,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 
 
@@ -29,6 +28,8 @@ PACKAGE = ROOT / "skills" / "yomiyasu"
 sys.path.insert(0, str(SCRIPTS))
 
 import yomiyasu_diff  # noqa: E402
+sys.path.insert(0, str(ROOT / "tests"))
+from portable import paced_limit, timing_clock  # noqa: E402
 
 RISK_KEYS = {"kind", "subkind", "old_line", "new_line", "old", "new", "detail", "basis"}
 STIFF_KEYS = {"kind", "subkind", "old_line", "new_line", "old", "new", "detail", "level"}
@@ -162,8 +163,8 @@ class ContrastReversalTest(unittest.TestCase):
     def test_cli_fail_on_ignores_reversal(self):
         with tempfile.TemporaryDirectory() as folder:
             a, b = Path(folder) / "a.md", Path(folder) / "b.md"
-            a.write_text(DETECT[0] + "\n", encoding="utf-8")
-            b.write_text(DETECT[1] + "\n", encoding="utf-8")
+            a.write_bytes((DETECT[0] + "\n").encode("utf-8"))
+            b.write_bytes((DETECT[1] + "\n").encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(SCRIPTS / "yomiyasu_diff.py"), "--fail-on=meaning-risk",
                                       str(a), str(b)], capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
         result = yomiyasu_diff.diff(DETECT[0] + "\n", DETECT[1] + "\n")
@@ -330,8 +331,8 @@ class ListFileTest(unittest.TestCase):
             for name in ("yomiyasu_diff.py", "markdown_visibility.py", "yomiyasu_lint.py"):
                 shutil.copy(str(SCRIPTS / name), str(target / name))
             a, b = Path(folder) / "a.md", Path(folder) / "b.md"
-            a.write_text(STIFF_DETECT_1[0] + "\n", encoding="utf-8")
-            b.write_text(STIFF_DETECT_1[1] + "\n", encoding="utf-8")
+            a.write_bytes((STIFF_DETECT_1[0] + "\n").encode("utf-8"))
+            b.write_bytes((STIFF_DETECT_1[1] + "\n").encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(target / "yomiyasu_diff.py"), "--json", str(a), str(b)],
                                      capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
             self.assertEqual(process.returncode, 0, process.stderr.decode("utf-8"))
@@ -349,10 +350,10 @@ class ListFileTest(unittest.TestCase):
             lists.mkdir(parents=True)
             for name in ("yomiyasu_diff.py", "markdown_visibility.py", "yomiyasu_lint.py"):
                 shutil.copy(str(SCRIPTS / name), str(target / name))
-            (lists / "nominalization.txt").write_text("壊れた\t(?:\n", encoding="utf-8")
+            (lists / "nominalization.txt").write_bytes("壊れた\t(?:\n".encode("utf-8"))
             a, b = Path(folder) / "a.md", Path(folder) / "b.md"
-            a.write_text(STIFF_DETECT_1[0] + "\n", encoding="utf-8")
-            b.write_text(STIFF_DETECT_1[1] + "\n", encoding="utf-8")
+            a.write_bytes((STIFF_DETECT_1[0] + "\n").encode("utf-8"))
+            b.write_bytes((STIFF_DETECT_1[1] + "\n").encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(target / "yomiyasu_diff.py"), "--json", str(a), str(b)],
                                      capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
             self.assertEqual(process.returncode, 0, process.stderr.decode("utf-8"))
@@ -392,13 +393,16 @@ class PerformanceTest(unittest.TestCase):
         after = "\n\n".join("{}。{}".format(index, paragraph_new) for index in range(count)) + "\n"
         self.assertGreater(len(before), 60000)
         sides = yomiyasu_diff._Sides(before, after)
-        started = time.perf_counter()
+        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        clock = timing_clock()
+        started = clock()
         full = yomiyasu_diff.full_diff(before, after)
         yomiyasu_diff.meaning_risks(before, after, full=full)
         yomiyasu_diff.stiffness(before, after)
         yomiyasu_diff.tone(before, after)
-        elapsed = time.perf_counter() - started
-        self.assertLess(elapsed, 3.0)
+        elapsed = clock() - started
+        limit, detail = paced_limit(3.0, elapsed)
+        self.assertLess(elapsed, limit, detail)
         del sides
 
 

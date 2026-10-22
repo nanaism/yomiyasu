@@ -339,7 +339,7 @@ class BeforeAfterTest(DocTypeCase):
         original = check._run_checks
         def change(ctx, *args):
             value = original(ctx, *args)
-            Path(ctx.final.path).write_text("途中で変更しました。\n", encoding="utf-8")
+            Path(ctx.final.path).write_bytes("途中で変更しました。\n".encode("utf-8"))
             return value
         with mock.patch.object(check, "_run_checks", change):
             code, out, _ = self.run_pair(extra=("--no-record",))

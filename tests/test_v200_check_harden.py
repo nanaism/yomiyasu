@@ -21,6 +21,7 @@ import unicodedata
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import paced_limit, timing_clock  # noqa: E402
 from test_v200_check import (  # noqa: E402
     CHECK, CheckCase, ROOT, SCRIPTS, SKILL_MD, TOOL_NAMES, FINALIZE_FILE, FINALIZE_STDIN, RUN_COMPOSE_FIRST, RUN_REWRITE_FIRST,
     RUN_REWRITE_FIRST_NO_CANDIDATES, RUN_SAME_FINAL, RUN_AFTER_FIX, RUN_OVER_LIMIT, VERIFY_LINE1,
@@ -298,9 +299,13 @@ class TestC44Similarity(unittest.TestCase):
         source = b"\n".join(source for _, source, _ in pairs) * 3
         final = b"\n".join(final for _, _, final in pairs) * 3
         self.assertGreater(len(source.decode("utf-8")), 60000)
-        started = time.perf_counter()
+        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        clock = timing_clock()
+        started = clock()
         self.similarity(source, final)
-        self.assertLess(time.perf_counter() - started, 0.5)
+        elapsed = clock() - started
+        limit, detail = paced_limit(0.5, elapsed)
+        self.assertLess(elapsed, limit, detail)
 
     def test_composition_that_keeps_the_memo_wording_is_treated(self):
         """メモの言い回しをほぼそのまま残した新規作成は、推敲と見分けられないので、原文とみなす（しきい値を超える）。"""
@@ -1325,7 +1330,7 @@ class TestReviewRecheckGuard(CheckCase):
         check = scripts / "yomiyasu_check.py"
         source = check.read_text(encoding="utf-8")
         self.assertIn("_SIMILAR_TO_SOURCE = 0.53\n", source)
-        check.write_text(source.replace("_SIMILAR_TO_SOURCE = 0.53\n", "_SIMILAR_TO_SOURCE = 0.999\n"), encoding="utf-8")
+        check.write_bytes(source.replace("_SIMILAR_TO_SOURCE = 0.53\n", "_SIMILAR_TO_SOURCE = 0.999\n").encode("utf-8"))
         process = self.check("verify", "--final", b, "--json", script=check)
         self.assertEqual(process.returncode, 1, process.stdout + process.stderr)
         result = json.loads(process.stdout)

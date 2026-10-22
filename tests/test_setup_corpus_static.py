@@ -51,7 +51,7 @@ class CorpusSetupTests(unittest.TestCase):
         return subprocess.run(
             [sys.executable, '-B', '-c', WORKER, str(self.root), mode,
              str(self.script)] + list(arguments),
-            cwd=str(self.root), capture_output=True, text=True, timeout=10,
+            cwd=str(self.root), capture_output=True, text=True, encoding='utf-8', timeout=10,
         )
 
     def assert_success(self, result):
@@ -107,7 +107,7 @@ class CorpusSetupTests(unittest.TestCase):
         html += ''.join('<h2>Section ' + str(number) + '</h2><p>' + body + '</p>'
                         for number in range(1, 10))
         source = self.root / 'source.html'
-        source.write_text(html, encoding='utf-8')
+        source.write_bytes(html.encode('utf-8'))
         output = self.root / 'selected-output'
         self.assert_success(self.run_script('--source-html', str(source),
                                             '--output-dir', str(output)))

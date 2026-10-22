@@ -11,13 +11,14 @@ import statistics
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import yomiyasu_diff as diff
+sys.path.insert(0, str(ROOT / 'tests'))
+from portable import paced_limit, timing_clock  # noqa: E402
 
 L = "まだ計測していませんが、決済APIの呼び出しがDBトランザクションの内側にあるため、外部APIが遅延した際にコネクションを長く握る可能性があります。"
 EX = [
@@ -305,10 +306,10 @@ class Contracts(unittest.TestCase):
             for name, failed in (('S1', 1), ('P1', 1), ('P7', 1), ('R1', 0), ('R3', 0), ('R6', 0),
                                  ('S13', 1), ('SN11', 0), ('SN14', 0), ('PN16', 0), ('PN18', 0), ('PN19', 0)):
                 a, b = EXAMPLES[name]
-                old.write_text(a, encoding='utf-8'); new.write_text(b, encoding='utf-8')
+                old.write_bytes(a.encode('utf-8')); new.write_bytes(b.encode('utf-8'))
                 for flags, code in (([], 0), (['--fail-on=meaning-risk'], failed)):
                     result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/yomiyasu_diff.py'),
-                                             str(old), str(new)] + flags, capture_output=True, text=True)
+                                             str(old), str(new)] + flags, capture_output=True, text=True, encoding='utf-8')
                     self.assertEqual(result.returncode, code, result.stdout + result.stderr)
 
     def test_addition_time_for_full_rewrite(self):
@@ -319,12 +320,15 @@ class Contracts(unittest.TestCase):
         full, sides = diff._build_full_diff(old, new, None)
         groups = diff._sentence_pairs(sides, full)
         masks = (diff._Masker(sides, 0), diff._Masker(sides, 1))
+        # 0.3秒の上限は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        clock = timing_clock()
         durations = []
         for _ in range(3):
-            start = time.perf_counter()
+            start = clock()
             diff._addition_risks(sides, groups, [], masks)
-            durations.append(time.perf_counter() - start)
-        self.assertLess(statistics.median(durations), 0.3, durations)
+            durations.append(clock() - start)
+        limit, detail = paced_limit(0.3, statistics.median(durations))
+        self.assertLess(statistics.median(durations), limit, "{} {}".format(detail, durations))
 
 
 sys.path.insert(0, str(ROOT / 'tests'))

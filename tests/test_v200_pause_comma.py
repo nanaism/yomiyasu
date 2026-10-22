@@ -281,8 +281,8 @@ class PauseCommaTest(unittest.TestCase):
                 self.assertEqual(call(lint.main, ["-", "--doc-type", "article"] + flags, text)[0], 0)
         with tempfile.TemporaryDirectory() as tmp:
             source, final = Path(tmp) / "source.md", Path(tmp) / "final.md"
-            source.write_text(REMOVE[3][0].replace("、", ""), encoding="utf-8")
-            final.write_text(REMOVE[3][0], encoding="utf-8")
+            source.write_bytes(REMOVE[3][0].replace("、", "").encode("utf-8"))
+            final.write_bytes(REMOVE[3][0].encode("utf-8"))
             code, out, err = call(check.main, ["run", "--source", str(source), "--final", str(final),
                                               "--state-dir", str(Path(tmp) / "state"),
                                               "--doc-type", "article", "--fail-on=warn"])

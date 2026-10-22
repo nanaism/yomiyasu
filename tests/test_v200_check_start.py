@@ -25,8 +25,8 @@ class ManagedCase(unittest.TestCase):
             self.env.pop(name, None)
         self.source = self.root / 'draft.md'
         self.final = self.root / 'final.md'
-        self.source.write_text('担当者は原稿を確認しました。\n', encoding='utf-8')
-        self.final.write_text('担当者が原稿を確認しました。\n', encoding='utf-8')
+        self.source.write_bytes('担当者は原稿を確認しました。\n'.encode('utf-8'))
+        self.final.write_bytes('担当者が原稿を確認しました。\n'.encode('utf-8'))
 
     def cli(self, *args, **kwargs):
         result = subprocess.run([sys.executable, '-B', str(CHECK)] + list(args), cwd=str(self.root),
@@ -42,13 +42,13 @@ class ManagedCase(unittest.TestCase):
                                    '--json', *args, **kwargs).stdout)
 
     def entry(self, run_id):
-        return json.loads((self.state / 'armed' / (run_id + '.json')).read_text())
+        return json.loads((self.state / 'armed' / (run_id + '.json')).read_text(encoding='utf-8'))
 
     def update(self, run_id, **changes):
         path = self.state / 'armed' / (run_id + '.json')
         entry = self.entry(run_id)
         entry.update(changes)
-        path.write_text(json.dumps(entry), encoding='utf-8')
+        path.write_bytes(json.dumps(entry).encode('utf-8'))
 
 
 class StartTests(ManagedCase):
@@ -79,11 +79,12 @@ class StartTests(ManagedCase):
         self.assertEqual(entry['session_id'], 'A')
         self.assertEqual(entry['limits'], dict(max_stop_blocks=2, max_runs=3, deadline_min=30))
         self.assertRegex(result['status_line'], r'^yomiyasu-check: started(?: [a-z_]+=\S+)+$')
-        start = json.loads(Path(result['start_path']).read_text())
+        start = json.loads(Path(result['start_path']).read_text(encoding='utf-8'))
         self.assertEqual(start['format'], 'yomiyasu-check-start')
         self.assertEqual((self.state / entry['targets']['source']['snapshot']).read_bytes(), self.source.read_bytes())
         self.assertEqual(len(list((self.state / 'index' / 'starts').glob('*/*'))), 1)
-        self.assertEqual(Path(result['armed_path']).stat().st_mode & 0o777, 0o600)
+        if os.name != 'nt':  # Windows では check の _chmod が権限を変えないので、POSIX だけで確かめる
+            self.assertEqual(Path(result['armed_path']).stat().st_mode & 0o777, 0o600)
         self.start()
         self.assertEqual(self.entry(result['run_id'])['status_reason'], 'superseded')
 
@@ -113,13 +114,13 @@ class StartTests(ManagedCase):
         started = self.start('--session', 'A')
         run = self.run_check()
         self.assertEqual(run['run_id'], started['run_id'])
-        record = json.loads(Path(run['record_path']).read_text())
+        record = json.loads(Path(run['record_path']).read_text(encoding='utf-8'))
         self.assertEqual(record['host']['armed_by'], 'armed/' + run['run_id'] + '.json')
         self.assertEqual(record['host']['session'], 'A')
-        self.source.write_text('担当者が確認しました。\n', encoding='utf-8')
+        self.source.write_bytes('担当者が確認しました。\n'.encode('utf-8'))
         self.final = self.source
         run = self.run_check()
-        record = json.loads(Path(run['record_path']).read_text())
+        record = json.loads(Path(run['record_path']).read_text(encoding='utf-8'))
         self.assertEqual(record['inputs']['source']['sha256'], started['source']['sha256'])
         self.assertNotEqual(record['inputs']['source']['sha256'], record['inputs']['final']['sha256'])
 
@@ -134,10 +135,10 @@ class StartTests(ManagedCase):
         run = self.run_check('--new-run')
         self.assertNotIn(run['run_id'], [first['run_id'], second['run_id']])
         self.final = self.root / 'different-final.md'
-        self.final.write_text('確認を終えました。\n', encoding='utf-8')
+        self.final.write_bytes('確認を終えました。\n'.encode('utf-8'))
         run = self.run_check()
         self.assertNotIn(run['run_id'], [first['run_id'], second['run_id']])
-        record = json.loads(Path(run['record_path']).read_text())
+        record = json.loads(Path(run['record_path']).read_text(encoding='utf-8'))
         self.assertIsNone(record['host']['armed_by'])
         self.source = original
 
@@ -170,7 +171,7 @@ class StartTests(ManagedCase):
             out, err = process.communicate(timeout=15)
             self.assertEqual(process.returncode, 0, err)
             self.assertEqual(json.loads(out)['status'], 'started')
-        entries = [json.loads(p.read_text()) for p in (self.state / 'armed').glob('*.json')]
+        entries = [json.loads(p.read_text(encoding='utf-8')) for p in (self.state / 'armed').glob('*.json')]
         self.assertEqual(sum(e['status'] == 'active' for e in entries), 1)
         self.assertEqual(sum(e['status_reason'] == 'superseded' for e in entries), 3)
 
@@ -234,11 +235,12 @@ class StartTests(ManagedCase):
         result = json.loads(self.cli('export', '--final', str(self.final), '--json').stdout)
         export = Path(result['export_path'])
         self.assertEqual(export.read_bytes(), self.final.read_bytes())
-        self.assertEqual(export.stat().st_mode & 0o777, 0o444)
+        if os.name != 'nt':  # Windows では check の _chmod が権限を変えないので、POSIX だけで確かめる
+            self.assertEqual(export.stat().st_mode & 0o777, 0o444)
         before = export.stat().st_mtime_ns
         self.cli('export', '--final', str(self.final))
         self.assertEqual(before, export.stat().st_mtime_ns)
-        self.final.write_text('変更しました。', encoding='utf-8')
+        self.final.write_bytes('変更しました。'.encode('utf-8'))
         result = json.loads(self.cli('export', '--final', str(self.final), '--json', code=1).stdout)
         self.assertIsNone(result['export_path'])
         self.assertEqual(len(list((self.state / 'exports').glob('*/*'))), 1)
@@ -264,7 +266,7 @@ print(json.dumps(r))'''
             self.final.write_bytes(data)
             cli = json.loads(self.cli('verify', '--final', str(self.final), '--json', code=0 if data != b'changed' else 1).stdout)
             r = subprocess.run([sys.executable, '-B', '-c', worker, str(CHECK), str(self.state), str(self.final)],
-                               cwd=str(self.root), env=self.env, capture_output=True, text=True, timeout=10)
+                               cwd=str(self.root), env=self.env, capture_output=True, text=True, encoding='utf-8', timeout=10)
             self.assertEqual(r.returncode, 0, r.stderr)
             quick = json.loads(r.stdout)
             self.assertEqual(quick['status'], cli['status'])

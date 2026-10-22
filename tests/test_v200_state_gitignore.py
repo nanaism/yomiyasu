@@ -473,7 +473,7 @@ class TestStartAndHook(StateGitignoreCase):
         scripts.mkdir()
         copied = scripts / "yomiyasu_hook.py"
         shutil.copyfile(str(HOOK), str(copied))
-        (scripts / "yomiyasu_check.py").write_text("raise RuntimeError('x')\n", encoding="utf-8")
+        (scripts / "yomiyasu_check.py").write_bytes("raise RuntimeError('x')\n".encode("utf-8"))
         payload = {"hook_event_name": "UserPromptSubmit", "session_id": "A", "prompt": "/yomiyasu a.md を直して"}
         for prepared in ("bare", "gitignore", "state.json"):
             with self.subTest(prepared=prepared):
@@ -523,11 +523,12 @@ class TestPlaceNewFile(StateGitignoreCase):
                 def failing_fdopen(handle, mode="r", *args, **kwargs):
                     stream = real_fdopen(handle, mode, *args, **kwargs)
                     if mode == "wb" and os.path.lexists(str(path)) and os.path.getsize(str(path)) == 0:
+                        # 置き直す前に閉じる（Windows は開いているファイルへの os.replace を PermissionError にする）
+                        stream.close()
                         if replaced:
                             other = folder / "other.tmp"
                             other.write_bytes(b"other\n")
                             os.replace(str(other), str(path))
-                        stream.close()
                         raise OSError(28, "試験で起こした書き込みの失敗")
                     return stream
 

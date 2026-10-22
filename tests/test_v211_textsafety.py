@@ -87,8 +87,8 @@ class _RegisteredCase(_Case):
 
     def setUp(self):
         super().setUp()
-        (self.project / "s.md").write_text(SOURCE_TEXT, encoding="utf-8")
-        (self.project / "f.md").write_text(FINAL_TEXT, encoding="utf-8")
+        (self.project / "s.md").write_bytes(SOURCE_TEXT.encode("utf-8"))
+        (self.project / "f.md").write_bytes(FINAL_TEXT.encode("utf-8"))
         result = self.check("start", "--source", "s.md")
         self.assertEqual(result.returncode, 0, result.stderr)
         # 時間切れで検査を終えられない回にする（登録した原稿の最終稿が、検査記録と照合できない状態）
@@ -198,7 +198,7 @@ class HookBrokenPromptTests(_Case):
     """依頼の文に、ファイルの名前にできない語があっても、ほかの名前の原稿を登録する。"""
 
     def test_prompt_with_broken_word_registers_good_file(self):
-        (self.project / "f.md").write_text(FINAL_TEXT, encoding="utf-8")
+        (self.project / "f.md").write_bytes(FINAL_TEXT.encode("utf-8"))
         for number, prompt in enumerate(("/yomiyasu 下書き\ud83d を f.md で直して", "/yomiyasu x\ud800.md f.md")):
             with self.subTest(prompt=ascii(prompt)):
                 state = self.root / ("st" + str(number))
@@ -222,8 +222,8 @@ class NonUtf8NameKeyTests(unittest.TestCase):
         self.root = os.path.realpath(folder.name)
         self.state = os.path.join(self.root, "st")
         self.real = os.path.join(self.root, "draft.md")
-        with open(self.real, "w", encoding="utf-8") as stream:
-            stream.write(SOURCE_TEXT)
+        with open(self.real, "wb") as stream:
+            stream.write(SOURCE_TEXT.encode("utf-8"))
         self.name = os.path.join(self.root, BAD_NAME)
         check, real, original = self.check, self.real, self.check._managed_input
 
@@ -277,7 +277,7 @@ class HookRegistrationOutputTests(_Case):
     """登録の知らせ（平文）に UTF-8 で読めない名前が入っても、フックが書き出しで止まらない。"""
 
     def test_registration_text_with_lone_surrogate_is_written(self):
-        (self.project / "s.md").write_text(SOURCE_TEXT, encoding="utf-8")
+        (self.project / "s.md").write_bytes(SOURCE_TEXT.encode("utf-8"))
         self.assertEqual(self.check("start", "--source", "s.md").returncode, 0)
         payload = json.dumps({"hook_event_name": "UserPromptSubmit", "session_id": "s1", "cwd": str(self.project),
                               "prompt": "/yomiyasu " + BAD_NAME})
@@ -311,7 +311,7 @@ class NonUtf8NameEndToEndTests(_Case):
         super().setUp()
         if _make_bad_name(self.project) is None:
             self.skipTest("このファイルシステムでは UTF-8 で読めないファイル名を作れません")
-        (self.project / "f.md").write_text("原稿を直しました。\n", encoding="utf-8")
+        (self.project / "f.md").write_bytes("原稿を直しました。\n".encode("utf-8"))
 
     def test_start_run_verify_share_registration(self):
         result = self.check("start", "--source", BAD_NAME, "--json")
@@ -402,7 +402,7 @@ class RunHeadTests(_Case):
         return result.stdout.decode("utf-8").splitlines()
 
     def write(self, name, text):
-        (self.project / name).write_text(text, encoding="utf-8")
+        (self.project / name).write_bytes(text.encode("utf-8"))
 
     def test_head_part_orders_lines_before_limit(self):
         """行のある項目を行の順に先に並べてから上限で切る。行のない項目と同じ行の項目は元の順のまま。"""

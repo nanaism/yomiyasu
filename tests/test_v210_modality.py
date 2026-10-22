@@ -14,7 +14,6 @@ import importlib.util
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 
 
@@ -22,6 +21,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import yomiyasu_diff  # noqa: E402
+sys.path.insert(0, str(ROOT / "tests"))
+from portable import paced_limit, timing_clock  # noqa: E402
 
 
 PERMISSION_LOST = [("modality", "permission_lost")]
@@ -264,8 +265,8 @@ class RequestTableTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             old, new = Path(folder) / "old.md", Path(folder) / "new.md"
             for name, before, after, _, _, plain_count, formal_count in rows:
-                old.write_text(before + "\n", encoding="utf-8")
-                new.write_text(after + "\n", encoding="utf-8")
+                old.write_bytes((before + "\n").encode("utf-8"))
+                new.write_bytes((after + "\n").encode("utf-8"))
                 for flags, count in (([], plain_count), (["--doc-type", "formal"], formal_count)):
                     with self.subTest(row=name, flags=flags):
                         process = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/yomiyasu_diff.py"), "--fail-on",
@@ -412,13 +413,16 @@ class ContractsTest(unittest.TestCase):
         o, r = yomiyasu_diff.normalize(before), yomiyasu_diff.normalize(after)
         opcodes = yomiyasu_diff._ExactSequenceMatcher(None, o, r, autojunk=False).get_opcodes()
         yomiyasu_diff._type_changes(o, r, opcodes)
+        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        clock = timing_clock()
         durations = []
         for _ in range(3):
-            start = time.perf_counter()
+            start = clock()
             found = yomiyasu_diff._modality_changes(o, r)
-            durations.append(time.perf_counter() - start)
+            durations.append(clock() - start)
         self.assertEqual(len(found), 3800)
-        self.assertLess(min(durations), 1.0, durations)
+        limit, detail = paced_limit(1.0, min(durations))
+        self.assertLess(min(durations), limit, "{} {}".format(detail, durations))
 
 
 if __name__ == "__main__":

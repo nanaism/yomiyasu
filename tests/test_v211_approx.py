@@ -460,8 +460,8 @@ class CliTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             old, new = Path(folder) / "old.md", Path(folder) / "new.md"
             for before, after, code in rows:
-                old.write_text(before + "\n", encoding="utf-8")
-                new.write_text(after + "\n", encoding="utf-8")
+                old.write_bytes((before + "\n").encode("utf-8"))
+                new.write_bytes((after + "\n").encode("utf-8"))
                 for flags in ([], ["--doc-type", "formal"]):
                     with self.subTest(before=before, after=after, flags=flags):
                         process = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/yomiyasu_diff.py"), "--fail-on",
@@ -479,8 +479,8 @@ class CliTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             old, new = Path(folder) / "old.md", Path(folder) / "new.md"
             for before, after, code in rows:
-                old.write_text(before + "\n", encoding="utf-8")
-                new.write_text(after + "\n", encoding="utf-8")
+                old.write_bytes((before + "\n").encode("utf-8"))
+                new.write_bytes((after + "\n").encode("utf-8"))
                 with self.subTest(before=before, after=after):
                     process = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/yomiyasu_check.py"), "run", "--source",
                                               str(old), "--final", str(new), "--fail-on", "meaning-risk", "--no-record"],

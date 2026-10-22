@@ -13,6 +13,7 @@ import time
 import unittest
 
 from test_v200_check_start import ManagedCase, ROOT, CHECK
+from portable import paced_limit
 
 HOOK = ROOT / 'scripts' / 'yomiyasu_hook.py'
 HOSTS = ('claude-code', 'codex')
@@ -47,7 +48,7 @@ class HookTests(ManagedCase):
         scripts.mkdir()
         copied = scripts / 'yomiyasu_hook.py'
         shutil.copyfile(str(HOOK), str(copied))
-        (scripts / 'yomiyasu_check.py').write_text("raise RuntimeError('must not import')\n", encoding='utf-8')
+        (scripts / 'yomiyasu_check.py').write_bytes("raise RuntimeError('must not import')\n".encode('utf-8'))
         for existing in (False, True):
             if existing:
                 self.state.mkdir()
@@ -75,7 +76,7 @@ class HookTests(ManagedCase):
                 self.run_check()
                 self.assertEqual(self.hook(host=host), '')
                 self.assertEqual(self.entry(run_id)['status'], 'checked')
-                self.final.write_text('最終稿を変更しました。\n', encoding='utf-8')
+                self.final.write_bytes('最終稿を変更しました。\n'.encode('utf-8'))
                 for remaining in (1, 0):
                     response = json.loads(self.hook(host=host, stop_hook_active=True))
                     self.assertEqual(response['decision'], 'block')
@@ -86,17 +87,17 @@ class HookTests(ManagedCase):
                 self.assertEqual(self.entry(run_id)['status_reason'], 'stop_limit')
                 self.assertEqual(self.hook(host=host), '')
                 self.assertEqual(self.entry(run_id)['counters']['stop_blocks'], 2)
-                self.final.write_text('担当者が原稿を確認しました。\n', encoding='utf-8')
+                self.final.write_bytes('担当者が原稿を確認しました。\n'.encode('utf-8'))
 
     def test_h6_in_place_no_record_and_missing_files(self):
         run_id = self.bound(final=False)
-        self.source.write_text('原稿をその場で直しました。\n', encoding='utf-8')
+        self.source.write_bytes('原稿をその場で直しました。\n'.encode('utf-8'))
         response = json.loads(self.hook())
         self.assertIn('--source draft.md --final draft.md', response['reason'])
         self.source.unlink()
         self.assertEqual(self.hook(), '')
         self.assertEqual(self.entry(run_id)['log'][-1]['result'], 'source_missing')
-        self.source.write_text('復元した原稿。', encoding='utf-8')
+        self.source.write_bytes('復元した原稿。'.encode('utf-8'))
         run_id = self.bound()
         self.final.unlink()
         self.assertEqual(self.hook(), '')
@@ -118,13 +119,13 @@ class HookTests(ManagedCase):
             self.update(run_id, deadline='2000-01-01T00:00:00Z')
             self.assertEqual(self.hook(host=host), '')
             self.assertEqual(self.entry(run_id)['status'], 'checked')
-            self.final.write_text('期限を過ぎてから変わった本文。', encoding='utf-8')
+            self.final.write_bytes('期限を過ぎてから変わった本文。'.encode('utf-8'))
             response = json.loads(self.hook(host=host))
             self.assertIn('期限30分', response['systemMessage'])
             self.assertNotIn('decision', response)
             self.assertEqual(self.hook(host=host), '')
             self.assertEqual(self.entry(run_id)['status_reason'], 'deadline')
-            self.final.write_text('担当者が原稿を確認しました。\n', encoding='utf-8')
+            self.final.write_bytes('担当者が原稿を確認しました。\n'.encode('utf-8'))
 
     def test_h8_session_and_host_binding(self):
         run_id = self.start()['run_id']
@@ -168,12 +169,12 @@ class HookTests(ManagedCase):
         paths = []
         for n in range(7):
             path = self.root / ('draft {}.md'.format(n))
-            path.write_text('原稿です。', encoding='utf-8')
+            path.write_bytes('原稿です。'.encode('utf-8'))
             paths.append(path)
         output = self.hook('UserPromptExpansion', command_name='yomiyasu', command_args=' '.join(shlex.quote(p.name) for p in paths))
         self.assertEqual(output.count('登録しました'), 1)
         self.assertIn('原稿 draft 0.md を登録しました', output)
-        entries = [json.loads(p.read_text()) for p in (self.state / 'armed').glob('*.json')]
+        entries = [json.loads(p.read_text(encoding='utf-8')) for p in (self.state / 'armed').glob('*.json')]
         self.assertEqual([os.path.basename(e['targets']['source']['path']) for e in entries], ['draft 0.md'])
         bad = self.root / 'bad.md'
         bad.write_bytes(b'\xff')
@@ -182,7 +183,7 @@ class HookTests(ManagedCase):
     def test_h9_only_the_manuscript_is_registered(self):
         # The final, notes and references named later in the request are not registered.
         notes = self.root / 'notes.md'
-        notes.write_text('言い回しのメモ。', encoding='utf-8')
+        notes.write_bytes('言い回しのメモ。'.encode('utf-8'))
         output = self.hook('UserPromptExpansion', command_name='yomiyasu',
                            command_args='draft.md を直して、結果は final.md に上書きして')
         self.assertIn('原稿 draft.md を登録しました', output)
@@ -194,7 +195,7 @@ class HookTests(ManagedCase):
         self.cli('end', '--source', str(self.source))
         output = self.hook('UserPromptSubmit', 'codex', prompt='$yomiyasu draft.md を直して。言い回しは notes.md を参考に')
         self.assertIn('原稿 draft.md を登録しました', output)
-        active = [json.loads(p.read_text()) for p in (self.state / 'armed').glob('*.json')]
+        active = [json.loads(p.read_text(encoding='utf-8')) for p in (self.state / 'armed').glob('*.json')]
         active = [e for e in active if e['status'] != 'ended']
         self.assertEqual([os.path.basename(e['targets']['source']['path']) for e in active], ['draft.md'])
         self.assertEqual(self.pre('gh issue comment 3 --body-file notes.md', 'codex'), '')
@@ -207,12 +208,12 @@ class HookTests(ManagedCase):
             folder.mkdir()
             (folder / '.git').mkdir()
         source = project_a / 'draft.md'
-        source.write_text('担当者は原稿を確認しました。\n', encoding='utf-8')
+        source.write_bytes('担当者は原稿を確認しました。\n'.encode('utf-8'))
         result = subprocess.run([sys.executable, '-B', str(CHECK), 'start', '--source', 'draft.md', '--json'],
-                                cwd=str(project_a), env=self.env, capture_output=True, text=True, timeout=30)
+                                cwd=str(project_a), env=self.env, capture_output=True, text=True, encoding='utf-8', timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         run_id = json.loads(result.stdout)['run_id']
-        source.write_text('担当者が原稿を確認しました。\n', encoding='utf-8')
+        source.write_bytes('担当者が原稿を確認しました。\n'.encode('utf-8'))
         for event in ('UserPromptSubmit', 'PreToolUse', 'Stop'):
             self.assertEqual(self.hook(event, session='B', cwd=str(project_b), tool_name='Bash',
                                        tool_input={'command': 'ls'}), '')
@@ -238,13 +239,13 @@ class HookTests(ManagedCase):
 
     def test_h10_publication_bodies_and_exports_both_hosts(self):
         other = self.root / 'other.md'
-        other.write_text('別の用件です。', encoding='utf-8')
+        other.write_bytes('別の用件です。'.encode('utf-8'))
         for host in HOSTS:
             run_id = self.bound(host)
             self.run_check()
             export = json.loads(self.cli('export', '--final', str(self.final), '--json').stdout)['export_path']
             self.assertEqual(self.pre('gh pr create --body-file ' + shlex.quote(export), host), '')
-            self.final.write_text('検査のあとで変えた最終稿。', encoding='utf-8')
+            self.final.write_bytes('検査のあとで変えた最終稿。'.encode('utf-8'))
             for command in ('gh pr create --body-file other.md', 'git commit -m 文', 'ls', 'curl example.invalid',
                             'gh pr create --body "別の投稿です"', 'gh pr create --body-file - <<EOF\n別件\nEOF'):
                 self.assertEqual(self.pre(command, host), '')
@@ -270,14 +271,14 @@ class HookTests(ManagedCase):
             command = 'gh pr create --body-file - <<EOF\nfinal.md\nEOF'
             self.assertEqual(json.loads(self.pre(command, host))['hookSpecificOutput']['permissionDecision'],
                              'ask' if host == 'claude-code' else 'deny')
-            self.final.write_text('担当者が原稿を確認しました。\n', encoding='utf-8')
+            self.final.write_bytes('担当者が原稿を確認しました。\n'.encode('utf-8'))
 
     def test_h10_body_file_reason_uses_registered_final_path(self):
         other = self.root / 'copy.md'
         for host in HOSTS:
             for explicit_final in (True, False):
                 with self.subTest(host=host, explicit_final=explicit_final):
-                    self.final.write_text('担当者が原稿を確認しました。\n', encoding='utf-8')
+                    self.final.write_bytes('担当者が原稿を確認しました。\n'.encode('utf-8'))
                     run_id = self.bound(host, final=explicit_final)
                     self.run_check()
                     export = json.loads(self.cli('export', '--final', str(self.final), '--json').stdout)['export_path']
@@ -285,7 +286,7 @@ class HookTests(ManagedCase):
                     # Body matching still accepts an equivalent text with different line endings.
                     self.final.write_bytes(self.final.read_bytes().replace(b'\n', b'\r\n'))
                     self.assertEqual(self.pre('gh pr create --body-file final.md', host), '')
-                    self.final.write_text('検査のあとで変えた最終稿。', encoding='utf-8')
+                    self.final.write_bytes('検査のあとで変えた最終稿。'.encode('utf-8'))
                     other.write_bytes(self.final.read_bytes())
                     for path, status in (('final.md', 'final_changed'), ('copy.md', 'wrong_file')):
                         decision = json.loads(self.pre('gh pr create --body-file ' + path, host))['hookSpecificOutput']
@@ -330,20 +331,20 @@ class HookTests(ManagedCase):
 
     def test_h13_no_body_in_any_event_or_errors(self):
         marker = 'ZQX本文の目印ZQX'
-        self.source.write_text(marker + ' 原文です。', encoding='utf-8')
-        self.final.write_text(marker + ' 最終稿です。', encoding='utf-8')
+        self.source.write_bytes((marker + ' 原文です。').encode('utf-8'))
+        self.final.write_bytes((marker + ' 最終稿です。').encode('utf-8'))
         outputs = []
         for host in HOSTS:
             run_id = self.bound(host)
             self.run_check()
-            self.final.write_text(marker + ' 検査後の変更です。', encoding='utf-8')
+            self.final.write_bytes((marker + ' 検査後の変更です。').encode('utf-8'))
             for event in EVENTS:
                 outputs.append(self.hook(event, host, prompt='/yomiyasu draft.md ' + marker,
                                          command_name='yomiyasu', command_args='draft.md ' + marker,
                                          tool_name='mcp__post', tool_input={'body': self.final.read_text(encoding='utf-8')},
                                          transcript_path=marker, last_assistant_message=marker))
             self.assertEqual(self.hook(host=host), '')
-        (self.state / 'armed' / 'bad.json').write_text('{"secret":' + marker, encoding='utf-8')
+        (self.state / 'armed' / 'bad.json').write_bytes(('{"secret":' + marker).encode('utf-8'))
         outputs.append(self.hook())
         (self.state / 'armed' / 'bad.json').unlink()
         for text in outputs + [p.read_text(encoding='utf-8') for p in (self.state / 'armed').glob('*') if p.is_file()] + [
@@ -360,7 +361,9 @@ class HookTests(ManagedCase):
                 self.hook(host=host)
                 samples.append(time.perf_counter() - begin)
             median = statistics.median(samples)
-            self.assertLess(median, 0.3)
+            # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）
+            limit, detail = paced_limit(0.3, median)
+            self.assertLess(median, limit, detail)
             measurements.append('{} fast={:.4f}s'.format(host, median))
         for host in HOSTS:
             self.bound(host)
@@ -370,7 +373,8 @@ class HookTests(ManagedCase):
                 begin = time.perf_counter()
                 self.hook(host=host)
                 samples.append(time.perf_counter() - begin)
-            self.assertLess(max(samples), 1.0)
+            limit, detail = paced_limit(1.0, max(samples))
+            self.assertLess(max(samples), limit, detail)
             measurements.append('{} Stop median={:.4f}s max={:.4f}s'.format(host, statistics.median(samples), max(samples)))
         print('\nH14 Python {}: {}'.format(sys.version.split()[0], ', '.join(measurements)), flush=True)
 
@@ -415,7 +419,7 @@ class HookTests(ManagedCase):
         before = sorted(str(p) for p in self.root.rglob('*'))
         for host in HOSTS:
             result = subprocess.run([sys.executable, '-B', str(HOOK), '--print-config', host],
-                                    cwd=str(self.root), env=self.env, capture_output=True, text=True, timeout=5)
+                                    cwd=str(self.root), env=self.env, capture_output=True, text=True, encoding='utf-8', timeout=5)
             self.assertEqual(result.returncode, 0)
             config = json.loads(result.stdout)
             expected = {'UserPromptSubmit', 'PreToolUse', 'Stop', 'SessionEnd',
@@ -433,7 +437,7 @@ class HookTests(ManagedCase):
             self.assertNotIn('allow', result.stdout)
         self.assertEqual(before, sorted(str(p) for p in self.root.rglob('*')))
         result = subprocess.run([sys.executable, '-B', str(HOOK), '--version'], cwd=str(self.root),
-                                env=self.env, capture_output=True, text=True, timeout=5)
+                                env=self.env, capture_output=True, text=True, encoding='utf-8', timeout=5)
         self.assertEqual(result.stdout, 'yomiyasu_hook.py 2.1.2\n')
 
     def test_h16b_help_and_print_config_errors(self):
@@ -441,7 +445,7 @@ class HookTests(ManagedCase):
         フックとして呼ぶ形（--host）と知らない引数は、ホストを止めないよう今までどおり何も出さずに0。"""
         def run(*args):
             return subprocess.run([sys.executable, '-B', str(HOOK)] + list(args), cwd=str(self.root), env=self.env,
-                                  capture_output=True, text=True, timeout=10, stdin=subprocess.DEVNULL)
+                                  capture_output=True, text=True, encoding='utf-8', timeout=10, stdin=subprocess.DEVNULL)
         before = sorted(str(p) for p in self.root.rglob('*'))
         shown = run('--help')
         self.assertEqual((shown.returncode, shown.stderr), (0, ''))
@@ -503,10 +507,11 @@ class HookTests(ManagedCase):
         self.assertEqual(self.entry(run_id)['counters']['stop_blocks'], 0)
         self.assertTrue(lock.exists())
         log = self.state / 'hook-errors.log'
-        log.write_text('2000-01-01T00:00:00Z Stop ValueError x.py:1\n' * 2000, encoding='utf-8')
+        log.write_bytes(('2000-01-01T00:00:00Z Stop ValueError x.py:1\n' * 2000).encode('utf-8'))
         self.hook()
         self.assertLessEqual(log.stat().st_size, 65536)
-        self.assertEqual(log.stat().st_mode & 0o777, 0o600)
+        if os.name != 'nt':  # Windows では権限を変えないので、POSIX だけで確かめる
+            self.assertEqual(log.stat().st_mode & 0o777, 0o600)
 
     def test_h20_exception_message_and_time_budget(self):
         run_id = self.bound()
@@ -516,13 +521,13 @@ class HookTests(ManagedCase):
         shutil.copyfile(str(HOOK), str(copied))
         fake = scripts / 'yomiyasu_check.py'
         marker = 'ZQX本文の目印ZQX'
-        fake.write_text('import sys; print(' + repr(marker) + '); print(' + repr(marker) + ', file=sys.stderr); raise RuntimeError(' + repr(marker) + ')', encoding='utf-8')
+        fake.write_bytes(('import sys; print(' + repr(marker) + '); print(' + repr(marker) + ', file=sys.stderr); raise RuntimeError(' + repr(marker) + ')').encode('utf-8'))
         self.assertEqual(self.hook(script=copied), '')
         log = (self.state / 'hook-errors.log').read_text(encoding='utf-8')
         self.assertIn('RuntimeError', log)
         self.assertNotIn(marker, log)
         if os.name == 'posix':
-            fake.write_text('import time; time.sleep(3)', encoding='utf-8')
+            fake.write_bytes('import time; time.sleep(3)'.encode('utf-8'))
             begin = time.perf_counter()
             self.assertEqual(self.hook('SessionEnd', script=copied), '')
             self.assertLess(time.perf_counter() - begin, 1.5)
@@ -530,15 +535,15 @@ class HookTests(ManagedCase):
             self.assertFalse(any(row['result'] == 'timeout' for row in self.entry(run_id)['log']))
 
             # Time out while checking a known registration, after acquiring its lock.
-            copied.write_text(HOOK.read_text(encoding='utf-8').replace(
-                "budget = started + _BUDGETS[event]", "budget = started + 0.3"), encoding='utf-8')
+            copied.write_bytes(HOOK.read_text(encoding='utf-8').replace(
+                "budget = started + _BUDGETS[event]", "budget = started + 0.3").encode('utf-8'))
             for dependency in CHECK.parent.glob('*.py'):
                 if dependency.name not in (HOOK.name, CHECK.name):
                     shutil.copyfile(str(dependency), str(scripts / dependency.name))
-            fake.write_text(CHECK.read_text(encoding='utf-8') +
-                            '\ndef verify_quick(*args, **kwargs):\n    time.sleep(3)\n', encoding='utf-8')
+            fake.write_bytes((CHECK.read_text(encoding='utf-8') +
+                              '\ndef verify_quick(*args, **kwargs):\n    time.sleep(3)\n').encode('utf-8'))
             unrelated = self.root / 'unrelated.md'
-            unrelated.write_text('別の原稿。', encoding='utf-8')
+            unrelated.write_bytes('別の原稿。'.encode('utf-8'))
             other_id = json.loads(self.cli('start', '--source', str(unrelated), '--session', 'B',
                                            '--host', 'claude-code', '--json').stdout)['run_id']
             other_before = self.entry(other_id)

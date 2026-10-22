@@ -33,6 +33,9 @@ import unicodedata
 import unittest
 from unittest import mock
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import paced_limit, run_text  # noqa: E402
+
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -344,7 +347,7 @@ def inject_cli_code(path, code_lines):
     lines = source.splitlines(True)
     at = main_insertion_point(source)
     snippet = "if __name__ == \"__main__\":\n" + "".join("    " + line + "\n" for line in code_lines)
-    path.write_text("".join(lines[:at]) + snippet + "".join(lines[at:]), encoding="utf-8")
+    path.write_bytes(("".join(lines[:at]) + snippet + "".join(lines[at:])).encode("utf-8"))
 
 
 class CheckCase(unittest.TestCase):
@@ -395,7 +398,8 @@ class CheckCase(unittest.TestCase):
     # --- 実行 ---
 
     def check(self, *args, stdin=None, script=None, env=None, cwd=None, flags=("-B",)):
-        return subprocess.run(
+        """標準入力の文字列は、改行を変えずに UTF-8 のバイト列で渡す（portable.run_text）。"""
+        return run_text(
             [sys.executable] + list(flags) + [str(script or CHECK)] + [str(a) for a in args],
             input=stdin, cwd=str(cwd or self.root), env=env or self.env(),
             capture_output=True, encoding="utf-8", timeout=30,
@@ -447,7 +451,7 @@ class CheckCase(unittest.TestCase):
         return path, json.loads(path.read_text(encoding="utf-8"))
 
     def save_record(self, path, record):
-        path.write_text(json.dumps(record, ensure_ascii=True, indent=1), encoding="utf-8")
+        path.write_bytes(json.dumps(record, ensure_ascii=True, indent=1).encode("utf-8"))
 
     def check_entry(self, record, name):
         entries = [entry for entry in record["checks"] if entry["name"] == name]
@@ -892,7 +896,7 @@ class TestRunThenVerify(CheckCase):
         b = self.write("b.md", "保存期間は30日です。\n")
         run_dir = self.state / "runs" / "x"
         run_dir.mkdir(parents=True)
-        (run_dir / "attempt-1.json").write_text('{"reviewed": true}', encoding="utf-8")
+        (run_dir / "attempt-1.json").write_bytes('{"reviewed": true}'.encode("utf-8"))
         index = self.state / "index" / "by-final" / sha256_file(b)
         index.mkdir(parents=True)
         (index / "x.1").write_bytes(b"")
@@ -1887,7 +1891,8 @@ class TestReadOnlyAndWrites(CheckCase):
         process = self.check("verify", "--final", b)
         elapsed = time.perf_counter() - started
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
-        self.assertLess(elapsed, 1.0)
+        limit, detail = paced_limit(1.0, elapsed)  # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）
+        self.assertLess(elapsed, limit, detail)
         process = self.check("verify", "--final", b, flags=("-B", "-X", "importtime"))
         self.assertEqual(process.returncode, 0, process.stdout)
         self.assertNotIn("yomiyasu_lint", process.stderr)
@@ -1910,7 +1915,7 @@ class TestReadOnlyAndWrites(CheckCase):
         # 見張りが働くこと: lint を別の名前で読み込む合成のスクリプトで、読み込みを見つける
         probe = self.root / "probe" / "load_renamed.py"
         probe.parent.mkdir()
-        probe.write_text(LOAD_UNDER_OTHER_NAME, encoding="utf-8")
+        probe.write_bytes(LOAD_UNDER_OTHER_NAME.encode("utf-8"))
         process, names = loaded(probe, scripts / "yomiyasu_lint.py")
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertEqual(names, ["yomiyasu_lint.py"])
@@ -2137,7 +2142,7 @@ class TestStateFolderPlace(CheckCase):
                 if kind == "dir":
                     (top / ".git").mkdir()
                 else:
-                    (top / ".git").write_text("gitdir: /nonexistent/worktree\n", encoding="utf-8")
+                    (top / ".git").write_bytes("gitdir: /nonexistent/worktree\n".encode("utf-8"))
                 a = self.write(kind + "/docs/a.md", "保存期間は3日です。\n")
                 b = self.write(kind + "/docs/b.md", "保存期間は30日です。\n")
                 process = self.run_without_state_env(top, deep, "run", "--source", a, "--final", b)
@@ -2294,7 +2299,7 @@ class TestCommonPromises(CheckCase):
                 for copy in copies:
                     shutil.copyfile(str(SCRIPTS / copy), str(folder / copy))
                 if broken:
-                    (folder / broken[0]).write_text(broken[1], encoding="utf-8")
+                    (folder / broken[0]).write_bytes(broken[1].encode("utf-8"))
                 process = self.check("run", "--source", a, "--final", b, script=folder / "yomiyasu_check.py")
                 self.assertEqual(process.returncode, 3, process.stdout + process.stderr)
                 self.assertEqual(process.stdout, "")
@@ -2484,8 +2489,8 @@ class TestReviewFixes(CheckCase):
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertEqual(process.stdout, expected)
         self.assertEqual(re.findall(r"^LOADED-SCRIPTS \[(.*)\]$", process.stderr, flags=re.M), [""], process.stderr)
-        with open(str(scripts / "yomiyasu_diff.py"), "a", encoding="utf-8") as handle:
-            handle.write("\ndef broken_by_test(:\n")
+        with open(str(scripts / "yomiyasu_diff.py"), "ab") as handle:
+            handle.write(b"\ndef broken_by_test(:\n")
         process = self.check("--version", script=script)
         self.assertEqual((process.returncode, process.stdout, process.stderr), (0, expected, ""))
 

@@ -245,7 +245,7 @@ class TestCliVersions(unittest.TestCase):
 
     def write(self, name, text):
         path = self.root / name
-        path.write_text(text, encoding="utf-8")
+        path.write_bytes(text.encode("utf-8"))
         return path
 
     def version_of(self, path):

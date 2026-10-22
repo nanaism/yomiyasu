@@ -14,6 +14,8 @@ import unittest
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import yomiyasu_diff as diff
+sys.path.insert(0, str(ROOT / "tests"))
+from portable import paced_limit, timing_clock  # noqa: E402
 
 EXAMPLES = {'C1': ('来週の負荷試験で効果を検証する見込みです。\n', '来週の負荷試験で効果を検証する予定です。\n'),
  'C2': ('ジッターで緩和できると思われますが、負荷試験は来週実施する見込みです。\n', 'ジッターで緩和できると考えられますが、負荷試験は来週実施する予定です。\n'),
@@ -285,12 +287,12 @@ class Contracts(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             old, new = Path(folder) / 'old.md', Path(folder) / 'new.md'
             for tag in ('C1', 'C5', 'C8', 'Q1', 'R1'):
-                old.write_text(EXAMPLES[tag][0], encoding='utf-8')
-                new.write_text(EXAMPLES[tag][1], encoding='utf-8')
+                old.write_bytes(EXAMPLES[tag][0].encode('utf-8'))
+                new.write_bytes(EXAMPLES[tag][1].encode('utf-8'))
                 for flag in ([], ['--fail-on=meaning-risk']):
                     with self.subTest(tag=tag, flag=flag):
                         run = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/yomiyasu_diff.py'),
-                                              *flag, str(old), str(new)], capture_output=True, text=True)
+                                              *flag, str(old), str(new)], capture_output=True, text=True, encoding='utf-8')
                         self.assertEqual(run.returncode, int(tag == 'C1' and bool(flag)), run.stderr)
 
     def test_fail_on_line_only_mentions_certainty_when_counted(self):
@@ -440,12 +442,14 @@ class ReviewFixes(unittest.TestCase):
         new = ''.join('「まったく別の{}話だね」と花子が笑って返事をした。\n'.format(i * 7) for i in range(400))
         full, sides = diff._build_full_diff(old, new, None)
         groups = diff._sentence_pairs(sides, full)
+        clock = timing_clock()
         durations = []
         for _ in range(3):
-            start = time.perf_counter()
+            start = clock()
             diff._quote_risks(sides, groups)
-            durations.append(time.perf_counter() - start)
-        self.assertLess(sorted(durations)[1], 0.3, durations)
+            durations.append(clock() - start)
+        limit, detail = paced_limit(0.3, sorted(durations)[1])
+        self.assertLess(sorted(durations)[1], limit, "{} {}".format(detail, durations))
 
 
 sys.path.insert(0, str(ROOT / 'tests'))

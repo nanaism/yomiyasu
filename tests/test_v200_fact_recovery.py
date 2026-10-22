@@ -9,7 +9,6 @@ import shutil
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 from unittest import mock
 
@@ -17,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
 import yomiyasu_check as check
 import yomiyasu_diff as diff
+sys.path.insert(0, str(ROOT / 'tests'))
+from portable import paced_limit, timing_clock  # noqa: E402
 
 
 class G15CLI(unittest.TestCase):
@@ -59,12 +60,12 @@ class G15CLI(unittest.TestCase):
                 else:
                     result = self.json_run('--material', m if route == 'file' else '-', '--final', f, '--new-run',
                                            stdin=material if route == 'dash' else None)
-                record = json.loads(Path(result['record_path']).read_text())
+                record = json.loads(Path(result['record_path']).read_text(encoding='utf-8'))
                 labels = ['利用者の発言（3回目の依頼）', '出力 git diff（retry.py）']
                 self.assertEqual([r['label'] for r in record['inputs']['materials']], labels)
                 self.assertEqual([r['label'] for r in result['materials']['sources']], labels)
                 for entry in record['inputs']['materials']:
-                    body = (self.state / entry['snapshot']).read_text()
+                    body = (self.state / entry['snapshot']).read_text(encoding='utf-8')
                     self.assertNotIn('<<<', body)
                     self.assertNotIn('3回目', body)
                 three = next(i for i in result['materials']['items'] if i['text'] == '3回')
@@ -115,7 +116,7 @@ class G15CLI(unittest.TestCase):
         self.assertIn('、事実の穴の候補1件', b[2])
         self.assertIn('■ 事実の穴の候補', flagged.stdout.decode())
         result = self.json_run('--source', source, '--final', final, '--fact-gaps')
-        record_path = Path(result['record_path']); record = json.loads(record_path.read_text())
+        record_path = Path(result['record_path']); record = json.loads(record_path.read_text(encoding='utf-8'))
         self.assertEqual(record['fact_gaps'], result['fact_gaps'])
         self.assertTrue(record['options']['fact_gaps'])
         self.assertEqual(record['required_checks'], ['lint', 'diff'])
@@ -123,11 +124,11 @@ class G15CLI(unittest.TestCase):
         self.assertEqual(replay.returncode, 0, replay.stdout.decode())
         self.assertNotIn('fact_gaps', json.loads(replay.stdout))
         record['fact_gaps']['items'][0]['sentence'] = '書き換え'
-        record_path.write_text(json.dumps(record))
+        record_path.write_bytes(json.dumps(record).encode('utf-8'))
         bad = self.cli('verify', '--final', final, '--state-dir', str(self.state), '--json')
         self.assertEqual(json.loads(bad.stdout)['status'], 'invalid_record')
         record['record_digest'] = check._record_digest(record)
-        record_path.write_text(json.dumps(record))
+        record_path.write_bytes(json.dumps(record).encode('utf-8'))
         bad = self.cli('verify', '--final', final, '--state-dir', str(self.state), '--replay', '--json')
         self.assertEqual(json.loads(bad.stdout)['status'], 'not_reproducible')
 
@@ -161,16 +162,16 @@ class G15CLI(unittest.TestCase):
         scripts = self.folder / 'scripts'; shutil.copytree(str(ROOT/'scripts'), str(scripts))
         self.script = scripts/'yomiyasu_check.py'
         lists = self.folder/'references/lists'; lists.mkdir(parents=True)
-        pattern = lists/'fact-gaps.txt'; pattern.write_text('change\t短くしました\n')
+        pattern = lists/'fact-gaps.txt'; pattern.write_bytes('change\t短くしました\n'.encode('utf-8'))
         source = self.write('source.txt', '処理を変えました。')
         final = self.write('final.txt', '間隔を短くしました。')
         plain_final = self.write('plain.txt', '処理の間隔を短くしました。')
         result = self.json_run('--source', source, '--final', final, '--fact-gaps')
         self.assertEqual(result['fact_gaps']['count'], 1)
-        self.assertIn('references/lists/fact-gaps.txt', json.loads(Path(result['record_path']).read_text())['tools'])
+        self.assertIn('references/lists/fact-gaps.txt', json.loads(Path(result['record_path']).read_text(encoding='utf-8'))['tools'])
         plain = self.json_run('--source', source, '--final', plain_final, '--new-run')
-        self.assertNotIn('references/lists/fact-gaps.txt', json.loads(Path(plain['record_path']).read_text())['tools'])
-        pattern.write_text('# 候補が同じでも一覧の変更を検出する\nchange\t短くしました\n')
+        self.assertNotIn('references/lists/fact-gaps.txt', json.loads(Path(plain['record_path']).read_text(encoding='utf-8'))['tools'])
+        pattern.write_bytes('# 候補が同じでも一覧の変更を検出する\nchange\t短くしました\n'.encode('utf-8'))
         expected = ('記録のあとで、検査に使う語の一覧（references/lists/fact-gaps.txt）が変わりました。'
                     'yomiyasu_check.py run をもう一度実行してください。')
         for extra in ([], ['--replay']):
@@ -251,7 +252,7 @@ class G15CLI(unittest.TestCase):
                 self.assertFalse((self.folder / 'refused').exists())
 
     def test_byte_and_json_compatibility_fixed_cases(self):
-        rows = json.loads((ROOT/'tests/fixtures/g15_unchanged_outputs.json').read_text())
+        rows = json.loads((ROOT/'tests/fixtures/g15_unchanged_outputs.json').read_text(encoding='utf-8'))
         for row in rows:
             self.write('source.txt', row['source']); self.write('final.txt', row['final'])
             for scripts in (ROOT/'scripts', ROOT/'skills/yomiyasu/scripts'):
@@ -320,7 +321,7 @@ class G15Ground(unittest.TestCase):
 
 class G15Gaps(unittest.TestCase):
     def test_prototype_positive_and_keep_cases(self):
-        cases=json.loads((ROOT/'tests/fixtures/g15_gaps_cases.json').read_text())
+        cases=json.loads((ROOT/'tests/fixtures/g15_gaps_cases.json').read_text(encoding='utf-8'))
         for row in cases['flag']:
             with self.subTest(text=row['text']): self.assertGreater(diff.fact_gaps(row['text'])['count'],0)
         for row in cases['keep']:
@@ -350,12 +351,15 @@ class G15Gaps(unittest.TestCase):
 
     def test_sixty_thousand_chars_under_half_second(self):
         text = ('再試行の間隔を短くしました。\n' * 4000)[:60000]
-        started = time.perf_counter()
+        # 0.5秒の上限は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        clock = timing_clock()
+        started = clock()
         result = diff.fact_gaps(text)
-        elapsed = time.perf_counter() - started
+        elapsed = clock() - started
         self.assertEqual(len(text), 60000)
         self.assertGreater(result['count'], 1000)
-        self.assertLess(elapsed, 0.5)
+        limit, detail = paced_limit(0.5, elapsed)
+        self.assertLess(elapsed, limit, detail)
 
     def test_python38_and_mirrors(self):
         for name in ('yomiyasu_check.py','yomiyasu_diff.py'):

@@ -36,8 +36,8 @@ def heading_entries(result):
 def run_cli(src, dst, *args):
     with tempfile.TemporaryDirectory() as tmp:
         a, b = Path(tmp) / "a.md", Path(tmp) / "b.md"
-        a.write_text(src, encoding="utf-8")
-        b.write_text(dst, encoding="utf-8")
+        a.write_bytes(src.encode("utf-8"))
+        b.write_bytes(dst.encode("utf-8"))
         return subprocess.run([sys.executable, "-B", str(ROOT / "scripts" / "yomiyasu_diff.py"), str(a), str(b)] + list(args),
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding="utf-8")
 

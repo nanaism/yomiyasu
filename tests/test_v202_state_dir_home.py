@@ -81,11 +81,13 @@ class HomePathRule(unittest.TestCase):
         return result
 
     def test_tilde_alone_and_tilde_slash_become_home(self):
+        # 展開したパスは「~/」のあとの「/」を残す（Windows では「C:\\...\\home/state」）。どちらの区切りでも同じ場所なので、
+        # 両方を normpath してから比べる
         self.assertEqual(self.both("~"), self.home)
-        self.assertEqual(self.both("~/state"), os.path.join(self.home, "state"))
-        self.assertEqual(self.both("~/a/b"), os.path.join(self.home, "a", "b"))
-        self.assertEqual(os.path.normpath(self.both("~/")), self.home)
-        self.assertEqual(os.path.normpath(self.both("~//state")), os.path.join(self.home, "state"))
+        self.assertEqual(os.path.normpath(self.both("~/state")), os.path.normpath(os.path.join(self.home, "state")))
+        self.assertEqual(os.path.normpath(self.both("~/a/b")), os.path.normpath(os.path.join(self.home, "a", "b")))
+        self.assertEqual(os.path.normpath(self.both("~/")), os.path.normpath(self.home))
+        self.assertEqual(os.path.normpath(self.both("~//state")), os.path.normpath(os.path.join(self.home, "state")))
 
     def test_other_values_are_kept(self):
         """「~user/x」「~x」などは、その名前の利用者がいても置き換えない（root はたいていの機械にいる）。"""

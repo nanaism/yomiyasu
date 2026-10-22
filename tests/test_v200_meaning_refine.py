@@ -9,7 +9,6 @@ sentence_type）の誤検知を減らし、取りこぼしを拾う。feeling �
 
 from pathlib import Path
 import sys
-import time
 import unittest
 
 
@@ -17,6 +16,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import yomiyasu_diff  # noqa: E402
+sys.path.insert(0, str(ROOT / "tests"))
+from portable import paced_limit, timing_clock  # noqa: E402
 
 COUNTED = ("number", "negation", "swap", "sentence_type")
 
@@ -148,11 +149,15 @@ class LongLineTest(unittest.TestCase):
     """36: 1行が長い文書の全面書き換えでも、6万字で3秒未満（「．」と「. 」の文も文に分ける）。
     37: 2,000字を超える断片でも、前後の同じ字を外してから削除と追加にする（変えていないコードとリンク先を出さない）。"""
 
-    def check_time(self, before, after):
-        started = time.perf_counter()
+    def assert_fast(self, before, after):
+        # 3秒の上限は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        clock = timing_clock()
+        started = clock()
         full = yomiyasu_diff.full_diff(before, after)
         yomiyasu_diff.meaning_risks(before, after, full=full)
-        return time.perf_counter() - started
+        elapsed = clock() - started
+        limit, detail = paced_limit(3.0, elapsed)
+        self.assertLess(elapsed, limit, detail)
 
     def test_period_sentences_in_long_lines(self):
         for line_chars, stop in ((1500, "。"), (1900, "。"), (1500, "．"), (800, "．")):
@@ -168,7 +173,7 @@ class LongLineTest(unittest.TestCase):
                         number += 1
                     lines_old.append(line_old)
                     lines_new.append(line_new)
-                self.assertLess(self.check_time("\n\n".join(lines_old) + "\n", "\n\n".join(lines_new) + "\n"), 3.0)
+                self.assert_fast("\n\n".join(lines_old) + "\n", "\n\n".join(lines_new) + "\n")
 
     def test_english_sentences_in_long_lines(self):
         sentence = "Step {} checks the input before it returns the result. "
@@ -181,7 +186,7 @@ class LongLineTest(unittest.TestCase):
                 number += 1
             lines_old.append(line_old)
             lines_new.append(line_new)
-        self.assertLess(self.check_time("\n\n".join(lines_old) + "\n", "\n\n".join(lines_new) + "\n"), 3.0)
+        self.assert_fast("\n\n".join(lines_old) + "\n", "\n\n".join(lines_new) + "\n")
 
     def test_long_fragment_keeps_unchanged_code_and_links(self):
         body = "`make test` を先に実行し、[手順](https://example.com/guide) を読みます，" + "キャッシュとログの中身を確かめます，" * 120

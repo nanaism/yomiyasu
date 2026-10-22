@@ -152,8 +152,8 @@ class NumberOrderSwapTest(unittest.TestCase):
             for index, (before, after) in enumerate(pairs):
                 a = Path(folder) / ("a%d.md" % index)
                 b = Path(folder) / ("b%d.md" % index)
-                a.write_text(before, encoding="utf-8")
-                b.write_text(after, encoding="utf-8")
+                a.write_bytes(before.encode("utf-8"))
+                b.write_bytes(after.encode("utf-8"))
                 for options, code in ((["--fail-on", "meaning-risk"], 1), ([], 0)):
                     with self.subTest(before=before, options=options):
                         process = subprocess.run([sys.executable, "-B", str(diff_script)] + options + [str(a), str(b)],

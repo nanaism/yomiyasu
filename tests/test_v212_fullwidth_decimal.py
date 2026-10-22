@@ -35,8 +35,8 @@ class FullwidthDecimalTest(unittest.TestCase):
     def test_cli_exit_code(self):
         with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder:
             a, b = os.path.join(folder, "a.md"), os.path.join(folder, "b.md")
-            Path(a).write_text("値は３．５％だった。\n", encoding="utf-8")
-            Path(b).write_text("値は４．５％だった。\n", encoding="utf-8")
+            Path(a).write_bytes("値は３．５％だった。\n".encode("utf-8"))
+            Path(b).write_bytes("値は４．５％だった。\n".encode("utf-8"))
             plain = subprocess.run([sys.executable, "-B", str(DIFF), a, b], capture_output=True, timeout=60)
             self.assertEqual(plain.returncode, 0, plain.stderr.decode("utf-8"))
             self.assertEqual(plain.stderr, b"")

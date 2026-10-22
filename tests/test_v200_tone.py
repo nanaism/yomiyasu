@@ -229,8 +229,8 @@ class NotCountedTest(unittest.TestCase):
     def test_cli_fail_on_exit_zero(self):
         with tempfile.TemporaryDirectory() as folder:
             a, b = Path(folder) / "a.md", Path(folder) / "b.md"
-            a.write_text("最強のお土産！\n", encoding="utf-8")
-            b.write_text("最強のお土産、\n", encoding="utf-8")
+            a.write_bytes("最強のお土産！\n".encode("utf-8"))
+            b.write_bytes("最強のお土産、\n".encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(SCRIPTS / "yomiyasu_diff.py"), "--fail-on=meaning-risk",
                                       str(a), str(b)], capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
         self.assertEqual(process.returncode, 0)

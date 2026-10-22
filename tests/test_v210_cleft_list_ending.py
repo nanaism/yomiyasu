@@ -247,7 +247,7 @@ class CleftListEndingTest(unittest.TestCase):
     def test_info_does_not_change_the_exit_code(self):
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "cleft.md"
-            path.write_text(SAMPLE, encoding="utf-8")
+            path.write_bytes(SAMPLE.encode("utf-8"))
             for options in ([], ["--strict"], ["--fail-on=warn"], ["--fail-on=error"]):
                 with self.subTest(options=options):
                     code, out, err = call(options + [path])

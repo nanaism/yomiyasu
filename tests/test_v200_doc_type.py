@@ -37,7 +37,6 @@ import os
 import re
 import sys
 import tempfile
-import time
 import unittest
 
 
@@ -53,6 +52,8 @@ import markdown_visibility  # noqa: E402
 import yomiyasu_lint  # noqa: E402
 import yomiyasu_diff  # noqa: E402
 import yomiyasu_check  # noqa: E402
+sys.path.insert(0, str(ROOT / "tests"))
+from portable import paced_limit, timing_clock  # noqa: E402
 
 
 # ---- 9.1 と追記: 値、名前、外す規則 ----
@@ -1040,7 +1041,7 @@ class OptionTest(DocTypeCase):
             change(value)
             if digest:
                 value["record_digest"] = yomiyasu_check._record_digest(value)
-            path.write_text(json.dumps(value, ensure_ascii=True, indent=1) + "\n", encoding="utf-8")
+            path.write_bytes((json.dumps(value, ensure_ascii=True, indent=1) + "\n").encode("utf-8"))
 
         rewrite(lambda value: value["options"].update(doc_type="pr"), False)
         code, out, err = self.check("verify", "--final", b)
@@ -1070,7 +1071,7 @@ class OptionTest(DocTypeCase):
         for key in ("doc_type", "reader"):
             record_c["options"].pop(key)
         record_c["record_digest"] = yomiyasu_check._record_digest(record_c)
-        path_c.write_text(json.dumps(record_c, ensure_ascii=True, indent=1) + "\n", encoding="utf-8")
+        path_c.write_bytes((json.dumps(record_c, ensure_ascii=True, indent=1) + "\n").encode("utf-8"))
         code, out, err = self.check("verify", "--final", c)
         self.assertEqual((code, out.split("\n")[1].split()[1]), (0, "executed"), out)
         self.assertNotIn("doc_type=", out)
@@ -1092,17 +1093,21 @@ class SpeedTest(unittest.TestCase):
         text = block * (60000 // len(block) + 1)
         self.assertGreaterEqual(len(text), 60000)
 
+        # 0.2秒の差は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        clock = timing_clock()
+
         def best(**options):
             times = []
             for _ in range(3):
-                started = time.perf_counter()
+                started = clock()
                 yomiyasu_lint.lint_text(text, **options)
-                times.append(time.perf_counter() - started)
+                times.append(clock() - started)
             return min(times)
 
         plain = best()
         typed = best(doc_type="slides")
-        self.assertLessEqual(typed, plain + 0.2, (plain, typed))
+        slack, detail = paced_limit(0.2, typed - plain)
+        self.assertLessEqual(typed, plain + slack, (plain, typed, detail))
 
 
 # ---- C3、C4、C5: SKILL.md と references（SKILL.md と references を入れる段までは失敗する）----

@@ -7,12 +7,13 @@ import json
 import subprocess
 import sys
 import tempfile
-import time
 import unittest
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import yomiyasu_diff as diff
+sys.path.insert(0, str(ROOT / "tests"))
+from portable import paced_limit, timing_clock  # noqa: E402
 
 EXAMPLES = {'S1': ('プールサイズの暫定引き上げは、別の負荷問題を誘発するかもしれません。\n', 'プールサイズの暫定的な拡張は、別の負荷問題を誘発するおそれがあります。\n'),
  'S2': ('キャッシュの再構築が完了するまでの間、数十分程度は影響が続くと思われます。\n', 'キャッシュの再構築が完了するまでの数十分程度は、影響が続く見込みです。\n'),
@@ -560,20 +561,20 @@ class HedgeMarks(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             old, new = Path(tmp) / 'old.md', Path(tmp) / 'new.md'
             for tag in ('S1', 'U1', 'K1'):
-                old.write_text(EXAMPLES[tag][0], encoding='utf-8')
-                new.write_text(EXAMPLES[tag][1], encoding='utf-8')
+                old.write_bytes(EXAMPLES[tag][0].encode('utf-8'))
+                new.write_bytes(EXAMPLES[tag][1].encode('utf-8'))
                 for fail_on in (False, True):
                     with self.subTest(tag=tag, fail_on=fail_on):
                         cmd = [sys.executable, '-B', str(ROOT / 'scripts/yomiyasu_diff.py'), '--json']
                         if fail_on:
                             cmd.append('--fail-on=meaning-risk')
-                        process = subprocess.run(cmd + [str(old), str(new)], capture_output=True, text=True)
+                        process = subprocess.run(cmd + [str(old), str(new)], capture_output=True, text=True, encoding='utf-8')
                         self.assertEqual(process.returncode, int(fail_on and tag != 'S1'), process.stderr)
                         self.assertEqual(json.loads(process.stdout), diff.diff(*EXAMPLES[tag]))
 
     def test_P3_help(self):
         process = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/yomiyasu_diff.py'), '--help'],
-                                 capture_output=True, text=True)
+                                 capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertIn('推量の印が同じ強さの慎重な言い方に替わっただけの文', process.stdout)
         # ヘルプは端末の幅で折り返し、日本語の語の途中でも改行が入るので、空白をすべて除いて比べる
@@ -597,12 +598,15 @@ class HedgeMarks(unittest.TestCase):
         # 6万字をすべて替える。反復文字の負荷に、推量の印の例を添える。
         old = 'a' * 60000 + '\n\n' + EXAMPLES['S1'][0]
         new = 'b' * 60000 + '\n\n' + EXAMPLES['S1'][1]
+        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        clock = timing_clock()
         durations = []
         for _ in range(3):
-            start = time.perf_counter()
+            start = clock()
             result = diff.diff(old, new)
-            durations.append(time.perf_counter() - start)
-        self.assertLess(sorted(durations)[1], 3.0, durations)
+            durations.append(clock() - start)
+        limit, detail = paced_limit(3.0, sorted(durations)[1])
+        self.assertLess(sorted(durations)[1], limit, "{} {}".format(detail, durations))
         self.assertEqual(result['fail_on_meaning_risk_count'], 0)
 
     def test_public_function_without_type_changes(self):

@@ -115,8 +115,8 @@ class GroundB2Test(unittest.TestCase):
         with tempfile.TemporaryDirectory(dir=str(ROOT), prefix=".b2-test-") as folder:
             root = Path(folder)
             material, final = root / "material.txt", root / "final.txt"
-            material.write_text("elapsed=14.2s\ninterval: 200ms\n", encoding="utf-8")
-            final.write_text("処理には14.2秒かかりました。間隔は200ミリ秒です。\n", encoding="utf-8")
+            material.write_bytes("elapsed=14.2s\ninterval: 200ms\n".encode("utf-8"))
+            final.write_bytes("処理には14.2秒かかりました。間隔は200ミリ秒です。\n".encode("utf-8"))
             env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
             for key in ("YOMIYASU_STATE_DIR", "YOMIYASU_SESSION", "CODEX_THREAD_ID"):
                 env.pop(key, None)
@@ -134,8 +134,8 @@ class GroundB2Test(unittest.TestCase):
             replay = run("verify", "--final", str(final), "--state-dir", str(root / "state"), "--replay")
             self.assertEqual(replay.returncode, 0, replay.stdout + replay.stderr)
             self.assertIn("replay=ok", replay.stdout)
-            material.write_text("RETRY_INTERVAL_SECONDS = 1.0\n", encoding="utf-8")
-            final.write_text("間隔は1秒です。\n", encoding="utf-8")
+            material.write_bytes("RETRY_INTERVAL_SECONDS = 1.0\n".encode("utf-8"))
+            final.write_bytes("間隔は1秒です。\n".encode("utf-8"))
             for flags, code in (([], 0), (["--fail-on=meaning-risk"], 1)):
                 result = run("run", "--material", str(material), "--final", str(final), "--no-record", *flags)
                 self.assertEqual(result.returncode, code, result.stdout + result.stderr)
