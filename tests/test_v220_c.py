@@ -90,11 +90,11 @@ class ReaderTest(FolderCase):
 
     def test_crlf_bom_cr_comments_blank_lines_and_spaces(self):
         allow = b"\xef\xbb\xbf# \xe3\x82\xb3\xe3\x83\xa1\xe3\x83\xb3\xe3\x83\x88\r\n" + "依存先\r\n\r\n  入口  \r\n\t# 字下げのコメント\r\n".encode("utf-8")
-        flag = "マイルストーン\r受け口\r\r　全角の空白　\r".encode("utf-8")
+        flag = "スプリント\r締め日\r\r　全角の空白　\r".encode("utf-8")
         folder = self.words(allow=allow, flag=flag)
         words = markdown_visibility.load_words(str(folder))
         self.assertEqual(words["allow"], ("依存先", "入口"))
-        self.assertEqual(words["flag"], ("マイルストーン", "受け口", "全角の空白"))
+        self.assertEqual(words["flag"], ("スプリント", "締め日", "全角の空白"))
         self.assertEqual((words["allow_lines"], words["flag_lines"]), (2, 3))
         self.assertEqual(words["allow_sha256"], hashlib.sha256(allow).hexdigest())
         self.assertEqual(words["flag_sha256"], hashlib.sha256(flag).hexdigest())
@@ -109,10 +109,10 @@ class ReaderTest(FolderCase):
         self.assertEqual(markdown_visibility.load_words(str(folder))["allow_lines"], 2)
 
     def test_one_file_only(self):
-        folder = self.words(flag="受け口\n")
+        folder = self.words(flag="締め日\n")
         words = markdown_visibility.load_words(str(folder))
         self.assertEqual((words["allow"], words["allow_lines"], words["allow_sha256"]), ((), 0, None))
-        self.assertEqual(words["flag"], ("受け口",))
+        self.assertEqual(words["flag"], ("締め日",))
 
     def test_empty_files_are_used(self):
         """ファイルがあれば（中身が空やコメントだけでも）一覧を使ったものとする。"""
@@ -127,8 +127,8 @@ class ReaderTest(FolderCase):
         self.assertIsNone(markdown_visibility.resolve_words(str(self.root)))
 
     def test_not_utf8_names_the_file_and_line(self):
-        for data, line in ((b"\xff\n", 1), ("入口\n受け口\n".encode("utf-8") + b"\x82\xa0\n", 3),
-                           ("入口\r\n受け口\r\n".encode("utf-8") + b"\xe3\x81\n", 3), (b"a\rb\r\xff", 3)):
+        for data, line in ((b"\xff\n", 1), ("入口\n締め日\n".encode("utf-8") + b"\x82\xa0\n", 3),
+                           ("入口\r\n締め日\r\n".encode("utf-8") + b"\xe3\x81\n", 3), (b"a\rb\r\xff", 3)):
             with self.subTest(data=data):
                 folder = self.words(allow=data)
                 with self.assertRaises(markdown_visibility.WordsError) as raised:
@@ -175,7 +175,7 @@ class ReaderTest(FolderCase):
                 deep.mkdir(parents=True)
                 self.assertEqual(markdown_visibility.find_words_folder(str(deep)), str(project / ".yomiyasu-words"))
                 # 作業ディレクトリの一覧は、git の中では使わない（git の最上位だけ）
-                self.words(deep / ".yomiyasu-words", allow="受け口\n")
+                self.words(deep / ".yomiyasu-words", allow="締め日\n")
                 self.assertEqual(markdown_visibility.find_words_folder(str(deep)), str(project / ".yomiyasu-words"))
                 # git の最上位に一覧がなければ、一覧なし
                 inner = project / "docs" / "inner"
@@ -301,53 +301,53 @@ class ProjectTermTest(FolderCase):
         return yomiyasu_lint.lint_text(text, words=words)
 
     def test_one_finding_per_line_with_the_words(self):
-        text = ("# マイルストーンの決め方\n\n"
-                "次のマイルストーンでは、受け口の名前とマイルストーンの日付を決めます。\n\n"
-                "| 項目 | 期日 |\n|---|---|\n| マイルストーン | 月末 |\n\n"
-                "- 受け口を一つにまとめる\n")
-        result = self.lint_with(text, "マイルストーン\n受け口\n")
+        text = ("# スプリントの決め方\n\n"
+                "次のスプリントでは、締め日の名前とスプリントの日付を決めます。\n\n"
+                "| 項目 | 期日 |\n|---|---|\n| スプリント | 月末 |\n\n"
+                "- 締め日を一つにまとめる\n")
+        result = self.lint_with(text, "スプリント\n締め日\n")
         found = [(f["line"], f["severity"]) for f in result["findings"] if f["rule"] == "project_term"]
         self.assertEqual(found, [(1, "info"), (3, "info"), (7, "info"), (9, "info")])
         finding = [f for f in result["findings"] if f["line"] == 3][0]
         self.assertEqual(finding["message"], "語の一覧（flag.txt）の語の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。")
-        self.assertEqual(finding["snippet"], "次のマイルストーンでは、受け口の名前とマイルストーンの日付を決めます。")
+        self.assertEqual(finding["snippet"], "次のスプリントでは、締め日の名前とスプリントの日付を決めます。")
         self.assertEqual(sorted(finding), ["line", "message", "rule", "severity", "snippet"])
         # 点数に入れない
         self.assertEqual(result["rule_penalty_score"], 100)
 
     def test_words_field_holds_the_line_words(self):
-        analysis = markdown_visibility.analyze_markdown("受け口とマイルストーンと受け口。\n")
-        words = {"flag": ("マイルストーン", "受け口", "日付"), "allow": ()}
+        analysis = markdown_visibility.analyze_markdown("締め日とスプリントと締め日。\n")
+        words = {"flag": ("スプリント", "締め日", "日付"), "allow": ()}
         found = yomiyasu_lint._project_term_findings(analysis, words)
-        self.assertEqual([f["_words"] for f in found], [("受け口", "マイルストーン")])
+        self.assertEqual([f["_words"] for f in found], [("締め日", "スプリント")])
 
     def test_hidden_places_are_not_counted(self):
-        text = ("```\nマイルストーン = 1\n```\n\n"
-                "`マイルストーン` を設定します。\n\n"
-                "> マイルストーンを決めました。\n\n"
-                "彼は「マイルストーン」と言いました。\n\n"
-                "詳しくは https://example.com/マイルストーン を見ます。\n\n"
-                "<div>マイルストーン</div>\n\n"
+        text = ("```\nスプリント = 1\n```\n\n"
+                "`スプリント` を設定します。\n\n"
+                "> スプリントを決めました。\n\n"
+                "彼は「スプリント」と言いました。\n\n"
+                "詳しくは https://example.com/スプリント を見ます。\n\n"
+                "<div>スプリント</div>\n\n"
                 "変数 milestone_id と obj.milestone と path/milestone を使います。\n")
-        result = self.lint_with(text, "マイルストーン\nmilestone\n")
+        result = self.lint_with(text, "スプリント\nmilestone\n")
         self.assertEqual([f["line"] for f in result["findings"] if f["rule"] == "project_term"], [])
         result = self.lint_with("次の milestone を決めます。Milestone ではありません。\n", "milestone\n")
         self.assertEqual([f["line"] for f in result["findings"] if f["rule"] == "project_term"], [1])
 
     def test_frontmatter_is_not_counted(self):
-        result = self.lint_with("---\ntitle: マイルストーン\n---\n\n本文です。\n", "マイルストーン\n")
+        result = self.lint_with("---\ntitle: スプリント\n---\n\n本文です。\n", "スプリント\n")
         self.assertEqual([f for f in result["findings"] if f["rule"] == "project_term"], [])
 
     def test_allow_wins_over_flag(self):
-        result = self.lint_with("次のマイルストーンを決めます。\n", "マイルストーン\n", allow="マイルストーン\n")
+        result = self.lint_with("次のスプリントを決めます。\n", "スプリント\n", allow="スプリント\n")
         self.assertEqual(result["findings"], [])
         self.assertEqual(result["context"]["words"]["allow_removed"]["project_term"], 1)
 
     def test_doc_type_does_not_skip(self):
-        words = markdown_visibility.load_words(str(self.words(flag="マイルストーン\n")))
+        words = markdown_visibility.load_words(str(self.words(flag="スプリント\n")))
         for doc_type in [row[0] for row in yomiyasu_lint.DOC_TYPES]:
             with self.subTest(doc_type=doc_type):
-                result = yomiyasu_lint.lint_text("次のマイルストーンを決めます。\n", doc_type=doc_type, words=words)
+                result = yomiyasu_lint.lint_text("次のスプリントを決めます。\n", doc_type=doc_type, words=words)
                 self.assertEqual([f["rule"] for f in result["findings"]], ["project_term"])
 
 

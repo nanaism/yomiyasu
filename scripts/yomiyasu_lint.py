@@ -5169,9 +5169,12 @@ _PENALTY_HELP = """rule_penalty_score（--json の目安）:
 
 
 _WORDS_HELP = ("語の一覧（allow.txt と flag.txt）のフォルダ。省くと、作業ディレクトリから上へたどった git の最上位"
-               "（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を探します。allow.txt の語は "
-               + "、".join(_ALLOW_RULES) + " の候補から外し、flag.txt の語には project_term（info）の印をつけます。"
-               "1行に1語（UTF-8。# で始まる行と空の行は読み飛ばします）。")
+               "（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を探します（下の「語の一覧」）。")
+_WORDS_EPILOG = """語の一覧（--words、--no-words）:
+  allow.txt の語は、次の規則の候補から外し、外した件数を出します: calque、katakana_term、metaphor_label、
+  metaphor_verb、project_term、slop_vocabulary、translated_term。flag.txt の語には project_term（info）の
+  印をつけます。どちらも1行に1語（UTF-8。# で始まる行と空の行は読み飛ばします）。
+"""
 _NO_WORDS_HELP = "語の一覧を探さず、読みません（--words と一緒には使えません）。"
 
 
@@ -5180,7 +5183,7 @@ def _build_parser():
         prog="yomiyasu_lint.py",
         description=("日本語の表現とMarkdownの書式を、決まった規則で点検します。結果は見直し候補です。"
                      "候補の数や点数は、文章の品質、意味の保持、読者にとっての分かりやすさの合否ではありません。"),
-        epilog=_doc_type_table() + "\n\n" + _PENALTY_HELP + "\n" + _EXIT_CODES,
+        epilog=_doc_type_table() + "\n\n" + _PENALTY_HELP + "\n" + _WORDS_EPILOG + "\n" + _EXIT_CODES,
         formatter_class=_HelpFormatter,
         add_help=False,
         # 省略形（--js など）は受けない。lint、diff、check の3本でそろえる
