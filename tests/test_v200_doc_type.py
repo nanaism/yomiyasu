@@ -1093,7 +1093,7 @@ class SpeedTest(unittest.TestCase):
         text = block * (60000 // len(block) + 1)
         self.assertGreaterEqual(len(text), 60000)
 
-        # 0.2秒の差は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 0.2秒の差は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
 
         def best(**options):

@@ -393,7 +393,7 @@ class PerformanceTest(unittest.TestCase):
         after = "\n\n".join("{}。{}".format(index, paragraph_new) for index in range(count)) + "\n"
         self.assertGreater(len(before), 60000)
         sides = yomiyasu_diff._Sides(before, after)
-        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 上限の秒数は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         started = clock()
         full = yomiyasu_diff.full_diff(before, after)

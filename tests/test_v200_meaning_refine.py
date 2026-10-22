@@ -150,7 +150,7 @@ class LongLineTest(unittest.TestCase):
     37: 2,000字を超える断片でも、前後の同じ字を外してから削除と追加にする（変えていないコードとリンク先を出さない）。"""
 
     def assert_fast(self, before, after):
-        # 3秒の上限は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 3秒の上限は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         started = clock()
         full = yomiyasu_diff.full_diff(before, after)

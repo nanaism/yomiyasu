@@ -5,8 +5,9 @@ yomiyasu のスクリプトは読み込まない（試験のファイルが impo
 - run_text: subprocess.run の text モード（encoding、errors、text）の代わり。text モードの標準入力は、Windows では
   「\\n」を「\\r\\n」に、「\\r\\n」を「\\r\\r\\n」にして子に渡すので、文字列の入力を改行を変えずにバイト列にして渡す。
   出力の読み方は text モードと同じ（POSIX で text モードを使ったときと同じ文字列になる）。
-- timing_clock、paced_limit: 子プロセスを使わない性能の試験の時計と上限。test_v200_diff_full の性能の試験と同じく、
-  秒数の上限を、基準の処理（その CHILD_TIMER の pace）の遅さの比で延ばす（速い機械でも上限は縮めない）。
+- timing_clock、paced_limit: 子プロセスを使わない性能の試験の時計と上限。Windows では、test_v200_diff_full の性能の試験と
+  同じく、秒数の上限を、基準の処理（その CHILD_TIMER の pace）の遅さの比で延ばす（速い機械でも上限は縮めない）。POSIX では
+  延ばさず、2.1.2 までと同じ固定の上限で比べる。
 """
 
 from pathlib import Path
@@ -74,9 +75,9 @@ def pace_scale(rounds=3):
 
 
 def paced_limit(limit, elapsed):
-    """(上限, 説明の文) を返す。elapsed が limit 未満なら上限は limit のまま（pace は測らない）。limit 以上なら pace を測り、
-    limit をこの機械の遅さの比で延ばした値を上限にする。比は1以上なので、速い機械で上限が縮むことはなく、実装が遅くなった
-    ときは、遅い機械でも、その遅さを除いた分だけ上限を超える。"""
-    scale = 1.0 if elapsed < limit else pace_scale()
+    """(上限, 説明の文) を返す。POSIX と、elapsed が limit 未満のときは、上限は limit のまま（pace は測らない）。Windows で
+    limit 以上なら pace を測り、limit をこの機械の遅さの比で延ばした値を上限にする。比は1以上なので、速い機械で上限が縮む
+    ことはなく、実装が遅くなったときは、遅い機械でも、その遅さを除いた分だけ上限を超える。"""
+    scale = 1.0 if sys.platform != "win32" or elapsed < limit else pace_scale()
     detail = "%.3f秒。上限 %.3f秒（%s秒 × この機械の遅さ %.2f）" % (elapsed, limit * scale, limit, scale)
     return limit * scale, detail

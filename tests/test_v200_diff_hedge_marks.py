@@ -598,7 +598,7 @@ class HedgeMarks(unittest.TestCase):
         # 6万字をすべて替える。反復文字の負荷に、推量の印の例を添える。
         old = 'a' * 60000 + '\n\n' + EXAMPLES['S1'][0]
         new = 'b' * 60000 + '\n\n' + EXAMPLES['S1'][1]
-        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 上限の秒数は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         durations = []
         for _ in range(3):

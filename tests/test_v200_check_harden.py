@@ -299,7 +299,7 @@ class TestC44Similarity(unittest.TestCase):
         source = b"\n".join(source for _, source, _ in pairs) * 3
         final = b"\n".join(final for _, _, final in pairs) * 3
         self.assertGreater(len(source.decode("utf-8")), 60000)
-        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 上限の秒数は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         started = clock()
         self.similarity(source, final)

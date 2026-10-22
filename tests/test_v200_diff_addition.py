@@ -320,7 +320,7 @@ class Contracts(unittest.TestCase):
         full, sides = diff._build_full_diff(old, new, None)
         groups = diff._sentence_pairs(sides, full)
         masks = (diff._Masker(sides, 0), diff._Masker(sides, 1))
-        # 0.3秒の上限は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 0.3秒の上限は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         durations = []
         for _ in range(3):

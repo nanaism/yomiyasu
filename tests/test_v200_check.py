@@ -1891,7 +1891,7 @@ class TestReadOnlyAndWrites(CheckCase):
         process = self.check("verify", "--final", b)
         elapsed = time.perf_counter() - started
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
-        limit, detail = paced_limit(1.0, elapsed)  # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）
+        limit, detail = paced_limit(1.0, elapsed)  # 上限の秒数は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）
         self.assertLess(elapsed, limit, detail)
         process = self.check("verify", "--final", b, flags=("-B", "-X", "importtime"))
         self.assertEqual(process.returncode, 0, process.stdout)

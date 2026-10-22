@@ -616,7 +616,7 @@ class MovedValueSpeedTest(unittest.TestCase):
     def test_long_following_sentences_stay_within_the_promise(self):
         before, after = moved_document(17, 1850)
         self.assertGreater(len(after), 60000)
-        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 上限の秒数は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         started = clock()
         full = yomiyasu_diff.full_diff(before, after)

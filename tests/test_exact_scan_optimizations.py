@@ -30,7 +30,7 @@ class ExactScanTests(unittest.TestCase):
 
     def test_many_trailing_notes_finish_quickly(self):
         text = "確認します" + "(注) " * 20_000
-        # 3秒の上限は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 3秒の上限は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         started = clock()
         self.assertEqual(yomiyasu_diff.bare_end(text), "確認します")

@@ -7,7 +7,8 @@
 - POSIX の権限ビットの確かめは、Windows では行わない（check とフックは POSIX のときだけ chmod する）。
 - 開いているファイルへの os.replace は、Windows では PermissionError になる。O_EXCL で作ったあとの片付けの試験は、
   置き直す前にファイルを閉じる。Windows の動きは os.replace を差し替えて再現する。
-- 子プロセスを使わない性能の試験の上限は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。
+- 子プロセスを使わない性能の試験の上限は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。
+  POSIX では延ばさない。
 
 文はすべて合成の文。
 """
@@ -237,13 +238,23 @@ class PacedLimitTest(unittest.TestCase):
         self.assertIn("0.120秒", detail)
 
     def test_slow_result_is_compared_with_the_scaled_limit(self):
-        with mock.patch.object(portable, "pace_scale", return_value=4.0):
-            limit, detail = portable.paced_limit(0.3, 0.5)
-        self.assertAlmostEqual(limit, 1.2)
-        self.assertIn("この機械の遅さ 4.00", detail)
-        # 速い機械（比が1）では、上限を超えた結果はそのまま落ちる
-        with mock.patch.object(portable, "pace_scale", return_value=1.0):
-            self.assertEqual(portable.paced_limit(0.3, 3.0)[0], 0.3)
+        with mock.patch.object(portable.sys, "platform", "win32"):
+            with mock.patch.object(portable, "pace_scale", return_value=4.0):
+                limit, detail = portable.paced_limit(0.3, 0.5)
+            self.assertAlmostEqual(limit, 1.2)
+            self.assertIn("この機械の遅さ 4.00", detail)
+            # 速い機械（比が1）では、上限を超えた結果はそのまま落ちる
+            with mock.patch.object(portable, "pace_scale", return_value=1.0):
+                self.assertEqual(portable.paced_limit(0.3, 3.0)[0], 0.3)
+
+    def test_posix_keeps_the_fixed_limit(self):
+        """POSIX では、上限を超えても pace を測らず、上限は limit のまま。"""
+        for platform in ("darwin", "linux"):
+            with self.subTest(platform=platform), mock.patch.object(portable.sys, "platform", platform), \
+                    mock.patch.object(portable, "pace_scale", side_effect=AssertionError("pace を測った")):
+                limit, detail = portable.paced_limit(0.3, 0.5)
+                self.assertEqual(limit, 0.3)
+                self.assertIn("この機械の遅さ 1.00", detail)
 
     def test_scale_never_shrinks_the_limit(self):
         with mock.patch.object(portable, "_pace", return_value=(10.0, lambda: None)):

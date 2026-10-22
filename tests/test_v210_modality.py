@@ -413,7 +413,7 @@ class ContractsTest(unittest.TestCase):
         o, r = yomiyasu_diff.normalize(before), yomiyasu_diff.normalize(after)
         opcodes = yomiyasu_diff._ExactSequenceMatcher(None, o, r, autojunk=False).get_opcodes()
         yomiyasu_diff._type_changes(o, r, opcodes)
-        # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 上限の秒数は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         durations = []
         for _ in range(3):

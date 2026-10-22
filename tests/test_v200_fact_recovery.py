@@ -351,7 +351,7 @@ class G15Gaps(unittest.TestCase):
 
     def test_sixty_thousand_chars_under_half_second(self):
         text = ('再試行の間隔を短くしました。\n' * 4000)[:60000]
-        # 0.5秒の上限は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
+        # 0.5秒の上限は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         started = clock()
         result = diff.fact_gaps(text)

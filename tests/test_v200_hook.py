@@ -361,7 +361,7 @@ class HookTests(ManagedCase):
                 self.hook(host=host)
                 samples.append(time.perf_counter() - begin)
             median = statistics.median(samples)
-            # 上限の秒数は、遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）
+            # 上限の秒数は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）
             limit, detail = paced_limit(0.3, median)
             self.assertLess(median, limit, detail)
             measurements.append('{} fast={:.4f}s'.format(host, median))
