@@ -4236,7 +4236,7 @@ class _ArmedLock(object):
         self.identity = None
 
     def __enter__(self):
-        denied = 0
+        denied = refused = 0
         while time.monotonic() < self.deadline:
             try:
                 fd = os.open(self.path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
@@ -4262,12 +4262,18 @@ class _ArmedLock(object):
                     if time.time() - os.stat(self.path).st_mtime > _ARMED_STALE:
                         os.unlink(self.path)
                         continue
+                    refused = 0  # まだ新しいロック（使用中）。古いロックで続けて拒まれた数はここで切る
                 except FileNotFoundError:
                     continue
                 except PermissionError:
                     # Windows では、ほかのプロセスが先に消している途中の古いロックに stat や unlink をすると
-                    # PermissionError になる。使用中とみなして待ち直す。POSIX ではそのまま出す
+                    # PermissionError になる。使用中とみなして待ち直す。続けて _REPLACE_TRIES 回拒まれるときは、消せない
+                    # ロック（ほかの OS ユーザーの状態フォルダに残ったものなど）なので、締切まで待たずに出す。POSIX では
+                    # そのまま出す
                     if not _busy_on_windows():
+                        raise
+                    refused += 1
+                    if refused >= _REPLACE_TRIES:
                         raise
             except PermissionError:
                 # Windows では、ほかのプロセスが消している途中（削除の保留中）のロックの名前には、O_EXCL で作れず

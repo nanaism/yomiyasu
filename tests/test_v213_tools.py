@@ -452,6 +452,80 @@ class ArmedLockTests(_StateCase):
                 self.assertIsNotNone(lock.identity)
         self.assertEqual(len(denied), 1)
 
+    def test_windows_stale_lock_that_cannot_be_removed_raises_soon(self):
+        """古いロックを消せずに拒まれ続けるとき（ほかの OS ユーザーの状態フォルダに残ったロックなど）は、締切（12秒）まで
+        待たずに PermissionError を出す。stat を拒まれ続けるときも同じ。"""
+        self.lock.write_bytes(b"")
+        old = time.time() - check._ARMED_STALE - 60
+        os.utime(str(self.lock), (old, old))
+        real_unlink, real_stat = os.unlink, os.stat
+        for name in ("unlink", "stat"):
+            calls = []
+
+            def refuse(path, *args, **kwargs):
+                if str(path) == str(self.lock):
+                    calls.append(path)
+                    raise PermissionError(errno.EACCES, "Permission denied", str(path))
+                return (real_unlink if name == "unlink" else real_stat)(path, *args, **kwargs)
+            with self.subTest(refused=name):
+                begin = time.monotonic()
+                with mock.patch.object(os, name, refuse), mock.patch.object(os, "name", "nt"):
+                    with self.assertRaises(PermissionError):
+                        with check._ArmedLock(str(self.state), self.run_id):
+                            pass
+                self.assertEqual(len(calls), check._REPLACE_TRIES)
+                self.assertLess(time.monotonic() - begin, 2)
+                self.assertTrue(self.lock.exists())
+
+    def test_windows_new_lock_resets_stale_refusals(self):
+        """古いロックの拒否と、まだ新しいロック（使用中）が交互に続いても、拒否の数は続けた分だけ数える。"""
+        self.lock.write_bytes(b"")
+        old = time.time() - check._ARMED_STALE - 60
+        real_stat = os.stat
+        calls = []
+
+        def flapping(path, *args, **kwargs):
+            if str(path) == str(self.lock) and len(calls) < check._REPLACE_TRIES * 3:
+                calls.append(path)
+                if len(calls) % 2:
+                    raise PermissionError(errno.EACCES, "Permission denied", str(path))
+                os.utime(str(self.lock), None)  # ほかのプロセスが新しく取った
+                return real_stat(path, *args, **kwargs)
+            if str(path) == str(self.lock):
+                os.utime(str(self.lock), (old, old))  # 落ちたプロセスの残りになった
+            return real_stat(path, *args, **kwargs)
+        with mock.patch.object(os, "stat", flapping), mock.patch.object(os, "name", "nt"):
+            with check._ArmedLock(str(self.state), self.run_id) as lock:
+                self.assertIsNotNone(lock.identity)
+        self.assertEqual(len(calls), check._REPLACE_TRIES * 3)
+
+    def test_windows_start_with_a_stale_lock_that_cannot_be_removed_shows_the_guidance(self):
+        """start は、消せない古いロックがあっても、締切まで待たずに状態フォルダを分ける案内を出して終了コード3で終える
+        （2.1.2 と同じ。待ち続けて TimeoutError の内部エラーにしない）。"""
+        source = self.state.parent / "a.md"
+        source.write_bytes("これは確かめ用の原文です。\n".encode("utf-8"))
+        check._write_state_files(str(self.state))
+        name = check._sha256(check._armed_place(str(source)).encode("utf-8", "surrogateescape"))
+        stale = self.state / "armed" / (".source-" + name + ".lock")
+        stale.write_bytes(b"")
+        old = time.time() - check._ARMED_STALE - 60
+        os.utime(str(stale), (old, old))
+        real_unlink = os.unlink
+
+        def refuse(path, *args, **kwargs):
+            if str(path) == str(stale):
+                raise PermissionError(errno.EACCES, "Permission denied", str(path))
+            return real_unlink(path, *args, **kwargs)
+        out, err = io.StringIO(), io.StringIO()
+        begin = time.monotonic()
+        with mock.patch.object(os, "unlink", refuse), mock.patch.object(check, "_busy_on_windows", lambda: True), \
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = check.main(["start", "--source", str(source), "--state-dir", str(self.state)])
+        self.assertLess(time.monotonic() - begin, 3)
+        self.assertEqual(code, 3, err.getvalue())
+        self.assertIn(check._DENIED_STATE_NOTE, err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
+
     def test_posix_stale_lock_permission_error_is_raised(self):
         self.lock.write_bytes(b"")
         old = time.time() - check._ARMED_STALE - 60
