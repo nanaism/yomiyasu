@@ -4142,9 +4142,170 @@ def _v220_word_findings(analysis):
     return out
 
 
+# 2.2.0 の文の形の規則（say_hedge、copy_comma_noun、empty_shikumi、bare_verb_chain）。
+# 既存の表（_PATTERN_LITERAL_HINTS）とは別に、行ごとに見える文字（_prose_visible_text）を見る。
+# カギ括弧、二重カギ括弧、[ ]、引用符の中は伏せる。引用の行、表、コード、frontmatter、HTML は見ない。
+_SHAPE_RULE_MESSAGES = {
+    "say_hedge": "文末の「と言えるでしょう」の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。",
+    "copy_comma_noun": "修飾語と短い名詞の間に読点を打って名詞で終える、キャッチコピーの型の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。",
+    "empty_shikumi": "「仕組み」で終える文の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。",
+    "bare_verb_chain": "主語も目的語もない動詞を読点で並べて止める文の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。",
+}
+# 文書の元の文字で、4つの規則のどれかに当たりうる所（速さのための絞り込み）。当たった行だけを見える文字で調べる。
+# 見える文字では「*」「_」が消えるので、読点と句点の前の「*」「_」は許す
+_SHAPE_GATE_WORDS = ("えるでしょう", "仕組み", "しくみ")
+_SHAPE_COMMA_GATE = re.compile(
+    r"[ないたのうくぐすつぬぶむるか][*_]*、(?:[^、。\n]{1,14}。|[^。\n]{0,30}、[^、。\n]{0,30}[うくぐすつぬぶむる][*_]*。)")
+_SHAPE_HEADING_MARK = re.compile(r"^\s*#{1,6}(?:\s+|$)|\s+#+\s*$")
+_SHAPE_QUOTE_MARKS = ("「", "『", "[", "“", '"')
+_SHAPE_CURLY_QUOTED = re.compile(r"“[^“”]*”|\"[^\"]*\"")
+_SHAPE_SENTENCE = re.compile(r"[^。！？!?]+(?:[。！？!?]+|$)")
+# 文末の「と言えるでしょう」。問いの「でしょうか」は含めない
+_SAY_HEDGE = re.compile(r"(.?)と(?:言|い)えるでしょう[。！!]?$")
+# 直前が体言（漢字かカタカナで終わる）なら、ある語に当たるかの判断（「契約と言えるでしょう」）として出さない
+_SAY_HEDGE_NOUN_END = re.compile(r"[一-龯々〆ヵヶァ-ヴーｦ-ﾟA-Za-z0-9０-９Ａ-Ｚａ-ｚ]")
+# 「〜に当たると言えるでしょう」も、ある区分に当たるかの判断として出さない
+_SAY_HEDGE_JUDGE = re.compile(r"(?:に|へ)(?:当た|あた)る(?:と(?:言|い)えるでしょう)|に該当する(?:と(?:言|い)えるでしょう)")
+# 「な、」「い、」「た、」「の、」のあとに6字以下の名詞（か名詞＋を）で「。」。名詞は漢字、仮名、英数字だけ
+_COPY_COMMA_NOUN = re.compile(r"(?:^|、)([^、]+?[ないたの])、([一-龯々〆ヵヶぁ-ゖァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ]{1,7})。$")
+# 読点の前の部分に助詞の「を」「は」「が」「で」があれば、修飾語ではなく節とみて出さない（「条件を残した、やや長い出力。」）
+_COPY_MODIFIER_PARTICLE = re.compile(r"を|[はがで](?![ぁ-ゖ])")
+# 読点の前が感動詞、接続詞、指示語なら出さない（「はい、了解。」「また、今度。」）
+_COPY_NOT_MODIFIER = frozenset(("はい", "いいえ", "いい", "また", "まあ", "あの", "その", "この", "どの", "あのね",
+                                "ええ", "いや", "おい", "なお", "ただ", "しかし", "ちなみ", "つまり", "さて", "では"))
+# 名詞のほうが述語や助詞で終わるなら名詞ではない（「迷った、決めた。」「ある、です。」）。「の」を含む名詞句（「内部の誤り」）も外す
+_COPY_NOUN_NOT = re.compile(r"(?:[るたすだてでねよわかぞぜさうくぐつぬぶむずじ]|ない|ません|しい|たい)$|[はがにでの]")
+_EMPTY_SHIKUMI = re.compile(
+    r"(?:仕組み|しくみ)(?:|です|だ|になっています|になっている|になってます|となっています|となっている|を(?:作|つく)(?:る|ります|りました|った|りましょう))。$")
+# 終止形（う段の仮名）か「終止形＋か」で終わる部分
+_BARE_VERB_PART = re.compile(r"[一-龯々ぁ-ゖァ-ヴー]*[うくぐすつぬぶむる]か?$")
+_BARE_VERB_LAST = re.compile(r"[一-龯々ぁ-ゖァ-ヴー]*[うくぐすつぬぶむる]$")
+_BARE_VERB_POLITE = re.compile(r"(?:ます|です|ません)か?$")
+# 動詞ではないのに、う段の仮名で終わる部分（「一つ、二つ、三つ。」の数、「楽しく」の形容詞）
+_BARE_VERB_NOT_VERB = re.compile(r"(?:^[一二三四五六七八九十百千0-9０-９いくひとふたみよ]+つ|しく)か?$")
+# 助詞の「は」「が」「に」: 後ろが平仮名でない（漢字やカタカナの語が続く）ものを助詞とみる。「を」はいつも助詞
+_BARE_VERB_PARTICLE = re.compile(r"を|[はがに](?![ぁ-ゖ])")
+
+
+def _shape_visible_text(analysis, row):
+    """形の規則で見る行の文字。見ない行は空の文字列。引用の中身は空白で伏せる。"""
+    if row["kind"] not in ("paragraph", "list", "heading") or row["quote_depth"]:
+        return ""
+    text = _prose_visible_text(analysis, row["line"])
+    text = text.replace("__", "").replace("*", "")
+    if row["kind"] == "heading":
+        text = _SHAPE_HEADING_MARK.sub("", text)
+    if any(mark in text for mark in _SHAPE_QUOTE_MARKS):
+        text = _mask_quoted_segments(text)
+        if "“" in text or '"' in text:
+            text = _SHAPE_CURLY_QUOTED.sub(lambda match: " " * len(match.group()), text)
+    return text
+
+
+def _say_hedge_sentence(sentence):
+    match = _SAY_HEDGE.search(sentence)
+    if not match:
+        return False
+    if _SAY_HEDGE_NOUN_END.match(match.group(1)) or _SAY_HEDGE_JUDGE.search(sentence):
+        return False
+    return True
+
+
+def _copy_comma_noun_sentence(sentence):
+    if len(sentence) > 20 or not sentence.endswith("。"):
+        return False
+    match = _COPY_COMMA_NOUN.search(sentence)
+    if not match:
+        return False
+    modifier, noun = match.group(1).strip(), match.group(2)
+    if noun.endswith("を"):
+        noun = noun[:-1]
+    if (not noun or len(noun) > 6 or len(modifier) < 2 or modifier in _COPY_NOT_MODIFIER
+            or _COPY_MODIFIER_PARTICLE.search(modifier)):
+        return False
+    return not _COPY_NOUN_NOT.search(noun)
+
+
+def _bare_verb_chain_sentence(sentence):
+    if len(sentence) > 30 or not sentence.endswith("。"):
+        return False
+    parts = [part.strip() for part in sentence[:-1].split("、")]
+    if len(parts) < 3 or _BARE_VERB_PARTICLE.search(sentence):
+        return False
+    for part in parts[:-1]:
+        if (not _BARE_VERB_PART.fullmatch(part) or _BARE_VERB_POLITE.search(part)
+                or _BARE_VERB_NOT_VERB.search(part)):
+            return False
+    last = parts[-1]
+    return (bool(_BARE_VERB_LAST.fullmatch(last)) and not _BARE_VERB_POLITE.search(last)
+            and not _BARE_VERB_NOT_VERB.search(last))
+
+
+def _negation_block_lines(analysis, findings):
+    """negative_parallelism の候補がある行と、その行と同じ段落（ソフトな改行でつながった行）の行の番号。
+
+    negative_parallelism は、段落が複数の行にわたるとき、否定の文の行に1件出す（「努力ではない。」の行）。
+    同じ段落の次の行の「仕組みだ。」にも同じ候補が掛かるとみる。"""
+    lines = {finding["line"] for finding in findings if finding["rule"] == "negative_parallelism"}
+    if lines:
+        for block in analysis["blocks"]:
+            numbers = [row["line"] for row in block["lines"]]
+            if len(numbers) > 1 and not lines.isdisjoint(numbers):
+                lines.update(numbers)
+    return lines
+
+
 def _v220_shape_findings(analysis, findings, doc_type):
-    """say_hedge、copy_comma_noun、empty_shikumi、bare_verb_chain の候補。findings は既存の規則の候補（読むだけ）。"""
-    return []
+    """say_hedge、copy_comma_noun、empty_shikumi、bare_verb_chain の候補。findings は既存の規則の候補（読むだけ）。
+
+    1行に同じ規則の候補は1件まで。copy_comma_noun は promo では文書の中で2回目に当たったものから出す。
+    empty_shikumi は、同じ行（か、ソフトな改行でつながった同じ段落）に negative_parallelism の候補があれば出さない。"""
+    result = []
+    source = analysis["text"]
+    positions = [match.start() for match in _SHAPE_COMMA_GATE.finditer(source)]
+    for word in _SHAPE_GATE_WORDS:
+        position = source.find(word)
+        while position >= 0:
+            positions.append(position)
+            position = source.find(word, position + 1)
+    if not positions:
+        return result
+    rows = analysis["lines"]
+    starts = [row["start"] for row in rows]
+    indexes = sorted({bisect_right(starts, position) - 1 for position in positions})
+    negation_lines = None
+    copy_hits = 0
+    for index in indexes:
+        row = rows[index]
+        text = _shape_visible_text(analysis, row)
+        if not text:
+            continue
+        line_no = row["line"]
+        found = set()
+        for match in _SHAPE_SENTENCE.finditer(text):
+            sentence = match.group().strip()
+            if not sentence:
+                continue
+            if "say_hedge" not in found and "える" in sentence and _say_hedge_sentence(sentence):
+                found.add("say_hedge")
+            if "、" in sentence:
+                if _copy_comma_noun_sentence(sentence):
+                    copy_hits += 1
+                    if doc_type != "promo" or copy_hits >= 2:
+                        found.add("copy_comma_noun")
+                if "bare_verb_chain" not in found and _bare_verb_chain_sentence(sentence):
+                    found.add("bare_verb_chain")
+            if "empty_shikumi" not in found and ("仕組" in sentence or "しくみ" in sentence) \
+                    and _EMPTY_SHIKUMI.search(sentence):
+                if negation_lines is None:
+                    negation_lines = _negation_block_lines(analysis, findings)
+                if line_no not in negation_lines:
+                    found.add("empty_shikumi")
+        for rule in ("say_hedge", "copy_comma_noun", "empty_shikumi", "bare_verb_chain"):
+            if rule in found:
+                result.append({"rule": rule, "line": line_no, "severity": "info",
+                               "message": _SHAPE_RULE_MESSAGES[rule], "snippet": row["raw"].strip()})
+    return result
 
 
 # dialogue_period（script だけ）: 台詞が DIALOGUE_MIN 個以上あり、最後の字が「。」の台詞の割合が DIALOGUE_RATIO 以上なら
