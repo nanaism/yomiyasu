@@ -81,13 +81,14 @@ class HomePathRule(unittest.TestCase):
         return result
 
     def test_tilde_alone_and_tilde_slash_become_home(self):
-        # 展開したパスは「~/」のあとの「/」を残す（Windows では「C:\\...\\home/state」）。どちらの区切りでも同じ場所なので、
-        # 両方を normpath してから比べる
+        # 展開したパスは「~/」のあとの「/」を残す。Windows では「C:\\...\\home/state」になり、どちらの区切りでも同じ場所
+        # なので、Windows だけ両方を normpath してから比べる（POSIX では今までどおり文字列で比べ、区切りの重なりも見る）
+        same = (lambda path: os.path.normpath(path)) if os.name == "nt" else (lambda path: path)
         self.assertEqual(self.both("~"), self.home)
-        self.assertEqual(os.path.normpath(self.both("~/state")), os.path.normpath(os.path.join(self.home, "state")))
-        self.assertEqual(os.path.normpath(self.both("~/a/b")), os.path.normpath(os.path.join(self.home, "a", "b")))
+        self.assertEqual(same(self.both("~/state")), same(os.path.join(self.home, "state")))
+        self.assertEqual(same(self.both("~/a/b")), same(os.path.join(self.home, "a", "b")))
         self.assertEqual(os.path.normpath(self.both("~/")), os.path.normpath(self.home))
-        self.assertEqual(os.path.normpath(self.both("~//state")), os.path.normpath(os.path.join(self.home, "state")))
+        self.assertEqual(os.path.normpath(self.both("~//state")), same(os.path.join(self.home, "state")))
 
     def test_other_values_are_kept(self):
         """「~user/x」「~x」などは、その名前の利用者がいても置き換えない（root はたいていの機械にいる）。"""
