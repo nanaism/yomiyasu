@@ -780,7 +780,7 @@ def main(argv=None):
         elif '--print-config' in options:
             # Only a person runs --print-config (it is never in a host's settings), so a wrong value is a usage error.
             if hasattr(sys.stderr, 'reconfigure'):
-                sys.stderr.reconfigure(encoding='utf-8')
+                sys.stderr.reconfigure(encoding='utf-8', newline='\n')
             sys.stderr.write(_PRINT_CONFIG_ERROR + '\n')
             return 2
         else:
@@ -836,7 +836,8 @@ def main(argv=None):
             if hasattr(sys.stdout, 'reconfigure'):
                 # The registration message is plain text with the draft's name. A name with bytes that are not
                 # UTF-8 (a lone surrogate such as '\udcff') is written as an escape instead of failing the hook.
-                sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace')
+                # Write '\n' on every OS (Windows would otherwise write '\r\n').
+                sys.stdout.reconfigure(encoding='utf-8', errors='backslashreplace', newline='\n')
             sys.stdout.write(output + '\n')
             sys.stdout.flush()
     except BaseException as error:

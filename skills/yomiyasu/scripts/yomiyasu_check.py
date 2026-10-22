@@ -4834,8 +4834,9 @@ def _version_line():
 
 
 def _use_utf8(stream, **options):
+    # 改行は OS によらず "\n" で書く（Windows の既定では "\r\n" になり、記録や CLI の出力が OS で変わる）
     if stream is not None and hasattr(stream, "reconfigure"):
-        stream.reconfigure(encoding="utf-8", **options)
+        stream.reconfigure(encoding="utf-8", newline="\n", **options)
 
 
 def _error(message):
@@ -4881,6 +4882,13 @@ def _run_cli(argv):
     if sys.stdout is not None:
         sys.stdout.flush()
     return code
+
+
+def _closed_output_on_windows(error):
+    """Windows で、読む側が閉じたパイプに書いたときの例外か。Windows では BrokenPipeError ではなく、errno が EINVAL の
+    OSError になる。ファイル名のある OSError（Windows で名前に使えない字を含むパスなど）と、POSIX では、ほかの誤りとして扱う。"""
+    return (os.name == "nt" and type(error) is OSError and error.errno == errno.EINVAL
+            and error.filename is None and error.filename2 is None)
 
 
 def _silence_stdout():
@@ -4964,6 +4972,11 @@ def main(argv=None):
         _error("yomiyasu_check.py: 出力先が閉じられたため、結果を最後まで書けませんでした。")
         return 3
     except Exception as error:
+        if _closed_output_on_windows(error):
+            # Windows で出力先が閉じられた。上の BrokenPipeError と同じく扱う
+            _silence_stdout()
+            _error("yomiyasu_check.py: 出力先が閉じられたため、結果を最後まで書けませんでした。")
+            return 3
         _error("yomiyasu_check.py: 内部エラー: {}: {}".format(type(error).__name__, error))
         _error(traceback.format_exc().rstrip("\n"))
         return 3
