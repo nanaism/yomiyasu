@@ -1,4 +1,5 @@
-"""v2.2.0: 文の形の規則（say_hedge、copy_comma_noun、empty_shikumi、bare_verb_chain）を確かめる。
+"""v2.2.0: 文の形の規則（say_hedge、copy_comma_noun、bare_verb_chain）を確かめる。中身のない「仕組み」（empty_shikumi）は
+推敲の前後の比べで悪くなったので入れなかった（印がつかないことを確かめる）。
 
 文はすべて自作の類例（v220-development/seed/g2-label-hedge と g4-copy-shikumi-verbs、所有者の類例の5〜8）と、
 この試験のために作った文。
@@ -15,18 +16,19 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import yomiyasu_diff  # noqa: E402
 import yomiyasu_lint  # noqa: E402
 
-SHAPE_RULES = ("say_hedge", "copy_comma_noun", "empty_shikumi", "bare_verb_chain")
+SHAPE_RULES = ("say_hedge", "copy_comma_noun", "bare_verb_chain")
 COMMON_TAIL = "文脈を見て、誰が何をどうするかを書き直すか確かめてください。"
 # 印に当たったときに守ることの1文（推敲の測りで、守らない書き直しが出た規則だけ）
-HANDLING = {"say_hedge": "推量の「でしょう」は残します。ある区分に当たるかを判断する文（印のないもの）は直しません。", "empty_shikumi": "前後の文が何がどう動くかを説明していれば残します。"}
+HANDLING = {"say_hedge": "推量の「でしょう」は残します。ある区分に当たるかを判断する文（印のないもの）は直しません。"}
 
 # 所有者の類例（指示書「作業を始める前に」）の5〜8と、当たる規則
 OWNER_SEEDS = (
     ("この結果は、品質の向上につながったと言えるでしょう。", "say_hedge"),
     ("丁寧な、人。", "copy_comma_noun"),
-    ("本当に大事なのは、続けられる仕組み。", "empty_shikumi"),
     ("切るか、続けるか、決める。", "bare_verb_chain"),
 )
+# 所有者の類例の7（中身のない「仕組み」）。2.2.0 では規則を入れなかったので、どの印もつかない
+OWNER_SEED_7 = "本当に大事なのは、続けられる仕組み。"
 # 所有者の類例の1〜4（ほかの担当の規則）。この4つの規則は当たらない
 OWNER_OTHER_SEEDS = (
     "取りこぼした通知は、翌朝の再送ジョブが拾います。",
@@ -151,6 +153,8 @@ class OwnerSeedTest(unittest.TestCase):
         for text, rule in OWNER_SEEDS:
             with self.subTest(text=text):
                 self.assertEqual(rules_of(text + "\n"), [rule])
+        self.assertEqual([f["rule"] for f in yomiyasu_lint.lint_text(OWNER_SEED_7 + "\n")["findings"]
+                          if f["rule"] in yomiyasu_lint._V220_RULES], [])
 
     def test_owner_seeds_5_to_8_in_one_document(self):
         text = "".join(sentence + "\n" for sentence, _ in OWNER_SEEDS)
@@ -226,31 +230,15 @@ class CopyCommaNounTest(RuleTestBase):
         self.assertEqual(rules_of("いつもの、安心を。小さな、贅沢。\n", "promo"), ["copy_comma_noun"])
 
 
-class EmptyShikumiTest(RuleTestBase):
-    rule, fix, keep = "empty_shikumi", SHIKUMI_FIX, SHIKUMI_KEEP
+class EmptyShikumiNotIncludedTest(unittest.TestCase):
+    """中身のない「仕組み」の規則は 2.2.0 に入れなかった。「仕組み」で終わる文にも、新しい規則の印はつかない。"""
 
-    def test_seed(self):
-        self.check()
-
-    def test_not_on_a_negative_parallelism_line(self):
-        text = "足りないのは人ではなく、仕組みです。\n"
-        rules = [finding["rule"] for finding in yomiyasu_lint.lint_text(text)["findings"]]
-        self.assertIn("negative_parallelism", rules)
-        self.assertNotIn("empty_shikumi", rules)
-        # 段落がソフトな改行で続くとき、negative_parallelism は段落の否定の行に出る。同じ段落の「仕組みだ。」にも出さない
-        text = "# 観察\n\n努力ではない。\n才能でもない。仕組みだ。\n"
-        found = [(finding["rule"], finding["line"]) for finding in yomiyasu_lint.lint_text(text)["findings"]]
-        self.assertEqual(found, [("negative_parallelism", 3)])
-        # 別の段落の negative_parallelism は外す理由にならない
-        text = "足りないのは人ではなく、手順です。\n\n障害に強い仕組みです。\n"
-        found = [(finding["rule"], finding["line"]) for finding in yomiyasu_lint.lint_text(text)["findings"]]
-        self.assertIn(("negative_parallelism", 1), found)
-        self.assertIn(("empty_shikumi", 3), found)
-
-    def test_explained_sentences_are_still_marked(self):
-        """前後の文で説明していても印はつく（残すかは推敲で決める）。"""
-        text = "マージすると、プレビュー環境は30分後に自動で消えます。消し忘れたまま費用がかさむことのない仕組みです。\n"
-        self.assertEqual(rules_of(text), ["empty_shikumi"])
+    def test_no_marks(self):
+        self.assertNotIn("empty_shikumi", yomiyasu_lint._V220_RULES)
+        for text in SHIKUMI_FIX + SHIKUMI_KEEP:
+            with self.subTest(text=text):
+                rules = [f["rule"] for f in yomiyasu_lint.lint_text(text + "\n")["findings"]]
+                self.assertNotIn("empty_shikumi", rules)
 
 
 class BareVerbChainTest(RuleTestBase):
@@ -308,7 +296,7 @@ class CommonTest(unittest.TestCase):
         text = "".join(sentence + "\n\n" for sentence, _ in OWNER_SEEDS)
         result = yomiyasu_lint.lint_text(text)
         self.assertEqual(sorted(finding["rule"] for finding in result["findings"]), sorted(rule for _, rule in OWNER_SEEDS))
-        self.assertEqual(result["counts"], {"error": 0, "warn": 0, "info": 4})
+        self.assertEqual(result["counts"], {"error": 0, "warn": 0, "info": 3})
         self.assertEqual(result["rule_penalty_score"], 100)
         with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "seed.md"

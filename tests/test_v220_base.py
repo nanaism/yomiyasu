@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import yomiyasu_lint  # noqa: E402
 
 RULES = ("calque", "metaphor_label", "say_hedge", "thin_evaluation", "katakana_term", "dialogue_period",
-         "narrative_density", "copy_comma_noun", "empty_shikumi", "bare_verb_chain", "project_term")
+         "narrative_density", "copy_comma_noun", "bare_verb_chain", "project_term")
 
 
 def fake_finding(rule="calque"):

@@ -297,7 +297,7 @@ class RulePenaltyScoreTest(unittest.TestCase):
   negative_parallelism_density は数えません。ダッシュの規則に当たった行は、候補に出さない4行目からも数えます。
   2.2.0 で足した次の規則の候補も数えず、その候補だけのときは100です: calque、metaphor_label、
   say_hedge、thin_evaluation、katakana_term、dialogue_period、narrative_density、copy_comma_noun、
-  empty_shikumi、bare_verb_chain、project_term。
+  bare_verb_chain、project_term。
   --doc-type で候補が変わると、点数も変わります。CI では --fail-on か counts を使ってください。"""
         help_text = parser.format_help()
         self.assertIn(expected, help_text)

@@ -3240,7 +3240,7 @@ _SUMMARY_RULES = ("negative_parallelism_density",)
 # 2.2.0 で足した規則。どれも info で、点数を計算する前に除く（この規則の候補だけなら100のまま）。
 # 点数に入れるかは tests/corpus で測って決める
 _V220_RULES = ("calque", "metaphor_label", "say_hedge", "thin_evaluation", "katakana_term", "dialogue_period",
-               "narrative_density", "copy_comma_noun", "empty_shikumi", "bare_verb_chain", "project_term")
+               "narrative_density", "copy_comma_noun", "bare_verb_chain", "project_term")
 _DASH_RULES = ("dash_decoration", "dash_insertion", "dash_list_ending")
 
 
@@ -4173,18 +4173,17 @@ def _v220_word_findings(analysis):
     return out
 
 
-# 2.2.0 の文の形の規則（say_hedge、copy_comma_noun、empty_shikumi、bare_verb_chain）。
+# 2.2.0 の文の形の規則（say_hedge、copy_comma_noun、bare_verb_chain）。
 # 既存の表（_PATTERN_LITERAL_HINTS）とは別に、行ごとに見える文字（_prose_visible_text）を見る。
 # カギ括弧、二重カギ括弧、[ ]、引用符の中は伏せる。引用の行、表、コード、frontmatter、HTML は見ない。
 _SHAPE_RULE_MESSAGES = {
     "say_hedge": "文末の「と言えるでしょう」の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。推量の「でしょう」は残します。ある区分に当たるかを判断する文（印のないもの）は直しません。",
     "copy_comma_noun": "修飾語と短い名詞の間に読点を打って名詞で終える、キャッチコピーの型の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。",
-    "empty_shikumi": "「仕組み」で終える文の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。前後の文が何がどう動くかを説明していれば残します。",
     "bare_verb_chain": "主語も目的語もない動詞を読点で並べて止める文の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。",
 }
-# 文書の元の文字で、4つの規則のどれかに当たりうる所（速さのための絞り込み）。当たった行だけを見える文字で調べる。
+# 文書の元の文字で、3つの規則のどれかに当たりうる所（速さのための絞り込み）。当たった行だけを見える文字で調べる。
 # 見える文字では「*」「_」が消えるので、読点と句点の前の「*」「_」は許す
-_SHAPE_GATE_WORDS = ("えるでしょう", "仕組み", "しくみ")
+_SHAPE_GATE_WORDS = ("えるでしょう",)
 _SHAPE_COMMA_GATE = re.compile(
     r"[ないたのうくぐすつぬぶむるか][*_]*、(?:[^、。\n]{1,14}。|[^。\n]{0,30}、[^、。\n]{0,30}[うくぐすつぬぶむる][*_]*。)")
 _SHAPE_HEADING_MARK = re.compile(r"^\s*#{1,6}(?:\s+|$)|\s+#+\s*$")
@@ -4211,8 +4210,6 @@ _COPY_NOT_MODIFIER = frozenset(("はい", "いいえ", "いい", "また", "ま�
 _COPY_I_NOUNS = frozenset(("思い", "想い", "願い", "違い", "匂い", "出会い", "味わい", "祝い", "誓い", "迷い", "笑い", "住まい",
                            "佇まい", "問い", "扱い", "装い", "幸い"))
 _COPY_NOUN_NOT = re.compile(r"(?:[るたすだてでねよわかぞぜさうくぐつぬぶむずじ]|ない|ません|しい|たい)$|[はがにでの]")
-_EMPTY_SHIKUMI = re.compile(
-    r"(?:仕組み|しくみ)(?:|です|だ|になっています|になっている|になってます|となっています|となっている|を(?:作|つく)(?:る|ります|りました|った|りましょう))。$")
 # 終止形（う段の仮名）か「終止形＋か」で終わる部分
 _BARE_VERB_PART = re.compile(r"[一-龯々ぁ-ゖァ-ヴー]*[うくぐすつぬぶむる]か?$")
 _BARE_VERB_LAST = re.compile(r"[一-龯々ぁ-ゖァ-ヴー]*[うくぐすつぬぶむる]$")
@@ -4283,25 +4280,12 @@ def _bare_verb_chain_sentence(sentence):
             and not _BARE_VERB_NOT_VERB.search(last))
 
 
-def _negation_block_lines(analysis, findings):
-    """negative_parallelism の候補がある行と、その行と同じ段落（ソフトな改行でつながった行）の行の番号。
-
-    negative_parallelism は、段落が複数の行にわたるとき、否定の文の行に1件出す（「努力ではない。」の行）。
-    同じ段落の次の行の「仕組みだ。」にも同じ候補が掛かるとみる。"""
-    lines = {finding["line"] for finding in findings if finding["rule"] == "negative_parallelism"}
-    if lines:
-        for block in analysis["blocks"]:
-            numbers = [row["line"] for row in block["lines"]]
-            if len(numbers) > 1 and not lines.isdisjoint(numbers):
-                lines.update(numbers)
-    return lines
-
-
 def _v220_shape_findings(analysis, findings, doc_type):
-    """say_hedge、copy_comma_noun、empty_shikumi、bare_verb_chain の候補。findings は既存の規則の候補（読むだけ）。
+    """say_hedge、copy_comma_noun、bare_verb_chain の候補。findings は既存の規則の候補（読むだけ。いまは使わない）。
 
     1行に同じ規則の候補は1件まで。copy_comma_noun は promo では文書の中で2回目に当たったものから出す。
-    empty_shikumi は、同じ行（か、ソフトな改行でつながった同じ段落）に negative_parallelism の候補があれば出さない。"""
+    中身のない「仕組み」（empty_shikumi）は、推敲の前後の比べで直せた文がなく、仕組みを説明している文を書き換えたので
+    2.2.0 には入れなかった。"""
     result = []
     source = analysis["text"]
     positions = [match.start() for match in _SHAPE_COMMA_GATE.finditer(source)]
@@ -4315,7 +4299,6 @@ def _v220_shape_findings(analysis, findings, doc_type):
     rows = analysis["lines"]
     starts = [row["start"] for row in rows]
     indexes = sorted({bisect_right(starts, position) - 1 for position in positions})
-    negation_lines = None
     copy_hits = 0
     for index in indexes:
         row = rows[index]
@@ -4337,13 +4320,7 @@ def _v220_shape_findings(analysis, findings, doc_type):
                         found.add("copy_comma_noun")
                 if "bare_verb_chain" not in found and _bare_verb_chain_sentence(sentence):
                     found.add("bare_verb_chain")
-            if "empty_shikumi" not in found and ("仕組" in sentence or "しくみ" in sentence) \
-                    and _EMPTY_SHIKUMI.search(sentence):
-                if negation_lines is None:
-                    negation_lines = _negation_block_lines(analysis, findings)
-                if line_no not in negation_lines:
-                    found.add("empty_shikumi")
-        for rule in ("say_hedge", "copy_comma_noun", "empty_shikumi", "bare_verb_chain"):
+        for rule in ("say_hedge", "copy_comma_noun", "bare_verb_chain"):
             if rule in found:
                 result.append({"rule": rule, "line": line_no, "severity": "info",
                                "message": _SHAPE_RULE_MESSAGES[rule], "snippet": row["raw"].strip()})
@@ -5194,7 +5171,7 @@ _PENALTY_HELP = """rule_penalty_score（--json の目安）:
   negative_parallelism_density は数えません。ダッシュの規則に当たった行は、候補に出さない4行目からも数えます。
   2.2.0 で足した次の規則の候補も数えず、その候補だけのときは100です: calque、metaphor_label、
   say_hedge、thin_evaluation、katakana_term、dialogue_period、narrative_density、copy_comma_noun、
-  empty_shikumi、bare_verb_chain、project_term。
+  bare_verb_chain、project_term。
   --doc-type で候補が変わると、点数も変わります。CI では --fail-on か counts を使ってください。
 """
 

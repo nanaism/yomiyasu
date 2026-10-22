@@ -102,7 +102,7 @@ Claude Code、Codex、CursorをはじめとするAIコーディング環境に�
 
 - 直訳語（機械やシステムが人の動作をする言い方、実物の代わりの場所のたとえ、英語を一語ずつ写した句）は、型で拾うのが主です。プロジェクトの語の一覧（`.yomiyasu-words/` の `allow.txt` と `flag.txt`）の役目は、誤った印を外すことと、プロジェクトの事情を足すことです。
 - 印はどれも info です。印に当たっただけでは直さず、文脈を見て、誰が何をどうするかを書き直します。印のついた語を別の語に差し替えるだけの直しはしません。書き直しに要る名前や動作が原文にないときは、本文を残して書き手に確かめます。
-- 印をつける型は、直訳語（`calque`）、見出しと1行目の比喩ラベル（`metaphor_label`）、「〜と言えるでしょう」（`say_hedge`）、中身の薄い評価の文（`thin_evaluation`）、意味の薄いカタカナ語（`katakana_term`）、キャッチコピーの読点（`copy_comma_noun`）、中身のない「仕組み」（`empty_shikumi`）、主語も目的語もない他動詞の並び（`bare_verb_chain`）、語の一覧の flag.txt の語（`project_term`）です。台詞の句点（`dialogue_period`）は台詞・脚本、一人称と数字（`narrative_density`）はエッセイを指定したときだけ、文書に1件の印として出します。
+- 印をつける型は、直訳語（`calque`）、見出しと1行目の比喩ラベル（`metaphor_label`）、「〜と言えるでしょう」（`say_hedge`）、中身の薄い評価の文（`thin_evaluation`）、意味の薄いカタカナ語（`katakana_term`）、キャッチコピーの読点（`copy_comma_noun`）、主語も目的語もない他動詞の並び（`bare_verb_chain`）、語の一覧の flag.txt の語（`project_term`）です。台詞の句点（`dialogue_period`）は台詞・脚本、一人称と数字（`narrative_density`）はエッセイを指定したときだけ、文書に1件の印として出します。
 - 文書の種類に台詞・脚本（`script`）を足しました。台詞の最後の「。」だけを外し、台詞の口調と言い回しは直しません。
 
 ## Before → After 例
