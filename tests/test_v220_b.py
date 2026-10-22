@@ -154,7 +154,7 @@ class NarrativeDensityTest(unittest.TestCase):
         density = (numbers + bullets) * 1000 / chars
         self.assertEqual(hit["message"], "読み物の一人称と数字（地の文{:,}字、一人称は千字あたり0.0、数字と箇条書きは千字あたり{:.1f}）"
                                          "の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。"
-                                         .format(chars, density))
+                                         "一人称と体験は足さず、数字も消しません。".format(chars, density))
 
     def test_keeps_first_person_essays(self):
         chars, first_person, numbers, bullets, _ = yomiyasu_lint._narrative_counts(

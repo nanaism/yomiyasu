@@ -17,6 +17,8 @@ import yomiyasu_lint  # noqa: E402
 
 SHAPE_RULES = ("say_hedge", "copy_comma_noun", "empty_shikumi", "bare_verb_chain")
 COMMON_TAIL = "文脈を見て、誰が何をどうするかを書き直すか確かめてください。"
+# 印に当たったときに守ることの1文（推敲の測りで、守らない書き直しが出た規則だけ）
+HANDLING = {"say_hedge": "推量の「でしょう」は残します。", "empty_shikumi": "前後の文が何がどう動くかを説明していれば残します。"}
 
 # 所有者の類例（指示書「作業を始める前に」）の5〜8と、当たる規則
 OWNER_SEEDS = (
@@ -277,12 +279,13 @@ class CommonTest(unittest.TestCase):
                 self.assertEqual(sorted(finding), ["line", "message", "rule", "severity", "snippet"])
                 self.assertEqual((finding["rule"], finding["line"], finding["severity"], finding["snippet"]),
                                  (rule, 3, "info", line))
-                self.assertTrue(finding["message"].endswith("の候補です。" + COMMON_TAIL), finding["message"])
+                self.assertTrue(finding["message"].endswith("の候補です。" + COMMON_TAIL + HANDLING.get(rule, "")),
+                                finding["message"])
 
     def test_messages_name_no_replacement(self):
         for rule, message in yomiyasu_lint._SHAPE_RULE_MESSAGES.items():
             with self.subTest(rule=rule):
-                self.assertTrue(message.endswith("の候補です。" + COMMON_TAIL))
+                self.assertTrue(message.endswith("の候補です。" + COMMON_TAIL + HANDLING.get(rule, "")))
                 self.assertNotIn("に替え", message)
                 self.assertNotIn("に置き換え", message)
 
