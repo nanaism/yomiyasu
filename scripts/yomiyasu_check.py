@@ -433,28 +433,44 @@ def _busy_on_windows():
     return os.name == "nt"
 
 
+# Windows で、入れ替えの途中とみなして読み直すときに待つ時間の、1つのプロセスでの合計の上限（秒）。ほかの OS ユーザーが
+# 作った記録のように、ずっと読めないファイルが並んでも、フックや一覧が長く止まらないようにする
+_SETTLE_BUDGET = [1.0]
+
+
+def _settle_wait(path, attempt, opening=False):
+    """読み直す前に待つ。待たずに例外を出すべきとき（POSIX、最後の回、開こうとした名前がフォルダ、待つ時間の合計を
+    使い切った）は False。Windows ではフォルダを開いても PermissionError になるので、opening のときは名前がフォルダかを見る。"""
+    if not _busy_on_windows() or attempt == _REPLACE_TRIES - 1 or (opening and os.path.isdir(path)):
+        return False
+    if _SETTLE_BUDGET[0] < _REPLACE_WAIT:
+        return False
+    _SETTLE_BUDGET[0] -= _REPLACE_WAIT
+    time.sleep(_REPLACE_WAIT)
+    return True
+
+
 def _read_bytes(path):
     """ファイルの中身を読む。Windows で PermissionError になったときは、ほかのプロセスが入れ替えている途中とみなして、
-    50ミリ秒待って5回まで読み直す（POSIX では読み直さない）。"""
+    50ミリ秒待って5回まで読み直す（POSIX では読み直さない。待つ時間の合計は _SETTLE_BUDGET まで）。"""
     for attempt in range(_REPLACE_TRIES):
         try:
             with open(path, "rb") as handle:
                 return handle.read()
         except PermissionError:
-            if not _busy_on_windows() or attempt == _REPLACE_TRIES - 1:
+            if not _settle_wait(path, attempt, opening=True):
                 raise
-            time.sleep(_REPLACE_WAIT)
 
 
 def _stat_settled(path):
-    """os.stat。Windows で PermissionError になったときは、50ミリ秒待って5回まで確かめ直す（POSIX では確かめ直さない）。"""
+    """os.stat。Windows で PermissionError になったときは、50ミリ秒待って5回まで確かめ直す（POSIX では確かめ直さない。
+    待つ時間の合計は _SETTLE_BUDGET まで）。"""
     for attempt in range(_REPLACE_TRIES):
         try:
             return os.stat(path)
         except PermissionError:
-            if not _busy_on_windows() or attempt == _REPLACE_TRIES - 1:
+            if not _settle_wait(path, attempt):
                 raise
-            time.sleep(_REPLACE_WAIT)
 
 
 def _replace(source, target):
@@ -4241,12 +4257,18 @@ class _ArmedLock(object):
                     raise
                 return self
             except FileExistsError:
+                denied = 0  # ほかのプロセスがロックを持っている（拒まれ続けているのではない）
                 try:
                     if time.time() - os.stat(self.path).st_mtime > _ARMED_STALE:
                         os.unlink(self.path)
                         continue
                 except FileNotFoundError:
                     continue
+                except PermissionError:
+                    # Windows では、ほかのプロセスが先に消している途中の古いロックに stat や unlink をすると
+                    # PermissionError になる。使用中とみなして待ち直す。POSIX ではそのまま出す
+                    if not _busy_on_windows():
+                        raise
             except PermissionError:
                 # Windows では、ほかのプロセスが消している途中（削除の保留中）のロックの名前には、O_EXCL で作れず
                 # PermissionError になる。使用中とみなして、同じ締切まで待ち直す。名前がないのに続けて拒まれるときは、
@@ -4258,6 +4280,8 @@ class _ArmedLock(object):
                     denied += 1
                     if denied >= _REPLACE_TRIES:
                         raise
+                else:
+                    denied = 0  # 名前がある（消している途中のロック）。続けて拒まれた数はここで切る
             time.sleep(min(0.02, max(0, self.deadline - time.monotonic())))
         raise TimeoutError("armed_lock")
 
@@ -4442,7 +4466,7 @@ def _managed_run_count(run_dir):
             info = _stat_settled(os.path.join(run_dir, "attempt-{}.json".format(number)))
         except PermissionError:
             # Windows で、ほかの run が記録に入れ替えている途中で確かめられない。回数を使ったものとして数え、
-            # 上限を超えて run を動かさない（POSIX ではここに来ない。下の OSError と同じく数えない）
+            # 上限を超えて run を動かさない（POSIX では待ち直さずにここに来て、今までどおり数えない）
             if _busy_on_windows():
                 count += 1
             continue

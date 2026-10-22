@@ -335,6 +335,10 @@ class ClosedOutputTests(unittest.TestCase):
 
 class _StateCase(unittest.TestCase):
     def setUp(self):
+        # 読み直しで待つ時間の合計の上限は、試験ごとに元に戻す
+        budget = mock.patch.object(check, "_SETTLE_BUDGET", [1.0])
+        budget.start()
+        self.addCleanup(budget.stop)
         folder = tempfile.TemporaryDirectory(prefix="yomiyasu-v213-tools-")
         self.addCleanup(folder.cleanup)
         self.state = Path(folder.name) / "state"
@@ -411,6 +415,55 @@ class ArmedLockTests(_StateCase):
         self.assertEqual(len(calls), check._REPLACE_TRIES)
         self.assertLess(time.monotonic() - begin, 2)
 
+    def test_windows_contention_does_not_add_up_refusals(self):
+        """拒否（消し終わった直後）と使用中（ほかのプロセスが取った）が交互に続いても、拒否の数は続けた分だけ数え、
+        締切の前にロックを取れる。"""
+        real_open = os.open
+        calls = []
+
+        def fake(path, flags, *args):
+            if str(path) == str(self.lock) and len(calls) < check._REPLACE_TRIES * 3:
+                calls.append(path)
+                if len(calls) % 2:
+                    raise PermissionError(errno.EACCES, "Permission denied", str(path))
+                raise FileExistsError(errno.EEXIST, "File exists", str(path))
+            return real_open(path, flags, *args)
+        with mock.patch.object(os, "open", fake), mock.patch.object(os, "name", "nt"):
+            with check._ArmedLock(str(self.state), self.run_id) as lock:
+                self.assertIsNotNone(lock.identity)
+        self.assertEqual(len(calls), check._REPLACE_TRIES * 3)
+
+    def test_windows_waits_when_a_stale_lock_is_being_deleted(self):
+        """古いロックを消そうとして、ほかのプロセスが先に消している途中（PermissionError）でも、待ち直して取る。"""
+        self.lock.write_bytes(b"")
+        old = time.time() - check._ARMED_STALE - 60
+        os.utime(str(self.lock), (old, old))
+        real_unlink = os.unlink
+        denied = []
+
+        def fake_unlink(path, *args, **kwargs):
+            if str(path) == str(self.lock) and not denied:
+                denied.append(path)
+                real_unlink(path)  # ほかのプロセスが消し終える
+                raise PermissionError(errno.EACCES, "Permission denied", str(path))
+            return real_unlink(path, *args, **kwargs)
+        with mock.patch.object(os, "unlink", fake_unlink), mock.patch.object(os, "name", "nt"):
+            with check._ArmedLock(str(self.state), self.run_id) as lock:
+                self.assertIsNotNone(lock.identity)
+        self.assertEqual(len(denied), 1)
+
+    def test_posix_stale_lock_permission_error_is_raised(self):
+        self.lock.write_bytes(b"")
+        old = time.time() - check._ARMED_STALE - 60
+        os.utime(str(self.lock), (old, old))
+
+        def fake_unlink(path, *args, **kwargs):
+            raise PermissionError(errno.EACCES, "Permission denied", str(path))
+        with mock.patch.object(os, "unlink", fake_unlink), mock.patch.object(os, "name", "posix"):
+            with self.assertRaises(PermissionError):
+                with check._ArmedLock(str(self.state), self.run_id):
+                    pass
+
     def test_existing_lock_still_waits_and_times_out(self):
         self.lock.write_bytes(b"")
         lock = check._ArmedLock(str(self.state), self.run_id, budget=time.monotonic() + 0.1)
@@ -460,6 +513,41 @@ class RecordReadTests(_StateCase):
             self.assertEqual(check._read_record_status(str(path)), ("bad", None))
         self.assertEqual(len(calls), 1)
 
+    def test_unreadable_records_share_one_wait_budget(self):
+        """ずっと読めない記録が並んでも、読み直しで待つ時間の合計は _SETTLE_BUDGET で止まる（フックが長く止まらない）。"""
+        paths = []
+        for index in range(20):
+            path = self.state / "armed" / ("20261022T0000{:02d}Z-0123456789ab.json".format(index))
+            path.write_bytes(b"{}")
+            paths.append(str(path))
+        real_open = open
+
+        def fake(file, *args, **kwargs):
+            if str(file) in paths:
+                raise PermissionError(errno.EACCES, "Permission denied", str(file))
+            return real_open(file, *args, **kwargs)
+        begin = time.monotonic()
+        with mock.patch.object(check, "open", fake, create=True), mock.patch.object(os, "name", "nt"):
+            for path in paths:
+                self.assertEqual(check._read_record_status(path), ("bad", None))
+        self.assertLess(time.monotonic() - begin, 1.5)
+        self.assertLess(check._SETTLE_BUDGET[0], check._REPLACE_WAIT)
+
+    def test_folder_names_are_not_read_again(self):
+        folder = self.state / "armed" / "20261022T000099Z-0123456789ab.json"
+        folder.mkdir()
+        real_open = open
+        calls = []
+
+        def fake(file, *args, **kwargs):
+            if str(file) == str(folder):
+                calls.append(file)
+                raise PermissionError(errno.EACCES, "Permission denied", str(file))
+            return real_open(file, *args, **kwargs)
+        with mock.patch.object(check, "open", fake, create=True), mock.patch.object(os, "name", "nt"):
+            self.assertEqual(check._read_record_status(str(folder)), ("bad", None))
+        self.assertEqual(len(calls), 1)
+
     def test_armed_entries_keep_a_registration_being_replaced(self):
         """登録を読み飛ばすと、run は登録のない原稿として検査し、上限を超えて動く。Windows では読み直して数える。"""
         path = self.write_record()
@@ -475,6 +563,9 @@ class ManagedRunCountTests(unittest.TestCase):
     """登録の run の回数。Windows で記録を確かめられないときは、使った回として数える。POSIX は今までどおり。"""
 
     def setUp(self):
+        budget = mock.patch.object(check, "_SETTLE_BUDGET", [1.0])
+        budget.start()
+        self.addCleanup(budget.stop)
         folder = tempfile.TemporaryDirectory(prefix="yomiyasu-v213-tools-")
         self.addCleanup(folder.cleanup)
         self.run_dir = Path(folder.name)
