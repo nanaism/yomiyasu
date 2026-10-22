@@ -61,6 +61,10 @@ class CalqueTest(unittest.TestCase):
                      "テスト一式は pytest で通します。\n", "外部ライブラリは足さないでください。\n"):
             with self.subTest(text=text):
                 self.assertNotIn("calque", rules_of(text))
+        for text in ("このリンターは、推敲で見落としやすい表現を拾うための補助です。\n",
+                     "この検査は、表記ゆれをすべて拾います。\n", "設定のフックは、サブエージェントの呼び出しにも効く。\n"):
+            with self.subTest(text=text):
+                self.assertNotIn("calque", rules_of(text))
         self.assertIn("calque", rules_of("取りこぼした通知は、翌朝の再送ジョブが拾います。\n"))
 
 
