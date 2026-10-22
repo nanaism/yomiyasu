@@ -4169,9 +4169,12 @@ _SHAPE_QUOTE_MARKS = ("「", "『", "[", "“", '"')
 _SHAPE_CURLY_QUOTED = re.compile(r"“[^“”]*”|\"[^\"]*\"")
 _SHAPE_SENTENCE = re.compile(r"[^。！？!?]+(?:[。！？!?]+|$)")
 # 文末の「と言えるでしょう」。問いの「でしょうか」は含めない
-_SAY_HEDGE = re.compile(r"(.?)と(?:言|い)えるでしょう[。！!]?$")
+_SAY_HEDGE = re.compile(r"(.{0,4})と(?:言|い)えるでしょう[。！!]?$")
 # 直前が体言（漢字かカタカナで終わる）なら、ある語に当たるかの判断（「契約と言えるでしょう」）として出さない
 _SAY_HEDGE_NOUN_END = re.compile(r"[一-龯々〆ヵヶァ-ヴーｦ-ﾟA-Za-z0-9０-９Ａ-Ｚａ-ｚ]")
+# ただし、形容動詞の語幹（「有効」「効果的」など）のあとは評価のぼかしとして出す（「有効と言えるでしょう」）
+_SAY_HEDGE_NA_ADJECTIVE = re.compile(r"(?:的|重要|有効|必要|適切|十分|妥当|有用|大切|確実|可能|重大|有益|顕著|明確|"
+                                     r"不可欠|理想|最適|容易|困難|安全|安心)$")
 # 「〜に当たると言えるでしょう」も、ある区分に当たるかの判断として出さない
 _SAY_HEDGE_JUDGE = re.compile(r"(?:に|へ)(?:当た|あた)る(?:と(?:言|い)えるでしょう)|に該当する(?:と(?:言|い)えるでしょう)")
 # 「な、」「い、」「た、」「の、」のあとに6字以下の名詞（か名詞＋を）で「。」。名詞は漢字、仮名、英数字だけ
@@ -4214,7 +4217,10 @@ def _say_hedge_sentence(sentence):
     match = _SAY_HEDGE.search(sentence)
     if not match:
         return False
-    if _SAY_HEDGE_NOUN_END.match(match.group(1)) or _SAY_HEDGE_JUDGE.search(sentence):
+    head = match.group(1)
+    if _SAY_HEDGE_JUDGE.search(sentence):
+        return False
+    if head and _SAY_HEDGE_NOUN_END.match(head[-1]) and not _SAY_HEDGE_NA_ADJECTIVE.search(head):
         return False
     return True
 

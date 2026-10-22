@@ -186,6 +186,19 @@ class SayHedgeTest(RuleTestBase):
         self.assertEqual(rules_of("前年より問い合わせが減りました。この結果は、品質の向上につながったと言えるでしょう。\n"),
                          ["say_hedge"])
 
+    def test_adjective_stems_are_hedges_but_noun_judgements_are_not(self):
+        """形容動詞の語幹（「有効」「効果的」）のあとの「と言えるでしょう」は印をつけ、名詞の判断（「契約」）にはつけない。"""
+        for text in ("新しい手順は、問い合わせの多い部署で有効と言えるでしょう。\n",
+                     "週ごとの見直しは、小さなチームにとって効果的と言えるでしょう。\n",
+                     "鍵を分けて保管するのは、復旧の面でも重要と言えるでしょう。\n"):
+            with self.subTest(text=text):
+                self.assertEqual(rules_of(text), ["say_hedge"])
+        for text in ("この覚え書きは、法の上では契約と言えるでしょう。\n",
+                     "今回の遅れは、取り決めの違反に当たると言えるでしょう。\n",
+                     "これは一つの効果と言えるでしょう。\n"):
+            with self.subTest(text=text):
+                self.assertEqual(rules_of(text), [])
+
 
 class CopyCommaNounTest(RuleTestBase):
     rule, fix, keep = "copy_comma_noun", COPY_FIX, COPY_KEEP
