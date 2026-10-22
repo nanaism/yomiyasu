@@ -1,12 +1,12 @@
 {
   "description": "指定しない（--doc-type と --reader を付けない）ときの lint、diff、check の出力の要約。tests/test_v200_doc_type.py の UnchangedOutputTest が今の出力と照らす（種類と読者を指定しない利用者の出力を、知らないうちに変えないための見張り）。行ごとに出どころが違う。lint の行は種類と読者のオプション（--doc-type と --reader）を入れる前の作業ツリー（45a5885 に check の固めを入れたもの）の出力で、作り直していない（指定しないときの lint の出力が、そのオプションを入れる前と1字も違わないことを見る）。diff と check の行は、diff の詰め（文体の硬化、勢い、否定対比の逆転、気持ちの語の検査と、意味が変わる恐れの判定の詰め）とその直し（反証で見つけた例の直しを3回と、そのあとの数値と否定対比の判定の直し）のあとの作業ツリーの出力で作り直した。オプションを入れる前の出力とは違い、そのあとの変更で出力が変わらないことを見る（オプションを入れる前からの変化と、終了コードが変わった組は updates）。行ごとの出どころは generated_by、source_commit、source_sha256 の lint、diff、check。値は、終了コード、標準出力、標準エラー（check は一時の状態フォルダと実行IDを伏せたもの、JSON は context を除いたもの）をつないだ SHA-256 の先頭16字。今の版の文字列が tool_version の値と違うときは、tool_version の値に読み替えてから数える。",
   "generated_by": {
-    "lint": "種類と読者のオプション（--doc-type と --reader）を入れる前に tests/test_v200_doc_type.py の unchanged_lint() で作った値。作り直していない（作り直すたびに、今の unchanged_lint() と1字も違わないことを確かめる）",
+    "lint": "種類と読者のオプション（--doc-type と --reader）を入れる前に tests/test_v200_doc_type.py の unchanged_lint() で作った値。作り直していない（作り直すたびに、今の unchanged_lint() と1字も違わないことを確かめる）。ただし 2.2.0 で、新しい info の規則（直訳語の calque）の候補が出る raw_ai/01_tech_arch_sonnet_casual.md の1本だけは、その5通り（plain、strict、fail_error、json、stdin）を unchanged_lint() で作り直した（updates）",
     "diff": "tests/test_v200_doc_type.py の unchanged_diff()。状態の語の消えと約束・因果の検出追加に合わせて再計測（評価と一般化の足しの検出は外した）。lint の要約は旧版のまま。",
     "check": "tests/test_v200_doc_type.py の unchanged_check()。状態の語の消えと約束・因果の検出追加に合わせて再計測（評価と一般化の足しの検出は外した）。lint の要約は旧版のまま。"
   },
   "source_commit": {
-    "lint": "45a5885（scripts に未コミットの変更あり: check の固め）",
+    "lint": "45a5885（scripts に未コミットの変更あり: check の固め）。raw_ai/01_tech_arch_sonnet_casual.md の行だけは 2.2.0 の規則を入れた作業ツリー",
     "diff": "状態の語の消えと書き足しの検出を追加し、そのあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにし、推量の印が同じ強さの慎重な言い方に替わっただけの文を意味が変わる恐れの候補から外した作業ツリー（既存9キーと既存候補は変更なし）。",
     "check": "状態の語の消えと書き足しの検出、見直し候補の行と直した箇所の節を追加し、lint の rule_penalty_score の式を直したあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにし、推量の印が同じ強さの慎重な言い方に替わっただけの文を意味が変わる恐れの候補から外した作業ツリー（既存9キーと既存候補は変更なし）。"
   },
@@ -745,11 +745,11 @@
       "diff_endings": "74d4f4a04b52389a"
     },
     "raw_ai/01_tech_arch_sonnet_casual.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "61e331b819b54d3d",
-      "stdin": "10fa74b964043101",
+      "plain": "b91edc766628a8a6",
+      "strict": "b91edc766628a8a6",
+      "fail_error": "b91edc766628a8a6",
+      "json": "f6b90ed5aef9fb78",
+      "stdin": "b91edc766628a8a6",
       "diff_endings": "058c7f30e832ec16"
     },
     "raw_ai/01_tech_arch_sonnet_default.md": {
@@ -2293,15 +2293,15 @@
   },
   "check": {
     "raw_ai/01_tech_arch_sonnet_casual.md|yomiyasu_rewritten/01_tech_arch_sonnet_casual.md": {
-      "run": "b4ed6aa953233ad1",
+      "run": "0fac70e7369191fc",
       "verify": "dfb2123bdc1b4f8a",
       "replay": "5e7c8249603ef7d8",
-      "rerun": "248aac26d51be883",
-      "compose": "f36f9b97803a4268",
-      "stdin": "fcdc24559d1b9f22",
-      "fail_on": "b4ed6aa953233ad1",
-      "no_record": "812a1ed402dbe8b1",
-      "json": "624c8551ece008be"
+      "rerun": "823f66e5d7dad468",
+      "compose": "37a05b419e69f98c",
+      "stdin": "8f2adfd22f079590",
+      "fail_on": "0fac70e7369191fc",
+      "no_record": "70c254abd583e26d",
+      "json": "8ebe3ce38d3fc574"
     },
     "blacklist_ai/01_tech_arch_sonnet_casual.md|yomiyasu_rewritten/01_tech_arch_sonnet_casual_bl.md": {
       "run": "787825acf38bdc49",
@@ -3073,7 +3073,7 @@
       "verify": "9a0505afe5eee6b8"
     },
     "raw_ai/01_tech_arch_sonnet_casual.md|raw_ai/01_tech_arch_sonnet_default.md": {
-      "run": "e099f052c5863ce3",
+      "run": "5f7a9debf23d0ac0",
       "verify": "6c06e8d8ab046366"
     },
     "raw_ai/01_tech_arch_sonnet_default.md|raw_ai/01_tech_arch_sonnet_formal.md": {
@@ -3220,6 +3220,7 @@
     "2026-10-20 v2.1.1 で、diff の「構造」の見直し候補（structure）に見出しの変化（見出しの数の増減、太字の行や本文の行を見出しにした、見出しを本文の行にした、見出しの段を変えた）の文を足したときの作り直し: unchanged_diff() と unchanged_check() で diff の136組と check の136組を作り直して比べ、値が変わったのは diff の16組（80行）と check の16組（28行）だけだった。推敲の48組では2組（blacklist_ai/02_incident_report_sonnet_casual → yomiyasu_rewritten/02_incident_report_sonnet_casual_bl と blacklist_ai/02_incident_report_sonnet_formal → yomiyasu_rewritten/02_incident_report_sonnet_formal_bl）で、どちらも太字の行を ## の見出しにした推敲（見出しの数 1 → 4 と 0 → 5）。この2組は diff の5通りと check の7通りの行が変わった。別の文書を並べた14組は、見出しの数の違う文書を並べた組で「見出しの数が変わった」の1文が足され、diff の5通りと check の run の行が変わった。意味が変わる恐れ、--fail-on の数、終了コード、lint の行は1字も変わらなかった。source_sha256 は作り直していない。",
     "2026-10-20 v2.1.1 で、check run の人が読む出力の3行目のあとに、候補があるときだけ候補の短い一覧（「lint の候補: …」「diff の候補: …」など）と「候補の中身は下の節にあります。出力を切らずに読んでください。」の2行を足したときの作り直し（上の見出しの変化の直しを入れた木で作った）: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の136組（376行）で、どれも run の人が読む出力の使い方（run、rerun、compose、stdin、fail_on、no_record）だけだった。推敲の48組では48組（どの組にも候補がある）。verify と verify --replay の出力、run --json の値、lint と diff の行は変わらなかった。",
     "2026-10-20 v2.1.1 の見直しのあとの直しで、check run の頭の候補の一覧を行の順に並べてから3件で切り、資料との照合の候補が節の見直し候補の行だけのときに件数でなく名前（資料に基づく補足など）を出すようにしたときの作り直し: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の26組（31行）で、どれも run の人が読む出力の4行目だけだった（推敲の48組では2組）。diff と lint の行、verify と verify --replay の出力、run --json の値は変わらなかった。",
-    "2026-10-21 v2.1.1 の最後の見直しのあとの直しで、check run の頭の候補の一覧の構造の候補（見出しの変化の文）に、最初に挙げた行の番号を添えて行の順に並べるようにしたときの作り直し: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の2組（12行）で、どれも run の人が読む出力の4行目だけだった（推敲の48組では2組）。diff と lint の行、verify と verify --replay の出力、run --json の値は変わらなかった。"
+    "2026-10-21 v2.1.1 の最後の見直しのあとの直しで、check run の頭の候補の一覧の構造の候補（見出しの変化の文）に、最初に挙げた行の番号を添えて行の順に並べるようにしたときの作り直し: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の2組（12行）で、どれも run の人が読む出力の4行目だけだった（推敲の48組では2組）。diff と lint の行、verify と verify --replay の出力、run --json の値は変わらなかった。",
+    "2026-10-23 v2.2.0 の新しい info の規則（直訳語、見出しの比喩ラベル、「と言えるでしょう」など11の規則）を入れたときの作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、値が変わったのは、直訳語の型1（calque）の候補が L3（送信側は相手の生死を気にせず）に1件出る raw_ai/01_tech_arch_sonnet_casual.md の lint の5通りと、この文書を含む check の2組（推敲の組の compose、fail_on、json、no_record、rerun、run、stdin と、raw_ai の隣の組の run。どれも lint の候補が1件増えた分）だけだった。新しい規則は info なので、lint の終了コード（--strict、--fail-on warn と error を含む）と点数（rule_penalty_score）は変わらなかった。diff の行と、ほかの162本の lint の行は変わらなかった。語の一覧（.yomiyasu-words/）はリポジトリにないので読まれない。"
   ]
 }
