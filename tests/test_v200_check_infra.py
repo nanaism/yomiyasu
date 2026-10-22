@@ -32,8 +32,12 @@ from test_v200_check import (  # noqa: E402
 
 sys.path.insert(0, str(SCRIPTS))
 import yomiyasu_diff  # noqa: E402
+import yomiyasu_lint  # noqa: E402
 
-LIST_NAMES = ("nominalization", "intensifiers", "feelings", "hedges")
+# diff が読む4つの一覧と、2.2.0 で lint が読む2つの一覧（check の記録の tools にはどれも入る）
+DIFF_LIST_NAMES = ("nominalization", "intensifiers", "feelings", "hedges")
+LINT_LIST_NAMES = ("katakana-terms", "thin-evaluation")
+LIST_NAMES = DIFF_LIST_NAMES + LINT_LIST_NAMES
 LIST_KEYS = tuple("references/lists/{}.txt".format(name) for name in LIST_NAMES)
 LISTS = ROOT / "references" / "lists"
 
@@ -285,7 +289,9 @@ class ListHashTest(CheckCase):
         module = load_check_module()
         self.assertEqual(tuple(module._LIST_NAMES), LIST_NAMES)
         # fact-gaps は任意の手がかり。verify の通常判定ではなく replay で比べる。
-        self.assertEqual(set(LIST_NAMES) | {"fact-gaps"}, set(yomiyasu_diff.BUILTIN_LISTS))
+        self.assertEqual(set(DIFF_LIST_NAMES) | {"fact-gaps"}, set(yomiyasu_diff.BUILTIN_LISTS))
+        # 2.2.0: lint の katakana_term と thin_evaluation の一覧
+        self.assertEqual(set(LINT_LIST_NAMES), set(yomiyasu_lint._V220_BUILTIN_LISTS))
 
 
 # ---- spec の F5 の後半: 読めない一覧の知らせと、気持ちの語の一覧の出どころ ----
@@ -412,7 +418,7 @@ class BomListTest(unittest.TestCase):
                                      env=dict(os.environ, PYTHONIOENCODING="utf-8"), timeout=60)
             self.assertEqual(process.returncode, 0, process.stderr.decode("utf-8", "replace"))
             loaded = json.loads(process.stdout.decode("utf-8"))
-            for name in LIST_NAMES:
+            for name in DIFF_LIST_NAMES:
                 with self.subTest(name=name):
                     self.assertEqual(loaded[name]["source"], "references/lists/{}.txt".format(name))
                     builtin = [item if isinstance(item, str) else list(item) for item in yomiyasu_diff.BUILTIN_LISTS[name]]

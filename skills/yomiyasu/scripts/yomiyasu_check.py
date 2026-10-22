@@ -102,10 +102,11 @@ RESULT_FORMAT_VERSION = 1   # run と verify の --json
 _HERE = os.path.dirname(os.path.realpath(__file__))
 # 記録の tools に入れる4本（名前を決めたファイルだけを数える。__pycache__ は数えない）
 _TOOL_NAMES = ("yomiyasu_check.py", "yomiyasu_lint.py", "yomiyasu_diff.py", "markdown_visibility.py")
-# 記録の tools に足す一覧のファイル（diff が scripts の隣の ../references/lists/<名前>.txt から読む。名前は yomiyasu_diff.py の
-# BUILTIN_LISTS と同じ）。ファイルがあるときだけ "references/lists/<名前>.txt" のキーで SHA-256 を入れ、verify で比べて、
+# 記録の tools に足す一覧のファイル（diff と lint が scripts の隣の ../references/lists/<名前>.txt から読む。名前は
+# yomiyasu_diff.py の BUILTIN_LISTS と、yomiyasu_lint.py の _V220_BUILTIN_LISTS（katakana-terms と thin-evaluation。2.2.0）と
+# 同じ）。ファイルがあるときだけ "references/lists/<名前>.txt" のキーで SHA-256 を入れ、verify で比べて、
 # 変わっていれば tool_changed にする（diff の詰めの直し。反証で見つけた例）
-_LIST_NAMES = ("nominalization", "intensifiers", "feelings", "hedges")
+_LIST_NAMES = ("nominalization", "intensifiers", "feelings", "hedges", "katakana-terms", "thin-evaluation")
 _LIST_KEYS = tuple("references/lists/{}.txt".format(name) for name in _LIST_NAMES)
 # 事実の穴の候補の一覧（--fact-gaps を付けた run の記録の tools にだけ入る）。入った記録は、ほかの4つと同じく verify で比べ、
 # 変わっていれば tool_changed にする（前は --replay だけで比べ、通常の verify は executed のままだった）

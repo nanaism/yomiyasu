@@ -556,9 +556,10 @@ class TestK1RecordAndOutput(CheckCase):
         self.assertEqual((record["skill"]["dir"], record["skill"]["skill_md_sha256"], record["skill"]["version"]),
                          (None, None, None))
         # diff の詰めの直し（反証で見つけた例）: scripts の隣の
-        # references/lists/ にある一覧のファイルの SHA-256 も tools に入れる（ルートの scripts の隣には3つともある）
+        # references/lists/ にある一覧のファイルの SHA-256 も tools に入れる（ルートの scripts の隣には一覧がみなある）
         lists = ROOT / "references" / "lists"
-        list_keys = ["references/lists/{}.txt".format(name) for name in ("nominalization", "intensifiers", "feelings", "hedges")]
+        list_keys = ["references/lists/{}.txt".format(name) for name in ("nominalization", "intensifiers", "feelings", "hedges",
+                                                                       "katakana-terms", "thin-evaluation")]
         self.assertEqual(set(record["tools"]), set(TOOL_NAMES) | set(list_keys))
         for name in TOOL_NAMES:
             self.assertEqual(record["tools"][name], {"version": "2.1.3", "sha256": sha256_file(SCRIPTS / name)})
