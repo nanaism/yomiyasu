@@ -63,7 +63,8 @@ class SpecExamples(unittest.TestCase):
 
 class DocTypes(unittest.TestCase):
     def test_types_and_mirrors(self):
-        self.assertEqual(len(visibility.DOC_TYPES), 12)
+        # 2.2.0 で script（台詞・脚本）を足して13
+        self.assertEqual(len(visibility.DOC_TYPES), 13)
         self.assertEqual(visibility.normalize_doc_type(' ＭＡＩＬ '), 'mail')
         for name in ('markdown_visibility.py', 'yomiyasu_lint.py', 'yomiyasu_diff.py', 'yomiyasu_check.py'):
             self.assertEqual((ROOT/'scripts'/name).read_bytes(), (ROOT/'skills/yomiyasu/scripts'/name).read_bytes())

@@ -30,9 +30,11 @@ class BaseTest(unittest.TestCase):
         text = "記録を確認した。\n"
         plain = yomiyasu_lint.lint_text(text)
         for rule in RULES:
+            # 種類を限って当てる規則（dialogue_period と narrative_density）は、その種類を指定して見る
+            doc_type = yomiyasu_lint.DOC_TYPE_ONLY_RULES.get(rule, (None,))[0]
             with self.subTest(rule=rule), \
                     mock.patch.object(yomiyasu_lint, "_v220_word_findings", lambda analysis, r=rule: [fake_finding(r)]):
-                result = yomiyasu_lint.lint_text(text)
+                result = yomiyasu_lint.lint_text(text, doc_type=doc_type)
             self.assertEqual(result["rule_penalty_score"], plain["rule_penalty_score"])
             self.assertEqual(result["rule_penalty_score"], 100)
             self.assertEqual(result["counts"], {"error": 0, "warn": 0, "info": 1})
