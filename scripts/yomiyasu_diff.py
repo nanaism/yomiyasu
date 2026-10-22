@@ -5201,6 +5201,16 @@ def _is_question(text):
     return bool(_QUESTION.search(text)) and not _NOT_QUESTION_KA.search(text)
 
 
+# 台詞の最後の「。」（閉じ括弧の前）。2.2.0 の台詞・脚本の推敲は、この「。」だけを外す
+_FINAL_PERIOD_IN_QUOTE = re.compile(r"。(?=[」』]+$)")
+
+
+def _only_final_period_removed(old, new):
+    """片方の文から台詞の最後の「。」を外すと、もう片方と同じになるか（「見たのか。」→「見たのか」）。"""
+    old, new = old.rstrip(), new.rstrip()
+    return _FINAL_PERIOD_IN_QUOTE.sub("", old) == new or _FINAL_PERIOD_IN_QUOTE.sub("", new) == old
+
+
 def _question_risks(sides, groups):
     """問い（kind sentence_type、subkind question）。組になった文の片方だけが問いの文（文末が ？、?、か。、か？）なら出す。
     句点のない「…か」で終わる文は問いに数えない。"""
@@ -5210,7 +5220,8 @@ def _question_risks(sides, groups):
         for i, j in group["pairs"]:
             old, new = group["old"][i], group["new"][j]
             old_question, new_question = _is_question(old.text), _is_question(new.text)
-            if old_question != new_question:
+            # 台詞の最後の「。」だけを外した組は、問いのまま読めるので出さない
+            if old_question != new_question and not _only_final_period_removed(old.text, new.text):
                 out.append((_group_index(group, new), order, _risk(
                     "sentence_type", "question", old.line, new.line, old.text, new.text,
                     {"old_is_question": old_question, "new_is_question": new_question})))
