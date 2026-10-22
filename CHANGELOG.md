@@ -21,7 +21,7 @@ Windows で見つかった不具合を直すバージョンです。推敲の結
 
 ### 確かめたこと
 
-- 試験一式は、macOS の Python 3.14.5 と 3.9.6 で2,104件ずつ通りました（どちらも、Linux だけで動かす試験2件を飛ばしています）。CI では Linux（3.9 と 3.14）と Windows（windows-latest、Python 3.12.10）で流し、Windows では2,087件が通りました（19件は、POSIX だけの試験や、`sh` や `/dev/stdin` がない環境で飛ばす試験です）。新しい試験は `tests/test_v213_hidden_state.py`、`tests/test_v213_tools.py`、`tests/test_v213_tests.py` です。#41 の状態は `os.mkdir`、`os.path.isdir`、`os.lstat` を差し替えて再現しました。Windows の改行、閉じた出力先、ロックと記録の読み直しは、Windows の CI のほか、macOS でも子プロセスの改行の変換と `os.name` を差し替えて確かめています。
+- 試験一式は、macOS の Python 3.14.5 と 3.9.6 で2,107件ずつ通りました（どちらも、Linux だけで動かす試験2件を飛ばしています）。CI では Linux（3.9 と 3.14）と Windows（windows-latest、Python 3.12.10）で流し、Windows では2,090件が通りました（19件は、POSIX だけの試験や、`sh` や `/dev/stdin` がない環境で飛ばす試験です）。新しい試験は `tests/test_v213_hidden_state.py`、`tests/test_v213_tools.py`、`tests/test_v213_tests.py` です。#41 の状態は `os.mkdir`、`os.path.isdir`、`os.lstat` を差し替えて再現しました。Windows の改行、閉じた出力先、ロックと記録の読み直しは、Windows の CI のほか、macOS でも子プロセスの改行の変換と `os.name` を差し替えて確かめています。
 - 2.1.2 と 2.1.3 の lint、diff、check の CLI を同じ4,099件の入力で動かし、版の文字列をそろえて比べました（Python 3.14.5 と 3.9.6）。標準出力、標準エラー、終了コードは4,099件すべて同じでした。
 
 ## 2.1.2 - 2026-10-22
