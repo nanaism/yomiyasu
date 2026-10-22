@@ -12,7 +12,7 @@ _BUDGETS = {"UserPromptExpansion": 4, "UserPromptSubmit": 4, "PreToolUse": 7,
 _LIMITS = {"max_stop_blocks": 2, "max_runs": 3, "deadline_min": 30}
 _MAX_INPUT = 4 * 1024 * 1024
 _MAX_TEXT = 2 * 1024 * 1024
-_HELP = """使い方: yomiyasu_hook.py --host claude-code|codex [--state-dir DIR]
+_HELP = """使い方: yomiyasu_hook.py --host claude-code|codex [--state-dir DIR] [--words フォルダ | --no-words]
        yomiyasu_hook.py --print-config claude-code|codex
        yomiyasu_hook.py --version
 
@@ -26,6 +26,11 @@ _HELP = """使い方: yomiyasu_hook.py --host claude-code|codex [--state-dir DIR
   --state-dir DIR           登録を探す状態フォルダ。省くと環境変数 YOMIYASU_STATE_DIR（空白だけの値と ${ を
                             含む値は使いません）、git の最上位（なければ作業ディレクトリ）の .yomiyasu/ の順に探します。
                             Claude Code では、環境変数 CLAUDE_PROJECT_DIR のプロジェクトの .yomiyasu/ も探します。
+  --words フォルダ          語の一覧（allow.txt と flag.txt）のフォルダ。フックは lint を動かさないので、続けさせるときや
+                            止めるときに案内する yomiyasu_check.py run のコマンドに --words と絶対パスを付けます。
+                            一覧を読めないときは付けず、check が作った状態フォルダの hook-errors.log に1行残します。
+  --no-words                案内する yomiyasu_check.py run のコマンドに --no-words を付けます（--words と一緒には使えず、
+                            両方あればどちらも付けません）。どちらも省くと、run が自分で .yomiyasu-words/ を探します。
   --print-config claude-code|codex
                             設定に貼る JSON の例（このスクリプトの絶対パス入り）を出します。設定ファイルには書き込みません。
   --version                 版を表示して終わります。
@@ -49,9 +54,12 @@ def _options(argv):
         if key in ("--version", "-h", "--help"):
             result[key] = True
             index += 1
-        elif key in ("--host", "--state-dir", "--print-config") and index + 1 < len(argv):
+        elif key in ("--host", "--state-dir", "--print-config", "--words") and index + 1 < len(argv):
             result[key] = argv[index + 1]
             index += 2
+        elif key == "--no-words":
+            result[key] = True
+            index += 1
         elif key == "--print-config":
             # A missing value is reported by main (exit 2); --print-config is never in a host's settings.
             result[key] = None
@@ -340,24 +348,59 @@ def _notice(entry, cwd):
                 _shown(entry['targets']['source']['path'], cwd), entry['run_id'], _limit_label(entry))
 
 
-def _reason(entry, final, v, cwd):
+class WordsOptionError(ValueError):
+    """--words と --no-words を両方受けた（hook-errors.log には型の名前だけを残す）。"""
+
+
+def _words_arguments(check, options, cwd, states, event):
+    """案内する check run のコマンドに付ける語の一覧の引数（先頭に空白。付けないときは空の文字列）。
+    --words は check と同じ決まりで探して読み、読めなければ付けずに hook-errors.log に残す（終了コードは0のまま）。"""
+    import shlex
+    if '--words' in options and options.get('--no-words'):
+        _error_log(states, event, WordsOptionError('words_and_no_words'))
+        return ''
+    if options.get('--no-words'):
+        return ' --no-words'
+    if '--words' not in options:
+        return ''
+    try:
+        check.resolve_words(cwd, options['--words'])
+    except check.WordsError as error:
+        _error_log(states, event, error)
+        return ''
+    folder = os.path.abspath(os.path.join(cwd, check._home_path(options['--words'])))
+    return ' --words ' + shlex.quote(folder)
+
+
+def _words_note(words):
+    """run の名前だけを書いた案内のあとに足す文（語の一覧の引数があるときだけ）。"""
+    return "yomiyasu_check.py run には{}を付けてください。".format(words + ' ') if words else ''
+
+
+def _no_words():
+    return ''
+
+
+def _reason(entry, final, v, cwd, words=_no_words):
     import shlex
     source = shlex.quote(_shown(entry['targets']['source']['path'], cwd))
     final = shlex.quote(_shown(final, cwd))
     prefix = "yomiyasu（実行ID {}）: ".format(entry['run_id'])
     tail = "実行できない場合は、完了報告の「実行しなかった検査」に書いてください。"
     if v['status'] == 'no_record':
-        message = ("登録した原稿 {} の最終稿 {} に、検査記録がありません。yomiyasu_check.py run --source {} --final {} "
-                   "を実行し、そのあと verify を実行してください。").format(source, final, source, final) + tail
+        # 語の一覧の引数は、案内する run のコマンドの中に付ける
+        message = ("登録した原稿 {} の最終稿 {} に、検査記録がありません。yomiyasu_check.py run --source {} --final {}{} "
+                   "を実行し、そのあと verify を実行してください。").format(source, final, source, final, words()) + tail
     elif v['status'] == 'final_changed':
         message = ("最終稿 {} が、最後に検査した本文と違います（検査のあとに書き換えがありました）。run をもう一度実行し、"
-                   "そのあと verify を実行してください。").format(final) + tail
+                   "そのあと verify を実行してください。").format(final) + _words_note(words()) + tail
     elif v['status'] == 'incomplete':
         names = [name for name in ('lint', 'diff', 'materials') if any(
             p['code'] in ('missing_check', 'check_target') and p['detail'].startswith(name) for p in v['problems'])]
-        message = "検査記録に {} の結果がありません。run をもう一度実行してください。".format('、'.join(names)) + tail
+        message = ("検査記録に {} の結果がありません。run をもう一度実行してください。".format('、'.join(names))
+                   + _words_note(words()) + tail)
     elif v['status'] == 'tool_changed':
-        message = "記録のあとで検査スクリプトが変わりました。run をもう一度実行してください。" + tail
+        message = "記録のあとで検査スクリプトが変わりました。run をもう一度実行してください。" + _words_note(words()) + tail
     else:
         # These verify messages are fixed text, never report excerpts or exception messages.
         message = "最終稿 {}: {}".format(final, v['message'])
@@ -365,7 +408,7 @@ def _reason(entry, final, v, cwd):
         max(0, entry['limits']['max_stop_blocks'] - entry['counters']['stop_blocks']))
 
 
-def _stop(check, state, entry, data, host, session, cwd, started, budget):
+def _stop(check, state, entry, data, host, session, cwd, started, budget, words=_no_words):
     import hashlib
     response = {}
     def change(current):
@@ -410,7 +453,7 @@ def _stop(check, state, entry, data, host, session, cwd, started, budget):
             _log(current, 'Stop', 'unverified:' + reason, started, data.get('stop_hook_active', False))
         else:
             current['counters']['stop_blocks'] += 1
-            response.update(decision='block', reason=_reason(current, final, v, cwd))
+            response.update(decision='block', reason=_reason(current, final, v, cwd, words))
             _log(current, 'Stop', 'block:' + v['status'], started, data.get('stop_hook_active', False))
     check.armed_update(state, entry['run_id'], change, budget)
     return response
@@ -628,7 +671,7 @@ def _related(check, state, entry, body, path, command):
         return False
 
 
-def _pretool(check, state, entry, bodies, host, session, cwd, started, budget):
+def _pretool(check, state, entry, bodies, host, session, cwd, started, budget, words=_no_words):
     response = {}
     def change(current):
         if not _mine(current, host, session):
@@ -664,6 +707,7 @@ def _pretool(check, state, entry, bodies, host, session, cwd, started, budget):
                           "yomiyasu_check.py run と verify を実行し、yomiyasu_check.py export --final {} で書き出した写しを "
                           "--body-file に渡してください。照合できないときは、投稿せずに未確認として利用者に伝えてください。").format(
                               current['run_id'], _shown(current['targets']['source']['path'], cwd), status, _shown(final, cwd))
+                reason += _words_note(words())
             response.update(hookSpecificOutput={'hookEventName': 'PreToolUse', 'permissionDecision': decision,
                                                'permissionDecisionReason': reason})
             _log(current, 'PreToolUse', decision + ':' + status, started)
@@ -673,9 +717,17 @@ def _pretool(check, state, entry, bodies, host, session, cwd, started, budget):
     return response
 
 
-def _process(check, states, invocation, data, host, event, cwd, started, budget, processing, default_place=False):
+def _process(check, states, invocation, data, host, event, cwd, started, budget, processing, default_place=False,
+             options=None):
     import time
     session = data['session_id']
+    # 案内する check run のコマンドに付ける語の一覧の引数（--words、--no-words を受けたときだけ）。案内の文を作るときだけ
+    # 一覧を読み、読めない一覧を hook-errors.log に残すのも1回だけにする
+    found = []
+    def words():
+        if not found:
+            found.append(_words_arguments(check, options or {}, cwd, states, event))
+        return found[0]
     registrations, combined = [], {}
     def remaining():
         if time.monotonic() >= budget:
@@ -695,7 +747,7 @@ def _process(check, states, invocation, data, host, event, cwd, started, budget,
             registrations.append(("yomiyasu の管理: 原稿 {} を登録しました（実行ID {}。上限: 続けさせる2回、run 3回、30分）。"
                                   "この原稿を yomiyasu_check.py run の --source に渡すと、記録がこの登録につながります。"
                                   "返答を終えるときに、最終稿が検査記録と合うかをフックが確かめます。").format(
-                                      _shown(path, cwd), entry['run_id']))
+                                      _shown(path, cwd), entry['run_id']) + _words_note(words()))
     bodies = _bodies(data, cwd) if event == 'PreToolUse' else []
     for state in states:
         remaining()
@@ -730,14 +782,14 @@ def _process(check, states, invocation, data, host, event, cwd, started, budget,
                     _log(current, event, 'ended:session_end', started)
                 check.armed_update(state, entry['run_id'], finish, budget)
             elif event == 'Stop':
-                response = _stop(check, state, entry, data, host, session, cwd, started, budget)
+                response = _stop(check, state, entry, data, host, session, cwd, started, budget, words)
                 for key, value in response.items():
                     if key in ('reason', 'systemMessage') and key in combined:
                         combined[key] += '\n' + value
                     else:
                         combined[key] = value
             elif event == 'PreToolUse' and bodies:
-                response = _pretool(check, state, entry, bodies, host, session, cwd, started, budget)
+                response = _pretool(check, state, entry, bodies, host, session, cwd, started, budget, words)
                 if response:
                     old = combined.get('hookSpecificOutput')
                     new = response['hookSpecificOutput']
@@ -827,7 +879,7 @@ def main(argv=None):
                 with contextlib.redirect_stdout(_SilentStream()), contextlib.redirect_stderr(_SilentStream()):
                     spec.loader.exec_module(check)
                     output = _process(check, states, invocation, data, host, event, cwd, started, budget, processing,
-                                      default_place=not _state_given(options.get('--state-dir')))
+                                      default_place=not _state_given(options.get('--state-dir')), options=options)
             finally:
                 if timer and previous is not None:
                     signal.setitimer(signal.ITIMER_REAL, 0)

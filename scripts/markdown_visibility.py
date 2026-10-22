@@ -5,6 +5,7 @@ not a claim to implement every CommonMark or GFM construct.
 """
 __version__ = "2.1.3"
 
+import os
 import re
 import unicodedata
 from bisect import bisect_left, bisect_right
@@ -807,3 +808,149 @@ def context_label(doc_type, reader):
     return "文書の種類: {}、読者: {}。".format(
         "{}（{}）".format(kinds[doc_type], doc_type) if doc_type else "指定なし",
         "{}（{}）".format(readers[reader], reader) if reader else "指定なし")
+
+
+# ---- 語の一覧（.yomiyasu-words/ の allow.txt と flag.txt）----
+# lint、diff、check、フックの4本が同じ探し方と読み方を使うので、ここに1つだけ置く。
+# 探し方は状態フォルダ（check の state_dir_for）と同じたどり方で、.yomiyasu/ の中は探さない。
+
+WORDS_FOLDER = ".yomiyasu-words"
+# (キーの頭, ファイルの名前)。context.words のキーと出力の行の順もこの順
+WORDS_FILES = (("allow", "allow.txt"), ("flag", "flag.txt"))
+WORDS_MAX_LINES = 10000
+# ないファイル（とフォルダ）は一覧なし。ほかの読めない理由は終了コード2
+_WORDS_ABSENT = (FileNotFoundError, NotADirectoryError)
+
+
+class WordsError(Exception):
+    """語の一覧を読めない（ないフォルダの --words、UTF-8 でない、1万行を超える、開けない）。終了コード2にする。
+    str() は標準エラーにそのまま書ける1行の文（入力の誤りの「Error opening file …」と同じ形）。"""
+
+
+def _words_home(value):
+    """--words の値の頭の ~ を、ホームフォルダに置き換える（check と hook の _home_path と同じ決まり）。"""
+    if isinstance(value, str) and (value == "~" or value[:2] in ("~/", "~" + os.sep)):
+        try:
+            home = os.path.expanduser("~")
+            expanded = os.path.expanduser(value)
+        except Exception:  # pwd を読めない環境など
+            return value
+        if (not home.startswith("~") and os.path.splitdrive(home)[1].strip().strip("/" + os.sep)
+                and not expanded.startswith("~")):
+            return expanded
+    return value
+
+
+def find_words_folder(cwd, option=None):
+    """語の一覧のフォルダの絶対パスか None（フォルダがない）。
+
+    1 option（--words）があれば、そのフォルダ（相対パスは cwd から。ないかフォルダでなければ WordsError）。
+    2 cwd から上へたどり、.git（フォルダでもファイルでもよい）がある最初のフォルダの .yomiyasu-words/。
+    3 git の外では cwd の .yomiyasu-words/。2と3は、フォルダがなければ None。cwd が None（作業ディレクトリを
+    読めない）ときは、2と3を探さずに None、相対パスの option は WordsError。"""
+    if option is not None:
+        value = _words_home(option)
+        if not str(value).strip():
+            raise WordsError("--words に空の値は使えません")
+        if not os.path.isabs(value):
+            if cwd is None:
+                raise WordsError("Error opening folder {}: 作業ディレクトリを読めないため、相対パスを決められません".format(option))
+            value = os.path.join(cwd, value)
+        folder = os.path.abspath(value)
+        if not os.path.isdir(folder):
+            reason = "フォルダではありません" if os.path.exists(folder) else "フォルダがありません"
+            raise WordsError("Error opening folder {}: --words の{}".format(option, reason))
+        return folder
+    if cwd is None:
+        return None
+    cwd = os.path.abspath(cwd)
+    current = cwd
+    while True:
+        if os.path.exists(os.path.join(current, ".git")):
+            folder = os.path.join(current, WORDS_FOLDER)
+            break
+        parent = os.path.dirname(current)
+        if parent == current:
+            folder = os.path.join(cwd, WORDS_FOLDER)
+            break
+        current = parent
+    return folder if os.path.isdir(folder) else None
+
+
+def _words_lines(path, data):
+    """1つのファイルのバイト列を語の並びにする。UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
+    try:
+        data.decode("utf-8")
+    except UnicodeDecodeError as error:
+        before = data[:error.start]
+        line = before.count(b"\n") + before.count(b"\r") - before.count(b"\r\n") + 1
+        raise WordsError("Error opening file {}: UTF-8 として読めません（{}行目）".format(path, line))
+    text = decode_source(data)[0]
+    rows = text.split("\n")
+    if rows and rows[-1] == "":
+        rows.pop()
+    if len(rows) > WORDS_MAX_LINES:
+        raise WordsError("Error opening file {}: 行が多すぎます（{}行目。{:,}行までです）".format(
+            path, WORDS_MAX_LINES + 1, WORDS_MAX_LINES))
+    words = []
+    for row in rows:
+        word = row.strip()
+        if word and not word.startswith("#"):
+            words.append(word)
+    return words
+
+
+def load_words(folder):
+    """フォルダの allow.txt と flag.txt を読む。どちらもないときは None（一覧なし）。
+
+    戻り値は {"path": フォルダ, "allow": 語のタプル, "flag": 語のタプル, "allow_lines": 語の数, "flag_lines": 語の数,
+    "allow_sha256": 中身の SHA-256 か None, "flag_sha256": …}。ないほうのファイルは、語なし、数0、SHA-256 は None。
+    読めないファイルは WordsError。"""
+    import hashlib
+    result = {"path": folder}
+    found = False
+    for key, name in WORDS_FILES:
+        path = os.path.join(folder, name)
+        try:
+            with open(path, "rb") as handle:
+                data = handle.read()
+        except _WORDS_ABSENT:
+            words, digest = [], None
+        except (OSError, ValueError) as error:
+            reason = getattr(error, "strerror", None) or error
+            raise WordsError("Error opening file {}: ファイルを開けません（{}）".format(path, reason))
+        else:
+            found = True
+            words, digest = _words_lines(path, data), hashlib.sha256(data).hexdigest()
+        result[key] = tuple(words)
+        result[key + "_lines"] = len(words)
+        result[key + "_sha256"] = digest
+    return result if found else None
+
+
+def resolve_words(cwd, option=None, disabled=False):
+    """--words と --no-words から語の一覧を決める。一覧を使うときは load_words の値、使わないときは None。
+    disabled（--no-words）なら探さない。cwd は作業ディレクトリ（読めなければ None）。読めない一覧は WordsError。"""
+    if disabled:
+        return None
+    folder = find_words_folder(cwd, option)
+    return load_words(folder) if folder is not None else None
+
+
+def current_directory():
+    """作業ディレクトリか、読めない（消えた）ときは None。"""
+    try:
+        return os.getcwd()
+    except OSError:
+        return None
+
+
+def words_context(words):
+    """JSON の context.words と check の記録の options.words に入れる5つのキー（この順）。"""
+    return {"path": words["path"], "allow_lines": words["allow_lines"], "flag_lines": words["flag_lines"],
+            "allow_sha256": words["allow_sha256"], "flag_sha256": words["flag_sha256"]}
+
+
+def words_label(context):
+    """人が読む出力の「語の一覧: <パス>（allow N語、flag N語）。」。context は words_context の値（読むだけ）。"""
+    return "語の一覧: {}（allow {}語、flag {}語）。".format(context["path"], context["allow_lines"], context["flag_lines"])

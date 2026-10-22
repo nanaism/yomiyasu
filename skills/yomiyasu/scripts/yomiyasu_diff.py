@@ -36,15 +36,18 @@ import unicodedata
 from array import array
 from bisect import bisect_left, bisect_right
 _VISIBILITY_NAMES = ("analyze_markdown", "inline_protected_spans", "unicode_whitespace", "decode_source",
-                     "normalize_doc_type", "normalize_reader", "context_label", "DOC_TYPES")
+                     "normalize_doc_type", "normalize_reader", "context_label", "DOC_TYPES",
+                     "WordsError", "resolve_words", "current_directory", "words_context", "words_label")
 try:
     try:
         if __package__:
             from .markdown_visibility import analyze_markdown, inline_protected_spans, unicode_whitespace, decode_source
             from .markdown_visibility import normalize_doc_type, normalize_reader, context_label, DOC_TYPES
+            from .markdown_visibility import WordsError, resolve_words, current_directory, words_context, words_label
         else:
             from markdown_visibility import analyze_markdown, inline_protected_spans, unicode_whitespace, decode_source
             from markdown_visibility import normalize_doc_type, normalize_reader, context_label, DOC_TYPES
+            from markdown_visibility import WordsError, resolve_words, current_directory, words_context, words_label
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
@@ -87,6 +90,11 @@ try:
         normalize_reader = _visibility_module.normalize_reader
         context_label = _visibility_module.context_label
         DOC_TYPES = _visibility_module.DOC_TYPES
+        WordsError = _visibility_module.WordsError
+        resolve_words = _visibility_module.resolve_words
+        current_directory = _visibility_module.current_directory
+        words_context = _visibility_module.words_context
+        words_label = _visibility_module.words_label
 except ImportError as _import_error:
     # スクリプトとして動かしたときは、main() が内部エラー（終了コード3）として出す。
     # 終了コード1は --fail-on の条件に当たったときだけに使う。
@@ -9594,7 +9602,7 @@ def _new_review_section(d, key):
     return "\n".join(lines)
 
 
-def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_type=None, reader=None) -> dict:
+def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_type=None, reader=None, words=None) -> dict:
     """元の文と書き直した文を比べる（JSON の形式2）。
 
     渡された文字列をそのまま使う（BOM を外したり、改行をそろえたりしない。CLI と check は読むときに decode_source で
@@ -9603,8 +9611,12 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
     （種類と読者を指定しても同じ規則）。事実や仕様を述べる種類（COUNTED_TYPES）だけ、確度の2つ（「場合がある」「ことがある」を
     消した言い切り、断定に「必ず」などを足した書き換え）を --fail-on に数える側に入れる。能力の言い方の消え（ability_lost）は、
     どの種類でも数えない候補（modality_review）。文体の硬化の検査（stiffness）と勢いの検査（tone）は、種類で level を決める
-    （paper の硬化と勢いも参考の info。mail の勢いは絵文字・見出しも review）。mail だけ敬語の度合いも検査する。値は中で正規化し、使えない値は ValueError。"""
+    （paper の硬化と勢いも参考の info。mail の勢いは絵文字・見出しも review）。mail だけ敬語の度合いも検査する。値は中で正規化し、使えない値は ValueError。
+    words は語の一覧（markdown_visibility.resolve_words の値）。渡すと context.words（場所、語の数、SHA-256）に残すだけで、
+    差分と候補は変えない（diff には allow.txt で外す規則がない）。None なら一覧なし。"""
     context = {"doc_type": normalize_doc_type(doc_type), "reader": normalize_reader(reader)}
+    if words is not None:
+        context["words"] = words_context(words)
     try:
         rules = _rule_candidates(orig_raw, rw_raw, stance)
         # 許可・能力の言い方と、選ぶ範囲・因果の言い方は、9キーの分析（_rule_candidates の type_changes）が作った範囲を
@@ -10302,6 +10314,9 @@ def report(d: dict) -> str:
     if context.get("doc_type") is not None or context.get("reader") is not None:
         head.append(context_label(context.get("doc_type"), context.get("reader")) + _REPORT_CONTEXT_TAIL
                     + (_REPORT_COUNTED_TAIL if context.get("doc_type") in COUNTED_TYPES else ""))
+    if isinstance(context.get("words"), dict):
+        # 語の一覧を使ったときだけ（種類と読者の行のあと）
+        head.append(words_label(context["words"]))
     return "\n".join(head) + "\n\n" + "\n\n".join(body) + "\n\n" + _status_line(d, _DETECTOR_STATUS_NOTE_ABOVE)
 
 
@@ -10315,9 +10330,10 @@ def read_text(path):
 _EXIT_CODES = """終了コード:
   0  比べ終わり、--fail-on の条件に当たらなかった（候補の有無によらない）。--endings の正常終了、-h と --version も0
   1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印・確度・状態の語・約束・許可の言い方・選ぶ範囲・因果の恐れが1件以上）
-  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り）
+  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える）、--words と --no-words を一緒に指定した）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
-_USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk] 元の文 書き直した文\n"
+_USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk]\n"
+          "                        [--words フォルダ | --no-words] 元の文 書き直した文\n"
           "       yomiyasu_diff.py --endings ファイル [--stance 立場]\n"
           "       yomiyasu_diff.py --version")
 _FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化、"
@@ -10430,8 +10446,14 @@ def _build_parser():
                               + "、".join("{}（{}）".format(row[0], row[1]) for row in DOC_TYPES) + "。")
     options.add_argument("--reader", metavar="読者",
                          help="想定する読者の知識（値は yomiyasu_lint.py と同じ）。表示と JSON に残すだけで、判定は変わりません。")
+    options.add_argument("--words", metavar="フォルダ",
+                         help="語の一覧（allow.txt と flag.txt）のフォルダ（値は yomiyasu_lint.py と同じ）。省くと、作業ディレクトリから"
+                              "上へたどった git の最上位（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を"
+                              "探します。diff では一覧の場所と語の数を表示と JSON に書きます（差分と候補は変わりません）。")
+    options.add_argument("--no-words", action="store_true",
+                         help="語の一覧を探さず、読みません（--words と一緒には使えません）。")
     options.add_argument("--endings", action="store_true",
-                         help="1つのファイルの文末の種類と、立場の混ざりだけを見ます（--json と --fail-on は使えません）。")
+                         help="1つのファイルの文末の種類と、立場の混ざりだけを見ます（--json、--fail-on、--words、--no-words は使えません）。")
     options.add_argument("--version", action="store_true", help="版を表示して終わります。")
     parser.set_defaults(fail_on=[])
     return parser
@@ -10552,10 +10574,15 @@ def _run(argv):
         if args.doc_type is not None or args.reader is not None:
             # 無視せずに使い方の誤りにする（--json、--fail-on と同じ）
             parser.error("--endings は --doc-type と --reader に対応していません")
+        if args.words is not None or args.no_words:
+            # 文末だけを見るときは語の一覧を探さない。指定は無視せずに使い方の誤りにする（--doc-type と同じ）
+            parser.error("--endings は --words と --no-words に対応していません")
         if len(files) != 1:
             parser.error("--endings のときは、ファイルを1つだけ渡してください（渡されたのは{}つ）".format(len(files)))
     elif len(files) != 2:
         parser.error("元の文と書き直した文の2つのファイルを渡してください（渡されたのは{}つ）".format(len(files)))
+    if args.words is not None and args.no_words:
+        parser.error("--words と --no-words は一緒に使えません")
     if files.count("-") > 1:
         parser.error("標準入力（-）は1か所だけに使えます")
     fail_on, problem = _fail_on(args.fail_on)
@@ -10576,6 +10603,14 @@ def _run(argv):
     except ValueError as error:
         _error(str(error))
         return 2
+    words = None
+    if not args.endings:
+        try:
+            # 語の一覧。読めない一覧は、入力を読む前に2で断る（--endings では探さない）
+            words = resolve_words(current_directory(), args.words, args.no_words)
+        except WordsError as error:
+            _error(str(error))
+            return 2
     texts, infos = [], []
     for path in files:
         text, info, problem = _read_input(path)
@@ -10590,7 +10625,7 @@ def _run(argv):
         code = 0
     else:
         result = diff(texts[0], texts[1], stance, encoding_notes=_encoding_notes(infos[0], infos[1]),
-                      doc_type=doc_type, reader=reader)
+                      doc_type=doc_type, reader=reader, words=words)
         counted = result["fail_on_meaning_risk_count"]
         hit = fail_on and counted > 0
         if args.json:

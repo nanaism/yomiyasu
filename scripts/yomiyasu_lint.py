@@ -23,15 +23,18 @@ from operator import is_
 from typing import List, Dict, Any, Tuple
 _VISIBILITY_NAMES = ("analyze_markdown", "line_visible_text", "range_overlaps_protected",
                      "inline_protected_spans", "unicode_whitespace", "decode_source",
-                     "DOC_TYPES", "READER_LEVELS", "normalize_doc_type", "normalize_reader", "context_label")
+                     "DOC_TYPES", "READER_LEVELS", "normalize_doc_type", "normalize_reader", "context_label",
+                     "WordsError", "resolve_words", "current_directory", "words_context", "words_label")
 try:
     try:
         if __package__:
             from .markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
             from .markdown_visibility import DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader, context_label
+            from .markdown_visibility import WordsError, resolve_words, current_directory, words_context, words_label
         else:
             from markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
             from markdown_visibility import DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader, context_label
+            from markdown_visibility import WordsError, resolve_words, current_directory, words_context, words_label
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
@@ -77,6 +80,11 @@ try:
         normalize_doc_type = _visibility_module.normalize_doc_type
         normalize_reader = _visibility_module.normalize_reader
         context_label = _visibility_module.context_label
+        WordsError = _visibility_module.WordsError
+        resolve_words = _visibility_module.resolve_words
+        current_directory = _visibility_module.current_directory
+        words_context = _visibility_module.words_context
+        words_label = _visibility_module.words_label
 except ImportError as _import_error:
     # スクリプトとして動かしたときは、main() が内部エラー（終了コード3）として出す。
     # 終了コード1は --strict と --fail-on の条件に当たったときだけに使う。
@@ -4445,14 +4453,86 @@ def _v220_document_findings(analysis, doc_type):
     return findings
 
 
+# 語の一覧の allow.txt の語で外す規則（規則ID の順。context.words.allow_removed の並び）
+_ALLOW_RULES = ("calque", "katakana_term", "metaphor_label", "metaphor_verb", "project_term", "slop_vocabulary",
+                "translated_term")
+_LABEL_WORD = re.compile(r"「([^」]+)」")
+_PROJECT_TERM_MESSAGE = ("語の一覧（flag.txt）の語の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。")
+# 英数字で始まるか終わる語は、識別子（snake_case、camelCase、ドットや / を含む語）の一部では数えない
+_WORD_ASCII = re.compile(r"[A-Za-z0-9_]")
+_WORD_BEFORE = r"(?<![A-Za-z0-9_./\\-])"
+_WORD_AFTER = r"(?![A-Za-z0-9_])(?![./\\-][A-Za-z0-9_])"
+
+
+def _hit_words(label, match):
+    """候補の内部の欄 _words の値。message に出る規則の表の語（label。「」があればその中身）、そこから「〜」と英語の
+    注記を除いた語、当たった文字列（前後の空白を除く）を、重ねずにこの順で並べる。"""
+    words = []
+    quoted = _LABEL_WORD.search(label)
+    shown = quoted.group(1) if quoted else label
+    name = re.sub(r"[ 　]*[（(][^）)]*[）)]$", "", shown).strip("〜~ 　")
+    for word in (shown, name, match.group(0).strip() if match is not None else ""):
+        if word and word not in words:
+            words.append(word)
+    return tuple(words)
+
+
+def _flag_pattern(flag):
+    """flag.txt の語を1つの正規表現にする（長い語を先に。英数字の端には識別子の境目を付ける）。語がなければ None。"""
+    words = sorted(set(flag), key=lambda word: (-len(word), word))
+    if not words:
+        return None
+    parts = []
+    for word in words:
+        part = re.escape(word)
+        if _WORD_ASCII.match(word[0]):
+            part = _WORD_BEFORE + part
+        if _WORD_ASCII.match(word[-1]):
+            part += _WORD_AFTER
+        parts.append(part)
+    return re.compile("|".join(parts))
+
+
 def _project_term_findings(analysis, words):
-    """語の一覧の flag.txt の語の候補（project_term）。"""
-    return []
+    """語の一覧の flag.txt の語の候補（project_term）。見える文字（コード、URL、リンク先、HTML、frontmatter を伏せた行）に
+    flag の語が出る行に1件。引用（> の行）とカギ括弧・二重カギ括弧の中は数えない。_words にその行の flag の語。"""
+    if not words or not words.get("flag"):
+        return []
+    pattern = _flag_pattern(words["flag"])
+    found = []
+    for row in analysis["lines"]:
+        if row["kind"] in ("code", "frontmatter", "html_block", "reference_definition", "quote") or row["quote_depth"]:
+            continue
+        visible = _prose_visible_text(analysis, row["line"])
+        if not visible.strip():
+            continue
+        hits = tuple(dict.fromkeys(match.group(0) for match in pattern.finditer(_mask_quoted_segments(visible))))
+        if hits:
+            found.append({"rule": "project_term", "line": row["line"], "severity": "info",
+                          "message": _PROJECT_TERM_MESSAGE, "snippet": row["raw"].strip(), "_words": hits})
+    return found
 
 
 def _apply_words(findings, words):
-    """語の一覧の allow.txt の語で候補を外す。(残った候補, context に入れる words の値か None) を返す。"""
-    return findings, None
+    """語の一覧の allow.txt の語で候補を外す。(残った候補, context に入れる words の値か None) を返す。
+
+    外すのは _ALLOW_RULES の規則の候補で、候補の _words のどれかが allow の語と同じもの。残った候補の順は変えない。
+    words が None（一覧を使わない）なら、候補をそのまま返し、context の値は None。"""
+    if words is None:
+        return findings, None
+    allow = frozenset(words.get("allow") or ())
+    removed = dict((rule, 0) for rule in _ALLOW_RULES)
+    kept = findings
+    if allow:
+        kept = []
+        for finding in findings:
+            if finding["rule"] in removed and any(word in allow for word in finding.get("_words") or ()):
+                removed[finding["rule"]] += 1
+            else:
+                kept.append(finding)
+    context = words_context(words)
+    context["allow_removed"] = removed
+    return kept, context
 
 
 def _public_finding(finding):
@@ -4537,20 +4617,24 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
     def _vocabulary_findings(plain_text, line_no, snippet):
         """AI頻出語彙と比喩動詞。見出しの行にも当てる（文の頭と終わりを前提にした型は当てない）。"""
         # スロップ語彙
+        # 語の一覧の allow.txt で外すため、候補の内部の欄 _words に当たった語（型の語は、型の名前と当たった文字列）を入れる
         if narrowed is None:
-            slop_hits = [word for word in SLOP_WORDS if word in plain_text]
-            slop_hits += [word for word, pattern in SLOP_WORD_PATTERNS if re.search(pattern, plain_text)]
+            slop_hits = [(word, (word,)) for word in SLOP_WORDS if word in plain_text]
+            slop_hits += [(word, _hit_words(word, match)) for word, match in
+                          ((word, re.search(pattern, plain_text)) for word, pattern in SLOP_WORD_PATTERNS) if match]
         else:
-            slop_hits = [word for word in slop_words if word in plain_text]
-            slop_hits += [word for word, pattern, required in slop_patterns
-                          if _may_match_literals(required, plain_text) and re.search(pattern, plain_text)]
-        for word in slop_hits:
+            slop_hits = [(word, (word,)) for word in slop_words if word in plain_text]
+            slop_hits += [(word, _hit_words(word, match)) for word, match in
+                          ((word, re.search(pattern, plain_text) if _may_match_literals(required, plain_text) else None)
+                           for word, pattern, required in slop_patterns) if match]
+        for word, hit in slop_hits:
             findings.append({
                 "rule": "slop_vocabulary",
                 "line": line_no,
                 "severity": "warn",
                 "message": f"AI頻出語彙「{word}」が含まれています。文脈上必要のない比喩や大げさな装飾であれば、ふだん使う自然な表現に置き換えてください。ただし、文字どおりの意味や必要な文脈を担っている場合は残してかまいません。",
-                "snippet": snippet
+                "snippet": snippet,
+                "_words": hit
             })
 
         # 比喩動詞パターン
@@ -4572,7 +4656,8 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
                         "line": line_no,
                         "severity": "warn",
                         "message": f"{desc}が検出されました。不自然な比喩動詞であれば、ふだん使う動詞や客観的な表現に書き直してください。ただし、文字どおりの動作や状態変化を表している場合は無理に言い換える必要はありません。",
-                        "snippet": snippet
+                        "snippet": snippet,
+                        "_words": _hit_words(desc, m)
                     })
                     break
                 continue
@@ -4589,7 +4674,8 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
                     "line": line_no,
                     "severity": "warn",
                     "message": f"{desc}が検出されました。不自然な比喩動詞であれば、ふだん使う動詞や客観的な表現に書き直してください。ただし、文字どおりの動作や状態変化を表している場合は無理に言い換える必要はありません。",
-                    "snippet": snippet
+                    "snippet": snippet,
+                    "_words": _hit_words(desc, m)
                 })
 
     # 3. 語彙・構文パターン検査
@@ -4692,18 +4778,24 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
         _vocabulary_findings(plain_text, line_no, line.strip())
 
         # 英語直訳の語
+        # 同じ desc の型が2つ当たっても1件。当たった文字列は _words にまとめて残す（語の一覧の allow.txt で外すため）
         if narrowed is None:
-            translated_hits = (desc for pattern, desc in TRANSLATED_TERM_PATTERNS if re.search(pattern, plain_text))
+            translated_hits = ((desc, re.search(pattern, plain_text)) for pattern, desc in TRANSLATED_TERM_PATTERNS)
         else:
-            translated_hits = (desc for pattern, desc, required in translated_patterns
-                               if _may_match_literals(required, plain_text) and re.search(pattern, plain_text))
-        for desc in dict.fromkeys(translated_hits):
+            translated_hits = ((desc, re.search(pattern, plain_text) if _may_match_literals(required, plain_text) else None)
+                               for pattern, desc, required in translated_patterns)
+        translated_words = {}
+        for desc, match in translated_hits:
+            if match:
+                translated_words[desc] = translated_words.get(desc, ()) + _hit_words(desc, match)
+        for desc, hit in translated_words.items():
             findings.append({
                 "rule": "translated_term",
                 "line": line_no,
                 "severity": "warn",
                 "message": f"英語の直訳{desc}が検出されました。ソフトウェアの文脈であれば、開発現場で定着した言い方（「バージョン」「リグレッション」「デグレ」など）や具体的な説明を検討してください。ただし、出版物や製品の種類を表す「版」、回帰テストや回帰分析など定着した用語は残してかまいません。",
-                "snippet": line.strip()
+                "snippet": line.strip(),
+                "_words": tuple(dict.fromkeys(hit))
             })
 
         # フィラーパターン（文ごとに見て、同じ型は1行1件）
@@ -4956,13 +5048,21 @@ def _context_line(result):
     return line
 
 
+def _words_line(result):
+    """語の一覧を使ったときの行（種類か読者の4行目のあと。なければ4行目）。使わないときは None。"""
+    words = (result.get("context") or {}).get("words")
+    if not isinstance(words, dict):
+        return None
+    return words_label(words) + "allow で外した候補 {}件。".format(sum((words.get("allow_removed") or {}).values()))
+
+
 def render_report(result: Dict[str, Any]) -> str:
-    """通常の出力の全体（1〜3行目、種類か読者を指定したときの4行目、候補があれば内訳と候補の並び）を返す。
-    末尾に改行は付けない。"""
+    """通常の出力の全体（1〜3行目、種類か読者を指定したときの4行目、語の一覧を使ったときの行、候補があれば内訳と
+    候補の並び）を返す。末尾に改行は付けない。"""
     header = "\n".join(_REPORT_HEADER).format(count=result["candidate_count"])
-    line = _context_line(result)
-    if line is not None:
-        header += "\n" + line
+    for line in (_context_line(result), _words_line(result)):
+        if line is not None:
+            header += "\n" + line
     body = render_findings(result)
     return header + "\n\n" + body if body else header
 
@@ -4982,7 +5082,7 @@ _MEANING_RISK_MESSAGE = (
 _EXIT_CODES = """終了コード:
   0  検査を最後まで実行し、--strict と --fail-on の条件に当たらなかった（候補の有無によらない）。-h と --version も0
   1  --strict か --fail-on の条件に当たった
-  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --fail-on、--doc-type、--reader の値）
+  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --fail-on、--doc-type、--reader の値、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える）、--words と --no-words を一緒に指定した）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 
 
@@ -5062,6 +5162,13 @@ _PENALTY_HELP = """rule_penalty_score（--json の目安）:
 """
 
 
+_WORDS_HELP = ("語の一覧（allow.txt と flag.txt）のフォルダ。省くと、作業ディレクトリから上へたどった git の最上位"
+               "（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を探します。allow.txt の語は "
+               + "、".join(_ALLOW_RULES) + " の候補から外し、flag.txt の語には project_term（info）の印をつけます。"
+               "1行に1語（UTF-8。# で始まる行と空の行は読み飛ばします）。")
+_NO_WORDS_HELP = "語の一覧を探さず、読みません（--words と一緒には使えません）。"
+
+
 def _build_parser():
     parser = _ArgumentParser(
         prog="yomiyasu_lint.py",
@@ -5096,6 +5203,8 @@ def _build_parser():
                               "省くと、すべての規則を当てます（今までどおり）。値: " + _choices(DOC_TYPES) + "。")
     options.add_argument("--reader", metavar="読者",
                          help="想定する読者の知識。表示と JSON に残すだけで、候補は変えません。値: " + _choices(READER_LEVELS) + "。")
+    options.add_argument("--words", metavar="フォルダ", help=_WORDS_HELP)
+    options.add_argument("--no-words", action="store_true", help=_NO_WORDS_HELP)
     options.add_argument("--version", action="store_true", help="版を表示して終わります。")
     parser.set_defaults(conditions=[])
     return parser
@@ -5183,7 +5292,8 @@ def _read_input(path):
 
 
 def _run(argv):
-    args = _build_parser().parse_args(argv)
+    parser = _build_parser()
+    args = parser.parse_args(argv)
     if args.version:
         print(_version_line())
         return 0
@@ -5197,12 +5307,20 @@ def _run(argv):
     except ValueError as error:
         _error(str(error))
         return 2
+    if args.words is not None and args.no_words:
+        parser.error("--words と --no-words は一緒に使えません")
+    try:
+        # 語の一覧。読めない一覧は、入力を読む前に2で断る
+        words = resolve_words(current_directory(), args.words, args.no_words)
+    except WordsError as error:
+        _error(str(error))
+        return 2
     content, problem = _read_input(args.file)
     if problem:
         _error(problem)
         return 2
 
-    result = lint_text(content, doc_type=doc_type, reader=reader)
+    result = lint_text(content, doc_type=doc_type, reader=reader, words=words)
 
     hit = []
     for name in conditions:
