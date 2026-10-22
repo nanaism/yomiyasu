@@ -123,7 +123,7 @@ class CrlfConsoleCase(unittest.TestCase):
         self.root = Path(folder.name)
         site = self.root / "site"
         site.mkdir()
-        (site / "sitecustomize.py").write_text(CRLF_SITECUSTOMIZE, encoding="utf-8")
+        (site / "sitecustomize.py").write_bytes(CRLF_SITECUSTOMIZE.encode("utf-8"))
         self.source = self.root / "source.md"
         self.final = self.root / "final.md"
         self.source.write_bytes(SOURCE_TEXT.encode("utf-8"))
