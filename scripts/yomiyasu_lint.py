@@ -3383,7 +3383,7 @@ _CALQUE_ATTRIBUTIVE_END = ("た", "る", "う", "く", "す", "つ", "む", "ぶ
 # （_CALQUE_ESTABLISHED_SAKI）を除いて拾う。入口、窓口などの実物にもある名前は、同じ文に機械やシステムの語（_CALQUE_TECH）が
 # あるときだけ拾い、実物の場所（駅の入口）と組織の窓口（総務部の窓口）は外す
 # 後ろに漢字やカタカナが続く語（入口付近、窓口業務、口座）は _calque_type2 が外す
-_CALQUE_PLACE_ALWAYS = _V220Lazy(r"受け口|(?:向け|用)の口")
+_CALQUE_PLACE_ALWAYS = _V220Lazy(r"受け口|(?:向け|用)の口|(?:出す|受ける|受け取る|返す|渡す|発行する)口(?=[はがをにでもへと、。]|$)")
 _CALQUE_PLACE_CONTEXT = _V220Lazy(r"(?:入り?口|出口|窓口|玄関口?|関所|関門|裏口|勝手口|抜け道|裏道|通り道|合流地点|合流点"
                                    r"|防波堤|砦)|の口(?=[はがをにでもへと、。]|$)")
 # 実物の場所の入口（駅の入口、正面入口、2番入口）と、組織の窓口（総務部の窓口）
@@ -3472,11 +3472,23 @@ _CALQUE_PHRASES = (
     ("目を保つ", r"目を保"),
     ("テーブルに置く", r"(?:案|提案|選択肢|アイデア|条件|議題)を[^。]{0,6}テーブルに(?:置|載せ|乗せ|出)"),
     ("次のレベルに", r"次のレベルに(?:引き上げ|持っていく|押し上げ|連れて)"),
+    # 2.2.0 の直訳語の対応表から足した形（machine-to-machine、matter、affect、pull、go through、turn）
+    ("機械どうし", r"機械(?:どうし|同士)(?:の|で|が|は|を|に)"),
+    ("ときに効く", r"(?:とき|際|場合|うえ|上)に(?:いちばん|特に|大きく|強く)?効(?:く|き(?=[ぁ-ん])|い[てた])|効くのは、"),
+    ("に響く", r"(?:クライアント|サーバー?|性能|応答|処理|ユーザー|利用者|ダッシュボード|システム|速度|画面|負荷|料金|費用"
+              r"|コスト|請求)(?:の[^。、]{0,6})?に(?:まで|も)?響(?:く|き|い|か)"),
+    ("データを引く", r"(?:データ|ログ|レコード|設定|履歴)を(?:[^。、]{0,6})?引(?:く|き(?![出継続受取])|い|か|け)"),
+    ("書き込みが通る", r"(?:書き込み|読み込み|書き換え|削除|更新|操作|アクセス)(?:も|が|は)(?:[^。、]{0,4})?通(?:る|り(?=[ぁ-ん])|っ|ら|れ)"),
+    ("ターン", r"毎ターン|(?:[0-9０-９一二三]+|各|次の|前の|同じ)ターン"),
 )
 _CALQUE_PHRASE = _V220Lazy("|".join("(?:{})".format(pattern) for _, pattern in _CALQUE_PHRASES))
 _CALQUE_PHRASE_EACH = tuple((name, _V220Lazy(pattern)) for name, pattern in _CALQUE_PHRASES)
 # 「〜から効く」は、薬や冷房の効き方（_KIKU_RE の文字どおりの語が同じ文にある）なら出さない
 _CALQUE_PHRASE_KIKU = "から効く"
+# 対応表から足した句と、型1の同じ動詞（型1が当てた文では句を重ねない）
+_CALQUE_PHRASE_VERB = {"ときに効く": "効く", "に響く": "響く", "データを引く": "引く", "書き込みが通る": "通る"}
+_CALQUE_TURN_CONTEXT = _V220Lazy(r"指示|会話|依頼|プロンプト|モデル|エージェント|LLM|AI|Claude|Codex|ツール|呼び出|呼ぶ|呼び|読み込"
+                                 r"|設定|応答|返答|トークン|コンテキスト|セッション")
 
 # metaphor_label: 見出しか文書の1行目が、記号を除いて8字以下で、「〜の横」「〜のそば」「〜係」「〜番」で終わるか一語だけで、
 # そのラベルが本文のほかの行に出てこないとき。よく使う節の名前（試験で守る）と、関係、一番などは外す
@@ -3724,7 +3736,7 @@ _V220_TRIGGER_LITERALS = tuple((
     # 型3の句（足すものがない、価値を足す、失効が効く、〜から効く は型1の動詞の頭で拾う）
     "秒を取 分を取 時間を取 場所を取 ステップを取 意味を 針を 所有権を持 違いを作 手を伸ば ライブに "
     "同じページ 水を試 透明に ループを ループに 駆動され 配達 大きな絵 インパクトを持 決定を作 "
-    "質問を持 真剣に取 目を保 テーブルに置 テーブルに載 テーブルに乗 テーブルに出 次のレベルに "
+    "質問を持 真剣に取 目を保 テーブルに置 テーブルに載 テーブルに乗 テーブルに出 次のレベルに 機械 ターン "
 ).split())
 _V220_TYPE1_END = _V220_TRIGGER_LITERALS.index("口")
 _V220_TYPE2_END = _V220_TRIGGER_LITERALS.index("秒を取")
@@ -3751,7 +3763,7 @@ def _v220_literal_re(literals):
 # 文ごとに、型の手掛かりの語があるかを先に見る（ない文は型の正規表現を当てない）
 _CALQUE_VERB_STEMS = frozenset(stem for stem, _, _ in _CALQUE_VERB_EACH)     # どれも1字
 _CALQUE_PLACE_HEAD = _v220_literal_re(_V220_TRIGGER_LITERALS[_V220_TYPE1_END:_V220_TYPE2_END])
-_CALQUE_PHRASE_HEAD = _v220_literal_re(_V220_TRIGGER_LITERALS[_V220_TYPE2_END:] + ("効", "足す", "足し"))
+_CALQUE_PHRASE_HEAD = _v220_literal_re(_V220_TRIGGER_LITERALS[_V220_TYPE2_END:] + ("効", "足す", "足し", "響", "引", "通"))
 
 # thin_evaluation: 文が「（20字以下の読点のない前置き）名詞（が|は|も）（程度の副詞）述語（です|だ など）。」の形
 _THIN_PREFIX_MAX = 20
@@ -3987,7 +3999,13 @@ def _calque_type3(sentence, words):
     found = False
     for match in _CALQUE_PHRASE.finditer(sentence):
         name = next((name for name, each in _CALQUE_PHRASE_EACH if each.match(sentence, match.start())), match.group())
-        if name == _CALQUE_PHRASE_KIKU and _KIKU_RE["context"].search(sentence):
+        if name in (_CALQUE_PHRASE_KIKU, "ときに効く") and _KIKU_RE["context"].search(sentence):
+            continue
+        # 型1が同じ動詞で当てた文には、対応表から足した形を重ねない（このキャッシュは、応答の速さに響きます）
+        if _CALQUE_PHRASE_VERB.get(name) in words:
+            continue
+        # 「ターン」は、ゲームの手番でなく、指示や会話、モデルの呼び出しの話のときだけ
+        if name == "ターン" and not _CALQUE_TURN_CONTEXT.search(sentence):
             continue
         words.append(name)
         found = True

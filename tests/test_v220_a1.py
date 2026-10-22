@@ -287,6 +287,20 @@ class OwnerSeedTest(unittest.TestCase):
                          [(1, "calque"), (2, "calque"), (3, "calque"), (4, "katakana_term")])
 
 
+class CalqueTableFormsTest(unittest.TestCase):
+    """2.2.0 の直訳語の対応表から足した形。定着した言い方とゲームの手番には印をつけない。"""
+
+    def test_kept(self):
+        for text in ("この薬は、寝る前に飲むときに効きます。\n", "鐘の音が、谷の全体に響きます。\n",
+                     "定規で線を引きます。\n", "前任者から設定を引き継ぎます。\n", "将棋は、1ターンに1手ずつ指します。\n",
+                     "申請が通りました。\n"):
+            with self.subTest(text=text):
+                self.assertNotIn("calque", rules_of(text))
+
+    def test_mouth_after_a_verb(self):
+        self.assertIn("calque", rules_of("トークンを出す口は、認証サーバーの中にあります。\n"))
+
+
 class CalqueTest(unittest.TestCase):
     def test_fix_sentences_are_marked_with_the_type(self):
         for number, text in CALQUE_FIX:
@@ -370,6 +384,9 @@ class CalqueTest(unittest.TestCase):
             "決定を作る": "来週までに決定を作ります。", "質問を持つ": "質問を持っている人は、後で聞いてください。",
             "真剣に取る": "この指摘を真剣に取ります。", "目を保つ": "応答の時間に目を保ちます。",
             "テーブルに置く": "その案を、もう一度テーブルに載せます。", "次のレベルに": "この改善で、品質を次のレベルに引き上げます。",
+            "機械どうし": "機械どうしの通信は、別の経路に分けます。", "ときに効く": "構成を選ぶときに効くのは、次の二点です。",
+            "に響く": "集計を毎分回すと、全クライアントの応答に響きます。", "データを引く": "検証環境からは、本番のデータを引けません。",
+            "書き込みが通る": "このロールでは、書き込みも通ります。", "ターン": "毎ターン、同じ設定を読み込みます。",
         }
         self.assertEqual(set(phrases), set(name for name, _ in yomiyasu_lint._CALQUE_PHRASES))
         for name, text in phrases.items():
