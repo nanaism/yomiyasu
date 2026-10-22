@@ -1000,6 +1000,7 @@ class TestMainDecisions(LintCase):
                     [sys.executable, "-B", str(LINT)],
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 process.stdout.close()
+                process.stdout = None
                 _, err = process.communicate(text.encode("utf-8"), timeout=30)
                 self.assertEqual(process.returncode, 3, err.decode("utf-8", "replace"))
                 message = err.decode("utf-8")

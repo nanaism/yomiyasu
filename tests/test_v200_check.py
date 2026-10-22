@@ -2256,6 +2256,7 @@ class TestCommonPromises(CheckCase):
                                    cwd=str(self.root), env=self.env(), stdin=subprocess.DEVNULL,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         process.stdout.close()
+        process.stdout = None
         _, err = process.communicate(timeout=30)
         message = err.decode("utf-8")
         self.assertEqual(process.returncode, 3, message)

@@ -1701,6 +1701,7 @@ class TestCliContract(DiffCase):
                 process = subprocess.Popen([sys.executable, "-B", str(DIFF)] + [str(a) for a in args],
                                            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 process.stdout.close()
+                process.stdout = None
                 _, err = process.communicate(timeout=60)
                 message = err.decode("utf-8")
                 self.assertEqual(process.returncode, 3, message)
