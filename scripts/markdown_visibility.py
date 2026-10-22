@@ -750,7 +750,7 @@ def decode_source(data):
 # lint、diff、check の3本が同じ値と名前を使うので、ここに1つだけ置く（ほかは import する）。
 # 公開の名前として読むだけにし、書き換えて使う使い方は約束しない。
 
-# (値, 名前, あわせて読む domains のファイル)。順は種類の表のとおり（formal と promo は、あとから足した）
+# (値, 名前, あわせて読む domains のファイル)。順は種類の表のとおり（formal と promo、2.2.0 の script は、あとから足した）
 DOC_TYPES = (
     ("pr", "PR説明", ("business.md",)),
     ("article", "技術記事", ("tech.md",)),
@@ -764,6 +764,7 @@ DOC_TYPES = (
     ("promo", "紹介記事・宣伝文", ("essay.md", "business.md")),
     ("mail", "メール・チャット", ("business.md",)),
     ("paper", "論文・研究レポート", ("tech.md",)),
+    ("script", "台詞・脚本", ("essay.md",)),
 )
 # (値, 名前)
 READER_LEVELS = (

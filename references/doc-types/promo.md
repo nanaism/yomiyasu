@@ -1,7 +1,7 @@
 # 紹介記事・宣伝文（promo）
 
 あわせて読む: domains/essay.md か domains/business.md（個人の記事は essay.md、店や会社の宣伝文は business.md）
-lint で外す規則: emoji_prohibited、fragment_run
+lint で外す規則: bare_verb_chain、emoji_prohibited、fragment_run、metaphor_label
 
 ## 1. 普通な書き方（直さない）
 

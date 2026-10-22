@@ -1,7 +1,7 @@
 # エッセイ・小説（essay）
 
 あわせて読む: domains/essay.md
-lint で外す規則: なし
+lint で外す規則: bare_verb_chain、metaphor_label
 
 ## 1. 普通な書き方（直さない）
 

@@ -1,7 +1,7 @@
 # スライド（slides）
 
 あわせて読む: domains/tech.md か domains/business.md（中身で選ぶ）
-lint で外す規則: bold_label_list、cleft_list_ending、count_declaration、excess_list、short_summary_heading
+lint で外す規則: bare_verb_chain、bold_label_list、cleft_list_ending、count_declaration、excess_list、short_summary_heading
 
 ## 1. 普通な書き方（直さない）
 

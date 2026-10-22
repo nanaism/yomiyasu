@@ -17,7 +17,7 @@ yomiyasu (よみやす, "easy to read") is an agent skill that rewrites AI-gener
 
 It keeps the meaning: numbers, negations, conditions, who does what, and how strongly a claim is made. It does not add facts that are not in the original or in the material you provide. Where the meaning cannot be decided from the text, it keeps the original wording and asks the writer instead of guessing.
 
-It is designed mainly for practical writing such as technical articles, design documents and specifications, pull request descriptions and internal reports. It also knows twelve document types, including mail, minutes, slides, papers and essays or fiction, and leaves the usual style of each type alone.
+It is designed mainly for practical writing such as technical articles, design documents and specifications, pull request descriptions and internal reports. It also knows thirteen document types, including mail, minutes, slides, papers, essays or fiction and scripts, and leaves the usual style of each type alone.
 
 Since 2.0.0, yomiyasu runs the bundled checks on its final draft before returning it, so that changed numbers, negations or swapped subjects and objects show up as items to review.
 

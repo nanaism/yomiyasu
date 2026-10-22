@@ -105,15 +105,20 @@ DOC_TYPE_SKIP_RULES = {
     "minutes": ("bold_label_list", "excess_list", "sentence_end_repetition"),
     "manual": ("excess_list",),
     # スライドの箇条で強調として選ぶ「〜のは、A、B、C。」（cleft_list_ending）も普通の書き方として外す
-    "slides": ("bold_label_list", "cleft_list_ending", "count_declaration", "excess_list", "short_summary_heading"),
-    "essay": (),
+    # 2.2.0: 主語も目的語もない動詞を並べる型（bare_verb_chain）もスライドの箇条では普通の書き方として外す
+    "slides": ("bare_verb_chain", "bold_label_list", "cleft_list_ending", "count_declaration", "excess_list",
+               "short_summary_heading"),
+    # 2.2.0: 読み物、宣伝文、台詞では、見出しの短い比喩（metaphor_label）と動詞を並べる型（bare_verb_chain）を外す
+    "essay": ("bare_verb_chain", "metaphor_label"),
     "formal": (),
     # 紹介記事・宣伝文では書き手の絵文字を残す（diff の勢いの検査は絵文字が減ると候補にするので、lint の
     # 絵文字の候補と食い違わせない。diff の詰めで測って決めた）。
     # 評価の語を短く重ねる型（「安い。うまい。早い。」。fragment_run）も勢いとして残す（作者の判断）
-    "promo": ("emoji_prohibited", "fragment_run"),
+    "promo": ("bare_verb_chain", "emoji_prohibited", "fragment_run", "metaphor_label"),
     "mail": ("emoji_prohibited",),
     "paper": (),
+    # 2.2.0: 台詞では、短い文の重ね（fragment_run）と同じ語尾の続き（sentence_end_repetition）が普通に出る
+    "script": ("bare_verb_chain", "fragment_run", "metaphor_label", "sentence_end_repetition"),
 }
 # meta_filler 全体を外すと誇張や無関係な前置きまで残すため、既存の型の説明で5型だけを選ぶ。
 # これらは mail では相手への返信・結びとして普通の形。宛名、挨拶、署名、クッション言葉の専用規則は元からない。
@@ -128,6 +133,9 @@ DOC_TYPE_SKIP_PATTERNS = {"mail": {"meta_filler": (
 # 種類を限って当てる規則（規則ID から、当てる種類のタプルへ）。種類を指定しないときと、ほかの種類では除く。
 DOC_TYPE_ONLY_RULES = {
     "pause_comma": ("pr", "article", "incident", "proposal", "minutes", "manual", "slides", "essay", "formal", "mail", "paper"),
+    # 2.2.0: 台詞の句点は script だけ、読み物の一人称と数字は essay だけ
+    "dialogue_period": ("script",),
+    "narrative_density": ("essay",),
 }
 
 
@@ -3260,9 +3268,141 @@ def _v220_shape_findings(analysis, findings, doc_type):
     return []
 
 
+# dialogue_period（script だけ）: 台詞が DIALOGUE_MIN 個以上あり、最後の字が「。」の台詞の割合が DIALOGUE_RATIO 以上なら
+# 文書に1件。narrative_density（essay だけ）: 地の文が NARRATIVE_MIN_CHARS 字以上で、一人称が千字あたり
+# FIRST_PERSON_MAX 未満、数字と箇条書きの項目の合計が千字あたり DENSITY_MIN 以上なら文書に1件。
+# 値は tests/corpus（human、raw_ai）と自作の類例で測って決めた（2.2.0。根拠の数は CHANGELOG）
+DIALOGUE_MIN = 10
+DIALOGUE_RATIO = 0.5
+FIRST_PERSON_MAX = 1.0
+DENSITY_MIN = 8
+NARRATIVE_MIN_CHARS = 1000
+# 台詞と地の文を探さない行（見出し、コード、表、引用は数えない）
+_DOCUMENT_SKIP_KINDS = frozenset(("code", "frontmatter", "html_block", "reference_definition", "heading",
+                                  "heading_underline", "thematic_break", "table"))
+_QUOTE_PAIRS = {"「": "」", "『": "』"}
+_QUOTE_CLOSERS = frozenset(_QUOTE_PAIRS.values())
+# 「名前：台詞」の行。名前は空白、句読点、括弧を含まない12字以下（全角と半角のコロン）
+_SPEAKER_LINE = re.compile(r"^\s*(?:[-*+]\s+|\d+\.\s+)?([^\s：:「」『』（）()、。！？!?，,．.]{1,12})[ \t　]*[：:][ \t　]*(.+)$")
+# 音と音楽の指示（SE、M、BGM）は台詞ではない。数字だけの名前（10:00）も外す
+_NOT_SPEAKER = re.compile(r"^(?:SE|ＳＥ|M|Ｍ|BGM|ＢＧＭ|[0-9０-９]+)$", re.I)
+# 台詞の前後のト書き（「ハル：屁理屈（笑う）」の（笑う））
+_EDGE_STAGE_NOTE = re.compile(r"^[（(][^（）()]*[）)]\s*|\s*[（(][^（）()]*[）)]$")
+# 一人称（たち、ら、ども などの複数の形も同じ語として1回に数える）。仮名の語は、前が仮名でなく、動詞の続き
+# （手わたします、おれた、など）でないときだけ。「私」は公私、私立、私鉄のような熟語を外す
+_FIRST_PERSON = re.compile(
+    r"(?<![公無])私(?![立鉄的物有服用語設費学道塾刑権財欲情事信案邸宅募企営益生淑書])"
+    r"|(?<![ぁ-ゖ手受引見])(?:わたくし|わたし(?!て|た(?!ち)|ます|まし|ませ)|ぼく(?![じしさめ])|おれ(?!い|る|た(?!ち)|て|ま|ば|ず|ろ|そ))"
+    r"|僕|俺|自分|筆者")
+# 数字の続き（全角を含む。1,000 や 1.5 は1つ）。英字のすぐあとの数字（版の番号や見出しの記号）は識別子として数えない
+_NARRATIVE_NUMBER = re.compile(r"(?<![A-Za-z_0-9０-９.,．，])[0-9０-９]+(?:[.,．，][0-9０-９]+)*(?![_0-9０-９])")
+_ASCII_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:[./][A-Za-z0-9_]+)+|[A-Za-z]+_[A-Za-z0-9_]+")
+
+
+def _top_quote_contents(text):
+    """1行の中の、いちばん外の「」と『』の中身。閉じていない括弧は数えない。"""
+    contents = []
+    stack = []
+    for index, char in enumerate(text):
+        if char in _QUOTE_PAIRS:
+            stack.append((char, index))
+        elif char in _QUOTE_CLOSERS and stack and _QUOTE_PAIRS[stack[-1][0]] == char:
+            _, start = stack.pop()
+            if not stack:
+                contents.append(text[start + 1:index])
+    return contents
+
+
+def _dialogue_lines(analysis):
+    """台詞の (行番号, 中身) の並び。「」と『』の中身、「名前「…」」の行、「名前：…」の行の中身を数える。
+    見出し、コード、表、引用（> の行）は数えない。「」が1つもない行だけ「名前：…」の形を見る。"""
+    dialogue = []
+    for row in analysis["lines"]:
+        if row["kind"] in _DOCUMENT_SKIP_KINDS or row["quote_depth"] or row["kind"] == "quote":
+            continue
+        visible = _prose_visible_text(analysis, row["line"]).replace("__", "").replace("*", "")
+        if not visible.strip():
+            continue
+        quoted = _top_quote_contents(visible) if ("「" in visible or "『" in visible) else []
+        if not quoted:
+            speaker = _SPEAKER_LINE.match(visible)
+            if speaker is None or _NOT_SPEAKER.match(speaker.group(1)):
+                continue
+            quoted = [_EDGE_STAGE_NOTE.sub("", speaker.group(2).strip())]
+        for content in quoted:
+            content = content.strip(" \t　")
+            if content:
+                dialogue.append((row["line"], content))
+    return dialogue
+
+
+def _narrative_counts(analysis):
+    """地の文の (字数, 一人称の数, 数字の数, 箇条書きの項目の数, 最初の行の番号)。
+    見出し、コード、表、引用（> の行）、画像だけの行は数えない。字数は空白を除いた見える文字。一人称と数字は、
+    カギ括弧の中と英数字の識別子を伏せてから数える。"""
+    chars = first_person = numbers = bullets = 0
+    first_line = None
+    for row in analysis["lines"]:
+        if row["kind"] in _DOCUMENT_SKIP_KINDS or row["quote_depth"] or row["kind"] == "quote":
+            continue
+        visible = _prose_visible_text(analysis, row["line"])
+        if not visible.strip():
+            continue
+        # 画像だけの行（[![…](…)](…) のバッジ）は数えない（_metrics_and_list_gate と同じ判定の門）
+        if ((_image_only_row is not _IMAGE_ONLY_ROW_DEFAULT or row["raw"].lstrip().startswith("[!["))
+                and _image_only_row(analysis, row, visible)):
+            continue
+        plain = visible.replace("__", "").replace("*", "")
+        length = len("".join(plain.split()))
+        if not length:
+            continue
+        if first_line is None:
+            first_line = row["line"]
+        chars += length
+        if row["kind"] == "list" and _LIST_MARKER_LINE.match(row["raw"]):
+            bullets += 1
+        masked = _mask_quoted_segments_sparse(plain) if ("「" in plain or "『" in plain) else plain
+        if "_" in masked or "." in masked or "/" in masked:
+            masked = _ASCII_IDENTIFIER.sub(" ", masked)
+        first_person += len(_FIRST_PERSON.findall(masked))
+        numbers += len(_NARRATIVE_NUMBER.findall(masked))
+    return chars, first_person, numbers, bullets, first_line
+
+
+def _per_thousand(count, chars):
+    return count * 1000 / chars if chars else 0.0
+
+
 def _v220_document_findings(analysis, doc_type):
-    """dialogue_period と narrative_density の候補（文書に1件）。"""
-    return []
+    """dialogue_period と narrative_density の候補（文書に1件）。種類を限って当てる規則なので、その種類のときだけ数える。"""
+    findings = []
+    if doc_type == "script":
+        dialogue = _dialogue_lines(analysis)
+        ended = sum(1 for _, content in dialogue if content.endswith(("。", "｡")))
+        if len(dialogue) >= DIALOGUE_MIN and ended >= DIALOGUE_RATIO * len(dialogue):
+            line_no = dialogue[0][0]
+            findings.append({
+                "rule": "dialogue_period",
+                "line": line_no,
+                "severity": "info",
+                "message": "台詞の最後の句点（台詞{}個のうち{}個、{}%が「。」で終わる）の候補です。文脈を見て、誰が何をどうするかを"
+                           "書き直すか確かめてください。".format(len(dialogue), ended, round(ended * 100 / len(dialogue))),
+                "snippet": analysis["lines"][line_no - 1]["raw"].strip()
+            })
+    elif doc_type == "essay":
+        chars, first_person, numbers, bullets, first_line = _narrative_counts(analysis)
+        person_rate = _per_thousand(first_person, chars)
+        density = _per_thousand(numbers + bullets, chars)
+        if chars >= NARRATIVE_MIN_CHARS and person_rate < FIRST_PERSON_MAX and density >= DENSITY_MIN:
+            findings.append({
+                "rule": "narrative_density",
+                "line": first_line,
+                "severity": "info",
+                "message": "読み物の一人称と数字（地の文{:,}字、一人称は千字あたり{:.1f}、数字と箇条書きは千字あたり{:.1f}）の候補です。"
+                           "文脈を見て、誰が何をどうするかを書き直すか確かめてください。".format(chars, person_rate, density),
+                "snippet": analysis["lines"][first_line - 1]["raw"].strip()
+            })
+    return findings
 
 
 def _project_term_findings(analysis, words):
@@ -3813,7 +3953,11 @@ def _doc_type_table():
     lines.append("mail は meta_filler の返信・結びの5型だけも外します（ご質問ありがとうございます、必要なら次に〜します、いかがでしたでしょうか、ぜひ〜してみてください、参考になれば幸いです等）。宛名・挨拶・署名を削る専用規則はありません。paper は慎重表現を削る規則がないため除外なし。")
     for rule, allowed in DOC_TYPE_ONLY_RULES.items():
         excluded = [row[0] for row in DOC_TYPES if row[0] not in allowed]
-        scope = "{} を除く{}種類".format("、".join(excluded), len(allowed)) if excluded else "全{}種類".format(len(allowed))
+        # 当てる種類が外す種類より少ない規則（2.2.0 の dialogue_period など）は、当てる種類を並べる
+        if len(allowed) < len(excluded):
+            scope = "{} だけ".format("、".join(allowed))
+        else:
+            scope = "{} を除く{}種類".format("、".join(excluded), len(allowed)) if excluded else "全{}種類".format(len(allowed))
         lines.append("種類を指定したときだけ当てる規則: {}（{}。種類を指定しないときは出しません）".format(rule, scope))
     lines.append("外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。")
     return "\n".join(lines)
