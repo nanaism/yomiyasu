@@ -545,12 +545,14 @@ class LintSkipTest(DocTypeCase):
                 self.assertLessEqual(plain["metrics"]["char_count"], 1000)
                 documents = {"excess_bold": 2, "excess_list": 2, "bold_label_list": 1}
                 weights = {"error": 3, "warn": 2, "info": 1}
-                line_weight = sum(weights[f["severity"]] for f in findings
+                # 2.2.0 で足した規則の候補は点数を計算する前に除く
+                scored = [f for f in findings if f["rule"] not in yomiyasu_lint._V220_RULES]
+                line_weight = sum(weights[f["severity"]] for f in scored
                                   if f["rule"] not in documents and f["rule"] != "negative_parallelism_density")
-                document_weight = sum(documents.get(f["rule"], 0) for f in findings)
+                document_weight = sum(documents.get(f["rule"], 0) for f in scored)
                 num = 4000 * 1000
                 den = (40 + document_weight + line_weight) * 1000
-                expected = max(1, min(99, (2 * num + den) // (2 * den))) if findings else 100
+                expected = max(1, min(99, (2 * num + den) // (2 * den))) if scored else 100
                 self.assertEqual(result["rule_penalty_score"], expected, value)
                 self.assertEqual(result["metrics"], plain["metrics"], value)
 

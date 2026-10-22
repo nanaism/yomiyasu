@@ -3221,6 +3221,10 @@ _PENALTY_FLOOR = 1000
 _PENALTY_HALF = 40
 _DOCUMENT_RULE_WEIGHTS = {"excess_bold": 2, "excess_list": 2, "bold_label_list": 1}
 _SUMMARY_RULES = ("negative_parallelism_density",)
+# 2.2.0 で足した規則。どれも info で、点数を計算する前に除く（この規則の候補だけなら100のまま）。
+# 点数に入れるかは tests/corpus で測って決める
+_V220_RULES = ("calque", "metaphor_label", "say_hedge", "thin_evaluation", "katakana_term", "dialogue_period",
+               "narrative_density", "copy_comma_noun", "empty_shikumi", "bare_verb_chain", "project_term")
 _DASH_RULES = ("dash_decoration", "dash_insertion", "dash_list_ending")
 
 
@@ -3246,11 +3250,42 @@ def _rule_penalty_score(findings, prose_chars, dash_hits):
     return max(1, min(99, (2 * num + den) // (2 * den)))
 
 
-def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
+def _v220_word_findings(analysis):
+    """calque、metaphor_label、katakana_term、thin_evaluation の候補。"""
+    return []
+
+
+def _v220_shape_findings(analysis, findings, doc_type):
+    """say_hedge、copy_comma_noun、empty_shikumi、bare_verb_chain の候補。findings は既存の規則の候補（読むだけ）。"""
+    return []
+
+
+def _v220_document_findings(analysis, doc_type):
+    """dialogue_period と narrative_density の候補（文書に1件）。"""
+    return []
+
+
+def _project_term_findings(analysis, words):
+    """語の一覧の flag.txt の語の候補（project_term）。"""
+    return []
+
+
+def _apply_words(findings, words):
+    """語の一覧の allow.txt の語で候補を外す。(残った候補, context に入れる words の値か None) を返す。"""
+    return findings, None
+
+
+def _public_finding(finding):
+    """候補の内部の欄（_ で始まるキー。_words など）を除いた写し。"""
+    return {key: value for key, value in finding.items() if not key.startswith("_")}
+
+
+def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str, Any]:
     """文章全体を総合検査する。
 
     doc_type（文書の種類）を渡すと、DOC_TYPE_SKIP_RULES のその種類の規則の候補を除き、除いた件数を context に入れる。
-    reader（読者）は context に入れるだけで、候補は変えない。値は中で正規化し、使えない値は ValueError。"""
+    reader（読者）は context に入れるだけで、候補は変えない。値は中で正規化し、使えない値は ValueError。
+    words は語の一覧（allow.txt と flag.txt）。None なら一覧なしとして動く。"""
     doc_type, reader = normalize_doc_type(doc_type), normalize_reader(reader)
     findings = []
     analysis = analyze_markdown(text)
@@ -3631,6 +3666,12 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
             "snippet": f"行: {', '.join(str(n) for n in bold_label_lines[:5])}"
         })
 
+    # 2.2.0 の規則（どれも info で、点数に入れない）
+    findings.extend(_v220_word_findings(analysis))
+    findings.extend(_v220_shape_findings(analysis, findings, doc_type))
+    findings.extend(_v220_document_findings(analysis, doc_type))
+    findings.extend(_project_term_findings(analysis, words))
+
     # 文書の種類で外す規則。検出が終わったあと、件数と点数を数える前に、前から順に
     # 除いて規則ごとに数える。残った候補の順は変えない。種類を指定しないときは、種類を限って当てる規則だけを除く
     skipped = dict((rule, 0) for rule in DOC_TYPE_SKIP_RULES[doc_type]) if doc_type is not None else {}
@@ -3646,6 +3687,8 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
             elif rule not in DOC_TYPE_ONLY_RULES or doc_type in DOC_TYPE_ONLY_RULES[rule]:
                 kept.append(finding)
         findings = kept
+    # 語の一覧の allow.txt の語で外す候補。件数と点数を数える前に除く
+    findings, words_context = _apply_words(findings, words)
     # ダッシュの候補は、外したあとに残ったものの初めから DASH_FINDING_LIMIT 件だけを出し、点数には全部を数える
     dash_hits = 0
     shown = []
@@ -3658,11 +3701,16 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
     findings = shown
 
     # 候補の重みを地の文1,000字あたりに直した x から、100 × 40 ÷ (40 + x) を丸める目安。品質の点数ではない。
-    rule_penalty_score = _rule_penalty_score(findings, prose_chars, dash_hits)
+    # 2.2.0 の規則の候補は点数を計算する前に除く
+    rule_penalty_score = _rule_penalty_score([finding for finding in findings if finding["rule"] not in _V220_RULES],
+                                             prose_chars, dash_hits)
     counts = {"error": 0, "warn": 0, "info": 0}
     for finding in findings:
         if finding["severity"] in counts:
             counts[finding["severity"]] += 1
+    context = {"doc_type": doc_type, "reader": reader, "skipped_by_doc_type": skipped}
+    if words_context is not None:
+        context["words"] = words_context
 
     return {
         "format": "yomiyasu-lint",
@@ -3673,9 +3721,9 @@ def lint_text(text: str, *, doc_type=None, reader=None) -> Dict[str, Any]:
         "no_rule_findings": len(findings) == 0,
         "rule_penalty_score": rule_penalty_score,
         "not_judged": ["meaning_preservation", "reader_comprehension"],
-        "context": {"doc_type": doc_type, "reader": reader, "skipped_by_doc_type": skipped},
+        "context": context,
         "metrics": metrics,
-        "findings": findings
+        "findings": [_public_finding(finding) for finding in findings]
     }
 
 
@@ -3822,6 +3870,9 @@ _PENALTY_HELP = """rule_penalty_score（--json の目安）:
   1,000字に満たなければ1,000字として割ります。
   excess_bold と excess_list は1件で2、bold_label_list は1を x に足し、
   negative_parallelism_density は数えません。ダッシュの規則に当たった行は、候補に出さない4行目からも数えます。
+  2.2.0 で足した次の規則の候補も数えず、その候補だけのときは100です: calque、metaphor_label、
+  say_hedge、thin_evaluation、katakana_term、dialogue_period、narrative_density、copy_comma_noun、
+  empty_shikumi、bare_verb_chain、project_term。
   --doc-type で候補が変わると、点数も変わります。CI では --fail-on か counts を使ってください。
 """
 
