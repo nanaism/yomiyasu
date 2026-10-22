@@ -3295,7 +3295,7 @@ _CALQUE_TYPE_NAMES = {1: "型1: 機械やシステムが人の動作をする言
                       3: "型3: 英語の言い方を一語ずつ写した句"}
 # 伏せる所: 引用符の中（カギ括弧は _mask_quoted_segments で伏せる）と、英数字の識別子
 _V220_QUOTES = _V220Lazy(r"“[^”\n]*”|\"[^\"\n]*\"|‘[^’\n]*’")
-_V220_IDENTIFIER = _V220Lazy(r"[A-Za-z0-9]+(?:[_./\\][A-Za-z0-9]+)+[_./]?|[a-z]+[A-Z][A-Za-z0-9]*|[_./\\][A-Za-z0-9_]+")
+_V220_IDENTIFIER = _V220Lazy(r"(?<![A-Za-z0-9])[A-Za-z0-9]+(?:[_./\\][A-Za-z0-9]+)+[_./]?|(?<![a-z])[a-z]+[A-Z][A-Za-z0-9]*|[_./\\][A-Za-z0-9_]+")
 _V220_SENTENCE = _V220Lazy(r"[^。．！？!?|｜]+[。．！？!?]*")
 
 # 型1: 機械やシステムが主語の文（主語の語に「は」「が」「も」「こそ」が付く）で、人や物の動作の動詞を使う形。
@@ -3355,6 +3355,8 @@ _CALQUE_VERB_EACH = tuple((re.sub(r"^(?:\(\?<![^)]*\))*(?:\[[^\]]*\])?", "", pat
 # 動詞が名詞を修飾する形（拾った通知、話した内容）は、主語が機械と決まらないので出さない
 _CALQUE_ESTABLISHED_TYPE1 = (
     r"テスト(?:が|は|も)(?:すべて|全部|全て|無事に?)?通",
+    # 件数や一式、道具の名前をはさむ形（テストは218件とも通りました、テスト一式は pytest で通す）
+    r"テスト(?:一式)?[0-9０-９]*件?(?:が|は|も)(?:[0-9０-９]+件(?:とも|すべて)?|すべて|全部|全て|無事に?|\s?[A-Za-z][\w.-]{0,15}\s?で)?\s?通",
     r"(?:ビルド|CI|コンパイル|審査|申請|予算|企画|法案|稟議|認証|筋|話|声|意見|理屈|名前|電気|電流)\s?(?:が|は|も)(?:無事に?)?通",
     r"(?i:ping)\s*(?:が|は|も)\s*通", r"疎通",
     r"(?:キャッシュ|インデックス|薬|ブレーキ|冷房|暖房|エアコン|設定|オプション|フラグ|権限)\s?(?:が|は|も)(?:よく|まだ|うまく)?効",
@@ -3369,7 +3371,8 @@ _CALQUE_KANA_RUN = _V220Lazy(r"[ぁ-ん]*")
 # 主語から動詞までの字数の上限と、間にあれば主語と動詞を結ばない記号（括弧、矢印。例を並べた文）
 _CALQUE_SUBJECT_REACH = 30
 _CALQUE_SUBJECT_BREAK = _V220Lazy(r"[（()）「」『』→←]")
-_CALQUE_REQUEST = ("てください", "て下さい", "てくださ", "なさい", "ましょう", "てほしい", "て欲しい", "ていただ", "てもらえ")
+_CALQUE_REQUEST = ("てください", "て下さい", "てくださ", "いでくださ", "いで下さ", "なさい", "ましょう", "てほしい", "て欲しい",
+                   "ていただ", "てもらえ")
 _CALQUE_ATTRIBUTIVE_END = ("た", "る", "う", "く", "す", "つ", "む", "ぶ", "ぐ", "だ", "ない", "いる")
 
 # 型2: 場所のたとえの名詞。受け口と「〜向けの口」はいつも拾う。「〜先」は _CALQUE_SAKI の形で、定着した語
@@ -3409,6 +3412,7 @@ _CALQUE_SAKI_TAIL = "しせげけめりちきぎびみいえねべれじ"
 # 定着した「〜先」（試験で守る）。当たった語がこのどれかで終われば出さない
 _CALQUE_ESTABLISHED_SAKI = tuple((
     "宛先 宛て先 送信先 受信先 保存先 接続先 連絡先 取引先 依存先 問い合わせ先 問合せ先 "
+    "回し先 割り振り先 振り分け先 立ち寄り先 働き先 通い先 務め先 引き合い先 取り寄せ先 借り先 貸し先 "
     "問合わせ先 提出先 申請先 申込先 申し込み先 照会先 相談先 通報先 報告先 連携先 格納先 "
     "出力先 入力先 書き込み先 読み込み先 書き出し先 取り込み先 移動先 移行先 遷移先 参照先 "
     "呼び出し先 配信先 通知先 公開先 共有先 掲載先 展開先 導入先 設置先 登録先 記録先 保管先 "
@@ -3439,7 +3443,7 @@ _CALQUE_PHRASES = (
     ("価値を足す", r"価値を足"),
     ("失効が効く", r"失効が効"),
     ("から効く", r"(?:日|月|年|週|請求|分|回|以降|翌[日月週年]|来[月週年]|明日|今日|本日|次回)から効(?:く|き(?=[ぁ-ん])|い[てた])"),
-    ("時間を取る", r"[0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:ミリ秒|秒|分|時間)を取(?:る|り|っ|ら)"),
+    ("時間を取る", r"(?<![0-9０-９])[0-9０-９]+(?:[.．][0-9０-９]+)?\s*(?:ミリ秒|秒|分|時間)を取(?:る|り|っ|ら)"),
     ("意味をなす", r"意味を(?:なす|成す|なし|成し)(?!てい?な|ませ|えな|得な)"),
     ("針を動かす", r"針を(?:ほとんど|大きく|少し|まったく|全く|あまり)?動か"),
     ("ステップを取る", r"ステップを取"),
@@ -3487,6 +3491,8 @@ _LABEL_COMMON = frozenset((
     "結び おわり 終わり あとがき まえがき 序論 本論 緒言 背景と目的 利点 欠点 長所 短所 "
     "前提条件 動作環境 必要なもの インストール セットアップ トラブルシューティング ライセンス 関連 "
     "関連資料 関連項目 参照 出典 注 脚注 当番 本番 順番 定番 一番 番号 係 "
+    "変更 再現 再現手順 決まり 道具 限界 命名 スクリプト チェックポイント 修正 不具合 動作 期待する動作 "
+    "実際の動作 回避策 移行 後片付け 片付け 後始末 引き継ぎ 切り戻し "
     # 文書の題によく使う語
     "資料 記録 メモ ノート 日報 週報 月報 議事録 手順書 仕様書 提案書 企画書 説明書 "
     "マニュアル ガイド 告知 通知 連絡 規約 規程 日記 雑記 覚え書き 備忘録 下書き 草稿 "
@@ -3497,6 +3503,7 @@ _LABEL_COMMON = frozenset((
 _LABEL_NUMBERING = _V220Lazy(r"^(?:[0-9０-９]+[.)．）]|[（(][0-9０-９]+[)）]|[①-⑳]|第[0-9０-９一二三四五六七八九十]+[章節部回条])")
 _LABEL_MARKS = "「『“\"（("
 # 漢字と仮名でない字（伏せる前の行から、ラベルになりうる字だけを残すのに使う。漢字の範囲の正規表現はこの1つだけにする）
+_LABEL_ASCII = _V220Lazy(r"[A-Za-z0-9０-９Ａ-Ｚａ-ｚ]")
 _LABEL_NOT_JAPANESE = _V220Lazy(r"[^ぁ-んァ-ヴー一-龥々〆ヵヶ]+")
 _LABEL_ENDINGS = ("の横", "のそば", "係", "番")
 # 「関係」「番号」などと、宛名や人の呼び方（田中様、各位、御中）で終わる語はラベルにしない
@@ -3572,6 +3579,9 @@ def _label_is_phrase(label):
             index -= 1
         if index >= 0 and _v220_kanji(label[index]):
             return True
+    # 動詞の終止形＋「こと」（守ること、いつも守ること）も句
+    if length > 2 and label.endswith("こと") and label[-3] in _LABEL_VERB_END:
+        return True
     return False
 
 
@@ -3923,14 +3933,20 @@ def _calque_type2(sentence, words):
             continue
         words.append("受け口" if match.group() == "受け口" else "口")
         found = True
+    tech = None
     for start, end in _calque_saki_spans(sentence):
         word = sentence[start:end]
         before = sentence[max(0, start - 8):end]
         if _CALQUE_SAKI_TIME.search(word) or any(before.endswith(item) for item in _CALQUE_ESTABLISHED_SAKI):
             continue
+        # 一覧の着地先などのほかは、技術の語のある文の「〜先」だけを見る（旅行の立ち寄り先、父の働き先は見ない）
+        if not any(word.endswith(kanji + "先") for kanji in _CALQUE_SAKI_KANJI):
+            if tech is None:
+                tech = bool(_CALQUE_TECH.search(sentence))
+            if not tech:
+                continue
         words.append(word)
         found = True
-    tech = None
     end_is_noun = _v220_noun_start
     for match in _CALQUE_PLACE_CONTEXT.finditer(sentence):
         word = match.group()
@@ -4023,6 +4039,9 @@ def _metaphor_label(analysis, row, scan):
         return None
     content = _LABEL_NUMBERING.sub("", scan.strip().strip("#").strip()).strip()
     if _LABEL_SEPARATED.search(content):
+        return None
+    # 番号のほかに英数字を含む見出し（v1.1.2 チェックポイント）は、版や名前を書いた見出しで、一語の比喩ではない
+    if _LABEL_ASCII.search(_LABEL_NUMBERING.sub("", row["raw"].strip().strip("#").strip())):
         return None
     if len("".join(analysis["text"].split())) - len("".join(row["raw"].split())) < _LABEL_MIN_BODY:
         return None
@@ -4185,6 +4204,8 @@ _COPY_MODIFIER_PARTICLE = re.compile(r"を|[はがで](?![ぁ-ゖ])")
 _COPY_NOT_MODIFIER = frozenset(("はい", "いいえ", "いい", "また", "まあ", "あの", "その", "この", "どの", "あのね",
                                 "ええ", "いや", "おい", "なお", "ただ", "しかし", "ちなみ", "つまり", "さて", "では"))
 # 名詞のほうが述語や助詞で終わるなら名詞ではない（「迷った、決めた。」「ある、です。」）。「の」を含む名詞句（「内部の誤り」）も外す
+_COPY_I_NOUNS = frozenset(("思い", "想い", "願い", "違い", "匂い", "出会い", "味わい", "祝い", "誓い", "迷い", "笑い", "住まい",
+                           "佇まい", "問い", "扱い", "装い", "幸い"))
 _COPY_NOUN_NOT = re.compile(r"(?:[るたすだてでねよわかぞぜさうくぐつぬぶむずじ]|ない|ません|しい|たい)$|[はがにでの]")
 _EMPTY_SHIKUMI = re.compile(
     r"(?:仕組み|しくみ)(?:|です|だ|になっています|になっている|になってます|となっています|となっている|を(?:作|つく)(?:る|ります|りました|った|りましょう))。$")
@@ -4236,6 +4257,9 @@ def _copy_comma_noun_sentence(sentence):
         noun = noun[:-1]
     if (not noun or len(noun) > 6 or len(modifier) < 2 or modifier in _COPY_NOT_MODIFIER
             or _COPY_MODIFIER_PARTICLE.search(modifier)):
+        return False
+    # 「暑い、暑い。」「疲れた、眠い。」のように形容詞で終わる文は、名詞で止める型ではない（「い」で終わる名詞は残す）
+    if noun.endswith("い") and noun not in _COPY_I_NOUNS:
         return False
     return not _COPY_NOUN_NOT.search(noun)
 
@@ -4339,7 +4363,9 @@ _QUOTE_CLOSERS = frozenset(_QUOTE_PAIRS.values())
 # 「名前：台詞」の行。名前は空白、句読点、括弧を含まない12字以下（全角と半角のコロン）
 _SPEAKER_LINE = re.compile(r"^\s*(?:[-*+]\s+|\d+\.\s+)?([^\s：:「」『』（）()、。！？!?，,．.]{1,12})[ \t　]*[：:][ \t　]*(.+)$")
 # 音と音楽の指示（SE、M、BGM）は台詞ではない。数字だけの名前（10:00）も外す
-_NOT_SPEAKER = re.compile(r"^(?:SE|ＳＥ|M|Ｍ|BGM|ＢＧＭ|[0-9０-９]+)$", re.I)
+# コマ、ページ、場所や時間の柱、ト書きの見出しは話し手ではない（ナレーションは話し手として数える）
+_NOT_SPEAKER = re.compile(r"^(?:SE|ＳＥ|M|Ｍ|BGM|ＢＧＭ|[0-9０-９]+|(?:[0-9０-９]+)?(?:コマ|ページ|P|Ｐ)目?[0-9０-９]*|場所|時間|時|"
+                          r"人物|登場人物|柱|ト書き?|注|メモ|備考)$", re.I)
 # 台詞の前後のト書き（「ハル：屁理屈（笑う）」の（笑う））
 _EDGE_STAGE_NOTE = re.compile(r"^[（(][^（）()]*[）)]\s*|\s*[（(][^（）()]*[）)]$")
 # 一人称（たち、ら、ども などの複数の形も同じ語として1回に数える）。仮名の語は、前が仮名でなく、動詞の続き
@@ -4350,7 +4376,7 @@ _FIRST_PERSON = re.compile(
     r"|僕|俺|自分|筆者")
 # 数字の続き（全角を含む。1,000 や 1.5 は1つ）。英字のすぐあとの数字（版の番号や見出しの記号）は識別子として数えない
 _NARRATIVE_NUMBER = re.compile(r"(?<![A-Za-z_0-9０-９.,．，])[0-9０-９]+(?:[.,．，][0-9０-９]+)*(?![_0-9０-９])")
-_ASCII_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*(?:[./][A-Za-z0-9_]+)+|[A-Za-z]+_[A-Za-z0-9_]+")
+_ASCII_IDENTIFIER = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*(?:[./][A-Za-z0-9_]+)+|(?<![A-Za-z])[A-Za-z]+_[A-Za-z0-9_]+")
 
 
 def _top_quote_contents(text):

@@ -8,6 +8,7 @@ from unittest import mock
 import hashlib
 import json
 import os
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -201,7 +202,8 @@ class ReaderTest(FolderCase):
 
     def test_option_home(self):
         self.words(self.root / "lists", allow="入口\n")
-        with mock.patch.dict(os.environ, {"HOME": str(self.root)}):
+        # Windows の ~ は USERPROFILE を読むので、HOME と一緒に差し替える
+        with mock.patch.dict(os.environ, {"HOME": str(self.root), "USERPROFILE": str(self.root)}):
             self.assertEqual(markdown_visibility.find_words_folder("/", "~/lists"), str(self.root / "lists"))
 
     def test_disabled(self):
@@ -682,7 +684,7 @@ class HookTest(ManagedCase):
         self.registered()
         response = json.loads(self.hook("--words", "lists"))
         self.assertEqual(response["decision"], "block")
-        self.assertIn("yomiyasu_check.py run --source draft.md --final final.md --words {} を実行し".format(folder),
+        self.assertIn("yomiyasu_check.py run --source draft.md --final final.md --words {} を実行し".format(shlex.quote(str(folder))),
                       response["reason"])
         response = json.loads(self.hook("--no-words"))
         self.assertIn("--source draft.md --final final.md --no-words を実行し", response["reason"])
@@ -697,7 +699,7 @@ class HookTest(ManagedCase):
         self.final.write_bytes("担当者が原稿を読みました。\n".encode("utf-8"))
         response = json.loads(self.hook("--words", str(folder)))
         self.assertIn("run をもう一度実行し、そのあと verify を実行してください。yomiyasu_check.py run には --words {} を"
-                      "付けてください。".format(folder), response["reason"])
+                      "付けてください。".format(shlex.quote(str(folder))), response["reason"])
 
     def test_without_options_the_text_is_unchanged(self):
         self.registered()
@@ -727,7 +729,7 @@ class HookTest(ManagedCase):
         output = self.hook("--words", str(folder), event="UserPromptSubmit",
                            prompt="/yomiyasu " + self.source.name)
         self.assertIn("を登録しました", output)
-        self.assertTrue(output.rstrip("\n").endswith("yomiyasu_check.py run には --words {} を付けてください。".format(folder)),
+        self.assertTrue(output.rstrip("\n").endswith("yomiyasu_check.py run には --words {} を付けてください。".format(shlex.quote(str(folder)))),
                         output)
 
 
