@@ -1513,7 +1513,7 @@ class _ExactSequenceMatcher(difflib.SequenceMatcher):
         # 3. 長い一致を種で探す。長さ L 以上の一致がなければ答えは L より短いので、L を半分にして続ける。
         length = cap
         while length >= _MATCH_SAMPLE_MIN:
-            found = self._seeded(alo, ahi, blo, bhi, length, (la + lb) // _MATCH_SAMPLE_BUDGET_DIV)
+            found = self._seeded(alo, ahi, blo, bhi, length, cap, (la + lb) // _MATCH_SAMPLE_BUDGET_DIV)
             if found is None:                # 候補が多すぎて調べきれない。何も決めずに次の手に回す
                 break
             if found is not False:
@@ -1657,15 +1657,22 @@ class _ExactSequenceMatcher(difflib.SequenceMatcher):
                     break
         return None if best is None else difflib.Match(best[0], best[1], size)
 
-    def _seeded(self, alo, ahi, blo, bhi, length, budget):
+    def _seeded(self, alo, ahi, blo, bhi, length, cap, budget):
         """長さ length 以上の共通の部分のうち、いちばん長く、a で最も前、同じ a なら b で最も前のもの。
         なければ False（答えは length-1 以下と分かる）。調べる候補が budget を超えたら None（何も決めない）。
+        cap は答えの長さの上限（証明済み。length 以上）。
 
         種の長さを q、格子の間隔を s = length-q+1 とし、a の格子の位置 t を alo+s-1 から s おきにとる。長さ length 以上の
         共通の部分が a[x:x+length] を含むとき、区間 [x, x+length-q]（s 個の連続した位置。x >= alo なので alo+s-1 以上の格子の位置が入る）
         には格子の位置 t が必ず1つあり、その共通の部分は種 a[t:t+q] を含む。そこで、格子の位置の種が b[blo:bhi] に現れる所をすべて引き、
         そこから範囲の中で前後に伸ばせるだけ伸ばした一致を集め、いちばん長く、a で最も前、b で最も前のものを選ぶ。
-        答え（いちばん長い共通の部分）は、それ以上伸ばせないので、伸ばした一致のどれかとして必ず集まる。"""
+        答え（いちばん長い共通の部分）は、それ以上伸ばせないので、伸ばした一致のどれかとして必ず集まる。
+
+        length が cap と同じときは、格子の位置を前から見て、一致が見つかった最初の位置で止める。長さ length 以上の一致は
+        どれも長さ cap ちょうどなので、区間 [x, x+length-q] に入る格子の位置はちょうど1つで、x が前の一致ほどその位置も前か同じになる。
+        最初に一致が見つかった格子の位置を T とすると、それより後ろの格子の位置の一致は x が T より後ろで、T の一致（x は T 以下）に勝てない。
+        答えの x の一致は、x が同じものも含めてすべて T の種から伸びる。同じ段落が何十回も続く文書では、右の範囲の答えがすぐ次の段落にあり、
+        残りの段落の種を引かずに済む。"""
         a, b = self.a, self.b
         q = _MATCH_SEED_LONG if length >= 2 * _MATCH_SEED_LONG else _MATCH_SEED_SHORT
         indexes = self.__dict__.setdefault("_seed_indexes", {})
@@ -1676,6 +1683,7 @@ class _ExactSequenceMatcher(difflib.SequenceMatcher):
         count = len(keys)
         step = length - q + 1
         last = bhi - q
+        early = length >= cap
         seeds = []
         total = 0
         for t in range(alo + step - 1, ahi - q + 1, step):
@@ -1691,17 +1699,31 @@ class _ExactSequenceMatcher(difflib.SequenceMatcher):
                     if total > budget:
                         return None
                 p += 1
+            if early and seeds:
+                best = self._extend_seeds(seeds, alo, ahi, blo, bhi, q, length, cap)
+                if best is not None:
+                    break
+                seeds = []
+        else:
+            best = self._extend_seeds(seeds, alo, ahi, blo, bhi, q, length, cap)
+        if best is None:
+            return False
+        return difflib.Match(best[1], best[2], -best[0])
+
+    def _extend_seeds(self, seeds, alo, ahi, blo, bhi, q, length, cap):
+        """種 (t, u) を範囲の中で前後に伸ばせるだけ伸ばした一致のうち、長さ length 以上で、いちばん長く、a で最も前、b で最も前のもの
+        を (-長さ, a の位置, b の位置) で返す（なければ None）。どの一致も長さは cap 以下なので、伸ばす長さも cap までで止める
+        （止めなければ、範囲の端までの長い部分を切り出して比べることになる）。"""
+        a, b = self.a, self.b
         best = None
         for t, u in seeds:
-            back = _common_suffix_len(a, t, b, u, min(t - alo, u - blo))
-            size = back + q + _common_prefix_len(a, t + q, b, u + q, min(ahi - t, bhi - u) - q)
+            back = _common_suffix_len(a, t, b, u, min(t - alo, u - blo, cap - q))
+            size = back + q + _common_prefix_len(a, t + q, b, u + q, min(ahi - t, bhi - u, cap - back) - q)
             if size >= length:
                 candidate = (-size, t - back, u - back)
                 if best is None or candidate < best:
                     best = candidate
-        if best is None:
-            return False
-        return difflib.Match(best[1], best[2], -best[0])
+        return best
 
     def _collision(self):
         """a の1字と b の1字が同じである割合（DP の手間の見積もりにだけ使う）。"""

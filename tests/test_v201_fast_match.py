@@ -9,6 +9,8 @@
    difflib と同じ対応になる。
 4. 2乗で重かった所（_widen_to_sentences、_pair_gone_sentences、_ending_changes_from_units、_Masker.mask、_rule_candidates、
    _register_changes、_addition_novelty）を、v2.0.0 の書き方（このファイルに写した OLD_ の関数）と突き合わせる。
+5. 同じ段落を何百回もくり返す文書で、種で探す段が、次の段落で一致が見つかったところで止まり（残りの段落の種を伸ばさない）、
+   difflib と同じ対応になる。
 文はすべてこのファイルで作った合成の文。コーパスの組は tests/corpus を読むだけで、書き換えない。
 """
 
@@ -126,6 +128,21 @@ def _full_rewrite(n):
     return "\n\n".join(old) + "\n", "\n\n".join(new) + "\n"
 
 
+REPEATED_OLD = ("設定ファイルは起動のたびに読み込まれ、各サービスの接続先と待ち時間と再試行の回数は、この値で決まります。"
+                "値が変わったときは、担当者が手順書に沿って確認し、結果を共有の記録に残してから、翌週の定例で報告します。"
+                "接続先が応答しないときは、三回まで待ってから次の接続先に切り替え、切り替えたことを監視の画面に表示します。")
+REPEATED_NEW = ("設定ファイルは起動のたびに読み込まれ、各サービスの接続先と待ち時間と再試行の回数は、この値で決まります。"
+                "値が変わったら、担当者が手順書に沿って確かめ、結果を共有の記録に残してから、翌週の定例で報告します。"
+                "接続先が応答しないときは、三回まで待ってから次の接続先に切り替え、切り替えたことを監視の画面に表示します。")
+
+
+def _repeated_rewrite(n, last=REPEATED_NEW):
+    """同じ段落 n 個の書き換え（どの段落も同じ文を同じように書き換える。最後の段落だけ last にできる）。
+    書き換えの前後で同じ部分（段落の終わりの文から次の段落の初めの文まで）は100字を超えるので、
+    一致の長さの上限が _MATCH_PROBE_MAX より長い範囲を、種で探す段で解く。"""
+    return "\n\n".join([REPEATED_OLD] * n) + "\n", "\n\n".join([REPEATED_NEW] * (n - 1) + [last]) + "\n"
+
+
 class MatcherEquivalenceTests(unittest.TestCase):
     """_ExactSequenceMatcher は difflib.SequenceMatcher(None, a, b, autojunk=False) と同じ答えを返す。"""
 
@@ -165,6 +182,8 @@ class MatcherEquivalenceTests(unittest.TestCase):
                     calls[name, "b_side" if bhi - blo <= ahi - alo else "a_side"] += 1
                 if name == "_first_of_length":   # 切り出す hash か、1字ずつずらす hash か
                     calls[name, "rolling" if args[5] >= yomiyasu_diff._MATCH_ROLLING_MIN else "sliced"] += 1
+                if name == "_seeded" and args[5] >= args[6]:   # 長さが上限と同じ段（一致が見つかった最初の格子の位置で止める）
+                    calls[name, "early_" + ("none" if result is None else "false" if result is False else "found")] += 1
                 return result
             return wrapper
         patches = [mock.patch.object(Matcher, name, counting(name, getattr(Matcher, name)))
@@ -185,7 +204,8 @@ class MatcherEquivalenceTests(unittest.TestCase):
                 patch.stop()
         for key in (("_dp", "found"), ("_probe", "found"), ("_probe", "none"), ("_probe_local", "found"), ("_probe_local", "none"),
                     ("_probe_local", "a_side"), ("_probe_local", "b_side"), ("_seeded", "found"), ("_seeded", "false"),
-                    ("_seeded", "none"), ("automaton", "found"), ("_bisect_length", "found"), ("_first_of_length", "found"),
+                    ("_seeded", "none"), ("_seeded", "early_found"), ("_seeded", "early_false"), ("_seeded", "early_none"),
+                    ("automaton", "found"), ("_bisect_length", "found"), ("_first_of_length", "found"),
                     ("_first_of_length", "none"), ("_first_of_length", "sliced"), ("_first_of_length", "rolling"),
                     ("gram_index", "found")):
             with self.subTest(path=key):
@@ -250,6 +270,16 @@ class MatcherEquivalenceTests(unittest.TestCase):
         o, r = yomiyasu_diff.normalize(a), yomiyasu_diff.normalize(b)
         self.assertEqual(Matcher(None, o, r, autojunk=False).get_opcodes(),
                          difflib.SequenceMatcher(None, o, r, autojunk=False).get_opcodes())
+
+    def test_repeated_paragraphs_under_every_setting(self):
+        """同じ段落のくり返しの書き換えで、difflib と同じ答えになる。右の範囲の答えはすぐ次の段落にあり、種で探す段は一致の見つかった
+        最初の格子の位置で止まる。最後の段落だけ違う組（書き換えない、途中で切れる、空）も入れ、くり返しの終わりの形も見る。"""
+        rng = random.Random(41)
+        for setting in SETTINGS:
+            for n in (1, 2, 3, 7, 12):
+                for last in (REPEATED_NEW, REPEATED_OLD, REPEATED_NEW[:40], ""):
+                    with self.subTest(setting=setting, n=n, last=last[:10]), mock.patch.multiple(yomiyasu_diff, **setting):
+                        self.check_pair(*_repeated_rewrite(n, last), rng)
 
 
 class FallbackTests(unittest.TestCase):
@@ -361,6 +391,25 @@ class LargeRewriteTests(unittest.TestCase):
         self.assertEqual(difflib.SequenceMatcher(None, a, b, autojunk=False).get_opcodes(),
                          [("equal", 0, small, 0, small), ("insert", small, small, small, small + 1),
                           ("equal", small, 2 * small, small + 1, 2 * small + 1)])
+
+    # 同じ段落200個の書き換えを正規化した文書全体の opcodes の数と sha256（difflib で求めた値。difflib では1分あまりかかる）
+    OPCODES_REPEATED_200 = (801, "0cc535752cfb3efdc9cad18ec5466c2c74a1fa91e3735a96df9e45e0948adbed")
+
+    def test_repeated_paragraphs_stop_at_the_next_copy(self):
+        """同じ段落200個の書き換え。右の範囲の答えはすぐ次の段落にあるので、種で探す段は残りの段落の種を伸ばさない。
+        前の書き方は、範囲の中のすべての格子の位置の種を、残りの段落の数だけ伸ばした（伸ばした種は18万あまり。今は4万に届かない）。"""
+        a, b = _repeated_rewrite(200)
+        o, r = yomiyasu_diff.normalize(a), yomiyasu_diff.normalize(b)
+        extended = []
+        original = yomiyasu_diff._common_suffix_len
+
+        def counting(*args):
+            extended.append(1)
+            return original(*args)
+        with mock.patch.object(yomiyasu_diff, "_common_suffix_len", counting):
+            opcodes = Matcher(None, o, r, autojunk=False).get_opcodes()
+        self.assertEqual((len(opcodes), hashlib.sha256(repr(opcodes).encode("utf-8")).hexdigest()), self.OPCODES_REPEATED_200)
+        self.assertLess(len(extended), 60000)
 
     def test_diff_of_30k_chars_finishes_quickly(self):
         a, b = _full_rewrite(590)
