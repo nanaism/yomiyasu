@@ -438,7 +438,7 @@ class HookTests(ManagedCase):
         self.assertEqual(before, sorted(str(p) for p in self.root.rglob('*')))
         result = subprocess.run([sys.executable, '-B', str(HOOK), '--version'], cwd=str(self.root),
                                 env=self.env, capture_output=True, text=True, encoding='utf-8', timeout=5)
-        self.assertEqual(result.stdout, 'yomiyasu_hook.py 2.2.0\n')
+        self.assertEqual(result.stdout, 'yomiyasu_hook.py 2.2.1\n')
 
     def test_h16b_help_and_print_config_errors(self):
         """--help に引数、環境変数、終了コードがあり、--print-config の値の誤りだけが終了コード2。

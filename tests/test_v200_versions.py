@@ -316,13 +316,13 @@ class TestCliVersions(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         self.assertEqual(process.stdout, "yomiyasu_lint.py {} (JSON format {})\n".format(version, format_version))
         # 10.1 L1: 完全一致
-        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.2.0 (JSON format 2)\n")
+        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.2.1 (JSON format 2)\n")
         self.assertEqual(process.stderr, "")
 
     def test_diff_and_check_version_lines(self):
         """diff と check の --version は 10.1 L1 の1行（完全一致）で0。"""
-        # diff `yomiyasu_diff.py 2.2.0 (JSON format 2)`、
-        # check `yomiyasu_check.py 2.2.0 (record format 1, result format 1, materials format 1)`。
+        # diff `yomiyasu_diff.py 2.2.1 (JSON format 2)`、
+        # check `yomiyasu_check.py 2.2.1 (record format 1, result format 1, materials format 1)`。
         expected = {
             DIFF: lambda version: "yomiyasu_diff.py {} (JSON format {})".format(
                 version, self.format_constant("DIFF_FORMAT_VERSION")),
@@ -331,8 +331,8 @@ class TestCliVersions(unittest.TestCase):
                 self.format_constant("MATERIALS_FORMAT_VERSION")),
         }
         literal = {
-            DIFF: "yomiyasu_diff.py 2.2.0 (JSON format 2)",
-            CHECK: "yomiyasu_check.py 2.2.0 (record format 1, result format 1, materials format 1)",
+            DIFF: "yomiyasu_diff.py 2.2.1 (JSON format 2)",
+            CHECK: "yomiyasu_check.py 2.2.1 (record format 1, result format 1, materials format 1)",
         }
         for script in (DIFF, CHECK):
             with self.subTest(script=script.name):

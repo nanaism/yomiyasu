@@ -767,7 +767,7 @@ class TestMainFunction(LintCase):
 
     def test_main_returns_exit_codes(self):
         path = self.write("warn.md", WARN_ONLY)
-        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_lint.py 2.2.0 (JSON format 2)\n", ""))
+        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_lint.py 2.2.1 (JSON format 2)\n", ""))
         code, out, err = self.call_main([str(path)])
         self.assertEqual((code, err), (0, ""))
         self.assertEqual(out.split("\n")[0], "表現・書式の検査を実行しました。")
@@ -915,10 +915,10 @@ class TestHelpAndVersion(LintCase):
             self.assertRegex(line, r"^  {}  \S".format(code))
 
     def test_version_line(self):
-        """--version は `yomiyasu_lint.py 2.2.0 (JSON format 2)`、終了コード0。"""
+        """--version は `yomiyasu_lint.py 2.2.1 (JSON format 2)`、終了コード0。"""
         process = run_lint(["--version"])
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
-        self.assertEqual(process.stdout.strip("\n"), "yomiyasu_lint.py 2.2.0 (JSON format 2)")
+        self.assertEqual(process.stdout.strip("\n"), "yomiyasu_lint.py 2.2.1 (JSON format 2)")
         self.assertEqual(process.stderr, "")
 
 

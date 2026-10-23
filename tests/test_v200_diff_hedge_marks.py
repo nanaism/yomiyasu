@@ -313,7 +313,7 @@ RULES_BASELINE = '■ 規則の見直し候補（4件）\n■ 元の文にない
 
 RESTORED_BASELINE = {'format': 'yomiyasu-diff',
  'format_version': 2,
- 'tool_version': '2.2.0',
+ 'tool_version': '2.2.1',
  'status': 'has_candidates',
  'changed': True,
  'candidate_count': 6,
