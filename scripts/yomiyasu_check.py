@@ -2121,7 +2121,7 @@ def _kept_marks(findings):
 
 
 def _kept_marks_text(marks):
-    """「要求（語の一覧。L9、L25）、拾う（直訳語。L31）」の形。行と語が多いときは初めのほうだけを出す。"""
+    """「語（語の一覧か直訳語。L と行の番号の並び）」を「、」でつないだ形。行と語が多いときは初めのほうだけを出す。"""
     shown = []
     for mark in marks[:_KEPT_MARK_SHOWN_WORDS]:
         lines = mark["lines"]

@@ -32,7 +32,7 @@ class KeptMarksTest(unittest.TestCase):
         self.root = Path(os.path.realpath(folder.name))
         words = self.root / "words"
         words.mkdir()
-        (words / "flag.txt").write_text("要求\n", encoding="utf-8")
+        (words / "flag.txt").write_bytes("要求\n".encode("utf-8"))
         self.words = words
         self.source = self.write("source.md", SOURCE)
 
