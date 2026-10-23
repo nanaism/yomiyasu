@@ -15,7 +15,7 @@
 
 主に技術記事、設計書・仕様書、PR説明文、社内レポートなどの実務的な文章を対象として設計されています。
 
-Claude Code、Codex、CursorをはじめとするAIコーディング環境に読み込ませて使用してください。
+Claude Code、Codex、CursorをはじめとするAIコーディング環境に読み込ませて使用してください。本体を入れられない環境のために、本体を短くした yomiyasu-mini と yomiyasu-pocket も公開しています（[本体を入れられない環境では](#本体を入れられない環境では)）。
 
 開発の背景、AI生成文の読みにくさ、コーパスを使った検証については、次の解説記事で紹介しています。
 
@@ -258,12 +258,12 @@ cp -R /tmp/yomiyasu/skills/yomiyasu .agents/skills/yomiyasu
 
 この置き方では Codex がスキルを `yomiyasu:yomiyasu` という名前で一覧に載せます。呼ぶときは「/yomiyasu」とだけ送るか、依頼の文に「yomiyasu で」と書いてください。一覧の名前どおり `$yomiyasu:yomiyasu` と書いても呼べます。コピーしたフォルダは自動では新しくなりません。最新にするには、同じ手順でコピーし直してください。
 
-### スキルの大きさに上限がある環境では
+### 本体を入れられない環境では
 
-SKILL.md の字数やファイルの数に上限があって本体を入れられない環境のために、本体を短くしたものを2つ、別のリポジトリで公開しています。
+SKILL.md の字数やファイルの数に上限がある環境や、スキルを読み込めず指示欄に貼るしかないAIのために、本体を短くしたものを2つ、別のリポジトリで公開しています。本体を読み込める環境では、本体をおすすめします。
 
-- [yomiyasu-mini](https://github.com/nanaism/yomiyasu-mini): SKILL.md を18,000字以下にしたスキルです。意味が変わる恐れの検査（本体の diff と同じ結果）を含みます。
-- [yomiyasu-pocket](https://github.com/nanaism/yomiyasu-pocket): AIの指示欄に貼って使う、400〜500字の指示文です。スキルの仕組みと検査は使いません。
+- [yomiyasu-mini](https://github.com/nanaism/yomiyasu-mini): SKILL.md を18,000字以下にしたスキルです。Microsoft 365 Copilot の宣言型エージェントのように、スキルの大きさに上限がある環境向けです。意味が変わる恐れの検査（本体の diff と同じ結果）を含みます。
+- [yomiyasu-pocket](https://github.com/nanaism/yomiyasu-pocket): AIの指示欄に貼って使う、400〜500字の指示文です。メールの作成画面のAIやチャットのカスタム指示のように、スキルを読み込めない所向けです。スキルの仕組みと検査は使いません。
 
 ### 他の日本語校正スキルとの干渉について
 

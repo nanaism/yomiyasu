@@ -21,6 +21,8 @@ It is designed mainly for practical writing such as technical articles, design d
 
 Since 2.0.0, yomiyasu runs the bundled checks on its final draft before returning it, so that changed numbers, negations or swapped subjects and objects show up as items to review.
 
+If your environment cannot load the full skill, two shorter versions built from it are published in separate repositories. [yomiyasu-mini](https://github.com/nanaism/yomiyasu-mini) is a skill whose SKILL.md stays within 18,000 characters, for hosts with size limits such as Microsoft 365 Copilot declarative agents; it includes the meaning-change check with the same results as the full diff. [yomiyasu-pocket](https://github.com/nanaism/yomiyasu-pocket) is a 400 to 500 character instruction to paste into an AI's instructions field, such as an email app's AI or a chat app's custom instructions; it has no bundled checks. Use the full skill when your environment can load it.
+
 ## Install
 
 The install commands are the same as in the [Japanese README](./README.md#インストール), which also lists the update command for each method.
