@@ -4,6 +4,8 @@
   「入口」「出口」（この入口を通ります、ひとつの入口に集めています）に印をつける。
 - 技術の文書でも、実物の場所の入口と出口（サーバールーム、データセンター、北側の出口、倉庫）には印をつけない。
 - 技術の文書でないときは、今までどおり同じ文に技術の語があるときだけ拾う。
+- 「全〇〇に響く」（全運転手に響きます）は、技術の文書のときだけ拾う。心に響く、全館に響くチャイムのような文字どおりの響きは
+  外す。前からある語の一覧の形（全クライアントに響く）は、技術の文書でなくても拾う。
 
 文はすべて合成の文。
 """
@@ -49,6 +51,26 @@ class EntryInTechnicalDocumentTest(unittest.TestCase):
         self.assertEqual(len(found), 1)
         self.assertIn("当たった言い方: 入口", found[0]["message"])
         self.assertEqual(found[0]["severity"], "info")
+
+
+class AllGroupHibikuTest(unittest.TestCase):
+    def test_all_group_form_in_technical_documents(self):
+        for sentence in ("管理画面が全車両の位置を毎秒読み直すと、全運転手に響きます。", "バッチを日中に回すと、全店舗に響きます。",
+                         "この遅れは全社員にまで響きます。"):
+            with self.subTest(sentence=sentence):
+                self.assertTrue(calque_on_line(TECH + sentence + "\n", 3))
+
+    def test_literal_and_non_technical_uses_are_not_marked(self):
+        for sentence in ("全館に響くチャイムで、休憩の時間を知らせます。", "彼のスピーチは、全員の心に響きました。",
+                         "全館に響く放送で、避難の手順を伝えます。"):
+            with self.subTest(sentence=sentence):
+                self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
+        for sentence in ("社長の言葉は、全社員に響きました。", "値上げは全家庭に響きます。"):
+            with self.subTest(sentence=sentence):
+                self.assertFalse(calque_on_line(PLAIN + sentence + "\n", 3))
+
+    def test_listed_form_is_kept_outside_technical_documents(self):
+        self.assertTrue(calque_on_line(PLAIN + "この集計を毎分回すと、全クライアントに響きます。\n", 3))
 
 
 if __name__ == "__main__":

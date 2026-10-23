@@ -3485,6 +3485,8 @@ _CALQUE_PHRASES = (
     ("ときに効く", r"(?:とき|際|場合|うえ|上)に(?:いちばん|特に|大きく|強く)?効(?:く|き(?=[ぁ-ん])|い[てた])"),
     ("に響く", r"(?:クライアント|サーバー?|性能|応答|処理|ユーザー|利用者|ダッシュボード|システム|速度|画面|負荷|料金|費用"
               r"|コスト|請求)(?:の[^。、]{0,6})?に(?:まで|も)?響(?:く|き|い|か)"),
+    # 2.2.1: 「全〇〇に響く」（全運転手に響きます）。技術の文書のときだけ拾う（_calque_type3）
+    ("に響く", r"全[^。、のをがは\s]{1,6}に(?:まで|も)?響(?:く|き|い|か)"),
     # 間引く、差し引く、引き渡す、引き上げる、引きずる などの複合の動詞は外す
     ("データを引く", r"(?:データ|ログ|レコード|設定|履歴)を(?:[^。、]{0,6})?(?<![間割])(?<!差し)引"
                     r"(?:く|き(?![出継続受取渡伸上下ず合寄止戻抜締起換替])|い|か|け)"),
@@ -3507,7 +3509,11 @@ _CALQUE_TURN_GAME = _V220Lazy(r"ゲーム|カード|山札|手札|プレイヤ�
 # 「ときに効く」は、構成や運用を決める話（what matters）か、機械やシステムの語がある文だけ（疲れたときに効くストレッチは外す）
 _CALQUE_KIKU_DECIDE = _V220Lazy(r"構成|設計|選ぶ|選び|決め|判断|見積|運用|導入|移行|方針|検討")
 # 「に響く」の文字どおりの音と心（心に響く、音が部屋に響く）
-_CALQUE_HIBIKU_LITERAL = _V220Lazy(r"(?:心|胸|耳|琴線)に(?:まで|も)?響|(?:音|声|鐘|足音|歌)(?:が|は|も)")
+_CALQUE_HIBIKU_LITERAL = _V220Lazy(r"(?:心|胸|耳|琴線)に(?:まで|も)?響|(?:音|声|鐘|足音|歌)(?:が|は|も)"
+                                   r"|響(?:く|いた|いて)(?:チャイム|ベル|サイレン|放送|音|声|歌|音楽|拍手|歓声|笑い声)")
+# 「全〇〇に響く」の形と、前からある語の一覧の形（クライアントに響く など）
+_CALQUE_HIBIKU_ALL = _V220Lazy(r"全[^。、のをがは\s]{1,6}に(?:まで|も)?響")
+_CALQUE_HIBIKU_LISTED = _V220Lazy(_CALQUE_PHRASES[[name for name, _ in _CALQUE_PHRASES].index("に響く")][1])
 # 「に響く」の料金や費用は、機械やシステムの語がある文だけ（円安が費用に響く は外す）
 _CALQUE_HIBIKU_COST = ("料金", "費用", "コスト", "請求")
 # 「機械どうし」は、通信ややり取りの話のときだけ（工場の機械同士の間隔は外す）
@@ -4026,8 +4032,8 @@ def _calque_type2(sentence, words, doc_tech=False):
     return found
 
 
-def _calque_type3(sentence, words):
-    """型3に当たれば True（当たった句の名前を words に足す）。"""
+def _calque_type3(sentence, words, doc_tech=False):
+    """型3に当たれば True（当たった句の名前を words に足す）。doc_tech は技術の文書か（「全〇〇に響く」の拾い方に使う）。"""
     if not _CALQUE_PHRASE_HEAD.search(sentence):
         return False
     found = False
@@ -4041,6 +4047,10 @@ def _calque_type3(sentence, words):
             continue
         if name == "に響く" and (_CALQUE_HIBIKU_LITERAL.search(sentence)
                                or (match.group().startswith(_CALQUE_HIBIKU_COST) and not _CALQUE_TECH.search(sentence))):
+            continue
+        # 「全〇〇に響く」は技術の文書のときだけ。前からある語の一覧の形を含むなら、今までどおり拾う
+        if (name == "に響く" and not doc_tech and _CALQUE_HIBIKU_ALL.match(sentence, match.start())
+                and not _CALQUE_HIBIKU_LISTED.search(sentence, match.start(), match.end())):
             continue
         if name == "機械どうし" and not _CALQUE_MACHINE_TALK.search(sentence):
             continue
@@ -4211,7 +4221,9 @@ def _v220_word_findings(analysis):
                 # 見出しのラベルと同じ行の型2は metaphor_label だけを出す
                 finders.append((2, functools.partial(_calque_type2, doc_tech=doc_tech)))
             if line_no not in blocked_type3 and _CALQUE_PHRASE_HEAD.search(scan):
-                finders.append((3, _calque_type3))
+                if doc_tech is None:
+                    doc_tech = _v220_doc_tech(text)
+                finders.append((3, functools.partial(_calque_type3, doc_tech=doc_tech)))
         thin_possible = thin_re is not None and thin_noun_re.search(scan) is not None
         sentences = ()
         if finders or thin_possible:
