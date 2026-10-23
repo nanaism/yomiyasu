@@ -11,6 +11,7 @@ __version__ = "2.2.0"
 
 import os
 import errno
+import functools
 import sys
 import re
 import argparse
@@ -3390,7 +3391,9 @@ _CALQUE_PLACE_CONTEXT = _V220Lazy(r"(?:入り?口|出口|窓口|玄関口?|関�
 # 実物の場所の入口（駅の入口、正面入口、2番入口）と、組織の窓口（総務部の窓口）
 _CALQUE_PLACE_REAL = _V220Lazy(
     r"(?:駅|正面|[東西南北]|番|建物|ビル|店|会場|公園|館|門|地下|トンネル|洞窟|港|校舎|病院|施設|部屋|通用|非常|改札|階段"
-    r"|空港|ホーム|ホール|劇場|球場|庭|家|屋敷|森|山|川|村|町|街|道|高速|本館|別館|棟|フロア|階)の?$")
+    r"|空港|ホーム|ホール|劇場|球場|庭|家|屋敷|森|山|川|村|町|街|道|高速|本館|別館|棟|フロア|階"
+    # 2.2.1: 技術の文書の中の実物の場所（サーバールーム、データセンター、北側の出口）
+    r"|ルーム|室|センター|オフィス|倉庫|工場|店舗|売り場|ロビー|受付|玄関|フロント|側)の?$")
 _CALQUE_PLACE_ORG = _V220Lazy(
     r"(?:部|課|室|係|局|センター|デスク|担当|相談|問い合わせ|問合せ|受付|事務所|事務局|総合|専用|役所|役場|銀行|郵便局"
     r"|市役所|区役所|窓口|申請|手続き|手続)の?$")
@@ -3403,6 +3406,10 @@ _CALQUE_TECH = _V220Lazy(
     + r"|データ|URL|リクエスト|レスポンス|接続|通信|トラフィック|ログイン|認証|ポータル|ページ|画面|サイト|フォーム"
     r"|アドレス|ポート|エンドポイント|ネットワーク|テーブル|ファイル|ログ|エラー|通知|CSV|JSON|HTTP|送信|受信|集計|決済"
     r"|リポジトリ|コード|メソッド|クラス|インターフェース|SDK|トークン|パケット|イベント|メッセージ|ドライブ|チャンネル)")
+# 入口と出口は、同じ文に技術の語がなくても、技術の文書（_CALQUE_TECH の語が5種類以上）で、要求や接続を集めたり通したり
+# する形（この入口を通ります、ひとつの入口に集めています）なら拾う。実物の場所（_CALQUE_PLACE_REAL）は今までどおり外す
+_CALQUE_DOC_TECH_MIN = 5
+_CALQUE_ENTRY_FLOW = _V220Lazy(r"(?:の前|を通|に集め|へ集め|に届|へ届|で受け|を経由|から入)")
 # 窓口は、コードの部品の語が同じ文にあり、組織の名前（総務部、情報システム課、サポートセンター）がないときだけ
 # （決済の窓口をこのモジュールに集める）
 _CALQUE_ORG_WORDS = ("センター", "デスク", "担当", "事務局")
@@ -3955,8 +3962,13 @@ def _calque_has_org(sentence):
     return False
 
 
-def _calque_type2(sentence, words):
-    """型2に当たれば True（当たった名詞を words に足す）。"""
+def _v220_doc_tech(text):
+    """技術の文書か（_CALQUE_TECH の語が _CALQUE_DOC_TECH_MIN 種類以上）。"""
+    return len(set(_CALQUE_TECH.findall(text))) >= _CALQUE_DOC_TECH_MIN
+
+
+def _calque_type2(sentence, words, doc_tech=False):
+    """型2に当たれば True（当たった名詞を words に足す）。doc_tech は技術の文書か（入口と出口の拾い方に使う）。"""
     if not _CALQUE_PLACE_HEAD.search(sentence):
         return False
     found = False
@@ -4006,7 +4018,8 @@ def _calque_type2(sentence, words):
         else:
             if tech is None:
                 tech = bool(_CALQUE_TECH.search(sentence))
-            if not tech:
+            if not tech and not (doc_tech and word in ("入口", "入り口", "出口")
+                                 and _CALQUE_ENTRY_FLOW.match(sentence, match.end())):
                 continue
         words.append(word)
         found = True
@@ -4171,6 +4184,7 @@ def _v220_word_findings(analysis):
         elif finding["rule"] == "translated_term":
             blocked_type3.add(finding["line"])
     out = []
+    doc_tech = None
     for line_no in sorted(candidate_lines | label_lines):
         row = rows[line_no - 1]
         if row["kind"] not in ("paragraph", "list", "heading", "table") or row["quote_depth"]:
@@ -4192,7 +4206,10 @@ def _v220_word_findings(analysis):
             if _v220_has_verb_stem(scan) and _CALQUE_SUBJECT_WORD.search(scan):
                 finders.append((1, _calque_type1))
             if label is None and _CALQUE_PLACE_HEAD.search(scan):
-                finders.append((2, _calque_type2))     # 見出しのラベルと同じ行の型2は metaphor_label だけを出す
+                if doc_tech is None:
+                    doc_tech = _v220_doc_tech(text)
+                # 見出しのラベルと同じ行の型2は metaphor_label だけを出す
+                finders.append((2, functools.partial(_calque_type2, doc_tech=doc_tech)))
             if line_no not in blocked_type3 and _CALQUE_PHRASE_HEAD.search(scan):
                 finders.append((3, _calque_type3))
         thin_possible = thin_re is not None and thin_noun_re.search(scan) is not None
