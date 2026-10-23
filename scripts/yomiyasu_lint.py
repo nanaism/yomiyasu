@@ -3502,9 +3502,6 @@ _CALQUE_PHRASES = (
     ("ときに効く", r"(?:とき|際|場合|うえ|上)に(?:いちばん|特に|大きく|強く)?効(?:く|き(?=[ぁ-ん])|い[てた])"),
     ("に響く", r"(?:クライアント|サーバー?|性能|応答|処理|ユーザー|利用者|ダッシュボード|システム|速度|画面|負荷|料金|費用"
               r"|コスト|請求)(?:の[^。、]{0,6})?に(?:まで|も)?響(?:く|き|い|か)"),
-    # 2.2.1: 「全〇〇に響く」（全運転手に響きます）。技術の文書のときだけ拾う（_calque_type3）
-    # 安全、健全の「全」と、全然、全く、全体として は外す
-    ("に響く", r"(?<![安完健保万不十])全(?!然|く|体として|体的)[^。、のをがは\s]{1,6}に(?:まで|も)?響(?:く|き|い|か)"),
     # 間引く、差し引く、引き渡す、引き上げる、引きずる などの複合の動詞は外す
     ("データを引く", r"(?:データ|ログ|レコード|設定|履歴)を(?:[^。、]{0,6})?(?<![間割])(?<!差し)引"
                     r"(?:く|き(?![出継続受取渡伸上下ず合寄止戻抜締起換替])|い|か|け)"),
@@ -3529,7 +3526,9 @@ _CALQUE_KIKU_DECIDE = _V220Lazy(r"構成|設計|選ぶ|選び|決め|判断|見�
 # 「に響く」の文字どおりの音と心（心に響く、音が部屋に響く）
 _CALQUE_HIBIKU_LITERAL = _V220Lazy(r"(?:心|胸|耳|琴線)に(?:まで|も)?響|(?:音|声|鐘|足音|歌)(?:が|は|も)")
 # 「全〇〇に響く」の形と、前からある語の一覧の形（クライアントに響く など）
-_CALQUE_HIBIKU_ALL = _V220Lazy(r"(?<![安完健保万不十])全(?!然|く|体として|体的)[^。、のをがは\s]{1,6}に(?:まで|も)?響")
+# 2.2.1: 「全〇〇に響く」（全運転手に響きます）。技術の文書のときだけ、_CALQUE_PHRASES とは別に探す（合わせた正規表現に
+# 入れると、中の「3ターン」などの句の一致を飲み込むため）。安全、健全の「全」と、全然、全く、全体として は外す
+_CALQUE_HIBIKU_ALL = _V220Lazy(r"(?<![安完健保万不十])全(?!然|く|体として|体的)[^。、のをがは\s]{1,6}に(?:まで|も)?響(?:く|き|い|か)")
 # 「全〇〇に響く」で外す音や言葉。「全〇〇」より前の主語（警報が鳴り、全フロアに響きます、社長の言葉は、全社員に響きました）
 # と、「響く」のすぐあとの名詞（全社員に響く言葉、全館に響く爆音で、サーバーが止まりました）。1字の語は電話、録音のような
 # 語の一部では当てず、「思いがけない」も外す
@@ -4008,12 +4007,22 @@ def _v220_doc_tech(text):
     return len(set(_CALQUE_TECH.findall(text)) - _CALQUE_DOC_TECH_GENERAL) >= _CALQUE_DOC_TECH_MIN
 
 
+def _entry_subject_end(sentence, cache):
+    """要求や呼び出しの主題（_CALQUE_ENTRY_SUBJECT）のいちばん早い終わり（なければ -1）。入口の一致ごとに文の頭から
+    読み直さず、文1つにつき1回だけ探す。"""
+    if "subject" not in cache:
+        first = _CALQUE_ENTRY_SUBJECT.search(sentence)
+        cache["subject"] = first.end() if first is not None else -1
+    return cache["subject"]
+
+
 def _calque_type2(sentence, words, doc_tech=False):
     """型2に当たれば True（当たった名詞を words に足す）。doc_tech は技術の文書か（入口と出口の拾い方に使う）。"""
     if not _CALQUE_PLACE_HEAD.search(sentence):
         return False
     found = False
     tech = None
+    cache = {}
     for match in _CALQUE_PLACE_ALWAYS.finditer(sentence):
         if match.group() != "受け口" and _v220_noun_start(sentence, match.end()):
             continue
@@ -4061,7 +4070,7 @@ def _calque_type2(sentence, words, doc_tech=False):
                 tech = bool(_CALQUE_TECH.search(sentence))
             if not tech and not (doc_tech and word in ("入口", "入り口", "出口")
                                  and _CALQUE_ENTRY_FLOW.match(sentence, match.end())
-                                 and _CALQUE_ENTRY_SUBJECT.search(sentence, 0, match.start())
+                                 and 0 <= _entry_subject_end(sentence, cache) <= match.start()
                                  and not _CALQUE_PLACE_REAL_DOC.search(before)
                                  and not _CALQUE_ENTRY_WAIT.match(sentence, match.end())):
                 continue
@@ -4071,41 +4080,43 @@ def _calque_type2(sentence, words, doc_tech=False):
 
 
 def _calque_type3(sentence, words, doc_tech=False):
-    """型3に当たれば True（当たった句の名前を words に足す）。doc_tech は技術の文書か（「全〇〇に響く」の拾い方に使う）。"""
+    """型3に当たれば True（当たった句の名前を words に足す）。doc_tech は技術の文書か（「全〇〇に響く」の拾い方に使う）。
+    文ごとに決まる値（機械やシステムの語があるか など）は、句の一致ごとに文を読み直さず、文1つにつき1回だけ求める。"""
     if not _CALQUE_PHRASE_HEAD.search(sentence):
         return False
     found = False
     type1_here = None
+    tech = None         # 文に機械やシステムの語（_CALQUE_TECH）があるか
+    literal = None      # 文字どおりの音と心の「響く」（_CALQUE_HIBIKU_LITERAL）があるか
+    hibiku = False      # この文で「に響く」を足したか
     for match in _CALQUE_PHRASE.finditer(sentence):
         name = next((name for name, each in _CALQUE_PHRASE_EACH if each.match(sentence, match.start())), match.group())
         if name in (_CALQUE_PHRASE_KIKU, "ときに効く") and _KIKU_RE["context"].search(sentence):
             continue
-        if name == "ときに効く" and (_CALQUE_ESTABLISHED_TYPE1_RE.search(sentence)
-                                    or not (_CALQUE_KIKU_DECIDE.search(sentence) or _CALQUE_TECH.search(sentence))):
+        if name == "ときに効く" and _CALQUE_ESTABLISHED_TYPE1_RE.search(sentence):
             continue
-        if name == "に響く":
-            # 「全〇〇に響く」の中に前からある語の一覧の形（全クライアントに響く、全費用に響く）があれば、その形で 2.2.0 のとおり見る
-            all_group = _CALQUE_HIBIKU_ALL.match(sentence, match.start())
-            listed = _CALQUE_HIBIKU_LISTED.search(sentence, match.start(), match.end()) if all_group else None
-            core = listed.group() if listed else match.group()
-            if _CALQUE_HIBIKU_LITERAL.search(sentence) or (core.startswith(_CALQUE_HIBIKU_COST)
-                                                           and not _CALQUE_TECH.search(sentence)):
+        if name == "ときに効く" and not _CALQUE_KIKU_DECIDE.search(sentence):
+            if tech is None:
+                tech = bool(_CALQUE_TECH.search(sentence))
+            if not tech:
                 continue
-            # 一覧にない「全〇〇に響く」は、技術の文書の、機械やシステムの語（「〜機」を含む）がある文だけ。音や言葉の名詞が続く形（全社員に響く言葉）、
-            # 響き渡る、響くほど、響くように、音や言葉が主語の文、全身の響きは外す
-            if all_group and listed is None:
-                after = match.end() + (1 if sentence.startswith("た", match.end()) else 0)
-                if (not doc_tech or not (_CALQUE_TECH.search(sentence) or _CALQUE_HIBIKU_MACHINE.search(sentence))
-                        or match.group().startswith("全身")
-                        or _CALQUE_HIBIKU_ALL_NOUN.match(sentence, after)
-                        or sentence.startswith(("渡", "わた", "ほど", "よう"), after)
-                        or sentence.startswith(("渡", "わた"), match.end())
-                        or _CALQUE_HIBIKU_ALL_LITERAL.search(sentence, 0, match.start())):
+        if name == "に響く":
+            if literal is None:
+                literal = bool(_CALQUE_HIBIKU_LITERAL.search(sentence))
+            if literal:
+                continue
+            if match.group().startswith(_CALQUE_HIBIKU_COST):
+                if tech is None:
+                    tech = bool(_CALQUE_TECH.search(sentence))
+                if not tech:
                     continue
         if name == "機械どうし" and not _CALQUE_MACHINE_TALK.search(sentence):
             continue
-        if name == "書き込みが通る" and match.group().startswith("アクセス") and not _CALQUE_TECH.search(sentence):
-            continue
+        if name == "書き込みが通る" and match.group().startswith("アクセス"):
+            if tech is None:
+                tech = bool(_CALQUE_TECH.search(sentence))
+            if not tech:
+                continue
         # 型1が同じ文で同じ動詞を当てたときは、対応表から足した形を重ねない（このキャッシュは、応答の速さに響きます）。
         # 同じ行のほかの文の型1とは比べない
         verb = _CALQUE_PHRASE_VERB.get(name)
@@ -4120,6 +4131,39 @@ def _calque_type3(sentence, words, doc_tech=False):
             continue
         words.append(name)
         found = True
+        if name == "に響く":
+            hibiku = True
+    # 2.2.1: 一覧にない「全〇〇に響く」は、技術の文書の、機械やシステムの語（「〜機」を含む）がある文だけ。一覧の形を含む
+    # 「全〇〇」（全クライアントに響く、全費用に響く）は上で見たので外す。音や言葉の名詞が続く形（全社員に響く言葉）、
+    # 響き渡る、響くほど、響くように、音や言葉が主語の文、全身の響き、文字どおりの音と心の響きは外す
+    if doc_tech and not hibiku and "全" in sentence:
+        subject_end = None    # 音や言葉の主語（_CALQUE_HIBIKU_ALL_LITERAL）のいちばん早い終わり。なければ -1
+        for match in _CALQUE_HIBIKU_ALL.finditer(sentence):
+            if _CALQUE_HIBIKU_LISTED.search(sentence, match.start(), match.end()) or match.group().startswith("全身"):
+                continue
+            if literal is None:
+                literal = bool(_CALQUE_HIBIKU_LITERAL.search(sentence))
+            if tech is None:
+                tech = bool(_CALQUE_TECH.search(sentence))
+            if literal or not (tech or _CALQUE_HIBIKU_MACHINE.search(sentence)):
+                break           # どれも文ごとに決まるので、ほかの一致も外れる
+            after = match.end() + (1 if sentence.startswith("た", match.end()) else 0)
+            if (_CALQUE_HIBIKU_ALL_NOUN.match(sentence, after) or sentence.startswith(("渡", "わた", "ほど", "よう"), after)
+                    or sentence.startswith(("渡", "わた"), match.end())):
+                continue
+            if subject_end is None:
+                first = _CALQUE_HIBIKU_ALL_LITERAL.search(sentence)
+                subject_end = first.end() if first is not None else -1
+            if 0 <= subject_end <= match.start():
+                continue
+            if type1_here is None:
+                type1_here = []
+                _calque_type1(sentence, type1_here)
+            if "響く" in type1_here:
+                break
+            words.append("に響く")
+            found = True
+            break
     return found
 
 

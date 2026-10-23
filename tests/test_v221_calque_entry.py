@@ -125,6 +125,22 @@ class AllGroupHibikuTest(unittest.TestCase):
                 with self.subTest(sentence=sentence):
                     self.assertTrue(calque_on_line(prefix + sentence + "\n", 3))
 
+    def test_turn_inside_an_all_group_form_keeps_its_v220_mark(self):
+        # 「全」のあとに「3ターン」「毎ターン」が来ても、2.2.0 のとおりターンの印がつく（「全〇〇に響く」は別に探す）
+        prefix = "この資料は、社内の API とデータベースの運用をまとめたものです。\n\n"
+        for sentence in ("モデルを呼ぶと、全3ターンに響きます。", "会話の遅れは全毎ターンに響きます。"):
+            with self.subTest(sentence=sentence):
+                found = [f for f in yomiyasu_lint.lint_text(prefix + sentence + "\n")["findings"]
+                         if f["rule"] == "calque" and f["line"] == 3]
+                self.assertEqual(len(found), 1)
+                self.assertIn("当たった言い方: ターン", found[0]["message"])
+
+    def test_one_long_sentence_stays_fast(self):
+        import time
+        started = time.perf_counter()
+        yomiyasu_lint.lint_text(TECH + "要求は入口を通り全店舗に響き、" * 4000 + "。\n")
+        self.assertLess(time.perf_counter() - started, 3.0)
+
     def test_cost_and_non_prefix_forms_keep_v220_behaviour(self):
         # 「全費用に響く」は 2.2.0 の費用の除外のとおり。安全、健全の「全」と、全然、全く、全体として は「全〇〇」にしない
         for prefix in (PLAIN, TECH):
