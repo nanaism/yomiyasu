@@ -48,7 +48,7 @@ lint の終了コード、既存の JSON のキー、`*_FORMAT_VERSION`、引数
 ### プロジェクトの語の一覧
 
 - git の最上位（git の外では作業ディレクトリ）の `.yomiyasu-words/` に置いた `allow.txt` と `flag.txt` を、lint、diff、check、フックが同じ順で探して読みます。`--words フォルダ` で場所を指定でき、`--no-words` で読みません。1行に1語の UTF-8 で、`#` で始まる行と空の行は読み飛ばし、BOM と CRLF も読めます。UTF-8 でないファイルと1万行を超えるファイルは、ファイルの名前と行番号を出して終了コード2で止めます（フックは止めず、`hook-errors.log` に残します）。
-- allow.txt の語は、calque、metaphor_label、katakana_term、project_term と、既存の metaphor_verb、translated_term、slop_vocabulary の候補から外し、外した件数を出します。flag.txt の語には `project_term` の印をつけます。
+- allow.txt の語は、calque、metaphor_label、katakana_term、project_term と、既存の metaphor_verb、translated_term、slop_vocabulary の候補から外し、外した件数を出します。1行に1件で行の語を並べる calque、katakana_term、project_term は、許した語だけを除き、ほかの語が残れば候補を残します。flag.txt の語には `project_term` の印をつけます。
 - 一覧を使ったときだけ、JSON の `context` に `words` を足します（`path`、`allow_lines`、`flag_lines`、`allow_sha256`、`flag_sha256`。lint ではさらに `allow_removed`）。check の記録の `options` にも同じ値を残し、`verify --replay` は記録の一覧で lint と diff をやり直します。一覧がないときの出力は、新しい規則の候補のほかは 2.1.3 と同じです。
 
 ### diff

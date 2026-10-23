@@ -3382,7 +3382,8 @@ _CALQUE_ATTRIBUTIVE_END = ("た", "る", "う", "く", "す", "つ", "む", "ぶ
 # 型2: 場所のたとえの名詞。受け口と「〜向けの口」はいつも拾う。「〜先」は _CALQUE_SAKI の形で、定着した語
 # （_CALQUE_ESTABLISHED_SAKI）を除いて拾う。入口、窓口などの実物にもある名前は、同じ文に機械やシステムの語（_CALQUE_TECH）が
 # あるときだけ拾い、実物の場所（駅の入口）と組織の窓口（総務部の窓口）は外す
-# 後ろに漢字やカタカナが続く語（入口付近、窓口業務、口座）は _calque_type2 が外す
+# 後ろに漢字やカタカナが続く語（入口付近、窓口業務、口座）は _calque_type2 が外す。動詞のあとの「口」（トークンを出す口）は、
+# 実物の口（水を出す口、切符を受け取る口）と分けるため、機械やシステムの語がある文だけで拾う
 _CALQUE_PLACE_ALWAYS = _V220Lazy(r"受け口|(?:向け|用)の口|(?:出す|受ける|受け取る|返す|渡す|発行する)口(?=[はがをにでもへと、。]|$)")
 _CALQUE_PLACE_CONTEXT = _V220Lazy(r"(?:入り?口|出口|窓口|玄関口?|関所|関門|裏口|勝手口|抜け道|裏道|通り道|合流地点|合流点"
                                    r"|防波堤|砦)|の口(?=[はがをにでもへと、。]|$)")
@@ -3474,12 +3475,17 @@ _CALQUE_PHRASES = (
     ("次のレベルに", r"次のレベルに(?:引き上げ|持っていく|押し上げ|連れて)"),
     # 2.2.0 の直訳語の対応表から足した形（machine-to-machine、matter、affect、pull、go through、turn）
     ("機械どうし", r"機械(?:どうし|同士)(?:の|で|が|は|を|に)"),
-    ("ときに効く", r"(?:とき|際|場合|うえ|上)に(?:いちばん|特に|大きく|強く)?効(?:く|き(?=[ぁ-ん])|い[てた])|効くのは、"),
+    ("ときに効く", r"(?:とき|際|場合|うえ|上)に(?:いちばん|特に|大きく|強く)?効(?:く|き(?=[ぁ-ん])|い[てた])"),
     ("に響く", r"(?:クライアント|サーバー?|性能|応答|処理|ユーザー|利用者|ダッシュボード|システム|速度|画面|負荷|料金|費用"
               r"|コスト|請求)(?:の[^。、]{0,6})?に(?:まで|も)?響(?:く|き|い|か)"),
-    ("データを引く", r"(?:データ|ログ|レコード|設定|履歴)を(?:[^。、]{0,6})?引(?:く|き(?![出継続受取])|い|か|け)"),
-    ("書き込みが通る", r"(?:書き込み|読み込み|書き換え|削除|更新|操作|アクセス)(?:も|が|は)(?:[^。、]{0,4})?通(?:る|り(?=[ぁ-ん])|っ|ら|れ)"),
-    ("ターン", r"毎ターン|(?:[0-9０-９一二三]+|各|次の|前の|同じ)ターン"),
+    # 間引く、差し引く、引き渡す、引き上げる、引きずる などの複合の動詞は外す
+    ("データを引く", r"(?:データ|ログ|レコード|設定|履歴)を(?:[^。、]{0,6})?(?<![間割])(?<!差し)引"
+                    r"(?:く|き(?![出継続受取渡伸上下ず合寄止戻抜締起換替])|い|か|け)"),
+    # 「通」の前が漢字の語（予定通り、手順通り、一通り、大通り）と「通りに」などは外す
+    ("書き込みが通る", r"(?:書き込み|読み込み|書き換え|削除|更新|操作|アクセス)(?:も|が|は)(?:[^。、]{0,4}[ぁ-ん])?通"
+                     r"(?:る|り(?=[ぁ-ん])(?![にのだでがはをもと])|っ|ら|れ)"),
+    # 数字の並びの途中から試さないよう、前に数字がないことを見る（長い数字の並びで遅くならない）
+    ("ターン", r"(?:毎|(?<![0-9０-９一二三])[0-9０-９一二三]+|各|次の|前の|同じ)ターン(?![ァ-ヴー])"),
 )
 _CALQUE_PHRASE = _V220Lazy("|".join("(?:{})".format(pattern) for _, pattern in _CALQUE_PHRASES))
 _CALQUE_PHRASE_EACH = tuple((name, _V220Lazy(pattern)) for name, pattern in _CALQUE_PHRASES)
@@ -3487,8 +3493,18 @@ _CALQUE_PHRASE_EACH = tuple((name, _V220Lazy(pattern)) for name, pattern in _CAL
 _CALQUE_PHRASE_KIKU = "から効く"
 # 対応表から足した句と、型1の同じ動詞（型1が当てた文では句を重ねない）
 _CALQUE_PHRASE_VERB = {"ときに効く": "効く", "に響く": "響く", "データを引く": "引く", "書き込みが通る": "通る"}
-_CALQUE_TURN_CONTEXT = _V220Lazy(r"指示|会話|依頼|プロンプト|モデル|エージェント|LLM|AI|Claude|Codex|ツール|呼び出|呼ぶ|呼び|読み込"
-                                 r"|設定|応答|返答|トークン|コンテキスト|セッション")
+_CALQUE_TURN_CONTEXT = _V220Lazy(r"指示|会話|依頼|プロンプト|モデル|エージェント|LLM|Claude|Codex|ツール|呼び出|読み込"
+                                 r"|応答|返答|トークン|コンテキスト|セッション")
+# ゲームの手番の「ターン」（毎ターン山札から引く、敵の AI は毎ターン行動を選ぶ）
+_CALQUE_TURN_GAME = _V220Lazy(r"ゲーム|カード|山札|手札|プレイヤー|将棋|囲碁|チェス|手番|モンスター|敵|攻撃|対戦|駒|盤")
+# 「ときに効く」は、構成や運用を決める話（what matters）か、機械やシステムの語がある文だけ（疲れたときに効くストレッチは外す）
+_CALQUE_KIKU_DECIDE = _V220Lazy(r"構成|設計|選ぶ|選び|決め|判断|見積|運用|導入|移行|方針|検討")
+# 「に響く」の文字どおりの音と心（心に響く、音が部屋に響く）
+_CALQUE_HIBIKU_LITERAL = _V220Lazy(r"(?:心|胸|耳|琴線)に(?:まで|も)?響|(?:音|声|鐘|足音|歌)(?:が|は|も)")
+# 「に響く」の料金や費用は、機械やシステムの語がある文だけ（円安が費用に響く は外す）
+_CALQUE_HIBIKU_COST = ("料金", "費用", "コスト", "請求")
+# 「機械どうし」は、通信ややり取りの話のときだけ（工場の機械同士の間隔は外す）
+_CALQUE_MACHINE_TALK = _V220Lazy(r"通信|やり取り|やりとり|接続|データ|API|連携|認証|リクエスト|メッセージ|プロトコル|経路")
 
 # metaphor_label: 見出しか文書の1行目が、記号を除いて8字以下で、「〜の横」「〜のそば」「〜係」「〜番」で終わるか一語だけで、
 # そのラベルが本文のほかの行に出てこないとき。よく使う節の名前（試験で守る）と、関係、一番などは外す
@@ -3944,12 +3960,17 @@ def _calque_type2(sentence, words):
     if not _CALQUE_PLACE_HEAD.search(sentence):
         return False
     found = False
+    tech = None
     for match in _CALQUE_PLACE_ALWAYS.finditer(sentence):
         if match.group() != "受け口" and _v220_noun_start(sentence, match.end()):
             continue
+        if not match.group().endswith(("受け口", "の口")):
+            if tech is None:
+                tech = bool(_CALQUE_TECH.search(sentence))
+            if not tech:
+                continue
         words.append("受け口" if match.group() == "受け口" else "口")
         found = True
-    tech = None
     for start, end in _calque_saki_spans(sentence):
         word = sentence[start:end]
         before = sentence[max(0, start - 8):end]
@@ -3997,15 +4018,32 @@ def _calque_type3(sentence, words):
     if not _CALQUE_PHRASE_HEAD.search(sentence):
         return False
     found = False
+    type1_here = None
     for match in _CALQUE_PHRASE.finditer(sentence):
         name = next((name for name, each in _CALQUE_PHRASE_EACH if each.match(sentence, match.start())), match.group())
         if name in (_CALQUE_PHRASE_KIKU, "ときに効く") and _KIKU_RE["context"].search(sentence):
             continue
-        # 型1が同じ動詞で当てた文には、対応表から足した形を重ねない（このキャッシュは、応答の速さに響きます）
-        if _CALQUE_PHRASE_VERB.get(name) in words:
+        if name == "ときに効く" and (_CALQUE_ESTABLISHED_TYPE1_RE.search(sentence)
+                                    or not (_CALQUE_KIKU_DECIDE.search(sentence) or _CALQUE_TECH.search(sentence))):
             continue
+        if name == "に響く" and (_CALQUE_HIBIKU_LITERAL.search(sentence)
+                               or (match.group().startswith(_CALQUE_HIBIKU_COST) and not _CALQUE_TECH.search(sentence))):
+            continue
+        if name == "機械どうし" and not _CALQUE_MACHINE_TALK.search(sentence):
+            continue
+        if name == "書き込みが通る" and match.group().startswith("アクセス") and not _CALQUE_TECH.search(sentence):
+            continue
+        # 型1が同じ文で同じ動詞を当てたときは、対応表から足した形を重ねない（このキャッシュは、応答の速さに響きます）。
+        # 同じ行のほかの文の型1とは比べない
+        verb = _CALQUE_PHRASE_VERB.get(name)
+        if verb:
+            if type1_here is None:
+                type1_here = []
+                _calque_type1(sentence, type1_here)
+            if verb in type1_here:
+                continue
         # 「ターン」は、ゲームの手番でなく、指示や会話、モデルの呼び出しの話のときだけ
-        if name == "ターン" and not _CALQUE_TURN_CONTEXT.search(sentence):
+        if name == "ターン" and (not _CALQUE_TURN_CONTEXT.search(sentence) or _CALQUE_TURN_GAME.search(sentence)):
             continue
         words.append(name)
         found = True
@@ -4163,17 +4201,16 @@ def _v220_word_findings(analysis):
             sentences = [part for part in (piece.strip() for piece in _V220_SENTENCE.findall(scan)) if part]
         types = []
         calque_words = []
+        word_types = []
         for number, finder in finders:
+            before = len(calque_words)
             if any([finder(sentence, calque_words) for sentence in sentences]):
                 types.append(number)
+                word_types.extend((word, number) for word in calque_words[before:])
         if types:
-            hit = tuple(dict.fromkeys(calque_words))
-            # 1行に1件なので、当たった言い方を message に並べる（同じ行の2つ目を読み落とさないため。置き換え先の語は出さない）
-            shown = "。当たった言い方: " + "、".join(hit) if hit else ""
             out.append({"rule": "calque", "line": line_no, "severity": "info",
-                        "message": "直訳語（{}{}）{}".format("。".join(_CALQUE_TYPE_NAMES[number] for number in types),
-                                                         shown, _V220_MESSAGE_TAIL),
-                        "snippet": snippet, "_words": hit})
+                        "message": _calque_message(types, word_types), "snippet": snippet,
+                        "_words": tuple(dict.fromkeys(calque_words)), "_word_types": tuple(word_types)})
         if katakana_re is not None:
             katakana_words = katakana_re.findall(scan)
             if katakana_words:
@@ -4192,6 +4229,13 @@ def _v220_word_findings(analysis):
                             "message": "中身の薄い評価の文" + _V220_MESSAGE_TAIL, "snippet": snippet,
                             "_words": tuple(dict.fromkeys(thin_words))})
     return out
+
+
+def _calque_message(types, word_types):
+    """calque の message。1行に1件なので、当たった言い方を並べる（同じ行の2つ目を読み落とさないため。置き換え先の語は出さない）。"""
+    hit = tuple(dict.fromkeys(word for word, _ in word_types))
+    shown = "。当たった言い方: " + "、".join(hit) if hit else ""
+    return "直訳語（{}{}）{}".format("。".join(_CALQUE_TYPE_NAMES[number] for number in types), shown, _V220_MESSAGE_TAIL)
 
 
 # 2.2.0 の文の形の規則（say_hedge、copy_comma_noun、bare_verb_chain）。
@@ -4554,6 +4598,8 @@ def _apply_words(findings, words):
     """語の一覧の allow.txt の語で候補を外す。(残った候補, context に入れる words の値か None) を返す。
 
     外すのは _ALLOW_RULES の規則の候補で、候補の _words のどれかが allow の語と同じもの。残った候補の順は変えない。
+    1行に1件で語を並べる規則（_ALLOW_PARTIAL_RULES）は、許した語だけを除き、許していない語が残れば候補を残して
+    message を作り直す（外した件数には数えない）。
     words が None（一覧を使わない）なら、候補をそのまま返し、context の値は None。"""
     if words is None:
         return findings, None
@@ -4563,13 +4609,34 @@ def _apply_words(findings, words):
     if allow:
         kept = []
         for finding in findings:
-            if finding["rule"] in removed and any(word in allow for word in finding.get("_words") or ()):
-                removed[finding["rule"]] += 1
+            hit = finding.get("_words") or ()
+            if finding["rule"] in removed and any(word in allow for word in hit):
+                rest = tuple(word for word in hit if word not in allow)
+                if finding["rule"] in _ALLOW_PARTIAL_RULES and rest:
+                    kept.append(_finding_with_words(finding, rest))
+                else:
+                    removed[finding["rule"]] += 1
             else:
                 kept.append(finding)
     context = words_context(words)
     context["allow_removed"] = removed
     return kept, context
+
+
+# 1行に1件で、行の語を _words に並べる規則。allow.txt の語は語ごとに外す
+_ALLOW_PARTIAL_RULES = ("calque", "katakana_term", "project_term")
+
+
+def _finding_with_words(finding, rest):
+    """許していない語（rest）だけを残した候補の写し。calque と project_term は message も作り直す。"""
+    out = dict(finding, _words=rest)
+    if finding["rule"] == "calque":
+        word_types = tuple((word, number) for word, number in finding.get("_word_types") or () if word in rest)
+        out["_word_types"] = word_types
+        out["message"] = _calque_message(list(dict.fromkeys(number for _, number in word_types)), word_types)
+    elif finding["rule"] == "project_term":
+        out["message"] = _PROJECT_TERM_MESSAGE.format("、".join(rest))
+    return out
 
 
 def _public_finding(finding):

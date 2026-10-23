@@ -142,7 +142,7 @@ python3 scripts/yomiyasu_lint.py article.md --json
 
 git の最上位に `.yomiyasu-words/` フォルダを置き、2つのファイルに1行に1語ずつ書きます。リポジトリに入れてチームで共有する前提のファイルで、状態フォルダ `.yomiyasu/` とは別の場所です（`.yomiyasu/` の中は探しません）。
 
-- `allow.txt`: 直さない語（その分野で定着した言い方）。`calque`、`metaphor_label`、`katakana_term`、`project_term` と、`metaphor_verb`、`translated_term`、`slop_vocabulary` の候補のうち、当たった語が一覧の語と同じものを外します。外した件数は出力と JSON に出ます。
+- `allow.txt`: 直さない語（その分野で定着した言い方）。`calque`、`metaphor_label`、`katakana_term`、`project_term` と、`metaphor_verb`、`translated_term`、`slop_vocabulary` の候補のうち、当たった語が一覧の語と同じものを外します。`calque`、`katakana_term`、`project_term` は1行に1件で行の語を並べるので、許した語だけを除き、ほかの語が残れば候補を残します。外した件数（候補ごと外したもの）は出力と JSON に出ます。
 - `flag.txt`: 印をつけて見直す語（その分野で見直したい言い方）。`project_term`（info）の印をつけます。扱いはほかの新しい印と同じで、文脈を見て書き直すかを決めます。
 
 探す順は次のとおりです。lint、diff、check、フックの4つが同じ順で探します。
