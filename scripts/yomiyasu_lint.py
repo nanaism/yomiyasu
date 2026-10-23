@@ -3392,8 +3392,12 @@ _CALQUE_PLACE_CONTEXT = _V220Lazy(r"(?:入り?口|出口|窓口|玄関口?|関�
 _CALQUE_PLACE_REAL = _V220Lazy(
     r"(?:駅|正面|[東西南北]|番|建物|ビル|店|会場|公園|館|門|地下|トンネル|洞窟|港|校舎|病院|施設|部屋|通用|非常|改札|階段"
     r"|空港|ホーム|ホール|劇場|球場|庭|家|屋敷|森|山|川|村|町|街|道|高速|本館|別館|棟|フロア|階"
-    # 2.2.1: 技術の文書の中の実物の場所（サーバールーム、データセンター、北側の出口、駐車場の出口）
-    r"|ルーム|室|センター|オフィス|倉庫|工場|店舗|売り場|ロビー|受付|玄関|フロント|(?:[東西南北]|正面|裏|表|反対|道路|線路)側"
+    # 2.2.1: 機械を置く部屋（サーバールーム、データセンター）。名前に技術の語があっても実物の場所
+    r"|(?:サーバー?|マシン|コンピューター?|電算|計算機)(?:ルーム|室)|データセンター)の?$")
+# 2.2.1: 同じ文に技術の語がない入口と出口（技術の文書の判定）で、ほかに外す実物の場所（サーバールーム、北側の出口、
+# 駐車場の出口）。同じ文に技術の語がある文は、2.2.0 のとおり _CALQUE_PLACE_REAL だけで外す
+_CALQUE_PLACE_REAL_DOC = _V220Lazy(
+    r"(?:ルーム|室|センター|オフィス|倉庫|工場|店舗|売り場|ロビー|受付|玄関|フロント|(?:[東西南北]|正面|裏|表|反対|道路|線路)側"
     r"|(?:駐車|駐輪|乗り|広|運動|工事)場|鉄|トイレ|学校|社屋|建屋|非常用)の?$")
 _CALQUE_PLACE_ORG = _V220Lazy(
     r"(?:部|課|室|係|局|センター|デスク|担当|相談|問い合わせ|問合せ|受付|事務所|事務局|総合|専用|役所|役場|銀行|郵便局"
@@ -3409,12 +3413,13 @@ _CALQUE_TECH = _V220Lazy(
     r"|リポジトリ|コード|メソッド|クラス|インターフェース|SDK|トークン|パケット|イベント|メッセージ|ドライブ|チャンネル)")
 # 入口と出口は、同じ文に技術の語がなくても、技術の文書（_CALQUE_TECH の語のうち、案内や行事の文書にも出る語
 # （_CALQUE_DOC_TECH_GENERAL）を除いた語が5種類以上）で、同じ文に要求や呼び出しの語（_CALQUE_ENTRY_SUBJECT）があり、
-# それを集めたり通したりする形（要求は、どれもこの入口を通ります）なら拾う。実物の場所（_CALQUE_PLACE_REAL）は今までどおり外す
+# それを集めたり通したりする形（要求は、どれもこの入口を通ります）なら拾う。実物の場所（_CALQUE_PLACE_REAL と
+# _CALQUE_PLACE_REAL_DOC）は外す
 _CALQUE_DOC_TECH_MIN = 5
 _CALQUE_DOC_TECH_GENERAL = frozenset((
     "画面 通知 メッセージ イベント サイト フォーム チャンネル ページ 送信 受信 ポータル アドレス ログイン 集計 決済 "
-    "ドライブ コード 設定 チェック テスト 監視 ツール サービス アプリ 端末 機器 装置 デバイス "
-    "センサー 体重計 計測器 鍵 テーブル クラス"
+    "ドライブ ファイル データ コード 設定 チェック テスト 監視 ツール サービス アプリ 端末 機器 装置 デバイス 処理 "
+    "センサー 体重計 計測器 エラー 鍵 テーブル クラス"
 ).split())
 _CALQUE_ENTRY_FLOW = _V220Lazy(r"(?:の前|を通|に通|へ通|に集め|へ集め|にまとめ|へまとめ|に届|へ届|で受け|を経由|から入)")
 _CALQUE_ENTRY_SUBJECT = _V220Lazy(r"要求|呼び出し|リクエスト|トラフィック|パケット|接続|通信")
@@ -3521,15 +3526,13 @@ _CALQUE_HIBIKU_LITERAL = _V220Lazy(r"(?:心|胸|耳|琴線)に(?:まで|も)?響
                                    r"|響(?:く|いた|いて)(?:チャイム|ベル|サイレン|放送|音|声|歌|音楽|拍手|歓声|笑い声)")
 # 「全〇〇に響く」の形と、前からある語の一覧の形（クライアントに響く など）
 _CALQUE_HIBIKU_ALL = _V220Lazy(r"全[^。、のをがは\s]{1,6}に(?:まで|も)?響")
-# 「全〇〇に響く」のうち、音や言葉が主語の文（警報が全フロアに響きます、社長の言葉は、全社員に響きました）。主語は
-# 「全〇〇」のすぐ前だけを見る（思いがけない遅れが全店舗に響きます は拾う）
-_CALQUE_HIBIKU_ALL_LITERAL = _V220Lazy(
-    r"(?:言葉|話|スピーチ|訓示|あいさつ|挨拶|メッセージ|ニュース|演説|呼びかけ|呼び掛け|思い|想い|痛み|衝撃|振動|揺れ"
-    r"|アラーム|サイレン|警報|ベル|チャイム|放送|アナウンス|音|声|鐘|歌|音楽)(?:が|は|も)、?$")
-# 「全〇〇に響く」のあとに続く音や言葉の名詞（全社員に響く言葉、全館に響くチャイム、全体に響く低音）
-_CALQUE_HIBIKU_ALL_NOUN = _V220Lazy(
-    r"(?:言葉|メッセージ|訓示|ニュース|名声|スピーチ|演説|話|声|音|低音|重低音|歌|音楽|チャイム|ベル|サイレン|アラーム"
-    r"|放送|アナウンス|拍手|歓声|痛み|衝撃|振動|揺れ)")
+# 「全〇〇に響く」で外す音や言葉の名詞。「全〇〇」のすぐ前の主語（警報が全フロアに響きます、社長の言葉は、全社員に響きました）
+# と、「響く」のすぐあとの名詞（全社員に響く言葉、全館に響く爆音で、サーバーが止まりました）に使う
+_CALQUE_HIBIKU_SOUND = (r"(?:言葉|話|一言|スピーチ|訓示|あいさつ|挨拶|メッセージ|ニュース|演説|呼びかけ|呼び掛け|思い|想い"
+                        r"|名前|名声|名曲|痛み|衝撃|振動|揺れ|アラーム|サイレン|警報|ベル|チャイム|ブザー|汽笛|放送|アナウンス"
+                        r"|音|爆音|低音|重低音|足音|声|大声|鐘|歌|音楽|拍手|歓声)")
+_CALQUE_HIBIKU_ALL_LITERAL = _V220Lazy(_CALQUE_HIBIKU_SOUND + r"(?:が|は|も)、?$")
+_CALQUE_HIBIKU_ALL_NOUN = _V220Lazy(_CALQUE_HIBIKU_SOUND)
 _CALQUE_HIBIKU_LISTED = _V220Lazy(_CALQUE_PHRASES[[name for name, _ in _CALQUE_PHRASES].index("に響く")][1])
 # 「に響く」の料金や費用は、機械やシステムの語がある文だけ（円安が費用に響く は外す）
 _CALQUE_HIBIKU_COST = ("料金", "費用", "コスト", "請求")
@@ -4043,7 +4046,8 @@ def _calque_type2(sentence, words, doc_tech=False):
                 tech = bool(_CALQUE_TECH.search(sentence))
             if not tech and not (doc_tech and word in ("入口", "入り口", "出口")
                                  and _CALQUE_ENTRY_FLOW.match(sentence, match.end())
-                                 and _CALQUE_ENTRY_SUBJECT.search(sentence)):
+                                 and _CALQUE_ENTRY_SUBJECT.search(sentence)
+                                 and not _CALQUE_PLACE_REAL_DOC.search(before)):
                 continue
         words.append(word)
         found = True
@@ -4066,12 +4070,13 @@ def _calque_type3(sentence, words, doc_tech=False):
         if name == "に響く" and (_CALQUE_HIBIKU_LITERAL.search(sentence)
                                or (match.group().startswith(_CALQUE_HIBIKU_COST) and not _CALQUE_TECH.search(sentence))):
             continue
-        # 「全〇〇に響く」は技術の文書だけ。音や言葉の名詞が続く形（全社員に響く言葉）、響き渡る、音や言葉が主語の文、
-        # 全身の響きは外す。前からある語の一覧の形を含むなら、今までどおり拾う
+        # 「全〇〇に響く」は、技術の文書の、機械やシステムの語がある文だけ。音や言葉の名詞が続く形（全社員に響く言葉）、
+        # 響き渡る、音や言葉が主語の文、全身の響きは外す。前からある語の一覧の形を含むなら、今までどおり拾う
         if (name == "に響く" and _CALQUE_HIBIKU_ALL.match(sentence, match.start())
                 and not _CALQUE_HIBIKU_LISTED.search(sentence, match.start(), match.end())):
             after = match.end() + (1 if sentence.startswith("た", match.end()) else 0)
-            if (not doc_tech or match.group().startswith("全身") or _CALQUE_HIBIKU_ALL_NOUN.match(sentence, after)
+            if (not doc_tech or not _CALQUE_TECH.search(sentence) or match.group().startswith("全身")
+                    or _CALQUE_HIBIKU_ALL_NOUN.match(sentence, after)
                     or sentence.startswith(("渡", "わた"), match.end())
                     or _CALQUE_HIBIKU_ALL_LITERAL.search(sentence, 0, match.start())):
                 continue
