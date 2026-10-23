@@ -140,7 +140,8 @@ class AllGroupHibikuTest(unittest.TestCase):
     def test_all_group_form_needs_a_machine_word_in_the_sentence(self):
         # 機械やシステムの語がない文は、技術の文書でも拾わない（2.2.0 のほかの句と同じ）
         for sentence in ("この遅れは全店舗に響きます。", "社長の言葉は、きっと全社員に響きます。", "警報が鳴り、全フロアに響きます。",
-                         "この機会は全社員に響きます。", "社長の機嫌は全社員に響きます。"):
+                         "この機会は全社員に響きます。", "社長の機嫌は全社員に響きます。", "この危機は全店舗に響きます。",
+                         "今回の障害を契機に、全店舗に響く見直しを進めます。", "待機の時間が延びると、全店舗に響きます。"):
             with self.subTest(sentence=sentence):
                 self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
 

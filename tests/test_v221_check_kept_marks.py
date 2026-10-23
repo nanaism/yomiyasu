@@ -102,5 +102,41 @@ class KeptMarksTest(unittest.TestCase):
         self.assertIn("要求（語の一覧。L3、L5、L7、L9、L11、ほか3行）", out)
 
 
+class KeptMarksHelperTest(unittest.TestCase):
+    """_kept_marks を直接呼ぶ（語ごとのまとめ方、語の取り出し方、手間）。"""
+
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / "scripts"))
+        import yomiyasu_check
+        cls.check = yomiyasu_check
+
+    def finding(self, rule, line, words):
+        if rule == "calque":
+            message = "直訳語（型2: 実物の名前の代わりに場所のたとえを使う名詞。当たった言い方: {}）の候補です。".format("、".join(words))
+        else:
+            message = "語の一覧（flag.txt）の語（{}）の候補です。".format("、".join(words))
+        return {"rule": rule, "line": line, "severity": "info", "message": message + "文脈を見て、誰が何をどうするかを書き直すか確かめてください。"}
+
+    def test_same_word_with_both_marks_is_listed_once_as_project_term(self):
+        marks = self.check._kept_marks([self.finding("calque", 7, ["入口"]), self.finding("project_term", 3, ["要求", "入口"]),
+                                        self.finding("calque", 3, ["入口"])])
+        # 最初の行が同じ語どうしは、候補に出た順（入口が先）
+        self.assertEqual(marks, [{"rule": "project_term", "word": "入口", "lines": [3, 7]},
+                                 {"rule": "project_term", "word": "要求", "lines": [3]}])
+
+    def test_words_with_full_width_parentheses_are_read_whole(self):
+        marks = self.check._kept_marks([self.finding("project_term", 1, ["決済（旧）"])])
+        self.assertEqual(marks, [{"rule": "project_term", "word": "決済（旧）", "lines": [1]}])
+
+    def test_cost_grows_with_the_number_of_findings(self):
+        import time
+        findings = [self.finding("project_term", line, ["要求"]) for line in range(1, 20001)]
+        started = time.perf_counter()
+        marks = self.check._kept_marks(findings)
+        self.assertLess(time.perf_counter() - started, 1.0)
+        self.assertEqual(len(marks[0]["lines"]), 20000)
+
+
 if __name__ == "__main__":
     unittest.main()
