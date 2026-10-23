@@ -2,11 +2,12 @@
 
 - 技術の文書（_CALQUE_TECH の語のうち、案内や行事の文書にも出る語を除いた語が5種類以上）では、同じ文に技術の語がなくても、
   同じ文の要求や呼び出しを集めたり通したりする形の「入口」「出口」（要求は、どれもこの入口を通ります）に印をつける。
-- 技術の文書でも、実物の場所の入口と出口（サーバールーム、駐車場の出口、学校の入口の前、宅配便が届く入口）には印をつけない。
+- 技術の文書でも、実物の場所の入口と出口（サーバールーム、駐車場の出口、学校の入口の前、宅配便が届く入口、駅からのアクセス）には
+  印をつけない。同じ文に技術の語がある入口と出口（サーバー側の入口）は、2.2.0 のとおり拾う。
 - 技術の文書でないとき（画面、通知、フォームのような語だけが並ぶ行事の案内を含む）は、今までどおり同じ文に技術の語があるときだけ拾う。
-- 「全〇〇に響く」（全運転手に響きます）は、技術の文書の、述語の「響く」だけを拾う。全社員に響く言葉、全館に響き渡る音、
-  警報が全フロアに響く、社長の言葉が全社員に響く、全身に響く、心に響くは外す。前からある語の一覧の形（全クライアントに響く）は、
-  技術の文書でなくても拾う。
+- 「全〇〇に響く」（全運転手に響きます、全店舗に響く可能性があります）は、技術の文書のときだけ拾う。音や言葉の名詞が続く形
+  （全社員に響く言葉）、全館に響き渡る音、すぐ前の主語が音や言葉の文（警報が全フロアに響く、社長の言葉は、全社員に響いた）、
+  全身に響く、心に響くは外す。前からある語の一覧の形（全クライアントに響く）は、技術の文書でなくても拾う。
 
 文はすべて合成の文。
 """
@@ -46,6 +47,19 @@ class EntryInTechnicalDocumentTest(unittest.TestCase):
             with self.subTest(sentence=sentence):
                 self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
 
+    def test_access_to_physical_places_is_not_marked(self):
+        for sentence in ("駅からのアクセスは、東口の入口を通るのが便利です。", "ビルへのアクセスは、裏手の入口を通ります。",
+                         "夜間のアクセスは、職員用の出口を通ります。", "来訪者のアクセスは、すべてこの入口を通ります。"):
+            with self.subTest(sentence=sentence):
+                self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
+
+    def test_entries_marked_in_v220_are_kept(self):
+        # 同じ文に技術の語がある入口と出口は、前の語が「〜側」「〜場」でも、2.2.0 のとおり拾う
+        for sentence in ("クライアント側の出口で、レスポンスを圧縮します。", "サーバー側の入口で、トークンを確かめます。",
+                         "API への要求は、サーバー側の入口を通ります。", "要求は、データの置き場の入口を通ります。"):
+            with self.subTest(sentence=sentence):
+                self.assertTrue(calque_on_line(PLAIN + sentence + "\n", 3))
+
     def test_event_notice_with_general_words_is_not_technical(self):
         text = ("# 秋の社内イベントのご案内\n\n参加の申し込みは社内サイトのフォームから受け付けます。\n\n"
                 "受付では、申し込み後に届くメッセージの画面を見せてください。\n\n当日の通知はチャンネルに流します。\n\n"
@@ -70,6 +84,14 @@ class AllGroupHibikuTest(unittest.TestCase):
     def test_all_group_form_in_technical_documents(self):
         for sentence in ("管理画面が全車両の位置を毎秒読み直すと、全運転手に響きます。", "バッチを日中に回すと、全店舗に響きます。",
                          "この遅れは全社員にまで響きます。"):
+            with self.subTest(sentence=sentence):
+                self.assertTrue(calque_on_line(TECH + sentence + "\n", 3))
+
+    def test_all_group_form_before_formal_nouns_and_with_other_subjects(self):
+        for sentence in ("この遅れは全店舗に響く可能性があります。", "この遅れは全店舗に響く恐れがあります。",
+                         "この遅れは全店舗に響く場合があります。", "全店舗に響く変更なので、夜に入れます。",
+                         "思いがけない遅れが全店舗に響きます。", "電話は止まりませんが、遅れは全店舗に響きます。",
+                         "アラームが鳴らないと、復旧の遅れが全店舗に響きます。", "メッセージが遅れると全店舗に響きます。"):
             with self.subTest(sentence=sentence):
                 self.assertTrue(calque_on_line(TECH + sentence + "\n", 3))
 
