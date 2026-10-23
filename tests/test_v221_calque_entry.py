@@ -107,7 +107,7 @@ class EntryInTechnicalDocumentTest(unittest.TestCase):
 class AllGroupHibikuTest(unittest.TestCase):
     def test_all_group_form_in_technical_documents(self):
         for sentence in ("管理画面が全車両の位置を毎秒読み直すと、全運転手に響きます。", "バッチを日中に回すと、全店舗に響きます。",
-                         "この処理の遅れは全社員にまで響きます。"):
+                         "この処理の遅れは全社員にまで響きます。", "貸出機が蔵書の一覧を毎秒読み直すと、全分館に響きます。"):
             with self.subTest(sentence=sentence):
                 self.assertTrue(calque_on_line(TECH + sentence + "\n", 3))
 
@@ -139,7 +139,8 @@ class AllGroupHibikuTest(unittest.TestCase):
 
     def test_all_group_form_needs_a_machine_word_in_the_sentence(self):
         # 機械やシステムの語がない文は、技術の文書でも拾わない（2.2.0 のほかの句と同じ）
-        for sentence in ("この遅れは全店舗に響きます。", "社長の言葉は、きっと全社員に響きます。", "警報が鳴り、全フロアに響きます。"):
+        for sentence in ("この遅れは全店舗に響きます。", "社長の言葉は、きっと全社員に響きます。", "警報が鳴り、全フロアに響きます。",
+                         "この機会は全社員に響きます。", "社長の機嫌は全社員に響きます。"):
             with self.subTest(sentence=sentence):
                 self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
 

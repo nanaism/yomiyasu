@@ -3538,6 +3538,8 @@ _CALQUE_HIBIKU_ALL_LITERAL = _V220Lazy(
     r"|名声|名曲|痛み|衝撃|振動|揺れ|アラーム|アラート|サイレン|警報|ベル|チャイム|ブザー|汽笛|放送|アナウンス|メロディー|うなり"
     r"|着信|爆音|騒音|低音|足音|大声|拍手|歓声)(?:が|は|も)(?!け)")
 # 「響く」のすぐあとの名詞は、音で終わる短い複合語（警告音、着信音、大音量）も外す
+# 「全〇〇に響く」で機械の語に数える「〜機」（貸出機、券売機、機械）。機能、機会、機関、機嫌などは外す
+_CALQUE_HIBIKU_MACHINE = _V220Lazy(r"(?<=[一-鿿ァ-ヴー])機(?!能|会|関|構|嫌|転|運|密|縁|敏|知)|機械")
 _CALQUE_HIBIKU_ALL_NOUN = _V220Lazy(
     r"(?:[一-鿿ァ-ヴー]{0,3}(?:音|声|音量)|言葉|話|一言|スピーチ|訓示|あいさつ|挨拶|メッセージ|ニュース|演説|呼びかけ|呼び掛け"
     r"|思い|想い|名前|名声|名曲|痛み|衝撃|振動|揺れ|アラーム|アラート|サイレン|警報|ベル|チャイム|ブザー|汽笛|放送|アナウンス"
@@ -4085,11 +4087,12 @@ def _calque_type3(sentence, words, doc_tech=False):
             if _CALQUE_HIBIKU_LITERAL.search(sentence) or (core.startswith(_CALQUE_HIBIKU_COST)
                                                            and not _CALQUE_TECH.search(sentence)):
                 continue
-            # 一覧にない「全〇〇に響く」は、技術の文書の、機械やシステムの語がある文だけ。音や言葉の名詞が続く形（全社員に響く言葉）、
+            # 一覧にない「全〇〇に響く」は、技術の文書の、機械やシステムの語（「〜機」を含む）がある文だけ。音や言葉の名詞が続く形（全社員に響く言葉）、
             # 響き渡る、響くほど、響くように、音や言葉が主語の文、全身の響きは外す
             if all_group and listed is None:
                 after = match.end() + (1 if sentence.startswith("た", match.end()) else 0)
-                if (not doc_tech or not _CALQUE_TECH.search(sentence) or match.group().startswith("全身")
+                if (not doc_tech or not (_CALQUE_TECH.search(sentence) or _CALQUE_HIBIKU_MACHINE.search(sentence))
+                        or match.group().startswith("全身")
                         or _CALQUE_HIBIKU_ALL_NOUN.match(sentence, after)
                         or sentence.startswith(("渡", "わた", "ほど", "よう"), after)
                         or sentence.startswith(("渡", "わた"), match.end())
