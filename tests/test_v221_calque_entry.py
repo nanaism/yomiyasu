@@ -49,6 +49,12 @@ class EntryInTechnicalDocumentTest(unittest.TestCase):
             with self.subTest(sentence=sentence):
                 self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
 
+    def test_people_waiting_at_physical_entries_are_not_marked(self):
+        for sentence in ("スタッフの呼び出しがあるまで、入口の前でお待ちください。", "要求があれば、マンションの入口に届けます。",
+                         "保護者の呼び出しがあったら、幼稚園の入口の前で待ってください。", "組合の要求を受けて、通路の出口を通る人を数えます。"):
+            with self.subTest(sentence=sentence):
+                self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
+
     def test_access_to_physical_places_is_not_marked(self):
         for sentence in ("駅からのアクセスは、東口の入口を通るのが便利です。", "ビルへのアクセスは、裏手の入口を通ります。",
                          "夜間のアクセスは、職員用の出口を通ります。", "来訪者のアクセスは、すべてこの入口を通ります。"):
@@ -104,6 +110,18 @@ class AllGroupHibikuTest(unittest.TestCase):
             with self.subTest(sentence=sentence):
                 self.assertTrue(calque_on_line(TECH + sentence + "\n", 3))
 
+    def test_cost_and_non_prefix_forms_keep_v220_behaviour(self):
+        # 「全費用に響く」は 2.2.0 の費用の除外のとおり。安全、健全の「全」と、全然、全く、全体として は「全〇〇」にしない
+        for prefix in (PLAIN, TECH):
+            for sentence in ("円安が全費用に響きます。", "値上げは全料金に響きます。"):
+                with self.subTest(sentence=sentence):
+                    self.assertFalse(calque_on_line(prefix + sentence + "\n", 3))
+        for sentence in ("APIの鍵の扱いは安全性に響きます。", "トークンの管理の甘さは、健全性に響きます。",
+                         "新しいAPIの説明会を開いたが、全然お客様に響かなかった。", "ログの話をしても、全く現場に響かなかった。",
+                         "データの保全作業は全体として現場に響きます。"):
+            with self.subTest(sentence=sentence):
+                self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
+
     def test_all_group_form_needs_a_machine_word_in_the_sentence(self):
         # 機械やシステムの語がない文は、技術の文書でも拾わない（2.2.0 のほかの句と同じ）
         for sentence in ("この遅れは全店舗に響きます。", "社長の言葉は、きっと全社員に響きます。", "警報が鳴り、全フロアに響きます。"):
@@ -115,7 +133,9 @@ class AllGroupHibikuTest(unittest.TestCase):
                          "全館に響く放送で、避難の手順を伝えます。", "障害のときは、警報が全フロアに響きます。",
                          "全館に響き渡るアラームが鳴りました。", "全館に響きわたる大きな音。", "衝撃が全身に響きます。",
                          "全社員に響くメッセージを考えます。", "社長の言葉は、全社員に響きました。", "全館に響いた拍手が続きました。",
-                         "全館に響く爆音で、サーバーが止まりました。", "障害のときは、全フロアに響く警報で知らせます。"):
+                         "全館に響く爆音で、サーバーが止まりました。", "障害のときは、全フロアに響く警報で知らせます。",
+                         "サーバーのアラームが鳴り、全フロアに響きました。", "監視装置のブザーが大きく全館に響いた。",
+                         "サーバーのファンが全フロアに響くほどうるさい。", "全員に響くように、APIの説明を短くしました。"):
             with self.subTest(sentence=sentence):
                 self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
         for sentence in ("社長の言葉は、全社員に響きました。", "値上げは全家庭に響きます。"):

@@ -3398,7 +3398,9 @@ _CALQUE_PLACE_REAL = _V220Lazy(
 # 駐車場の出口）。同じ文に技術の語がある文は、2.2.0 のとおり _CALQUE_PLACE_REAL だけで外す
 _CALQUE_PLACE_REAL_DOC = _V220Lazy(
     r"(?:ルーム|室|センター|オフィス|倉庫|工場|店舗|売り場|ロビー|受付|玄関|フロント|(?:[東西南北]|正面|裏|表|反対|道路|線路)側"
-    r"|(?:駐車|駐輪|乗り|広|運動|工事)場|鉄|トイレ|学校|社屋|建屋|非常用)の?$")
+    r"|(?:駐車|駐輪|乗り|広|運動|工事)場|鉄|トイレ|学校|社屋|建屋|非常用|団地|園|マンション|通路)の?$")
+# 入口の前で人が待つ、集まる形（入口の前でお待ちください）は、技術の語のない文では実物の場所として外す
+_CALQUE_ENTRY_WAIT = _V220Lazy(r"の前(?:で|に)(?:は、?)?(?:お?待|集ま|並|立)")
 _CALQUE_PLACE_ORG = _V220Lazy(
     r"(?:部|課|室|係|局|センター|デスク|担当|相談|問い合わせ|問合せ|受付|事務所|事務局|総合|専用|役所|役場|銀行|郵便局"
     r"|市役所|区役所|窓口|申請|手続き|手続)の?$")
@@ -3499,7 +3501,8 @@ _CALQUE_PHRASES = (
     ("に響く", r"(?:クライアント|サーバー?|性能|応答|処理|ユーザー|利用者|ダッシュボード|システム|速度|画面|負荷|料金|費用"
               r"|コスト|請求)(?:の[^。、]{0,6})?に(?:まで|も)?響(?:く|き|い|か)"),
     # 2.2.1: 「全〇〇に響く」（全運転手に響きます）。技術の文書のときだけ拾う（_calque_type3）
-    ("に響く", r"全[^。、のをがは\s]{1,6}に(?:まで|も)?響(?:く|き|い|か)"),
+    # 安全、健全の「全」と、全然、全く、全体として は外す
+    ("に響く", r"(?<![安完健保万不十])全(?!然|く|体として|体的)[^。、のをがは\s]{1,6}に(?:まで|も)?響(?:く|き|い|か)"),
     # 間引く、差し引く、引き渡す、引き上げる、引きずる などの複合の動詞は外す
     ("データを引く", r"(?:データ|ログ|レコード|設定|履歴)を(?:[^。、]{0,6})?(?<![間割])(?<!差し)引"
                     r"(?:く|き(?![出継続受取渡伸上下ず合寄止戻抜締起換替])|い|か|け)"),
@@ -3525,14 +3528,18 @@ _CALQUE_KIKU_DECIDE = _V220Lazy(r"構成|設計|選ぶ|選び|決め|判断|見�
 _CALQUE_HIBIKU_LITERAL = _V220Lazy(r"(?:心|胸|耳|琴線)に(?:まで|も)?響|(?:音|声|鐘|足音|歌)(?:が|は|も)"
                                    r"|響(?:く|いた|いて)(?:チャイム|ベル|サイレン|放送|音|声|歌|音楽|拍手|歓声|笑い声)")
 # 「全〇〇に響く」の形と、前からある語の一覧の形（クライアントに響く など）
-_CALQUE_HIBIKU_ALL = _V220Lazy(r"全[^。、のをがは\s]{1,6}に(?:まで|も)?響")
-# 「全〇〇に響く」で外す音や言葉の名詞。「全〇〇」のすぐ前の主語（警報が全フロアに響きます、社長の言葉は、全社員に響きました）
-# と、「響く」のすぐあとの名詞（全社員に響く言葉、全館に響く爆音で、サーバーが止まりました）に使う
-_CALQUE_HIBIKU_SOUND = (r"(?:言葉|話|一言|スピーチ|訓示|あいさつ|挨拶|メッセージ|ニュース|演説|呼びかけ|呼び掛け|思い|想い"
-                        r"|名前|名声|名曲|痛み|衝撃|振動|揺れ|アラーム|サイレン|警報|ベル|チャイム|ブザー|汽笛|放送|アナウンス"
-                        r"|音|爆音|低音|重低音|足音|声|大声|鐘|歌|音楽|拍手|歓声)")
-_CALQUE_HIBIKU_ALL_LITERAL = _V220Lazy(_CALQUE_HIBIKU_SOUND + r"(?:が|は|も)、?$")
-_CALQUE_HIBIKU_ALL_NOUN = _V220Lazy(_CALQUE_HIBIKU_SOUND)
+_CALQUE_HIBIKU_ALL = _V220Lazy(r"(?<![安完健保万不十])全(?!然|く|体として|体的)[^。、のをがは\s]{1,6}に(?:まで|も)?響")
+# 「全〇〇に響く」で外す音や言葉。「全〇〇」より前の主語（警報が鳴り、全フロアに響きます、社長の言葉は、全社員に響きました）
+# と、「響く」のすぐあとの名詞（全社員に響く言葉、全館に響く爆音で、サーバーが止まりました）。1字の語は電話、録音のような
+# 語の一部では当てず、「思いがけない」も外す
+_CALQUE_HIBIKU_ALL_LITERAL = _V220Lazy(
+    r"(?:(?<![一-鿿])(?:話|音|声|歌|鐘|雷)|言葉|一言|スピーチ|訓示|あいさつ|挨拶|ニュース|演説|呼びかけ|呼び掛け|思い|想い|理念"
+    r"|名声|名曲|痛み|衝撃|振動|揺れ|アラーム|サイレン|警報|ベル|チャイム|ブザー|汽笛|放送|アナウンス|爆音|騒音|低音|足音|大声"
+    r"|拍手|歓声)(?:が|は|も)(?!け)")
+_CALQUE_HIBIKU_ALL_NOUN = _V220Lazy(
+    r"(?:言葉|話|一言|スピーチ|訓示|あいさつ|挨拶|メッセージ|ニュース|演説|呼びかけ|呼び掛け|思い|想い|名前|名声|名曲|痛み|衝撃"
+    r"|振動|揺れ|アラーム|サイレン|警報|ベル|チャイム|ブザー|汽笛|放送|アナウンス|音|爆音|騒音|低音|重低音|足音|声|大声|鐘|歌"
+    r"|音楽|拍手|歓声)")
 _CALQUE_HIBIKU_LISTED = _V220Lazy(_CALQUE_PHRASES[[name for name, _ in _CALQUE_PHRASES].index("に響く")][1])
 # 「に響く」の料金や費用は、機械やシステムの語がある文だけ（円安が費用に響く は外す）
 _CALQUE_HIBIKU_COST = ("料金", "費用", "コスト", "請求")
@@ -4047,7 +4054,8 @@ def _calque_type2(sentence, words, doc_tech=False):
             if not tech and not (doc_tech and word in ("入口", "入り口", "出口")
                                  and _CALQUE_ENTRY_FLOW.match(sentence, match.end())
                                  and _CALQUE_ENTRY_SUBJECT.search(sentence)
-                                 and not _CALQUE_PLACE_REAL_DOC.search(before)):
+                                 and not _CALQUE_PLACE_REAL_DOC.search(before)
+                                 and not _CALQUE_ENTRY_WAIT.match(sentence, match.end())):
                 continue
         words.append(word)
         found = True
@@ -4067,19 +4075,24 @@ def _calque_type3(sentence, words, doc_tech=False):
         if name == "ときに効く" and (_CALQUE_ESTABLISHED_TYPE1_RE.search(sentence)
                                     or not (_CALQUE_KIKU_DECIDE.search(sentence) or _CALQUE_TECH.search(sentence))):
             continue
-        if name == "に響く" and (_CALQUE_HIBIKU_LITERAL.search(sentence)
-                               or (match.group().startswith(_CALQUE_HIBIKU_COST) and not _CALQUE_TECH.search(sentence))):
-            continue
-        # 「全〇〇に響く」は、技術の文書の、機械やシステムの語がある文だけ。音や言葉の名詞が続く形（全社員に響く言葉）、
-        # 響き渡る、音や言葉が主語の文、全身の響きは外す。前からある語の一覧の形を含むなら、今までどおり拾う
-        if (name == "に響く" and _CALQUE_HIBIKU_ALL.match(sentence, match.start())
-                and not _CALQUE_HIBIKU_LISTED.search(sentence, match.start(), match.end())):
-            after = match.end() + (1 if sentence.startswith("た", match.end()) else 0)
-            if (not doc_tech or not _CALQUE_TECH.search(sentence) or match.group().startswith("全身")
-                    or _CALQUE_HIBIKU_ALL_NOUN.match(sentence, after)
-                    or sentence.startswith(("渡", "わた"), match.end())
-                    or _CALQUE_HIBIKU_ALL_LITERAL.search(sentence, 0, match.start())):
+        if name == "に響く":
+            # 「全〇〇に響く」の中に前からある語の一覧の形（全クライアントに響く、全費用に響く）があれば、その形で 2.2.0 のとおり見る
+            all_group = _CALQUE_HIBIKU_ALL.match(sentence, match.start())
+            listed = _CALQUE_HIBIKU_LISTED.search(sentence, match.start(), match.end()) if all_group else None
+            core = listed.group() if listed else match.group()
+            if _CALQUE_HIBIKU_LITERAL.search(sentence) or (core.startswith(_CALQUE_HIBIKU_COST)
+                                                           and not _CALQUE_TECH.search(sentence)):
                 continue
+            # 一覧にない「全〇〇に響く」は、技術の文書の、機械やシステムの語がある文だけ。音や言葉の名詞が続く形（全社員に響く言葉）、
+            # 響き渡る、響くほど、響くように、音や言葉が主語の文、全身の響きは外す
+            if all_group and listed is None:
+                after = match.end() + (1 if sentence.startswith("た", match.end()) else 0)
+                if (not doc_tech or not _CALQUE_TECH.search(sentence) or match.group().startswith("全身")
+                        or _CALQUE_HIBIKU_ALL_NOUN.match(sentence, after)
+                        or sentence.startswith(("渡", "わた", "ほど", "よう"), after)
+                        or sentence.startswith(("渡", "わた"), match.end())
+                        or _CALQUE_HIBIKU_ALL_LITERAL.search(sentence, 0, match.start())):
+                    continue
         if name == "機械どうし" and not _CALQUE_MACHINE_TALK.search(sentence):
             continue
         if name == "書き込みが通る" and match.group().startswith("アクセス") and not _CALQUE_TECH.search(sentence):
