@@ -258,6 +258,13 @@ cp -R /tmp/yomiyasu/skills/yomiyasu .agents/skills/yomiyasu
 
 この置き方では Codex がスキルを `yomiyasu:yomiyasu` という名前で一覧に載せます。呼ぶときは「/yomiyasu」とだけ送るか、依頼の文に「yomiyasu で」と書いてください。一覧の名前どおり `$yomiyasu:yomiyasu` と書いても呼べます。コピーしたフォルダは自動では新しくなりません。最新にするには、同じ手順でコピーし直してください。
 
+### スキルの大きさに上限がある環境では
+
+SKILL.md の字数やファイルの数に上限があって本体を入れられない環境のために、本体を短くしたものを2つ、別のリポジトリで公開しています。
+
+- [yomiyasu-mini](https://github.com/nanaism/yomiyasu-mini): SKILL.md を18,000字以下にしたスキルです。意味が変わる恐れの検査（本体の diff と同じ結果）を含みます。
+- [yomiyasu-pocket](https://github.com/nanaism/yomiyasu-pocket): AIの指示欄に貼って使う、400〜500字の指示文です。スキルの仕組みと検査は使いません。
+
 ### 他の日本語校正スキルとの干渉について
 
 他の日本語校正スキルと併用すると、指示が食い違う場合があります。出力が乱れる場合は、類似スキルを一時的に無効にして使用してください。
