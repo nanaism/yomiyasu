@@ -1,7 +1,8 @@
 """v2.2.1: 直訳語（calque）の型2の「入口」「出口」の拾い方を確かめる。
 
 - 技術の文書（_CALQUE_TECH の語のうち、案内や行事の文書にも出る語を除いた語が5種類以上）では、同じ文に技術の語がなくても、
-  同じ文の要求や呼び出しを集めたり通したりする形の「入口」「出口」（要求は、どれもこの入口を通ります）に印をつける。
+  入口より前の要求や呼び出しの主題（〜は）を集めたり通したりする形の「入口」「出口」（要求は、どれもこの入口を通ります）に
+  印をつける。人を呼ぶ文、人が要求する文（来客の呼び出しがあったら、組合の要求を受けて）には印をつけない。
 - 技術の文書でも、実物の場所の入口と出口（サーバールーム、駐車場の出口、学校の入口の前、宅配便が届く入口、駅からのアクセス）には
   印をつけない。同じ文に技術の語がある入口と出口（サーバー側の入口、チャットルームの入口）は、2.2.0 のとおり拾う。
 - 技術の文書でないとき（画面、通知、フォームのような語だけが並ぶ行事の案内を含む）は、今までどおり同じ文に技術の語があるときだけ拾う。
@@ -32,7 +33,7 @@ def calque_on_line(text, line):
 class EntryInTechnicalDocumentTest(unittest.TestCase):
     def test_flow_forms_are_marked_without_a_technical_word_in_the_sentence(self):
         for sentence in ("外部から届く要求は、ひとつの入口に集めています。", "チャットからの要求は、どれもこの入口を通ります。",
-                         "要求の入口の前では、送り手が登録済みかを確かめます。", "すべての通知は、この入口に届きます。",
+                         "要求は、この入口の前で、送り手が登録済みかを確かめます。", "すべての通知は、この入口に届きます。",
                          "要求は、どれもこの入口に通します。", "外からの要求は、ひとつの入口にまとめています。"):
             with self.subTest(sentence=sentence):
                 self.assertTrue(calque_on_line(TECH + sentence + "\n", 3))
@@ -52,6 +53,13 @@ class EntryInTechnicalDocumentTest(unittest.TestCase):
     def test_people_waiting_at_physical_entries_are_not_marked(self):
         for sentence in ("スタッフの呼び出しがあるまで、入口の前でお待ちください。", "要求があれば、マンションの入口に届けます。",
                          "保護者の呼び出しがあったら、幼稚園の入口の前で待ってください。", "組合の要求を受けて、通路の出口を通る人を数えます。"):
+            with self.subTest(sentence=sentence):
+                self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
+
+    def test_people_called_or_requesting_at_physical_entries_are_not_marked(self):
+        for sentence in ("来客の呼び出しは、入口の前のインターホンで行います。", "呼び出しを受けた人は、出口を通って外に出てください。",
+                         "館内放送で呼び出しがあったら、出口の前に移動します。", "当番の呼び出しがあったら、入口から入ってください。",
+                         "保守の作業員は、入館の要求を出してから、入口を通ります。", "お客様の要求に応じて、入口に届けます。"):
             with self.subTest(sentence=sentence):
                 self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
 
@@ -110,6 +118,13 @@ class AllGroupHibikuTest(unittest.TestCase):
             with self.subTest(sentence=sentence):
                 self.assertTrue(calque_on_line(TECH + sentence + "\n", 3))
 
+    def test_listed_forms_followed_by_a_sound_word_keep_v220_marks(self):
+        # 一覧の形の「響いて」のあとに音の語で始まる節が続いても、2.2.0 のとおり拾う
+        for prefix in (PLAIN, TECH):
+            for sentence in ("回線の遅延が応答に響いて音声通話が途切れます。", "サーバーの負荷が応答に響いて放送が止まりました。"):
+                with self.subTest(sentence=sentence):
+                    self.assertTrue(calque_on_line(prefix + sentence + "\n", 3))
+
     def test_cost_and_non_prefix_forms_keep_v220_behaviour(self):
         # 「全費用に響く」は 2.2.0 の費用の除外のとおり。安全、健全の「全」と、全然、全く、全体として は「全〇〇」にしない
         for prefix in (PLAIN, TECH):
@@ -135,7 +150,9 @@ class AllGroupHibikuTest(unittest.TestCase):
                          "全社員に響くメッセージを考えます。", "社長の言葉は、全社員に響きました。", "全館に響いた拍手が続きました。",
                          "全館に響く爆音で、サーバーが止まりました。", "障害のときは、全フロアに響く警報で知らせます。",
                          "サーバーのアラームが鳴り、全フロアに響きました。", "監視装置のブザーが大きく全館に響いた。",
-                         "サーバーのファンが全フロアに響くほどうるさい。", "全員に響くように、APIの説明を短くしました。"):
+                         "サーバーのファンが全フロアに響くほどうるさい。", "全員に響くように、APIの説明を短くしました。",
+                         "全フロアに響く警告音で、サーバー室の異常を知らせます。", "全フロアに響く大音量で、サーバーの異常を知らせます。",
+                         "監視ツールのアラートが全フロアに響きました。", "全館に響くメロディーで、システムの停止を伝えます。"):
             with self.subTest(sentence=sentence):
                 self.assertFalse(calque_on_line(TECH + sentence + "\n", 3))
         for sentence in ("社長の言葉は、全社員に響きました。", "値上げは全家庭に響きます。"):
