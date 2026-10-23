@@ -3,7 +3,7 @@ name: yomiyasu
 description: AIが生成した日本語を推敲するスキル。利用者が yomiyasu の名前を出して頼んだとき（「/yomiyasu」、「$yomiyasu:yomiyasu」、「yomiyasu で推敲して」など）と、スキルを使った日本語の推敲をはっきり頼んだときだけ使う。CLAUDE.md、AGENTS.md、カスタム指示などで yomiyasu を使うよう求められているときも、名前を出して頼まれたものとして扱う。名前を出さずに日本語の文章を書かせる依頼や、コード、設定、ドキュメントの更新では使わない。意味と条件を保ち、不自然な比喩、曖昧な主述関係、不要な装飾やコピー調を整える。
 license: MIT
 metadata:
-  version: "2.2.1"
+  version: "2.2.2"
 ---
 
 # yomiyasu
