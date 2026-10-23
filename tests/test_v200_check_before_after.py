@@ -377,7 +377,8 @@ class BeforeAfterTest(DocTypeCase):
         expected = ["format", "format_version", "tool_version", "command", "status", "status_line", "message", "next",
                     "run_id", "attempt", "fix_count", "mode", "context", "record_path", "fail_on_hit", "meaning_risk_count",
                     "fail_on_meaning_risk_count", "stiffness_check", "tone_check", "hedges_check", "immutable_check",
-                    "politeness_check", "lint", "diff", "materials", "candidate_counts", "changed_places", "fact_gaps"]
+                    "politeness_check", "lint", "diff", "materials", "candidate_counts", "changed_places", "fact_gaps",
+                    "kept_marks"]
         self.assertEqual(list(data), expected)
         self.assertEqual(data["format_version"], 1)
         self.assertEqual(data["candidate_counts"], {"basis": "lint", "source": 0, "final": 0, "source_kind": "original",
@@ -394,7 +395,7 @@ class BeforeAfterTest(DocTypeCase):
         self.assertEqual(len(out.splitlines()), 4)
         self.assertEqual(out.splitlines()[3], "記録の中身: 見直し候補 最終稿 0件、直した箇所 1か所（原文の件数と元と後は run の出力にあります）")
         data = json.loads(json_out)
-        self.assertEqual(list(data)[-2:], ["final_candidate_count", "changed_place_count"])
+        self.assertEqual(list(data)[-3:], ["final_candidate_count", "changed_place_count", "kept_marks"])
         self.assertEqual((data["final_candidate_count"], data["changed_place_count"]), (0, 1))
         material, final = self.write("memo.md", MEMO), self.write("composed.md", COMPOSED)
         self.check("run", "--material", material, "--final", final)

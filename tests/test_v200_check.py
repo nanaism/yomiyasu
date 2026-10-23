@@ -135,7 +135,8 @@ RUN_JSON_KEYS = ("format", "format_version", "tool_version", "command", "status"
                  "materials")
 VERIFY_JSON_KEYS = ("format", "format_version", "tool_version", "command", "status", "status_line", "message",
                     "run_id", "attempt", "record_path", "final", "record_final_sha256", "mode", "context", "required_checks",
-                    "checks", "meaning_risk_count", "replay", "problems", "final_candidate_count", "changed_place_count")
+                    "checks", "meaning_risk_count", "replay", "problems", "final_candidate_count", "changed_place_count",
+                    "kept_marks")
 FILE_NAME = re.compile(r"^[A-Za-z0-9._-]+$")
 
 # 指示書2.2の3組（合成の文）
@@ -463,10 +464,17 @@ class CheckCase(unittest.TestCase):
         if code in (0, 1):
             self.assertEqual(process.stderr, "")
         lines = split_lines(process.stdout)
-        self.assertEqual(len(lines), 4 if state == "executed" else 3, lines)
         if state == "executed":
             record = json.loads(Path(lines[2][len("記録: "):]).read_text(encoding="utf-8"))
             summaries = {entry["name"]: entry["summary"] for entry in record["checks"]}
+            # 2.2.1: 記録に残した印の語があれば、5行目にその行が出る
+            kept = summaries["lint"].get("kept_marks")
+            self.assertEqual(len(lines), 5 if kept else 4, lines)
+            if kept:
+                self.assertTrue(lines[4].startswith("残した印の語: "), lines)
+        else:
+            self.assertEqual(len(lines), 3, lines)
+        if state == "executed":
             expected = "記録の中身: 見直し候補 最終稿 {}件".format(summaries["lint"]["candidate_count"])
             if "diff" in record["required_checks"]:
                 expected += "、直した箇所 {}か所（原文の件数と元と後は run の出力にあります）".format(summaries["diff"]["hunk_count"])

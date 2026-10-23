@@ -1812,7 +1812,8 @@ def _run_checks(ctx, snapshots, stance, timeout):
         if name == "lint":
             ctx.lint_result = parsed
             ctx.lint_findings = findings
-            entry["summary"] = OrderedDict((("candidate_count", parsed["candidate_count"]), ("counts", parsed["counts"])))
+            entry["summary"] = OrderedDict((("candidate_count", parsed["candidate_count"]), ("counts", parsed["counts"]),
+                                            ("kept_marks", _kept_marks(parsed["findings"]))))
         else:
             ctx.diff_result = parsed
             ctx.diff_parts = parts
@@ -2066,6 +2067,73 @@ def _summary_line(ctx, diff_module=None):
 _HEAD_LIMIT = 3
 # 候補があるときに、頭の一覧のすぐ下に置く文（出力の頭だけを読んで、下の節を読まずに終えないため）
 _HEAD_NOTE = "候補の中身は下の節にあります。出力を切らずに読んでください。"
+# 2.2.1: 最終稿に残った直訳語（calque）と語の一覧（project_term）の語。lint の message から語を取る（「当たった言い方: 語、語）」
+# と「語の一覧（flag.txt）の語（語、語）」）。run の「残した印の語」の節と頭の行、verify の行、記録の lint の要約に使う。
+# 候補を1回なめるだけで、lint を流し直さない
+_KEPT_MARK_RULES = {"calque": ("直訳語", re.compile(r"当たった言い方: ([^）]*)）")),
+                    "project_term": ("語の一覧", re.compile(r"語の一覧（flag\.txt）の語（([^）]*)）"))}
+_KEPT_MARK_SHOWN_LINES = 5
+_KEPT_MARK_SHOWN_WORDS = 10
+_KEPT_MARK_HEAD = "残した印の語: {}。下の「■ 残した印の語」のとおり、尋ねるか、残す理由を確認の記録に書いてください。"
+_KEPT_MARK_SECTION = (
+    "■ 残した印の語（最終稿の直訳語と語の一覧の印。{}語）\n"
+    "最終稿に残した次の語は、その文を SKILL.md Step 2 の問いで読み直し、書き直すか、残すなら次のどちらかにしてください。\n"
+    "- 書き直しに使う名前や動作、その動作をする人が、原文、依頼、提供資料、文脈のどれにも書いていないか、前後の文と呼び名がそろわず"
+    "同じものを指すか分からない: 本文を残し、「書き手に確かめたい点」で尋ねる（残す理由を書くだけにしない）。\n"
+    "- 直訳語の印で、その分野で定着した言い方か、文字どおりの意味（音、実物の場所など）: 残す理由を確認の記録に書く。語の一覧（flag.txt）"
+    "の語は、定着した言い方でも残さない。")
+_KEPT_MARK_VERIFY = ("残した印の語: {}。「書き手に確かめたい点」で尋ねたか、残す理由を確認の記録に書いたかを確かめてから"
+                     "提出してください。")
+
+
+def _kept_marks(findings):
+    """最終稿の lint の候補から、残った直訳語と語の一覧の語を、最初に出た行の順に並べる（[{"rule", "word", "lines"}]）。語の
+    取れない message は word を None にする。候補の数に比例する手間（と語の数の並べ替え）だけで済ませる。"""
+    marks = {}
+    for finding in findings or ():
+        if not isinstance(finding, dict):
+            continue
+        rule = finding.get("rule")
+        if rule not in _KEPT_MARK_RULES:
+            continue
+        found = _KEPT_MARK_RULES[rule][1].search(finding.get("message") or "")
+        words = [word for word in found.group(1).split("、") if word] if found else []
+        line = finding.get("line") if type(finding.get("line")) is int else None
+        for word in words or [None]:
+            lines = marks.setdefault((rule, word), [])
+            if line is not None and line not in lines:
+                lines.append(line)
+    order = sorted(marks, key=lambda key: marks[key][0] if marks[key] else 0)   # 同じ行どうしは出た順のまま
+    return [{"rule": rule, "word": word, "lines": sorted(marks[(rule, word)])} for rule, word in order]
+
+
+def _kept_marks_text(marks):
+    """「要求（語の一覧。L9、L25）、拾う（直訳語。L31）」の形。行と語が多いときは初めのほうだけを出す。"""
+    shown = []
+    for mark in marks[:_KEPT_MARK_SHOWN_WORDS]:
+        lines = mark["lines"]
+        where = "、".join("L{}".format(line) for line in lines[:_KEPT_MARK_SHOWN_LINES])
+        if len(lines) > _KEPT_MARK_SHOWN_LINES:
+            where += "、ほか{}行".format(len(lines) - _KEPT_MARK_SHOWN_LINES)
+        label = _KEPT_MARK_RULES[mark["rule"]][0]
+        shown.append("{}（{}{}）".format(mark["word"] if mark["word"] else "語の取れない印", label,
+                                       "。" + where if where else ""))
+    if len(marks) > _KEPT_MARK_SHOWN_WORDS:
+        shown.append("ほか{}語".format(len(marks) - _KEPT_MARK_SHOWN_WORDS))
+    return "、".join(shown)
+
+
+def _record_kept_marks(record):
+    """記録の lint の要約にある、残した印の語（2.2.1 より前の記録や、lint が動かなかった記録では None）。"""
+    if record is None:
+        return None
+    for entry in record["checks"]:
+        if entry["name"] == "lint" and isinstance(entry.get("summary"), dict):
+            marks = entry["summary"].get("kept_marks")
+            if isinstance(marks, list) and all(isinstance(mark, dict) and mark.get("rule") in _KEPT_MARK_RULES
+                                               and isinstance(mark.get("lines"), list) for mark in marks):
+                return marks
+    return None
 # diff の規則の見直し候補の、頭の一覧での名前（行番号を持たない候補。同じ名前はまとめて件数を付ける）
 # 構造の文の中の行番号（「後3行目」を先に、なければ「元3行目」）
 _HEAD_STRUCTURE_LINE = (re.compile(r"(後)(\d+)行目"), re.compile(r"(元)(\d+)行目"))
@@ -2200,7 +2268,8 @@ def _head_lines(ctx, diff_module):
         parts.append(_head_part("事実の穴の候補", entries, gaps["count"]))
     if not parts:
         return []
-    return ["。".join(parts), _HEAD_NOTE]
+    kept = _kept_marks(lint.get("findings")) if lint is not None else []
+    return ["。".join(parts)] + ([_KEPT_MARK_HEAD.format(_kept_marks_text(kept))] if kept else []) + [_HEAD_NOTE]
 
 
 def _detector_value(ctx, diff_module, key):
@@ -2381,6 +2450,10 @@ def _sections(ctx, lint_module, diff_module):
     base = ctx.diff_result if ctx.diff_result is not None else diff_module.diff("", "")
     if ctx.risks:
         sections.append(diff_module.report_parts(dict(base, meaning_risks=ctx.risks))["risks"])
+    kept = _kept_marks(ctx.lint_result.get("findings")) if ctx.lint_result is not None and not ctx.final_changed else []
+    if kept:
+        sections.append(_KEPT_MARK_SECTION.format(len(kept)) + "\n"
+                        + "\n".join("- " + _kept_marks_text([mark]) for mark in kept))
     parts = ctx.diff_parts
     if parts is not None and parts["rules"]:
         rules = parts["rules"]
@@ -2900,7 +2973,8 @@ def _run_impl(args, parser):
             ("politeness_check", _detector_value(ctx, diff_module, "politeness")),
             ("lint", ctx.lint_result), ("diff", diff_result), ("materials", ctx.materials_result),
             ("candidate_counts", candidate_counts), ("changed_places", changed_places),
-            ("fact_gaps", ctx.fact_gaps)))
+            ("fact_gaps", ctx.fact_gaps),
+            ("kept_marks", _kept_marks(ctx.lint_result.get("findings")) if ctx.lint_result is not None else None)))
         print(json.dumps(result, ensure_ascii=True, indent=1))
     else:
         if recording:
@@ -3693,6 +3767,9 @@ def _summary_problems(state, record, required):
         if name == "lint":
             compare("lint.candidate_count", summary.get("candidate_count"), value.get("candidate_count"))
             compare("lint.counts", summary.get("counts"), value.get("counts"))
+            if "kept_marks" in summary:
+                # 2.2.1 で足した要約（それより前の記録にはない）
+                compare("lint.kept_marks", summary["kept_marks"], _kept_marks(value.get("findings")))
         elif name == "diff":
             full = value.get("full_diff")
             hunks = (full.get("hunks") or []) if isinstance(full, dict) else None
@@ -4229,6 +4306,8 @@ def _verify(args, parser, _final=None, _return=False):
         record_line = _NO_RECORD_LINE.format(state)
     final_count = _record_summary_count(record if shown else None, "lint", "candidate_count")
     changed_count = _record_summary_count(record if shown else None, "diff", "hunk_count")
+    # 2.2.1: 記録の要約にある、残した印の語（照合が合ったときだけ出す）
+    kept_marks = _record_kept_marks(record) if shown and status == "executed" else None
     if args.json or _return:
         final_record = found.final() if found is not None else None
         recorded_sha = final_record.get("sha256") if isinstance(final_record, dict) else None
@@ -4248,7 +4327,8 @@ def _verify(args, parser, _final=None, _return=False):
             ("required_checks", required), ("checks", checks),
             ("meaning_risk_count", meaning), ("replay", replayed),
             ("problems", [OrderedDict((("code", code), ("detail", detail))) for code, detail in problems]),
-            ("final_candidate_count", final_count), ("changed_place_count", changed_count)))
+            ("final_candidate_count", final_count), ("changed_place_count", changed_count),
+            ("kept_marks", kept_marks)))
         if _return:
             result["_record_line"] = record_line
             return result
@@ -4257,6 +4337,8 @@ def _verify(args, parser, _final=None, _return=False):
         lines = [line, token, record_line]
         if status == "executed":
             lines.append(_verified_contents_line(final_count, changed_count, required))
+            if kept_marks:
+                lines.append(_KEPT_MARK_VERIFY.format(_kept_marks_text(kept_marks)))
         print("\n".join(lines))
     return 0 if status == "executed" else 1
 

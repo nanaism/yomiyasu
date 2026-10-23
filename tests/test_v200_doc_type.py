@@ -374,6 +374,7 @@ def unchanged_check():
                 value = json.loads(out)
                 value.pop("context", None)
                 value.pop("fact_gaps", None)  # 任意の手がかりの追加キーを除いて比較する
+                value.pop("kept_marks", None)  # 2.2.1 で足した、残した印の語
                 for key in ("lint", "diff"):
                     if isinstance(value.get(key), dict):
                         value[key].pop("context", None)
