@@ -23,7 +23,7 @@ lint の終了コード、既存の JSON のキー、`*_FORMAT_VERSION`、引数
 
 | 規則 | 見る型 | 当てる種類 |
 |---|---|---|
-| `calque` | 直訳語（型1: 機械やシステムが人の動作をする言い方、型2: 実物の名前の代わりの場所のたとえ、型3: 英語を一語ずつ写した句）。message に型の番号 | すべて |
+| `calque` | 直訳語（型1: 機械やシステムが人の動作をする言い方、型2: 実物の名前の代わりの場所のたとえ、型3: 英語を一語ずつ写した句）。1行に1件で、message に型の番号と当たった言い方 | すべて |
 | `metaphor_label` | 見出しと文書の1行目の、本文に出てこない一語の比喩 | essay、promo、script を除く |
 | `say_hedge` | 文末の「と言えるでしょう」 | すべて |
 | `thin_evaluation` | 名詞がもともと持つ評価を述語で言い直すだけの文（`references/lists/thin-evaluation.txt`） | すべて |
@@ -32,7 +32,7 @@ lint の終了コード、既存の JSON のキー、`*_FORMAT_VERSION`、引数
 | `narrative_density` | 一人称が少なく、数字と箇条書きが多い読み物（文書に1件） | essay だけ |
 | `copy_comma_noun` | 修飾語と名詞のあいだに読点を打ち、短い名詞で止める形 | すべて（promo は文書の2回目から） |
 | `bare_verb_chain` | 主語も目的語もない他動詞を読点で並べて止める文 | essay、promo、script、slides を除く |
-| `project_term` | 語の一覧の flag.txt の語 | すべて |
+| `project_term` | 語の一覧の flag.txt の語。message にその行の語 | すべて |
 
 - コードの中、引用、URL、カギ括弧と引用符の中、英数字の識別子は見ません。定着した言い方（テストが通る、キャッシュが効く、依存先など）は組み込みの一覧で外し、一覧は試験で守っています。
 - `--doc-type` を指定したときの `context.skipped_by_doc_type` に、essay、promo、script、slides で外す新しい規則の名前が加わります（人が読む出力の4行目も同じ）。

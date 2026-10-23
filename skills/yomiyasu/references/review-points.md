@@ -82,7 +82,7 @@ SKILL.md の Step 3 と Step 4 で `yomiyasu_check.py run` の出力の候補を
 - 過剰な箇条書きの候補（excess_list）は、行頭から書いた `<details>` と `</details>` の間の箇条書きを、比率の分子にも分母にも数えない（中に多く畳んでも、外の箇条書きの比率は薄まらない。中に箇条書きがあれば、候補に「（<details> の中の箇条書きN行は数えていません）」と添える）。畳んだ中の箇条書きも、論理を分断していないかは SKILL.md の Step 2 の9のとおりに読む。
 - 同じ文末が続くという候補は、読みにくさを見直すきっかけにとどめる。AIの文の目印として扱わず、語尾を散らすために文の働きや時制を変えない（gemini-syntax.md 原則8）。
 - 2.2.0 で足した info の印（calque、metaphor_label、say_hedge、thin_evaluation、katakana_term、dialogue_period、narrative_density、copy_comma_noun、bare_verb_chain、project_term）は、直す合図ではなく、文脈を読み直すための候補。印がついただけでは直さず、語を残すこともある。直すときは、誰が何をどうするかを文として書き直す（SKILL.md Step 2）。点数（rule_penalty_score）には入らない。
-  - calque（直訳語。message に型の番号）と project_term（語の一覧の flag.txt の語）: `references/calques.md` の問いで確かめる。
+  - calque（直訳語。message に型の番号と当たった言い方）と project_term（語の一覧の flag.txt の語。message にその語）: `references/calques.md` の問いで確かめる。1行に1件なので、message に並んだ言い方を一つずつ確かめる。
   - metaphor_label: SKILL.md「案内用の見出し」。say_hedge: slop-catalog.md 6章「文末の付け足し」。thin_evaluation、katakana_term: slop-catalog.md 5章。copy_comma_noun: SKILL.md「コピー調の抑制」。bare_verb_chain: SKILL.md「主語と目的語の明確化」。
   - dialogue_period（`--doc-type script` のときだけ、文書に1件）: `references/doc-types/script.md`。narrative_density（`--doc-type essay` のときだけ、文書に1件）: `references/doc-types/essay.md`。
   - 語の一覧（`.yomiyasu-words/`）を使ったときは、allow.txt の語で外した件数が出る。外れた候補の語は、そのプロジェクトで定着した言い方として直さない。

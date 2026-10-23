@@ -311,7 +311,8 @@ class ProjectTermTest(FolderCase):
         found = [(f["line"], f["severity"]) for f in result["findings"] if f["rule"] == "project_term"]
         self.assertEqual(found, [(1, "info"), (3, "info"), (7, "info"), (9, "info")])
         finding = [f for f in result["findings"] if f["line"] == 3][0]
-        self.assertEqual(finding["message"], "語の一覧（flag.txt）の語の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。")
+        self.assertEqual(finding["message"],
+                         "語の一覧（flag.txt）の語（スプリント、締め日）の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。")
         self.assertEqual(finding["snippet"], "次のスプリントでは、締め日の名前とスプリントの日付を決めます。")
         self.assertEqual(sorted(finding), ["line", "message", "rule", "severity", "snippet"])
         # 点数に入れない

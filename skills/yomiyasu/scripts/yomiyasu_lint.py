@@ -4167,10 +4167,13 @@ def _v220_word_findings(analysis):
             if any([finder(sentence, calque_words) for sentence in sentences]):
                 types.append(number)
         if types:
+            hit = tuple(dict.fromkeys(calque_words))
+            # 1行に1件なので、当たった言い方を message に並べる（同じ行の2つ目を読み落とさないため。置き換え先の語は出さない）
+            shown = "。当たった言い方: " + "、".join(hit) if hit else ""
             out.append({"rule": "calque", "line": line_no, "severity": "info",
-                        "message": "直訳語（{}）{}".format("。".join(_CALQUE_TYPE_NAMES[number] for number in types),
-                                                       _V220_MESSAGE_TAIL),
-                        "snippet": snippet, "_words": tuple(dict.fromkeys(calque_words))})
+                        "message": "直訳語（{}{}）{}".format("。".join(_CALQUE_TYPE_NAMES[number] for number in types),
+                                                         shown, _V220_MESSAGE_TAIL),
+                        "snippet": snippet, "_words": hit})
         if katakana_re is not None:
             katakana_words = katakana_re.findall(scan)
             if katakana_words:
@@ -4489,7 +4492,8 @@ def _v220_document_findings(analysis, doc_type):
 _ALLOW_RULES = ("calque", "katakana_term", "metaphor_label", "metaphor_verb", "project_term", "slop_vocabulary",
                 "translated_term")
 _LABEL_WORD = re.compile(r"「([^」]+)」")
-_PROJECT_TERM_MESSAGE = ("語の一覧（flag.txt）の語の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。")
+# 語の一覧の flag.txt の語の message。その行に出た flag の語を「語の一覧（flag.txt）の語（依存先、承認）」のように並べる
+_PROJECT_TERM_MESSAGE = "語の一覧（flag.txt）の語（{}）" + _V220_MESSAGE_TAIL
 # 英数字で始まるか終わる語は、識別子（snake_case、camelCase、ドットや / を含む語）の一部では数えない
 _WORD_ASCII = re.compile(r"[A-Za-z0-9_]")
 _WORD_BEFORE = r"(?<![A-Za-z0-9_./\\-])"
@@ -4541,7 +4545,8 @@ def _project_term_findings(analysis, words):
         hits = tuple(dict.fromkeys(match.group(0) for match in pattern.finditer(_mask_quoted_segments(visible))))
         if hits:
             found.append({"rule": "project_term", "line": row["line"], "severity": "info",
-                          "message": _PROJECT_TERM_MESSAGE, "snippet": row["raw"].strip(), "_words": hits})
+                          "message": _PROJECT_TERM_MESSAGE.format("、".join(hits)), "snippet": row["raw"].strip(),
+                          "_words": hits})
     return found
 
 

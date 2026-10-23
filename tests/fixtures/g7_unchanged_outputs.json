@@ -745,11 +745,11 @@
       "diff_endings": "74d4f4a04b52389a"
     },
     "raw_ai/01_tech_arch_sonnet_casual.md": {
-      "plain": "b91edc766628a8a6",
-      "strict": "b91edc766628a8a6",
-      "fail_error": "b91edc766628a8a6",
-      "json": "f6b90ed5aef9fb78",
-      "stdin": "b91edc766628a8a6",
+      "plain": "d1283db6c55859b7",
+      "strict": "d1283db6c55859b7",
+      "fail_error": "d1283db6c55859b7",
+      "json": "ff4461351a0e07c4",
+      "stdin": "d1283db6c55859b7",
       "diff_endings": "058c7f30e832ec16"
     },
     "raw_ai/01_tech_arch_sonnet_default.md": {

@@ -400,7 +400,9 @@ class CalqueTest(unittest.TestCase):
         text = "外部からの注文は、この受け口に届き、夜間の集計バッチが拾います。\n"
         found = new_findings(text)
         self.assertEqual(len(found), 1)
-        self.assertEqual(found[0]["message"], "直訳語（{}。{}）{}".format(TYPE_NAMES[1], TYPE_NAMES[2], TAIL))
+        # 1行に1件なので、当たった言い方を message に並べる（置き換え先の語は出さない）
+        self.assertEqual(found[0]["message"],
+                         "直訳語（{}。{}。当たった言い方: 拾う、受け口）{}".format(TYPE_NAMES[1], TYPE_NAMES[2], TAIL))
         self.assertEqual(found[0]["_words"], ("拾う", "受け口"))
 
     def test_metaphor_verb_on_the_line_hides_calque(self):
@@ -580,11 +582,16 @@ class CommonTest(unittest.TestCase):
             self.assertTrue(finding["message"].endswith(TAIL))
 
     def test_messages_do_not_name_a_replacement(self):
-        """message は型と共通の文だけで、置き換え先の語を出さない（候補の語も出さない）。"""
+        """message は型と共通の文で、置き換え先の語を出さない。calque は1行に1件なので、当たった言い方を並べる
+        （同じ行の2つ目を読み落とさないため）。ほかの語の規則は候補の語も出さない。"""
         text = "\n".join(text for text, _, _ in OWNER_SEEDS) + "\n本体の質感も上質です。\n# 資料\n"
         for finding in new_findings(text):
             for word in finding["_words"]:
-                self.assertNotIn(word, finding["message"])
+                if finding["rule"] == "calque":
+                    self.assertIn("当たった言い方: ", finding["message"])
+                    self.assertIn(word, finding["message"])
+                else:
+                    self.assertNotIn(word, finding["message"])
 
 
 class ListFileTest(unittest.TestCase):
