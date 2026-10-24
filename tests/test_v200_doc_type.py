@@ -135,6 +135,7 @@ LINT_HELP_LIST = "\n".join([
     "種類を指定したときだけ当てる規則: pause_comma（promo、script を除く11種類。種類を指定しないときは出しません）",
     "種類を指定したときだけ当てる規則: dialogue_period（script だけ。種類を指定しないときは出しません）",
     "種類を指定したときだけ当てる規則: narrative_density（essay だけ。種類を指定しないときは出しません）",
+    "種類を指定したときだけ当てる規則: slide_comma（slides だけ。種類を指定しないときは出しません）",
     "外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。",
 ])
 # diff の詰め: 文体の硬化の検査と勢いの検査は、種類で参考（info）にするかが決まるので、その文を足した。diff の詰めの直し
@@ -574,8 +575,9 @@ class LintSkipTest(DocTypeCase):
                 self.assertLessEqual(plain["metrics"]["char_count"], 1000)
                 documents = {"excess_bold": 2, "excess_list": 2, "bold_label_list": 1}
                 weights = {"error": 3, "warn": 2, "info": 1}
-                # 2.2.0 で足した規則の候補は点数を計算する前に除く
-                scored = [f for f in findings if f["rule"] not in yomiyasu_lint._V220_RULES]
+                # 2.2.0 から 2.4.0 で足した規則の候補は点数を計算する前に除く
+                excluded = yomiyasu_lint._V220_RULES + yomiyasu_lint._V230_RULES + yomiyasu_lint._V240_RULES
+                scored = [f for f in findings if f["rule"] not in excluded]
                 line_weight = sum(weights[f["severity"]] for f in scored
                                   if f["rule"] not in documents and f["rule"] != "negative_parallelism_density")
                 document_weight = sum(documents.get(f["rule"], 0) for f in scored)
@@ -662,6 +664,7 @@ class LintSkipTest(DocTypeCase):
             "pause_comma": ("pr", "article", "incident", "proposal", "minutes", "manual", "slides", "essay", "formal", "mail", "paper"),
             "dialogue_period": ("script",),
             "narrative_density": ("essay",),
+            "slide_comma": ("slides",),
         })
         text = COUNT_DECLARATION_ONLY
         with mock.patch.object(yomiyasu_lint, "DOC_TYPE_ONLY_RULES", {"count_declaration": ("article",)}):

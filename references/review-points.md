@@ -94,6 +94,7 @@ SKILL.md の Step 3 と Step 4 で `yomiyasu_check.py run` の出力の候補を
   - metaphor_label: SKILL.md「案内用の見出し」。say_hedge: slop-catalog.md 6章「文末の付け足し」。thin_evaluation、katakana_term: slop-catalog.md 5章。copy_comma_noun: SKILL.md「コピー調の抑制」。bare_verb_chain: SKILL.md「主語と目的語の明確化」。
   - renyo_noun（2.3.0。他動詞を1語だけ名詞にした語を「の」で受ける形。message に当たった言い方）: SKILL.md「主語と目的語の明確化」。目的語と動詞の文に戻すか、定着した漢語の名詞にする。ほかの和語の連用形名詞に替えるだけで済ませない。指示語で受ける形（「その確かめは」）にも指摘が出る。一覧は `references/lists/renyo-nouns.txt`。点数（rule_penalty_score）には入らない。
   - dialogue_period（`--doc-type script` のときだけ、文書に1件）: `references/doc-types/script.md`。narrative_density（`--doc-type essay` のときだけ、文書に1件）: `references/doc-types/essay.md`。
+  - slide_comma（2.4.0。`--doc-type slides` のときだけ。見出しと1行の箇条の、間を作るだけの読点。1行に1件で、message に当たった言い方）: `references/doc-types/slides.md` 2章。外すのは間を作るだけの読点で、逆接、条件、理由、名詞の並び、短い時の句、外すと読み違える読点は残す。点数（rule_penalty_score）には入らない。
   - 語の一覧（`.yomiyasu-words/`）を使ったときは、allow.txt の語で外した件数が出る。外れた候補の語は、そのプロジェクトで定着した言い方として直さない。
 
 ### ■ 資料との照合

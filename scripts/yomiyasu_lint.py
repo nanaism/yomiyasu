@@ -151,6 +151,8 @@ DOC_TYPE_ONLY_RULES = {
     # 2.2.0: 台詞の句点は script だけ、読み物の一人称と数字は essay だけ
     "dialogue_period": ("script",),
     "narrative_density": ("essay",),
+    # 2.4.0: スライドの見出しと1行の箇条の読点は slides だけ
+    "slide_comma": ("slides",),
 }
 
 
@@ -4470,6 +4472,159 @@ def _renyo_pattern():
     return value
 
 
+# 2.4.0: スライドの見出しと1行の箇条の、外してよい読点（slide_comma。slides だけ。info で、点数に入れない）。
+# 見出しは一目で読むので、地の文なら残す読点のうち、間を作るだけのものを外す。拾うのは、文頭のつなぎの語のあと（だから、それでも）、
+# 文頭の決まった「〜ば」のあと（振り返れば、数字で言えば）、文頭の6字以上の時や場面の句のあと（その日のうちに）、文頭から15字以内の
+# 主題のあと（〜には、〜は）、文頭から10字以内の主語のあと（名詞＋が）、目的語の「を」のあと（長い目的語も。見出しでは長い目的語のあとの
+# 読点も外す）。逆接、条件、理由や目的、名詞の並び、短い時の句（その夜、）、長い主語のあとの読点は拾わない。
+# 見るのは、1行で終わる60字以下の見出し、箇条、段落の行（続きの行がある項目と、複数行の段落の行は見ない）。行頭の箇条の印、「・」「①」
+# 「(1)」の印、【】、「結論：」のようなラベルは外してから文頭を決める。カギ括弧と引用符の中、コード、リンク、英数字の識別子は「＿」に伏せて、
+# 伏せた語のあとを文頭と取り違えないようにする。「も」で終わる逆接（ても、でも、けれども、ながらも、つつも、とも）、目的と条件の
+# 「ためには」「するには」「以上は」「ては」「〜ときは」「〜場合は」は主題に数えない。主題の読点のあとに別の主語（担当者が、私たちが、部長は）が続く行は、
+# 主題と主語を読み分ける読点なので拾わない（「〜がない」「〜がある」「〜が多い」のような、あるかないかや数を言う文の「が」は除く）。
+# 主題の読点のあとに読点で区切った並びが続く形（〜のは、A、B、C）と、「Aを、Bを、」「Aが、Bが、」の並びも拾わない。1行に1件。
+_V240_RULES = ("slide_comma",)
+_SLIDE_LINE_MAX = 60
+_SLIDE_CONJ = (r"(?:だから|それでも|それで|そして|しかし|しかも|ただし|ただ|つまり|まず|次に|最後に|実は|結局|そこで|さらに|また"
+               r"|一方で|一方|なので|すると|ところが|とはいえ|もちろん|むしろ|要するに|ちなみに|そのうえ|だけど|でも)")
+_SLIDE_START = r"(?:^|(?<=[。！？!?]))[ 　]*"
+_SLIDE_PERSON_KANA = r"(?:たち|さん|さま|ちゃん|くん|彼ら|僕ら|私ら|みんな|わたし|ぼく|誰も|誰か|皆さん|どなたか)"
+_SLIDE_COMMA = (
+    ("つなぎ", _V220Lazy(_SLIDE_START + _SLIDE_CONJ + r"、")),
+    ("ば", _V220Lazy(_SLIDE_START + r"(?:[^、。！？!?＿]{1,6}で|簡単に|一言で|今|いま|あとから|後から)?"
+                     r"(?:言えば|いえば|言ってみれば|言われてみれば|思えば|振り返れば|考えてみれば)、")),
+    ("場面", _V220Lazy(_SLIDE_START + r"(?:その日のうちに|[^、。！？!?]{3,10}(?:のうちに|うちに|までに|のあとで|あとで|の後で|後で|のちに|たびに))、")),
+    ("主題", _V220Lazy(_SLIDE_START + r"(?!" + _SLIDE_CONJ + r"、)[^、。！？!?]{1,15}?"
+                       r"(?:(?<!ため)(?<![うくぐすつぬぶむる])(?<!とき)(?<!場合)(?<![際時])には|では|とは"
+                       r"|(?<![てに])(?<!以上)(?<!とき)(?<!場合)(?<![際時])は|(?<![てでどらつと])(?<!とき)(?<!場合)(?<![際時])も)、")),
+    ("主語", _V220Lazy(_SLIDE_START + r"[^、。！？!?]{0,9}(?:[一-龥々ァ-ヴーA-Za-z0-9０-９」＿]|" + _SLIDE_PERSON_KANA + r")[ 　]?が、")),
+    ("目的語", _V220Lazy(r"を、")),
+)
+# 主題の読点のあとの別の主語（「が」か「は」）。あるかないかや数を言う述語の「が」は主語に数えない
+_SLIDE_ACTOR_AFTER = _V220Lazy(r"[ 　]*[^、。！？!?]{0,18}?(?:[一-龥々ァ-ヴーA-Za-z0-9０-９」）＿]|" + _SLIDE_PERSON_KANA + r")[ 　]?"
+                               r"(?:が(?!、|ない|なく|ある|あり|多い|多く(?!の)|少ない|少なく|いる|いない)|は(?!、))")
+_SLIDE_LIST_AFTER = _V220Lazy(r"[ 　]*[^、。！？!?]{1,15}(?:、[^、。！？!?]{1,15})+(?:[。！？!?]|$)")
+# 同じ助詞の句の並び（Aを、Bを、 / Aが、Bが、）の、次の句
+_SLIDE_SAME_NEXT = {"を、": _V220Lazy(r"[ 　]*[^、。！？!?]{1,12}を、"), "が、": _V220Lazy(r"[ 　]*[^、。！？!?]{1,12}が、")}
+# 行頭の印: 見出しの #、箇条の印（入れ子も）、「・」「■」「①」「(1)」「1．」、【】、「結論：」のようなラベル
+_SLIDE_LEAD = _V220Lazy(r"^[ \t　]*(?:#{1,6}[ 　]+)?(?:(?:[-*+]|\d+[.)]|[（(]\d+[)）]|\d+．|[①-⑳]|[・■□●○◆◇▪▶►✅✔☑])[ 　]*)*"
+                        r"(?:【[^】]{1,12}】[ 　]*)?(?:[^、。！？!?：:]{1,12}[：:](?![0-9０-９])[ 　]*)?")
+_SLIDE_BULLET = _V220Lazy(r"^[ \t　]*(?:[-*+]|\d+[.)])[ \t]|^[ \t　]*(?:[（(]\d+[)）]|\d+．|[①-⑳]|[・■□●○◆◇▪▶►✅✔☑])")
+# 行頭の箇条の印と引用の印（見える文字では空白になる）。この範囲より後ろで見える文字が空白になった字（コード、リンクの URL）は「＿」にする
+_SLIDE_MARKER_ZONE = _V220Lazy(r"^[ \t　]*(?:(?:[-*+>]|\d+[.)])[ \t]+)*")
+_SLIDE_MESSAGE = ("スライドの見出しや1行の箇条で、間を作るだけの読点（当たった言い方: {}）の候補です。逆接、条件、理由、名詞の並びの読点と、"
+                  "外すと読み違える読点は残し、ほかは外すか確かめてください。")
+
+
+def _v240_slide_single_lines(analysis):
+    """1行で終わる見出し、箇条、段落の行の番号。続きの行がある箇条と、複数行の段落の行は入れない。"""
+    rows = analysis["lines"]
+    out = []
+    for index, row in enumerate(rows):
+        if row["quote_depth"] or not row["raw"].strip():
+            continue
+        if row["kind"] == "heading":
+            out.append(row["line"])
+            continue
+        if row["kind"] not in ("list", "paragraph"):
+            continue
+        bullet = bool(_SLIDE_BULLET.match(row["raw"]))
+        previous = rows[index - 1] if index else None
+        following = rows[index + 1] if index + 1 < len(rows) else None
+
+        def continues(other):
+            return (other is not None and other["raw"].strip() and other["kind"] in ("list", "paragraph")
+                    and other["quote_depth"] == row["quote_depth"] and not _SLIDE_BULLET.match(other["raw"]))
+
+        if not bullet and previous is not None and previous["raw"].strip() and previous["kind"] in ("list", "paragraph"):
+            continue
+        if continues(following):
+            continue
+        out.append(row["line"])
+    return out
+
+
+def _v240_slide_texts(analysis, line_no):
+    """(見える文字、伏せた所を「＿」にした文字、見える文字の各字の元の行での位置)。太字の記号は外す。"""
+    raw = analysis["lines"][line_no - 1]["raw"]
+    visible_raw = _prose_visible_text(analysis, line_no)
+    if len(visible_raw) == len(raw):
+        zone = _SLIDE_MARKER_ZONE.match(raw).end()
+        visible_raw = "".join("＿" if (char == " " and index >= zone and raw[index] not in " \t　") else char
+                              for index, char in enumerate(visible_raw))
+    keep = [i for i, char in enumerate(visible_raw) if char != "*"]
+    visible = "".join(visible_raw[i] for i in keep)
+    positions = keep
+    if "__" in visible:
+        drop = set()
+        for match in re.finditer("__", visible):
+            drop.update((match.start(), match.start() + 1))
+        positions = [p for i, p in enumerate(positions) if i not in drop]
+        visible = "".join(char for i, char in enumerate(visible) if i not in drop)
+    masked = visible
+    if "「" in masked or "『" in masked or "[" in masked:
+        masked = _mask_quoted_segments_sparse(masked)
+    if "“" in masked or '"' in masked or "‘" in masked:
+        masked = _V220_QUOTES.sub(lambda m: " " * len(m.group()), masked)
+    masked = _V220_IDENTIFIER.sub(lambda m: " " * len(m.group()), masked)
+    if len(masked) != len(visible):
+        return visible, masked, positions
+    placeholder = "".join("＿" if (m == " " and v != " ") else m for v, m in zip(visible, masked))
+    return visible, placeholder, positions
+
+
+def _v240_slide_hit_text(raw, positions, begin, end):
+    """当たった言い方の字（元の行から切り出し、リンクは文字だけ、太字の記号は外す。20字より長ければ頭に「…」）。"""
+    if not positions or begin >= end:
+        return ""
+    start = positions[begin]
+    stop = positions[end - 1] + 1
+    text = raw[start:stop]
+    text = re.sub(r"\[([^\]\n]*)\]\([^)\n]*\)", r"\1", text).replace("**", "").replace("__", "").strip()
+    if len(text) > 20:
+        text = "…" + text[-20:]
+    return text
+
+
+def _v240_slide_comma_findings(analysis, findings, doc_type):
+    """slide_comma の候補（slides のときだけ数える。ほかの種類では作らない）。同じ行に pause_comma があれば、主題と主語の読点は重ねない。"""
+    if doc_type != "slides":
+        return []
+    pause_lines = set(finding["line"] for finding in findings if finding["rule"] == "pause_comma")
+    rows = analysis["lines"]
+    out = []
+    for line_no in _v240_slide_single_lines(analysis):
+        row = rows[line_no - 1]
+        if "、" not in row["raw"]:
+            continue
+        visible, scan, positions = _v240_slide_texts(analysis, line_no)
+        lead = _SLIDE_LEAD.match(scan).end()
+        body = scan[lead:].rstrip()
+        if not body or len(body) > _SLIDE_LINE_MAX:
+            continue
+        hits = []
+        for name, pattern in _SLIDE_COMMA:
+            if name in ("主題", "主語") and line_no in pause_lines:
+                continue
+            for match in pattern.finditer(body):
+                end = match.end()
+                if name == "主題" and (_SLIDE_ACTOR_AFTER.match(body, end) or _SLIDE_LIST_AFTER.match(body, end)):
+                    continue
+                tail = body[end - 2:end]
+                if name in ("主語", "目的語") and tail in _SLIDE_SAME_NEXT and (
+                        _SLIDE_SAME_NEXT[tail].match(body, end) or re.search(tail + r"[ 　]*[^、。！？!?]{1,12}$", body[:end - 2])):
+                    continue
+                begin = max(body.rfind(mark, 0, end - 1) for mark in "、。！？!?：:") + 1
+                while begin < end and body[begin] in " 　":
+                    begin += 1
+                hit = _v240_slide_hit_text(row["raw"], positions, lead + begin, lead + end) if len(positions) == len(scan) else body[begin:end]
+                hits.append("「" + hit + "」")
+        if hits:
+            out.append({"rule": "slide_comma", "line": line_no, "severity": "info",
+                        "message": _SLIDE_MESSAGE.format("".join(dict.fromkeys(hits))), "snippet": row["raw"].strip()})
+    return out
+
+
 def _v230_renyo_findings(analysis):
     """renyo_noun の候補。文書全体に一度だけ一覧の語を当て、当たった行を見える文字で調べる。"""
     pattern, prefilter, skip_after = _renyo_pattern()
@@ -5313,6 +5468,7 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
     analysis["_findings"] = findings
     findings.extend(_v220_word_findings(analysis))
     findings.extend(_v230_renyo_findings(analysis))
+    findings.extend(_v240_slide_comma_findings(analysis, findings, doc_type))
     findings.extend(_v220_shape_findings(analysis, findings, doc_type))
     findings.extend(_v220_document_findings(analysis, doc_type))
     findings.extend(_project_term_findings(analysis, words))
@@ -5348,7 +5504,8 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
     # 候補の重みを地の文1,000字あたりに直した x から、100 × 40 ÷ (40 + x) を丸める目安。品質の点数ではない。
     # 2.2.0 の規則の候補は点数を計算する前に除く
     rule_penalty_score = _rule_penalty_score([finding for finding in findings
-                                              if finding["rule"] not in _V220_RULES and finding["rule"] not in _V230_RULES],
+                                              if finding["rule"] not in _V220_RULES and finding["rule"] not in _V230_RULES
+                                              and finding["rule"] not in _V240_RULES],
                                              prose_chars, dash_hits)
     counts = {"error": 0, "warn": 0, "info": 0}
     for finding in findings:
@@ -5528,9 +5685,9 @@ _PENALTY_HELP = """rule_penalty_score（--json の目安）:
   1,000字に満たなければ1,000字として割ります。
   excess_bold と excess_list は1件で2、bold_label_list は1を x に足し、
   negative_parallelism_density は数えません。ダッシュの規則に当たった行は、候補に出さない4行目からも数えます。
-  2.2.0 と 2.3.0 で足した次の規則の候補も数えず、その候補だけのときは100です: calque、metaphor_label、
+  2.2.0 から 2.4.0 で足した次の規則の候補も数えず、その候補だけのときは100です: calque、metaphor_label、
   say_hedge、thin_evaluation、katakana_term、dialogue_period、narrative_density、copy_comma_noun、
-  bare_verb_chain、project_term、renyo_noun。
+  bare_verb_chain、project_term、renyo_noun、slide_comma。
   --doc-type で候補が変わると、点数も変わります。CI では --fail-on か counts を使ってください。
 """
 

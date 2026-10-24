@@ -242,9 +242,11 @@ class PauseCommaTest(unittest.TestCase):
             self.assertEqual(len(pauses(text, doc_type="article")), 1, text)
 
     def test_t5_types_and_detection_gate(self):
-        # 2.2.0 で dialogue_period（script だけ）と narrative_density（essay だけ）を足した。pause_comma の組は変えない
+        # 2.2.0 で dialogue_period（script だけ）と narrative_density（essay だけ）を、2.4.0 で slide_comma（slides だけ）を足した。
+        # pause_comma の組は変えない
         self.assertEqual(lint.DOC_TYPE_ONLY_RULES,
-                         {"pause_comma": TYPES, "dialogue_period": ("script",), "narrative_density": ("essay",)})
+                         {"pause_comma": TYPES, "dialogue_period": ("script",), "narrative_density": ("essay",),
+                          "slide_comma": ("slides",)})
         text = REMOVE[3][0]
         with mock.patch.object(lint, "_pause_comma_hits", side_effect=AssertionError("検出を呼ばない")):
             for options in ({}, {"doc_type": "promo"}, {"reader": "general"}):

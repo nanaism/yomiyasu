@@ -160,7 +160,7 @@ SKILL.md 1章の規則のうち当てない範囲は、SKILL.md 2章 Step 1 の�
 - lint は外した候補の件数だけを出す。中身は `--doc-type` を付けずに実行すると見られる。
 - bold_not_rendered（表示されない太字）と metaphor_verb は、どの種類でも外さない。fragment_run（「速い。軽い。安い。」の型）は promo と script のときだけ外す（ほかの種類では外さない）。
 - pause_comma（短い主語や主題のすぐあとの読点）は、種類を指定したときだけ出す規則で、promo と script では出さない。
-- dialogue_period（台詞の最後の句点）は script のときだけ、narrative_density（読み物の一人称と数字）は essay のときだけ出す。種類を指定しないときとほかの種類では出さない。
+- dialogue_period（台詞の最後の句点）は script のときだけ、narrative_density（読み物の一人称と数字）は essay のときだけ、slide_comma（見出しと1行の箇条の、間を作るだけの読点）は slides のときだけ出す。種類を指定しないときとほかの種類では出さない。
 - 差分、意味が変わる恐れ、資料との照合の候補は、どの種類と読者でも同じ規則で見つける。ただし確度のうち、「場合がある」「ことがある」を消して言い切った書き換えと、断定に「必ず」などを足した書き換えは、pr、article、incident、proposal、manual、formal、paper のときだけ `--fail-on=meaning-risk` に数える（ほかの種類と種類なしでは見直し候補にとどめる）。違うのは diff の文体の硬化と勢いの検査で、硬化は incident、formal、paper のとき、勢いは pr、article、incident、manual、formal、paper のとき、候補をすべて参考としてだけ出す。ほかの種類を指定したときも、勢いの絵文字の候補（promo と mail を除く）と見出しの候補（promo、minutes、mail を除く）は参考になる。種類を決めないとき、promo、mail は、どれも見直し候補のまま。promo では番号つき項目の行と太字だけの行も勢いの検査の見出しに数える（check の出力の注を読む）。読者では lint の候補も変わらない。diff の慎重な言い方の検査と、動かしてはいけない値（引用の書き方、宛名）の検査は、どの種類でも同じに出る。敬語の度合いの検査は mail のときだけ出る。
 
 ## 14. 例（合成）
