@@ -155,7 +155,7 @@ SKILL.md 1章の規則のうち当てない範囲は、SKILL.md 2章 Step 1 の�
 | promo | bare_verb_chain、emoji_prohibited、fragment_run、metaphor_label | 書き手が気持ちや勢いを表す絵文字と、本文で評価の語を短く重ねる型（安い。うまい。早い。）、見出しの短い比喩、動詞を並べて止める形は普通の書き方。「！」、見出しのキャッチコピー、勢いのある語と強める語、同じ褒め言葉の繰り返しは、エージェントが doc-types/promo.md に従って残す |
 | mail | emoji_prohibited、meta_filler（返信と結びの5つの型だけ） | 宛名、挨拶、結び、署名と、相手への返信の言葉（「ご質問ありがとうございます」「参考になれば幸いです」など）は普通の書き方。書き手が気持ちを表す絵文字も残す。meta_filler のほかの型（誇張や中身のない前置き）は外さない。敬語の度合い、クッション言葉、チャットの口語は、エージェントが doc-types/mail.md に従って残す |
 | paper | なし | 慎重な言い方、引用の印、専門用語、「である」調、条件と結果をまとめた長い文は、エージェントが doc-types/paper.md に従って残す。diff の文体の硬化と勢いの候補は参考としてだけ出る |
-| script | bare_verb_chain、fragment_run、metaphor_label、sentence_end_repetition | 台詞では短い文の重ね、同じ語尾の続き、主語のない動詞の並びが普通に出る。見出しの短い比喩も題として残す。台詞の口調と言い回しは、エージェントが doc-types/script.md に従って残す |
+| script | bare_verb_chain、fragment_run、metaphor_label、sentence_end_repetition | 台詞では短い文を重ねる形、同じ語尾の続き、主語のない動詞の並びが普通に出る。見出しの短い比喩も題として残す。台詞の口調と言い回しは、エージェントが doc-types/script.md に従って残す |
 
 - lint は外した候補の件数だけを出す。中身は `--doc-type` を付けずに実行すると見られる。
 - bold_not_rendered（表示されない太字）と metaphor_verb は、どの種類でも外さない。fragment_run（「速い。軽い。安い。」の型）は promo と script のときだけ外す（ほかの種類では外さない）。

@@ -3,7 +3,7 @@
 Offsets are half-open Python string positions. This is a targeted scanner,
 not a claim to implement every CommonMark or GFM construct.
 """
-__version__ = "2.2.2"
+__version__ = "2.3.0"
 
 import os
 import re

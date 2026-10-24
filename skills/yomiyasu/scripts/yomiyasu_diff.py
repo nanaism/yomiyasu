@@ -22,7 +22,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
   名詞化の言い回し、強める語、気持ちの語、慎重表現の一覧は ../references/lists/ から読み、なければ内蔵の一覧を使う。
 意味が同じかどうか、つながりが合っているか、文末が立場に合っているかの最終判断は、この結果を見たモデル（または人）がする。
 """
-__version__ = "2.2.2"
+__version__ = "2.3.0"
 
 import os
 import errno
@@ -484,23 +484,31 @@ def _pair_gone_sentences(o, r, opcodes, groups, moved, gone, r_spans):
         for gram in grams:
             spans_with.setdefault(gram, []).append(idx)
     candidates = []
+    # 組にできる書き直した文と字面の近さは、消えた文の2文字の組の集合だけで決まる。同じ段落をくり返す文書では同じ文が何度も消えるので、
+    # 集合ごとに1回だけ数えて使い回す（候補は下で (近さ, gi, idx) の順に並べ直すので、作る順が変わっても結果は同じ）
+    passed_by_grams = {}
     for gi, (text, _, _) in enumerate(gone):
         grams = _bigrams(text)
-        # shared_counts[idx] は len(grams & r_grams[idx])。共通の組が1つもない文は、下の least（3以上）に届かないので数えなくてよい。
-        shared_counts = Counter()
-        for gram in grams:
-            found = spans_with.get(gram)
-            if found:
-                shared_counts.update(found)
-        for idx in sorted(shared_counts):
-            shared_count = shared_counts[idx]
-            least = 3 if min(len(grams), len(r_grams[idx])) <= 6 else 4
-            if shared_count < least or shared_count < 0.5 * min(len(grams), len(r_grams[idx])):
-                continue
-            shared = grams & r_grams[idx]
-            if len(shared - owner_grams[idx]) < least:
-                continue
-            candidates.append((dice(grams, r_grams[idx]), gi, idx))
+        key = frozenset(grams)
+        passed = passed_by_grams.get(key)
+        if passed is None:
+            passed = passed_by_grams[key] = []
+            # shared_counts[idx] は len(grams & r_grams[idx])。共通の組が1つもない文は、下の least（3以上）に届かないので数えなくてよい。
+            shared_counts = Counter()
+            for gram in grams:
+                found = spans_with.get(gram)
+                if found:
+                    shared_counts.update(found)
+            for idx in sorted(shared_counts):
+                shared_count = shared_counts[idx]
+                least = 3 if min(len(grams), len(r_grams[idx])) <= 6 else 4
+                if shared_count < least or shared_count < 0.5 * min(len(grams), len(r_grams[idx])):
+                    continue
+                shared = grams & r_grams[idx]
+                if len(shared - owner_grams[idx]) < least:
+                    continue
+                passed.append((dice(grams, r_grams[idx]), idx))
+        candidates.extend((score, gi, idx) for score, idx in passed)
     candidates.sort(key=lambda c: (-c[0], c[1], c[2]))
     used_gone, used_r, drop = set(), {}, set()
     for score, gi, idx in candidates:

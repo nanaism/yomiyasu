@@ -7,7 +7,7 @@ Python標準ライブラリだけで動作する。
 mail は絵文字と meta_filler の返信・結びの5型を外す。宛名・挨拶・署名・クッション言葉を削る専用規則はない。
 paper は慎重表現をぼかしとして削る規則がないので、外す規則はない。
 """
-__version__ = "2.2.2"
+__version__ = "2.3.0"
 
 import os
 import errno
@@ -3725,6 +3725,12 @@ _V220_BUILTIN_LISTS = {
         ("性能", "(?:高い|優れてい(?:ます|る)|抜群)"),
     ),
 }
+# 2.3.0: renyo_noun の一覧（references/lists/renyo-nouns.txt と同じ。1項目は「語」か「語<TAB>外す後ろの字」）
+_V220_BUILTIN_LISTS["renyo-nouns"] = tuple((
+    "確かめ 直し 比べ 測り 補い 決め 選び 集め 探し 捜し 整え 揃え そろえ 重ね 外し 戻し 削り 消し 残し 伏せ "
+    "伝え 預け 並べ 分け 混ぜ 減らし 増やし 広げ 縮め 伸ばし 延ばし 遅らせ 終え 続け 動かし 移し 貼り 挙げ 数え 改め 入れ "
+    "たしかめ くらべ おぎない ととのえ"
+).split()) + ("育て\tの親|の母|の父", "足し\tに", "試し\tに")
 _V220_LIST_CACHE = {}
 # 一覧のファイルがあるのに読めなかった理由（なければ None）。lint の出力には出さない（diff の _LIST_PROBLEMS と同じ扱い）
 _V220_LIST_PROBLEMS = {}
@@ -4361,6 +4367,88 @@ def _calque_message(types, word_types):
     return "直訳語（{}{}）{}".format("。".join(_CALQUE_TYPE_NAMES[number] for number in types), shown, _V220_MESSAGE_TAIL)
 
 
+# 2.3.0: 他動詞を1語だけ名詞にした連用形名詞を「の」で受ける形（renyo_noun。「結果の確かめ」「案の比べ」）。info で、点数に入れない。
+# 他動詞の連用形を1語だけ名詞にした語は、名詞としての自立性が弱く、目的語を「の」で受ける形では使いにくい。漢語を避けて和語で
+# 書くと出やすい（確認→確かめ、比較→比べ）。名詞とくっつけた複合語（資金集め、手直し）、複合動詞から来た語（見直し、組み合わせ）、
+# 「お」「ご」を付けた形（お選び）は「の」のすぐあとに一覧の語が来ないので当たらない。別の意味で定着した語（住民票の写し、
+# 合格の知らせ、詰めが甘い）は一覧に入れない。一覧は references/lists/renyo-nouns.txt（ないとき、読めないときは内蔵の一覧）。
+# 新しい語の規則と同じ見える文字（カギ括弧と引用符の中、英数字の識別子を伏せた字）を見る。見出し、表、箇条書きも見る。1行に1件。
+_V230_RULES = ("renyo_noun",)
+_RENYO_MESSAGE = "他動詞を1語だけ名詞にした語を「の」で受ける形（当たった言い方: {}）" + _V220_MESSAGE_TAIL
+# 「の」の前は名詞の終わりになりうる字（漢字、仮名、英数字、閉じ括弧、半角の空白）。半角の空白は「API の確かめ」と、
+# カギ括弧や識別子を空白に伏せた「「結果」の確かめ」「2.2.0 の確かめ」のため。
+# 語のあとは助詞（が、を、は、に、で、も、と、や、へ、の、だけ、まで、など、から、より、こそ、さえ、しか、ばかり、くらい、
+# ぐらい、ほど）か、句読点、括弧、・、／、：、表の区切りの |、空白、行の終わり。動詞に続く形（入れやすい、確かめにくさ、
+# 決めがたそう）の「や」「に」「が」と、「探しもの」「入れもの」の「も」は外す。「か」（直しかた）と「だ」（探しだす）は入れない。
+# 「計り」「量り」は道具の名前（キッチン用の計り）にもなるので一覧に入れない（人の文章で見つけた例）
+_RENYO_BEFORE = r"(?<=[一-龥々〆ァ-ヴーぁ-んA-Za-z0-9０-９Ａ-Ｚａ-ｚ）」』\]) ])の"
+_RENYO_AFTER = (r"(?=が(?!た[いかくけさそ])|を|は|に(?!く[いかくけさそ])|で|も(?!の)|と|や(?!す[いかくけさそ])|へ|の|だけ|まで"
+                r"|など|から|より|こそ|さえ|しか|ばかり|くらい|ぐらい|ほど"
+                r"|[、。，．）」』！？!?（(・／/:：|｜\s]|$)")
+_RENYO_COMPILED = {}
+
+
+def _renyo_pattern():
+    """一覧から組んだ正規表現（文書全体の絞り込み用と、行の見える文字用）と、語ごとに外す後ろの文字列のタプル。
+    一覧ごとに1回だけ組む。一覧が空なら (None, None, {})。絞り込みは前後の先読みを持たず、「の」と語のあいだの「*」「_」
+    を許す（太字の印 ** が「の」と語のそばにあっても、見える文字では消えるので、その行を見落とさないため）。"""
+    items, source = _v220_load_list("renyo-nouns")
+    key = (source, id(items))
+    if _RENYO_COMPILED.get("key") == key:
+        return _RENYO_COMPILED["value"]
+    skip_after = {}
+    words = []
+    for item in items:
+        word, _, after = item.partition("\t")
+        word = word.strip()
+        if not word:
+            continue
+        words.append(word)
+        if after.strip():
+            skip_after[word] = tuple(part for part in after.strip().split("|") if part)
+    value = (None, None, {})
+    if words:
+        alternation = "|".join(map(re.escape, sorted(set(words), key=len, reverse=True)))
+        value = (re.compile(_RENYO_BEFORE + "(" + alternation + ")" + _RENYO_AFTER),
+                 re.compile("の[*_]*(?:" + alternation + ")"), skip_after)
+    _RENYO_COMPILED["key"] = key
+    _RENYO_COMPILED["value"] = value
+    return value
+
+
+def _v230_renyo_findings(analysis):
+    """renyo_noun の候補。文書全体に一度だけ一覧の語を当て、当たった行を見える文字で調べる。"""
+    pattern, prefilter, skip_after = _renyo_pattern()
+    rows = analysis["lines"]
+    if pattern is None or not rows:
+        return []
+    text = analysis["text"]
+    starts = None
+    candidate_lines = set()
+    for match in prefilter.finditer(text):
+        if starts is None:
+            starts = [row["start"] for row in rows]
+        candidate_lines.add(bisect_right(starts, match.start()))
+    out = []
+    for line_no in sorted(candidate_lines):
+        row = rows[line_no - 1]
+        if row["kind"] not in ("paragraph", "list", "heading", "table") or row["quote_depth"]:
+            continue
+        scan = _v220_scan_text(analysis, line_no)
+        words = []
+        for match in pattern.finditer(scan):
+            word = match.group(1)
+            if any(scan.startswith(part, match.end()) for part in skip_after.get(word, ())):
+                continue
+            words.append(word)
+        if words:
+            words = tuple(dict.fromkeys(words))
+            out.append({"rule": "renyo_noun", "line": line_no, "severity": "info",
+                        "message": _RENYO_MESSAGE.format("、".join("の" + word for word in words)),
+                        "snippet": row["raw"].strip(), "_words": words})
+    return out
+
+
 # 2.2.0 の文の形の規則（say_hedge、copy_comma_noun、bare_verb_chain）。
 # 既存の表（_PATTERN_LITERAL_HINTS）とは別に、行ごとに見える文字（_prose_visible_text）を見る。
 # カギ括弧、二重カギ括弧、[ ]、引用符の中は伏せる。引用の行、表、コード、frontmatter、HTML は見ない。
@@ -4656,8 +4744,8 @@ def _v220_document_findings(analysis, doc_type):
 
 
 # 語の一覧の allow.txt の語で外す規則（規則ID の順。context.words.allow_removed の並び）
-_ALLOW_RULES = ("calque", "katakana_term", "metaphor_label", "metaphor_verb", "project_term", "slop_vocabulary",
-                "translated_term")
+_ALLOW_RULES = ("calque", "katakana_term", "metaphor_label", "metaphor_verb", "project_term", "renyo_noun",
+                "slop_vocabulary", "translated_term")
 _LABEL_WORD = re.compile(r"「([^」]+)」")
 # 語の一覧の flag.txt の語の message。その行に出た flag の語を「語の一覧（flag.txt）の語（依存先、承認）」のように並べる
 _PROJECT_TERM_MESSAGE = "語の一覧（flag.txt）の語（{}）" + _V220_MESSAGE_TAIL
@@ -4747,11 +4835,11 @@ def _apply_words(findings, words):
 
 
 # 1行に1件で、行の語を _words に並べる規則。allow.txt の語は語ごとに外す
-_ALLOW_PARTIAL_RULES = ("calque", "katakana_term", "project_term")
+_ALLOW_PARTIAL_RULES = ("calque", "katakana_term", "project_term", "renyo_noun")
 
 
 def _finding_with_words(finding, rest):
-    """許していない語（rest）だけを残した候補の写し。calque と project_term は message も作り直す。"""
+    """許していない語（rest）だけを残した候補の写し。calque、project_term、renyo_noun は message も作り直す。"""
     out = dict(finding, _words=rest)
     if finding["rule"] == "calque":
         word_types = tuple((word, number) for word, number in finding.get("_word_types") or () if word in rest)
@@ -4759,6 +4847,8 @@ def _finding_with_words(finding, rest):
         out["message"] = _calque_message(list(dict.fromkeys(number for _, number in word_types)), word_types)
     elif finding["rule"] == "project_term":
         out["message"] = _PROJECT_TERM_MESSAGE.format("、".join(rest))
+    elif finding["rule"] == "renyo_noun":
+        out["message"] = _RENYO_MESSAGE.format("、".join("の" + word for word in rest))
     return out
 
 
@@ -5168,6 +5258,7 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
     # 2.2.0 の規則（どれも info で、点数に入れない）。既存の規則の候補は analysis["_findings"] で渡す（重なりを見るため。読むだけ）
     analysis["_findings"] = findings
     findings.extend(_v220_word_findings(analysis))
+    findings.extend(_v230_renyo_findings(analysis))
     findings.extend(_v220_shape_findings(analysis, findings, doc_type))
     findings.extend(_v220_document_findings(analysis, doc_type))
     findings.extend(_project_term_findings(analysis, words))
@@ -5202,7 +5293,8 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
 
     # 候補の重みを地の文1,000字あたりに直した x から、100 × 40 ÷ (40 + x) を丸める目安。品質の点数ではない。
     # 2.2.0 の規則の候補は点数を計算する前に除く
-    rule_penalty_score = _rule_penalty_score([finding for finding in findings if finding["rule"] not in _V220_RULES],
+    rule_penalty_score = _rule_penalty_score([finding for finding in findings
+                                              if finding["rule"] not in _V220_RULES and finding["rule"] not in _V230_RULES],
                                              prose_chars, dash_hits)
     counts = {"error": 0, "warn": 0, "info": 0}
     for finding in findings:
@@ -5382,9 +5474,9 @@ _PENALTY_HELP = """rule_penalty_score（--json の目安）:
   1,000字に満たなければ1,000字として割ります。
   excess_bold と excess_list は1件で2、bold_label_list は1を x に足し、
   negative_parallelism_density は数えません。ダッシュの規則に当たった行は、候補に出さない4行目からも数えます。
-  2.2.0 で足した次の規則の候補も数えず、その候補だけのときは100です: calque、metaphor_label、
+  2.2.0 と 2.3.0 で足した次の規則の候補も数えず、その候補だけのときは100です: calque、metaphor_label、
   say_hedge、thin_evaluation、katakana_term、dialogue_period、narrative_density、copy_comma_noun、
-  bare_verb_chain、project_term。
+  bare_verb_chain、project_term、renyo_noun。
   --doc-type で候補が変わると、点数も変わります。CI では --fail-on か counts を使ってください。
 """
 
@@ -5393,7 +5485,7 @@ _WORDS_HELP = ("語の一覧（allow.txt と flag.txt）のフォルダ。省く
                "（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を探します（下の「語の一覧」）。")
 _WORDS_EPILOG = """語の一覧（--words、--no-words）:
   allow.txt の語は、次の規則の候補から外し、外した件数を出します: calque、katakana_term、metaphor_label、
-  metaphor_verb、project_term、slop_vocabulary、translated_term。flag.txt の語には project_term（info）の
+  metaphor_verb、project_term、renyo_noun、slop_vocabulary、translated_term。flag.txt の語には project_term（info）の
   印をつけます。どちらも1行に1語（UTF-8。# で始まる行と空の行は読み飛ばします）。
 """
 _NO_WORDS_HELP = "語の一覧を探さず、読みません（--words と一緒には使えません）。"

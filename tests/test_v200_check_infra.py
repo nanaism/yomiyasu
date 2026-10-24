@@ -36,7 +36,7 @@ import yomiyasu_lint  # noqa: E402
 
 # diff が読む4つの一覧と、2.2.0 で lint が読む2つの一覧（check の記録の tools にはどれも入る）
 DIFF_LIST_NAMES = ("nominalization", "intensifiers", "feelings", "hedges")
-LINT_LIST_NAMES = ("katakana-terms", "thin-evaluation")
+LINT_LIST_NAMES = ("katakana-terms", "thin-evaluation", "renyo-nouns")
 LIST_NAMES = DIFF_LIST_NAMES + LINT_LIST_NAMES
 LIST_KEYS = tuple("references/lists/{}.txt".format(name) for name in LIST_NAMES)
 LISTS = ROOT / "references" / "lists"
