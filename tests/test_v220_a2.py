@@ -19,7 +19,7 @@ import yomiyasu_lint  # noqa: E402
 SHAPE_RULES = ("say_hedge", "copy_comma_noun", "bare_verb_chain")
 COMMON_TAIL = "文脈を見て、誰が何をどうするかを書き直すか確かめてください。"
 # 印に当たったときに守ることの1文（推敲の測りで、守らない書き直しが出た規則だけ）
-HANDLING = {"say_hedge": "推量の「でしょう」は残します。ある区分に当たるかを判断する文（印のないもの）は直しません。"}
+HANDLING = {"say_hedge": "推量の「でしょう」は残します。ある区分に当たるかを判断する文（指摘の出ないもの）は直しません。"}
 
 # 所有者の類例（指示書「作業を始める前に」）の5〜8と、当たる規則
 OWNER_SEEDS = (

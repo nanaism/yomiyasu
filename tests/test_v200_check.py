@@ -94,7 +94,7 @@ FAIL_ON_HEAD = "--fail-on={} の条件に当たりました（終了コード1�
 MATERIALS_DISCLAIMER = ("照らしたのは数値、名前、語、確度の語だけです。主張、条件、担当が資料どおりかは判定していません。"
                         "資料と読み比べてください。")
 SAME_FILE_ERROR = ("原文と最終稿が同じファイルです。書き直す前の原文を別のファイルに残し、最終稿を別のファイルに保存してから"
-                   "実行してください。原文を上書きしてしまったときは、git などで元の版を取り出して --source に渡してください。")
+                   "実行してください。原文を上書きしてしまったときは、git などで元の原稿を取り出して --source に渡してください。")
 GITIGNORE_LINES = ["# yomiyasu の検査記録。git に入れない。", "*"]
 
 # 3.9 verify の出力の1行目
@@ -471,7 +471,7 @@ class CheckCase(unittest.TestCase):
             kept = summaries["lint"].get("kept_marks")
             self.assertEqual(len(lines), 5 if kept else 4, lines)
             if kept:
-                self.assertTrue(lines[4].startswith("残した印の語: "), lines)
+                self.assertTrue(lines[4].startswith("残した指摘の語: "), lines)
         else:
             self.assertEqual(len(lines), 3, lines)
         if state == "executed":

@@ -307,9 +307,10 @@ TOP_KEYS = ['format',
  'hedges',
  'immutable',
  'politeness',
- 'register']
+ 'register',
+ 'added_actors']
 
-RULES_BASELINE = '■ 規則の見直し候補（4件）\n■ 元の文にない語: 拡張、暫定的\n■ 消えた語: 暫定引\n■ 文末の種類が変わった文（立場に合う向きか見る）\n- 推量・考え → 説明（〜ます）: プールサイズの暫定的な拡張は、別の負荷問題を誘発するおそれがあります。\n■ 文の種類の印が変わった文（伝聞・推量・意見・例え・依頼が、元の文と同じか見る）\n- 元: プールサイズの暫定引き上げは、別の負荷問題を誘発するかもしれません。\n  後: プールサイズの暫定的な拡張は、別の負荷問題を誘発するおそれがあります。\n  消えた印: 推量（かもしれません）'
+RULES_BASELINE = '■ 規則の見直し候補（4件）\n■ 元の文にない語: 拡張、暫定的\n■ 消えた語: 暫定引\n■ 文末の種類が変わった文（立場に合う向きか見る）\n- 推量・考え → 説明（〜ます）: プールサイズの暫定的な拡張は、別の負荷問題を誘発するおそれがあります。\n■ 文の種類を表す語が変わった文（伝聞・推量・意見・例え・依頼が、元の文と同じか見る）\n- 元: プールサイズの暫定引き上げは、別の負荷問題を誘発するかもしれません。\n  後: プールサイズの暫定的な拡張は、別の負荷問題を誘発するおそれがあります。\n  消えた語: 推量（かもしれません）'
 
 RESTORED_BASELINE = {'format': 'yomiyasu-diff',
  'format_version': 2,
@@ -495,7 +496,8 @@ RESTORED_BASELINE = {'format': 'yomiyasu-diff',
               'candidate_count': 0,
               'candidates': [],
               'threshold': {'min_sentences': 3, 'min_ratio': 0.5},
-              'skipped_by': None}}
+              'skipped_by': None},
+ 'added_actors': []}
 
 def risks(result, kind, subkind=None):
     return [r for r in result['meaning_risks']
@@ -540,8 +542,8 @@ class HedgeMarks(unittest.TestCase):
             self.assertEqual(result['fail_on_meaning_risk_count'], 1)
         if tag == 'S1':
             report = diff.report(result)
-            self.assertIn('■ 文の種類の印が変わった文', report)
-            self.assertNotIn('- 文の種類の印が変わった:', report)
+            self.assertIn('■ 文の種類を表す語が変わった文', report)
+            self.assertNotIn('- 文の種類を表す語が変わった:', report)
             self.assertNotIn('■ 意味が変わる恐れ', report)
             self.assertEqual(diff.report_parts(result)['rules'], RULES_BASELINE)
             self.assertEqual(diff.meaning_risks(*EXAMPLES[tag], type_changes=result['type_changes']),
@@ -576,9 +578,10 @@ class HedgeMarks(unittest.TestCase):
         process = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/yomiyasu_diff.py'), '--help'],
                                  capture_output=True, text=True, encoding='utf-8')
         self.assertEqual(process.returncode, 0, process.stderr)
-        self.assertIn('推量の印が同じ強さの慎重な言い方に替わっただけの文', process.stdout)
         # ヘルプは端末の幅で折り返し、日本語の語の途中でも改行が入るので、空白をすべて除いて比べる
-        # （v2.1.0 で --fail-on の説明の文が変わり、折り返しの位置がこの語句の中に来た）
+        # （v2.1.0 で --fail-on の説明の文が変わり、折り返しの位置がこの語句の中に来た。v2.4.0 で「推量の印」を
+        # 「推量の言い方」にして、上の語句の中にも来た）
+        self.assertIn('推量の言い方が、同じ強さの別の慎重な言い方に替わっただけの文', ''.join(process.stdout.split()))
         self.assertIn('かもしれません→恐れがあります、と思われます→見込みです', ''.join(process.stdout.split()))
         self.assertIn('かもしれない → 見込み', process.stdout)
 

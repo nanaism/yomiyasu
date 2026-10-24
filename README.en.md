@@ -50,16 +50,43 @@ When installed as a Claude Code plugin, the skill is named `yomiyasu:yomiyasu`. 
 
 For custom skills on Claude.ai (web), upload [yomiyasu.zip](https://github.com/nanaism/yomiyasu/releases/latest/download/yomiyasu.zip) from the latest release as it is, without unpacking it. The ZIP that GitHub's "Download ZIP" button makes contains the whole repository and may be rejected.
 
-Codex reads skills from `.agents/skills/` in the repository you work in. If you do not use the methods above, or you open the repository in Codex Cloud, copy the `skills/yomiyasu/` folder into `.agents/skills/yomiyasu/` with the commands below.
+Codex reads skills from `.agents/skills/` in the repository you work in. If you do not use the methods above, or you open the repository in Codex Cloud, copy the `skills/yomiyasu/` folder into `.agents/skills/yomiyasu/`: paste the commands below as one block in the root folder of that repository. Run the same commands again to update.
 
 ```bash
-rm -rf /tmp/yomiyasu .agents/skills/yomiyasu
-git clone --depth 1 https://github.com/nanaism/yomiyasu /tmp/yomiyasu
-mkdir -p .agents/skills
-cp -R /tmp/yomiyasu/skills/yomiyasu .agents/skills/yomiyasu
+(
+  set -e
+  tmp=$(mktemp -d)
+  trap 'rm -rf "$tmp"' EXIT
+  git clone --depth 1 https://github.com/nanaism/yomiyasu "$tmp/yomiyasu"
+  mkdir -p .agents/skills
+  if diff -r "$tmp/yomiyasu/skills/yomiyasu" .agents/skills/yomiyasu >/dev/null 2>&1; then
+    echo "Already up to date: .agents/skills/yomiyasu"; exit 0
+  fi
+  if [ -e .agents/skills/yomiyasu ] || [ -L .agents/skills/yomiyasu ]; then
+    backup=.agents/yomiyasu.bak-$(date +%Y%m%d-%H%M%S)
+    if [ -e "$backup" ]; then echo "$backup already exists. Run this again in a second." >&2; exit 1; fi
+    mv .agents/skills/yomiyasu "$backup"
+    echo "Moved the previous folder to $backup"
+  fi
+  cp -R "$tmp/yomiyasu/skills/yomiyasu" .agents/skills/yomiyasu
+  echo "Installed .agents/skills/yomiyasu"
+)
 ```
 
-Codex then lists the skill as `yomiyasu:yomiyasu`. Call it by sending only `/yomiyasu` or by writing 「yomiyasu で」 ("with yomiyasu") in the request. Writing the listed name, `$yomiyasu:yomiyasu`, also works. The copied folder is not updated automatically; copy it again to update.
+The commands fetch the latest version into a temporary folder, copy it to `.agents/skills/yomiyasu/`, and then delete the temporary folder. If `.agents/skills/yomiyasu/` already exists and differs from the latest version, they move it to `.agents/yomiyasu.bak-DATE-TIME/` instead of deleting it. If its files are exactly the same as the latest version, nothing changes. If any file in it has changed or been added since you installed it (Finder's `.DS_Store`, for example), it is moved even when the version is the same. If the download fails, they stop and leave the existing folder as it is. The backup is placed outside `.agents/skills/`, where Codex looks for skills. Each update to a new version adds one more backup folder.
+
+To go back to the previous folder, delete the new copy and move the backup back, using the name that was printed in place of `20261024-153000`.
+
+```bash
+rm -rf .agents/skills/yomiyasu
+mv .agents/yomiyasu.bak-20261024-153000 .agents/skills/yomiyasu
+```
+
+Do not commit the backup folder, and delete it when you no longer need it.
+
+Codex then lists the skill as `yomiyasu:yomiyasu`. Call it by sending only `/yomiyasu` or by writing 「yomiyasu で」 ("with yomiyasu") in the request. Writing the listed name, `$yomiyasu:yomiyasu`, also works. The copied folder is not updated automatically; run the commands again to update.
+
+Do not edit files inside the installed skill folder. Some install methods replace the whole folder on update, and your edits are not kept. Put project words in `.yomiyasu-words/` and your own instructions in `CLAUDE.md` or `AGENTS.md`, outside the skill folder.
 
 ## Usage
 
@@ -84,8 +111,8 @@ Since 2.0.2, agents use yomiyasu only when you ask for it: when the request name
 
 The skill comes with four Python scripts. They need only the Python standard library and are tested on Python 3.9 and 3.14. Their messages are in Japanese.
 
-- `scripts/yomiyasu_lint.py` lists expressions and Markdown formatting worth reviewing in one document, line by line, such as metaphorical verbs, stock phrases, heavy bold or lists, emoji, and bold that will not render. Since 2.2.0 it also marks calques, metaphor-only headings, 「〜と言えるでしょう」, empty evaluations, vague katakana words, catchphrase commas and bare verb chains. Since 2.3.0 it also marks a transitive verb's bare stem used as a noun after 「の」 (「結果の確かめ」, 「二つの案の比べ」), which Japanese grammar research describes as hard to use; the skill rewrites it as a verb with its object or a settled Sino-Japanese noun. These marks are info only: the skill rereads the context and rewrites who does what, instead of swapping one word for another. A project word list in `.yomiyasu-words/` (`allow.txt`, `flag.txt`) removes wrong marks and adds project-specific words.
-- `scripts/yomiyasu_diff.py` compares the text before and after rewriting. It shows every change and puts changes that may alter the meaning first: numbers, negation, swapped subjects and objects, and sentence types such as hearsay, guesses and requests.
+- `scripts/yomiyasu_lint.py` lists expressions and Markdown formatting worth reviewing in one document, line by line, such as metaphorical verbs, stock phrases, heavy bold or lists, emoji, and bold that will not render. Since 2.2.0 it also marks calques, metaphor-only headings, 「〜と言えるでしょう」, empty evaluations, vague katakana words, catchphrase commas and bare verb chains. Since 2.3.0 it also marks a transitive verb's bare stem used as a noun after 「の」 (「結果の確かめ」, 「二つの案の比べ」), which Japanese grammar research describes as hard to use; the skill rewrites it as a verb with its object or a settled Sino-Japanese noun. Since 2.4.0 it also marks a single kanji used as a noun for a short English term, such as 「版」 for "version", 「頭」 for "head" and 「印」 for "mark"; the skill writes the term people in the field use (「バージョン」, 「先頭」, 「指摘」) or asks the writer when it cannot tell what the word refers to. These marks are info only: the skill rereads the context and rewrites who does what, instead of swapping one word for another. A project word list in `.yomiyasu-words/` (`allow.txt`, `flag.txt`) removes wrong marks and adds project-specific words.
+- `scripts/yomiyasu_diff.py` compares the text before and after rewriting. It shows every change and puts changes that may alter the meaning first: numbers, negation, swapped subjects and objects, and sentence types such as hearsay, guesses and requests. Since 2.4.0 it also lists sentences where the rewrite added a person or role, as the subject or as the one to notify or ask, that is in neither the original nor the material given with `--material`.
 - `scripts/yomiyasu_check.py` runs lint on the final draft and diff on the original and the final draft, and keeps a record in `.yomiyasu/` at the top of the git repository (or in the working folder outside git). `verify` checks right before submitting that the final draft is the one that was checked.
 - `scripts/yomiyasu_hook.py` is an optional hook for Claude Code and Codex. It runs only if you add it to your own settings.
 

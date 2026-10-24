@@ -633,7 +633,8 @@
     "hedges",
     "immutable",
     "politeness",
-    "register"
+    "register",
+    "added_actors"
   ],
   "check_lines": {
     "SN1": [
@@ -716,6 +717,7 @@
   },
   "updates": [
     "2026-10-19 v2.1.0 の許可・能力の言い方の検査を足したときの作り直し: risks の PN14（来週お届けできる見込みです。 → 来週お届けします。）に、能力の言い方の消え（kind modality_review、subkind ability_lost。種類なしなので --fail-on には数えない）を確度の候補のあとに足した。ほかの例の risks、nine、reports、keys、check_lines は今の出力と1字も変わらないことを確かめた。",
-    "2026-10-20 v2.1.1 で、check run の3行目のあとに候補の短い一覧と、下の節を読む案内の2行を足したときの作り直し: check_lines の SN1 と RN1（diff の候補がある例）に、その2行（「diff の候補: …」と「候補の中身は下の節にあります。出力を切らずに読んでください。」）を足した。候補のない PN1 と、risks、nine、reports、keys は今の出力と1字も変わらないことを確かめた。"
+    "2026-10-20 v2.1.1 で、check run の3行目のあとに候補の短い一覧と、下の節を読む案内の2行を足したときの作り直し: check_lines の SN1 と RN1（diff の候補がある例）に、その2行（「diff の候補: …」と「候補の中身は下の節にあります。出力を切らずに読んでください。」）を足した。候補のない PN1 と、risks、nine、reports、keys は今の出力と1字も変わらないことを確かめた。",
+    "2026-10-24 v2.4.0 で、原文にない人や担当を足した文（added_actors）を diff の JSON の最後のキーとして足したときの作り直し: keys の最後に added_actors を足した。この fixture の例はどれも人や担当を足していないので added_actors は空で、risks、nine、reports、check_lines は今の出力と1字も変わらないことを確かめた。"
   ]
 }

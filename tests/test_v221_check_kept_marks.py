@@ -55,12 +55,12 @@ class KeptMarksTest(unittest.TestCase):
     def test_run_lists_the_kept_words_in_the_head_and_a_section(self):
         _, (code, out, err) = self.run_final(KEPT)
         self.assertEqual((code, err), (0, ""))
-        head = [line for line in out.splitlines()[:8] if line.startswith("残した印の語: ")]
+        head = [line for line in out.splitlines()[:8] if line.startswith("残した指摘の語: ")]
         self.assertEqual(len(head), 1, out)
         self.assertIn("要求（語の一覧。L3）", head[0])
         self.assertIn("に響く（直訳語。L5）", head[0])
-        self.assertIn("■ 残した印の語（最終稿の直訳語と語の一覧の印。2語）", out)
-        section = out.split("■ 残した印の語（", 1)[1].split("\n\n", 1)[0]
+        self.assertIn("■ 残した指摘の語（最終稿の直訳語と語の一覧の指摘。2語）", out)
+        section = out.split("■ 残した指摘の語（", 1)[1].split("\n\n", 1)[0]
         self.assertIn("「書き手に確かめたい点」で尋ねる", section)
         self.assertIn("- 要求（語の一覧。L3）", section)
 
@@ -71,7 +71,7 @@ class KeptMarksTest(unittest.TestCase):
         self.assertEqual((code, err), (0, ""))
         lines = out.splitlines()
         self.assertEqual(len(lines), 5, lines)
-        self.assertTrue(lines[4].startswith("残した印の語: 要求（語の一覧。L3）、に響く（直訳語。L5）。"), lines)
+        self.assertTrue(lines[4].startswith("残した指摘の語: 要求（語の一覧。L3）、に響く（直訳語。L5）。"), lines)
         code, out, err = self.check("verify", "--final", final, "--replay")
         self.assertEqual((code, err), (0, ""))
         self.assertIn("replay=ok", out)
@@ -88,7 +88,7 @@ class KeptMarksTest(unittest.TestCase):
     def test_nothing_is_added_without_kept_marks(self):
         final, (code, out, err) = self.run_final(CLEAN)
         self.assertEqual((code, err), (0, ""))
-        self.assertNotIn("残した印の語", out)
+        self.assertNotIn("残した指摘の語", out)
         code, out, _ = self.check("verify", "--final", final)
         self.assertEqual(code, 0)
         self.assertEqual(len(out.splitlines()), 4)

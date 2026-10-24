@@ -22,6 +22,12 @@ from bisect import bisect_right
 from itertools import chain, compress
 from operator import is_
 from typing import List, Dict, Any, Tuple
+
+# スクリプトとして動かしたときは、markdown_visibility を読み込む前に .pyc を書かないようにする
+# （スキルのフォルダに __pycache__ を作らない。yomiyasu_check.py と同じ）。モジュールとして読み込まれたときは、
+# 読み込む側の設定を変えない。
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True
 _VISIBILITY_NAMES = ("analyze_markdown", "line_visible_text", "range_overlaps_protected",
                      "inline_protected_spans", "unicode_whitespace", "decode_source",
                      "DOC_TYPES", "READER_LEVELS", "normalize_doc_type", "normalize_reader", "context_label",
@@ -39,7 +45,7 @@ try:
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
-            "{} を読めません（SyntaxError: {}）。yomiyasu_lint.py と同じ版の markdown_visibility.py を置いてください。".format(
+            "{} を読めません（SyntaxError: {}）。yomiyasu_lint.py と同じバージョンの markdown_visibility.py を置いてください。".format(
                 error.filename or "markdown_visibility.py", error.msg),
             name=(__package__ + ".markdown_visibility") if __package__ else "markdown_visibility") from error
     except ImportError as error:
@@ -61,13 +67,13 @@ try:
             # 隣に markdown_visibility.py がない、または壊れている。ImportError にして、スクリプトでは終了コード3にする
             # （OSError と SyntaxError のままだと外の except で受けられず、トレースバックと終了コード1になる。diff と同じ）。
             raise ImportError(
-                "{} を読めません（{}: {}）。yomiyasu_lint.py と同じ版の markdown_visibility.py を同じフォルダに置いてください。".format(
+                "{} を読めません（{}: {}）。yomiyasu_lint.py と同じバージョンの markdown_visibility.py を同じフォルダに置いてください。".format(
                     _visibility_spec.origin, type(_load_error).__name__, _load_error),
                 name=expected) from _load_error
         _missing = [name for name in _VISIBILITY_NAMES if not hasattr(_visibility_module, name)]
         if _missing:
             raise ImportError(
-                "{} に {} がありません。yomiyasu_lint.py と同じ版の markdown_visibility.py を置いてください。".format(
+                "{} に {} がありません。yomiyasu_lint.py と同じバージョンの markdown_visibility.py を置いてください。".format(
                     _visibility_spec.origin, "、".join(_missing)),
                 name=expected)
         analyze_markdown = _visibility_module.analyze_markdown
@@ -3293,7 +3299,8 @@ class _V220Lazy:
 _V220_MESSAGE_TAIL = "の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。"
 _CALQUE_TYPE_NAMES = {1: "型1: 機械やシステムが人の動作をする言い方",
                       2: "型2: 実物の名前の代わりに場所のたとえを使う名詞",
-                      3: "型3: 英語の言い方を一語ずつ写した句"}
+                      3: "型3: 英語の言い方を一語ずつ写した句",
+                      4: "型4: 英語の短い術語に当てた漢字1字の名詞"}
 # 伏せる所: 引用符の中（カギ括弧は _mask_quoted_segments で伏せる）と、英数字の識別子
 _V220_QUOTES = _V220Lazy(r"“[^”\n]*”|\"[^\"\n]*\"|‘[^’\n]*’")
 _V220_IDENTIFIER = _V220Lazy(r"(?<![A-Za-z0-9])[A-Za-z0-9]+(?:[_./\\][A-Za-z0-9]+)+[_./]?|(?<![a-z])[a-z]+[A-Z][A-Za-z0-9]*|[_./\\][A-Za-z0-9_]+")
@@ -3806,9 +3813,12 @@ _V220_TRIGGER_LITERALS = tuple((
     "秒を取 分を取 時間を取 場所を取 ステップを取 意味を 針を 所有権を持 違いを作 手を伸ば ライブに "
     "同じページ 水を試 透明に ループを ループに 駆動され 配達 大きな絵 インパクトを持 決定を作 "
     "質問を持 真剣に取 目を保 テーブルに置 テーブルに載 テーブルに乗 テーブルに出 次のレベルに 機械 ターン "
+    # 型4（2.4.0）の漢字1字の名詞
+    "版 印 頭 "
 ).split())
 _V220_TYPE1_END = _V220_TRIGGER_LITERALS.index("口")
 _V220_TYPE2_END = _V220_TRIGGER_LITERALS.index("秒を取")
+_V220_TYPE3_END = _V220_TRIGGER_LITERALS.index("版")
 
 
 def _v220_literal_re(literals):
@@ -3832,7 +3842,8 @@ def _v220_literal_re(literals):
 # 文ごとに、型の手掛かりの語があるかを先に見る（ない文は型の正規表現を当てない）
 _CALQUE_VERB_STEMS = frozenset(stem for stem, _, _ in _CALQUE_VERB_EACH)     # どれも1字
 _CALQUE_PLACE_HEAD = _v220_literal_re(_V220_TRIGGER_LITERALS[_V220_TYPE1_END:_V220_TYPE2_END])
-_CALQUE_PHRASE_HEAD = _v220_literal_re(_V220_TRIGGER_LITERALS[_V220_TYPE2_END:] + ("効", "足す", "足し", "響", "引", "通"))
+_CALQUE_PHRASE_HEAD = _v220_literal_re(_V220_TRIGGER_LITERALS[_V220_TYPE2_END:_V220_TYPE3_END] + ("効", "足す", "足し", "響", "引", "通"))
+_CALQUE_KANJI1_CHARS = frozenset(_V220_TRIGGER_LITERALS[_V220_TYPE3_END:])     # どれも1字
 
 # thin_evaluation: 文が「（20字以下の読点のない前置き）名詞（が|は|も）（程度の副詞）述語（です|だ など）。」の形
 _THIN_PREFIX_MAX = 20
@@ -4255,6 +4266,43 @@ def _metaphor_label(analysis, row, scan):
     return label
 
 
+# 型4（2.4.0）: 英語の短い術語（version、mark、head）に漢字1字を当てて名詞に使う言い方（今回の版、lint の印、一覧の頭）。
+# 漢字1字の語は文字どおりの意味でもよく使うので、語ごとに形と文の条件を決めた（人のニュース約900万字で0件になる形）。
+# 版: 連体の修飾（〜た、〜い、〜な、〜る、〜の、同じ）を受けて名詞として使う形と、「版ごと」「版の文字列」「版を分ける」の形。
+#     文に出版物の語（_PUBLICATION_WORDS と、版画、印刷、新聞、映画、吹き替え など）があれば出さない（第2版、吹き替え版）。
+# 印: 1字で使う印（×印、目印、焼き印、お印は外す）。文に検査や推敲の語（lint、diff、検証、ログ、推敲 など）があるときだけ出す。
+# 頭: 行、一覧、出力、ログなどの「頭」（先頭の意味）と、PR やブランチの「頭」（HEAD）。体や慣用の頭（頭が痛い、曲の頭）は形で外れる。
+_CALQUE_VERSION_PUB = _V220Lazy(_PUBLICATION_WORDS + r"|版画|木版|活版|銅版|印刷|新聞|雑誌|刷|号|映画|吹き?替え|字幕|劇場|DVD"
+                                r"|ブルーレイ|Blu-?ray|BD|ゲーム|コミック|漫画|マンガ|小説|写真集|楽譜|彫|刷り")
+_CALQUE_VERSION = (
+    _V220Lazy(r"(?:(?<=[たいなる])|(?<=の)|(?<=同じ))版(?=[はがをにでのもへと、。（(\s]|から|まで|ごと|だけ|より|$)(?!を重ね|を組|を彫|を刷)"),
+    _V220Lazy(r"(?<![一-龥々ァ-ヴーA-Za-z0-9０-９])(?<![A-Za-z0-9０-９][ 　])版(?:ごと|の(?:文字列?|番号|数字|名前|違い|差)|を(?:またい|分け|そろえ|揃え|固め))"))
+_CALQUE_MARK = _V220Lazy(r"(?<![一-龥々×○◎◆★☆▲△■□●◇◯※✓✔✕✖✗〇])(?<!焼き)(?<!バツ)(?<!マル)(?<!まる)(?<!チェック)(?<!という)"
+                         r"(?<!示す)(?<!お)印(?![一-龥々])(?!として|の線|付近|の部分|の位置|のところ|す|され|さ|である|だった|を?押|鑑)")
+_CALQUE_MARK_CONTEXT = _V220Lazy(r"(?<![A-Za-z])(?:lint|diff|check|CI|PR|info|warn|calque|規則|検査|検証|判定|推敲|レビュー|出力|ログ"
+                                 r"|レコード|フラグ|推量|引用|概数|直訳語|最終稿|(?:候補|記録|原文)(?![一-龥々]))")
+_CALQUE_HEAD = _V220Lazy(r"(?<![ァ-ヴー])(?:行|文|段落|項目|一覧|出力|リスト|ファイル|ログ|配列|キュー|表|節|章|ページ|見出し|箇条書き|並び|後半|前半"
+                         r"|列挙|ブロック|コマンド|キー|パス|run|check|README|PR|プルリク|ブランチ|branch|main|master|手元|リモート"
+                         r"|ローカル)\s?の頭(?![一-龥々])"
+                         r"|(?<![一-龥々])頭の(?:一覧|行|[0-9０-９一二三四五六七八九十]+(?:行|件|字|文|個|項目)|数行|並び)(?![一-龥々])")
+
+
+def _calque_type4(sentence, words, skip_version=False):
+    """型4（英語の短い術語に当てた漢字1字の名詞）。当たった字（版、印、頭）を words に足す。"""
+    found = False
+    if not skip_version and "版" in sentence and not _CALQUE_VERSION_PUB.search(sentence) \
+            and any(pattern.search(sentence) for pattern in _CALQUE_VERSION):
+        words.append("版")
+        found = True
+    if "印" in sentence and _CALQUE_MARK.search(sentence) and _CALQUE_MARK_CONTEXT.search(sentence):
+        words.append("印")
+        found = True
+    if "頭" in sentence and _CALQUE_HEAD.search(sentence):
+        words.append("頭")
+        found = True
+    return found
+
+
 def _v220_word_findings(analysis):
     """calque、metaphor_label、katakana_term、thin_evaluation の候補。
 
@@ -4288,11 +4336,14 @@ def _v220_word_findings(analysis):
         return []
     blocked_all = set()
     blocked_type3 = set()
+    blocked_version = set()
     for finding in analysis.get("_findings", ()):
         if finding["rule"] == "metaphor_verb":
             blocked_all.add(finding["line"])
         elif finding["rule"] == "translated_term":
             blocked_type3.add(finding["line"])
+            if any("版" in word for word in finding.get("_words", ())):
+                blocked_version.add(finding["line"])
     out = []
     doc_tech = None
     for line_no in sorted(candidate_lines | label_lines):
@@ -4324,6 +4375,9 @@ def _v220_word_findings(analysis):
                 if doc_tech is None:
                     doc_tech = _v220_doc_tech(text)
                 finders.append((3, functools.partial(_calque_type3, doc_tech=doc_tech)))
+            if not _CALQUE_KANJI1_CHARS.isdisjoint(scan):
+                # 同じ行に translated_term の版の直訳があれば、型4の版は重ねない（ほかの語の translated_term では止めない）
+                finders.append((4, functools.partial(_calque_type4, skip_version=line_no in blocked_version)))
         thin_possible = thin_re is not None and thin_noun_re.search(scan) is not None
         sentences = ()
         if finders or thin_possible:
@@ -4453,7 +4507,7 @@ def _v230_renyo_findings(analysis):
 # 既存の表（_PATTERN_LITERAL_HINTS）とは別に、行ごとに見える文字（_prose_visible_text）を見る。
 # カギ括弧、二重カギ括弧、[ ]、引用符の中は伏せる。引用の行、表、コード、frontmatter、HTML は見ない。
 _SHAPE_RULE_MESSAGES = {
-    "say_hedge": "文末の「と言えるでしょう」の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。推量の「でしょう」は残します。ある区分に当たるかを判断する文（印のないもの）は直しません。",
+    "say_hedge": "文末の「と言えるでしょう」の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。推量の「でしょう」は残します。ある区分に当たるかを判断する文（指摘の出ないもの）は直しません。",
     "copy_comma_noun": "修飾語と短い名詞の間に読点を打って名詞で終える、キャッチコピーの型の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。",
     "bare_verb_chain": "主語も目的語もない動詞を読点で並べて止める文の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。",
 }
@@ -4927,7 +4981,7 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
             "rule": "bold_not_rendered",
             "line": p["line"],
             "severity": "error",
-            "message": f"太字の印（**）について、太字として表示されない可能性のある書き方が見つかりました。GitHub などで太字にならず ** がそのまま表示されることがあります。直し方: {p['how']}。",
+            "message": f"太字の記号（**）について、太字として表示されない可能性のある書き方が見つかりました。GitHub などで太字にならず ** がそのまま表示されることがあります。直し方: {p['how']}。",
             "snippet": f"{p['found']} → {p['suggest']}" if p["suggest"] else p["found"]
         })
 
@@ -5486,7 +5540,7 @@ _WORDS_HELP = ("語の一覧（allow.txt と flag.txt）のフォルダ。省く
 _WORDS_EPILOG = """語の一覧（--words、--no-words）:
   allow.txt の語は、次の規則の候補から外し、外した件数を出します: calque、katakana_term、metaphor_label、
   metaphor_verb、project_term、renyo_noun、slop_vocabulary、translated_term。flag.txt の語には project_term（info）の
-  印をつけます。どちらも1行に1語（UTF-8。# で始まる行と空の行は読み飛ばします）。
+  指摘を出します。どちらも1行に1語（UTF-8。# で始まる行と空の行は読み飛ばします）。
 """
 _NO_WORDS_HELP = "語の一覧を探さず、読みません（--words と一緒には使えません）。"
 
@@ -5527,7 +5581,7 @@ def _build_parser():
                          help="想定する読者の知識。表示と JSON に残すだけで、候補は変えません。値: " + _choices(READER_LEVELS) + "。")
     options.add_argument("--words", metavar="フォルダ", help=_WORDS_HELP)
     options.add_argument("--no-words", action="store_true", help=_NO_WORDS_HELP)
-    options.add_argument("--version", action="store_true", help="版を表示して終わります。")
+    options.add_argument("--version", action="store_true", help="バージョンを表示して終わります。")
     parser.set_defaults(conditions=[])
     return parser
 

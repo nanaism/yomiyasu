@@ -441,8 +441,8 @@ class TestSentenceType(RiskCase):
         [change] = result["type_changes"]
         self.assertEqual(marks[0]["detail"], {"lost": change["lost"], "added": change["added"]})
         report = self.report(result)
-        self.assertIn("- 文の種類の印が変わった: 1件（下の「■ 文の種類の印が変わった文」を見る）", report)
-        self.assertTrue([line for line in report if line.startswith("■ 文の種類の印が変わった文（")], "既存の節と見出しは残す")
+        self.assertIn("- 文の種類を表す語が変わった: 1件（下の「■ 文の種類を表す語が変わった文」を見る）", report)
+        self.assertTrue([line for line in report if line.startswith("■ 文の種類を表す語が変わった文（")], "既存の節と見出しは残す")
 
 
 class TestProtected(RiskCase):

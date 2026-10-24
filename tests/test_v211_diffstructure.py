@@ -26,7 +26,7 @@ BOLD_DST = "# 手順\n\n#### 前提条件\n\n設定を確認します。\n\n####
 LEVEL_SRC = "# 手順\n\n### 前提\n\n設定を確認します。\n"
 LEVEL_DST = "# 手順\n\n#### 前提\n\n設定を確認します。\n"
 HEADING_PREFIXES = ("見出しの数が変わった", "太字の行を見出しにした", "本文の行を見出しにした", "見出しを本文の行にした",
-                    "見出しの段を変えた")
+                    "見出しのレベルを変えた")
 
 
 def heading_entries(result):
@@ -104,7 +104,7 @@ class HeadingLevelTest(unittest.TestCase):
     def test_level_change_is_a_structure_candidate(self):
         """### を #### にした組が、全文差分の「見出しの段 3 → 4」だけで候補0件になっていた不具合を防ぐ。"""
         result = yomiyasu_diff.diff(LEVEL_SRC, LEVEL_DST)
-        self.assertEqual(result["structure"], ["見出しの段を変えた（元3行目 段3「### 前提」→ 後3行目 段4「#### 前提」）"])
+        self.assertEqual(result["structure"], ["見出しのレベルを変えた（元3行目 レベル3「### 前提」→ 後3行目 レベル4「#### 前提」）"])
         self.assertEqual(result["candidate_count"], 1)
         self.assertEqual(result["meaning_risk_count"], 0)
 
@@ -112,7 +112,7 @@ class HeadingLevelTest(unittest.TestCase):
         src = "# 手順\n\n## 前提の条件\n\n設定を確認します。\n"
         dst = "# 手順\n\n### 前提条件\n\n設定を確認します。\n"
         self.assertEqual(heading_entries(yomiyasu_diff.diff(src, dst)),
-                         ["見出しの段を変えた（元3行目 段2「## 前提の条件」→ 後3行目 段3「### 前提条件」）"])
+                         ["見出しのレベルを変えた（元3行目 レベル2「## 前提の条件」→ 後3行目 レベル3「### 前提条件」）"])
 
     def test_setext_to_atx(self):
         src = "手順\n====\n\n設定を確認します。\n"
@@ -120,7 +120,7 @@ class HeadingLevelTest(unittest.TestCase):
         lower = "## 手順\n\n設定を確認します。\n"
         self.assertEqual(heading_entries(yomiyasu_diff.diff(src, same)), [])
         self.assertEqual(heading_entries(yomiyasu_diff.diff(src, lower)),
-                         ["見出しの段を変えた（元1行目 段1「手順」→ 後1行目 段2「## 手順」）"])
+                         ["見出しのレベルを変えた（元1行目 レベル1「手順」→ 後1行目 レベル2「## 手順」）"])
 
 
 class HeadingToBodyTest(unittest.TestCase):
@@ -171,7 +171,7 @@ class HeadingPairingTest(unittest.TestCase):
         dst = "# 手順\n\n## 準備\n\n道具をそろえる。\n\n**注意**\n\n手袋を付ける。\n\n### 注意\n\n電源を切る。\n"
         result = yomiyasu_diff.diff(src, dst)
         self.assertEqual(heading_entries(result),
-                         ["見出しの段を変えた（元7行目 段2「## 注意」→ 後11行目 段3「### 注意」）"])
+                         ["見出しのレベルを変えた（元7行目 レベル2「## 注意」→ 後11行目 レベル3「### 注意」）"])
         self.assertEqual(result["fail_on_meaning_risk_count"], 0)
 
     def test_same_text_headings_pair_inside_their_own_hunk(self):
@@ -181,7 +181,7 @@ class HeadingPairingTest(unittest.TestCase):
         self.assertEqual(heading_entries(yomiyasu_diff.diff(src, dst)), [
             "見出しの数が変わった（2 → 1）。節の分け方が元と同じでよいか見る",
             "見出しを本文の行にした（元1行目「## 注意」→ 後1行目「**注意**」）",
-            "見出しの段を変えた（元5行目 段2「## 注意」→ 後5行目 段3「### 注意」）",
+            "見出しのレベルを変えた（元5行目 レベル2「## 注意」→ 後5行目 レベル3「### 注意」）",
         ])
 
     def test_level_and_unrelated_text_changed_at_same_position(self):
@@ -190,12 +190,12 @@ class HeadingPairingTest(unittest.TestCase):
         dst = "# 手順\n\n### 準備するもの\n\n本文です。\n"
         result = yomiyasu_diff.diff(src, dst)
         self.assertEqual(heading_entries(result),
-                         ["見出しの段を変えた（元3行目 段2「## 前提」→ 後3行目 段3「### 準備するもの」）"])
+                         ["見出しのレベルを変えた（元3行目 レベル2「## 前提」→ 後3行目 レベル3「### 準備するもの」）"])
         self.assertEqual(result["fail_on_meaning_risk_count"], 0)
         src = "# 手順\n\n## 前提\n\n本文です。\n\n## 作業\n\n値を更新します。\n"
         dst = "# 手順\n\n### 必要なもの\n\n本文です。\n\n## 作業\n\n値を更新します。\n"
         self.assertEqual(heading_entries(yomiyasu_diff.diff(src, dst)),
-                         ["見出しの段を変えた（元3行目 段2「## 前提」→ 後3行目 段3「### 必要なもの」）"])
+                         ["見出しのレベルを変えた（元3行目 レベル2「## 前提」→ 後3行目 レベル3「### 必要なもの」）"])
 
     def test_unrelated_text_at_same_level_is_not_a_level_change(self):
         src = "# 手順\n\n## 前提\n\n本文です。\n"
@@ -235,7 +235,7 @@ class HeadingPairingTest(unittest.TestCase):
     def test_setext_underline_changed_level(self):
         src = "# 手順\n\n前提\n----\n\n本文です。\n"
         self.assertEqual(heading_entries(yomiyasu_diff.diff(src, src.replace("----", "===="))),
-                         ["見出しの段を変えた（元3行目 段2「前提」→ 後3行目 段1「前提」）"])
+                         ["見出しのレベルを変えた（元3行目 レベル2「前提」→ 後3行目 レベル1「前提」）"])
         self.assertEqual(heading_entries(yomiyasu_diff.diff(src, src.replace("----", "------"))), [])
 
     def test_fail_on_exit_code_for_new_pairs(self):

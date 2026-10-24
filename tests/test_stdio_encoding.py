@@ -167,6 +167,8 @@ def run_in_process(script, args, stdin=_KEEP, stdout=_KEEP):
         patches.append(mock.patch.object(sys, "stdin", stdin))
     # Never let the script reconfigure the test runner's own stdout.
     patches.append(mock.patch.object(sys, "stdout", io.StringIO() if stdout is _KEEP else stdout))
+    # lint、diff、check は __main__ として動くと sys.dont_write_bytecode を真にする。試験のプロセスの値は元に戻す。
+    patches.append(mock.patch.object(sys, "dont_write_bytecode", sys.dont_write_bytecode))
     with contextlib.ExitStack() as stack:
         for patch in patches:
             stack.enter_context(patch)

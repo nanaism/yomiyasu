@@ -38,10 +38,10 @@ NINE_KEYS = ["markers", "new_words", "lost_words", "structure", "spans", "logic"
 # diff の詰めの直し（反証で見つけた例）: 気持ちの語の一覧の出どころ（feeling）を最後に足す
 TOP_KEYS = (["format", "format_version", "tool_version", "status", "changed", "candidate_count", "meaning_risk_count",
              "fail_on_meaning_risk_count", "not_judged", "context", "meaning_risks"] + NINE_KEYS
-            + ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register"])
+            + ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register", "added_actors"])
 FIRST_LINE = "差分の検査を実行しました。"
 # v2.1.1: v1.1.2 の合成20組のうち、見出しを変えた組で structure の後ろに足す見出しの変化の文
-HEADING_ADDED = {"heading_and_code": ["見出しの段を変えた（元1行目 段2「## 手順」→ 後1行目 段3「### 手順」）"]}
+HEADING_ADDED = {"heading_and_code": ["見出しのレベルを変えた（元1行目 レベル2「## 手順」→ 後1行目 レベル3「### 手順」）"]}
 DISCLAIMER = ("全文差分は変わった箇所を示すだけで、意味が同じだという証明ではありません。"
               "この検査では、意味の保持と読者にとっての分かりやすさは判定していません。")
 NO_CANDIDATE_STATUS = "状態: 変更はあるが、専用の規則に当たる見直し候補はない（変更"
@@ -102,7 +102,7 @@ EXAMPLE_C = """差分の検査を実行しました。
 - 数値が変わった（元5行目 → 後3行目）: 3日 → 30日
   元: 保存期間は3日です。
   後: 保存期間は30日です。
-- 文の種類の印が変わった: 2件（下の「■ 文の種類の印が変わった文」を見る）
+- 文の種類を表す語が変わった: 2件（下の「■ 文の種類を表す語が変わった文」を見る）
 
 ■ 規則の見直し候補（15件）
 ■ 言い回しの種類の増減（意味が変わりやすいところ）
@@ -119,14 +119,14 @@ EXAMPLE_C = """差分の検査を実行しました。
 - 文頭のつなぎ: しかし、「キャッシュ」も確認するべきです。
 ■ 文末の種類が変わった文（立場に合う向きか見る）
 - 動作（〜します）・箇条書き → 勧め: 設定ファイルを開き、値を変更しましょう。
-■ 文の種類の印が変わった文（伝聞・推量・意見・例え・依頼が、元の文と同じか見る）
+■ 文の種類を表す語が変わった文（伝聞・推量・意見・例え・依頼が、元の文と同じか見る）
 - 元: 値を変更してください。
   後: 設定ファイルを開き、値を変更しましょう。
-  消えた印: 依頼・決まり（てください）
+  消えた語: 依頼・決まり（てください）
 - 元: 原因は設定ミスだとされる。これは重要です。
   後: 原因は設定ミスだ。しかし、「キャッシュ」も確認するべきです。
-  消えた印: 伝聞（とされる）
-  増えた印: 依頼・決まり（べき）
+  消えた語: 伝聞（とされる）
+  増えた語: 依頼・決まり（べき）
 ■ 文末の立場が混ざっている候補（立場を決めてから見る）
 - 敬体の文の中に、常体の文がある。そろえるときは「する → します」と形だけで変えず、立場に合う形にする
   ・原因は設定ミスだ。
@@ -770,7 +770,8 @@ class TestPresentation(DiffCase):
         report_parts = self.need_function("report_parts")
         result = self.diff2(C_OLD, C_NEW)
         parts = report_parts(result)
-        self.assertEqual(sorted(parts), ["full_diff", "hedges", "immutable", "politeness", "register", "risks", "rules", "stiffness", "tone"])
+        self.assertEqual(sorted(parts), ["added_actors", "full_diff", "hedges", "immutable", "politeness", "register", "risks", "rules",
+                                         "stiffness", "tone"])
         status = self.report(result).split("\n")[1]
         body = [part for part in (parts["risks"], parts["rules"], parts["stiffness"], parts["tone"], parts["full_diff"])
                 if part]
@@ -780,7 +781,7 @@ class TestPresentation(DiffCase):
         self.assertTrue(parts["full_diff"].startswith("■ 全文差分（変更 2か所。省略していません）"), parts["full_diff"])
         same = report_parts(self.diff2(A_OLD, A_OLD))
         self.assertEqual(same, {"risks": "", "rules": "", "stiffness": "", "tone": "", "hedges": "", "immutable": "", "politeness": "", "register": "",
-                                "full_diff": "■ 全文差分: 変わった箇所はありません。"})
+                                "added_actors": "", "full_diff": "■ 全文差分: 変わった箇所はありません。"})
         unsupported = {"kind": "unsupported", "subkind": "number", "old_line": None, "new_line": 4, "old": None,
                        "new": "再試行は最大3回です。", "detail": {"text": "3回", "value": "3", "unit": "回"}, "basis": None}
         name = dict(unsupported, subkind="name", new_line=2, new="移行先はMySQLです。", detail={"text": "MySQL"})
@@ -953,7 +954,7 @@ class TestBlockKinds(DiffCase):
         [hunk] = result["full_diff"]["hunks"]
         self.assertEqual((hunk["old_blocks"], hunk["new_blocks"]), (["heading"], ["heading"]))
         self.assertEqual(hunk["notes"], [{"kind": "heading_level", "old": 2, "new": 3}], "10.2 D10 の注記の形")
-        self.assertIn("@ 元1行目 → 後1行目（見出し、見出しの段 2 → 3）", full_diff_section(self.report(result)))
+        self.assertIn("@ 元1行目 → 後1行目（見出し、見出しのレベル 2 → 3）", full_diff_section(self.report(result)))
 
 
 class TestLongLine(DiffCase):
@@ -1421,7 +1422,7 @@ DIFF_HELP_DESCRIPTION = ("元の文と書き直した文を比べ、変わった
 # 能力の言い方の消えは、どの種類でも数えないことを書いた
 # v2.1.1: 関連・相関の文に因果の言い方を足した書き換えと、選ぶ範囲（どれか一つ ↔ 全部）が入れ替わった書き換え、数に付いた概数や範囲の印の
 # 消えと足しを数えることを足した
-DIFF_HELP_FAIL_ON = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化、"
+DIFF_HELP_FAIL_ON = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類を表す語）、引用の書き方の変化、"
                      "確度を強めた書き換え（かもしれない → 見込み、見込み → 予定、と思われる → 断定など）、"
                      "原文の状態の語（未定、未確認、調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足しが"
                      "1件でもあれば、終了コード1で終わります。許可の言い方（してよい、してもよい、構わない）が消えたか増えた書き換えも数えます。"
@@ -1431,12 +1432,12 @@ DIFF_HELP_FAIL_ON = ("意味が変わる恐れのうち、数値、否定、主�
                      "コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
                      "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、"
                      "数えない語だけの確度の変化、予定の言い切り（する予定です → します）、かぎかっこの中の言葉の変化も数えません。"
-                     "推量の印が同じ強さの慎重な言い方に替わっただけの文（かもしれません → 恐れがあります、と思われます → 見込みです）も数えません。"
-                     "原文にない因果のつながりの足しと、書き手の行為と読む印（いたします、今後・改めて、"
+                     "推量の言い方が、同じ強さの別の慎重な言い方に替わっただけの文（かもしれません → 恐れがあります、と思われます → 見込みです）も数えません。"
+                     "原文にない因果のつながりの足しと、書き手の行為と読む言い方（いたします、今後・改めて、"
                      "弊社などの主語）のない「〜します」の足し（説明や手順の文かもしれないもの）も数えません。"
                      "ただし、関連・相関を述べた原文の文に因果の言い方（因果、原因、引き起こす など）を足した書き換えと、"
                      "選ぶ範囲が入れ替わった書き換え（または・どちらか → 両方・すべて、またはその逆）、"
-                     "同じ数に付いた概数や範囲の印（約、ほど、以上、未満 など）が消えたか増えた書き換えは数えます。"
+                     "同じ数に付いた概数や範囲を表す語（約、ほど、以上、未満 など）が消えたか増えた書き換えは数えます。"
                      "候補は確かめる場所で、意味が変わったという判定ではありません。"
                      "条件に当たらなくても、意味が同じだという証明にはなりません。")
 UNKNOWN_FAIL_ON = "--fail-on に使えない値です: {}。diff で使えるのは meaning-risk です。"

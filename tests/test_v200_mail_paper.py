@@ -177,7 +177,7 @@ class ImmutableValues(unittest.TestCase):
         result = diff.diff('既報 (山田 2020)。', '既報 (佐藤 2020)。')
         self.assertEqual([r['kind'] for r in result['meaning_risks']], ['citation'])
         self.assertEqual(result['fail_on_meaning_risk_count'], 1)
-        self.assertIn('引用の印が変わった', diff.report(result))
+        self.assertIn('引用の書き方が変わった', diff.report(result))
         self.assertTrue(any(r['kind'] == 'citation' for r in diff.meaning_risks('(山田 2020)', '(佐藤 2020)')))
 
     def test_not_citations_and_moved(self):

@@ -318,7 +318,8 @@ class ListProblemTest(unittest.TestCase):
         self.assertEqual((result["stiffness"]["list"], result["stiffness"]["list_problem"]),
                          ("references/lists/nominalization.txt", None))
         self.assertEqual((result["tone"]["list"], result["tone"]["list_problem"]), ("references/lists/intensifiers.txt", None))
-        self.assertEqual(list(result)[-8:], ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register"])
+        self.assertEqual(list(result)[-9:], ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register",
+                                             "added_actors"])
 
     def test_missing_lists_are_silent(self):
         scripts = copy_scripts(self.folder)

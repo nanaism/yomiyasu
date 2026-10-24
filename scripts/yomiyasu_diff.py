@@ -3,7 +3,7 @@
 yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所をすべて出し、意味が変わる恐れと規則の見直し候補を挙げる。
 
 標準ライブラリだけで動く。モデルは呼ばない。外へ通信しない。
-出すものは8つ。
+出すものは9つ。
   1. 全文差分: 変わった箇所を省略せずに出す（太字、見出しの段、空白、空行、字下げ、コード、引用、表の変化も残す）。
      変わった箇所を示すだけで、意味が同じだという証明ではない。
   2. 意味が変わる恐れ: 数値、否定、主語と目的語の入れ替え、問いと平叙、文の種類の印、許可・能力の言い方（してよい、できる）、
@@ -18,6 +18,8 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
   7. 動かしてはいけない値: 引用の印は meaning_risks（citation、合否の対象）、宛名と裸のメールは immutable（合否の対象外）。
      数字・単位とURLは既存検査を使い、空白つきの科学単位・数値の符号・統計値の比較記号の抜けだけ補う。引用の数値だけの変化が number で出たら重ねない。
   8. 敬語の度合い: mail だけ。敬語の数/文数と敬体文末の割合の差が0.20以上なら politeness の節に出す。
+  9. 原文にない人や担当の足し（2.4.0）: 原文と資料にない人・担当・部署を、主語か、知らせる・頼む相手に足した文を
+     added_actors の節に出す（意味が変わる恐れには入れず、件数、状態、--fail-on にも入れない）。
   paper の硬化と勢いは参考。mail の勢い（絵文字を含む）は見直し候補。
   名詞化の言い回し、強める語、気持ちの語、慎重表現の一覧は ../references/lists/ から読み、なければ内蔵の一覧を使う。
 意味が同じかどうか、つながりが合っているか、文末が立場に合っているかの最終判断は、この結果を見たモデル（または人）がする。
@@ -35,6 +37,12 @@ import traceback
 import unicodedata
 from array import array
 from bisect import bisect_left, bisect_right
+
+# スクリプトとして動かしたときは、markdown_visibility と yomiyasu_lint を読み込む前に .pyc を書かないようにする
+# （スキルのフォルダに __pycache__ を作らない。yomiyasu_check.py と同じ）。モジュールとして読み込まれたときは、
+# 読み込む側の設定を変えない。
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True
 _VISIBILITY_NAMES = ("analyze_markdown", "inline_protected_spans", "unicode_whitespace", "decode_source",
                      "normalize_doc_type", "normalize_reader", "context_label", "DOC_TYPES",
                      "WordsError", "resolve_words", "current_directory", "words_context", "words_label")
@@ -51,7 +59,7 @@ try:
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
-            "{} を読めません（SyntaxError: {}）。yomiyasu_diff.py と同じ版の markdown_visibility.py を置いてください。".format(
+            "{} を読めません（SyntaxError: {}）。yomiyasu_diff.py と同じバージョンの markdown_visibility.py を置いてください。".format(
                 error.filename or "markdown_visibility.py", error.msg),
             name=(__package__ + ".markdown_visibility") if __package__ else "markdown_visibility") from error
     except ImportError as error:
@@ -73,13 +81,13 @@ try:
             # 隣に markdown_visibility.py がない、または壊れている。ImportError にして、スクリプトでは終了コード3にする
             # （OSError と SyntaxError のままだと外の except で受けられず、トレースバックと終了コード1になる）。
             raise ImportError(
-                "{} を読めません（{}: {}）。yomiyasu_diff.py と同じ版の markdown_visibility.py を同じフォルダに置いてください。".format(
+                "{} を読めません（{}: {}）。yomiyasu_diff.py と同じバージョンの markdown_visibility.py を同じフォルダに置いてください。".format(
                     _visibility_spec.origin, type(_load_error).__name__, _load_error),
                 name=expected) from _load_error
         _missing = [name for name in _VISIBILITY_NAMES if not hasattr(_visibility_module, name)]
         if _missing:
             raise ImportError(
-                "{} に {} がありません。yomiyasu_diff.py と同じ版の markdown_visibility.py を置いてください。".format(
+                "{} に {} がありません。yomiyasu_diff.py と同じバージョンの markdown_visibility.py を置いてください。".format(
                     _visibility_spec.origin, "、".join(_missing)),
                 name=expected)
         analyze_markdown = _visibility_module.analyze_markdown
@@ -3429,7 +3437,7 @@ def _heading_structure(sides, hunks):
         else:
             groups["to_body"].append((i, j, None, None))
     labels = {"bold": "太字の行を見出しにした", "body": "本文の行を見出しにした", "to_body": "見出しを本文の行にした",
-              "level": "見出しの段を変えた"}
+              "level": "見出しのレベルを変えた"}
     for name, items in groups.items():
         if not items:
             continue
@@ -3437,7 +3445,7 @@ def _heading_structure(sides, hunks):
         for i, j, old_level, new_level in items[:_HEADING_SHOWN]:
             old_text, new_text = _heading_shown(sides.lines[0][i]), _heading_shown(sides.lines[1][j])
             if name == "level":
-                shown.append("元{}行目 段{}「{}」→ 後{}行目 段{}「{}」".format(i + 1, old_level, old_text, j + 1, new_level, new_text))
+                shown.append("元{}行目 レベル{}「{}」→ 後{}行目 レベル{}「{}」".format(i + 1, old_level, old_text, j + 1, new_level, new_text))
             else:
                 old_desc, new_desc = "元{}行目「{}」".format(i + 1, old_text), "後{}行目「{}」".format(j + 1, new_text)
                 if old_text == new_text:
@@ -9597,6 +9605,388 @@ def _politeness(sides, doc_type):
     return _review_section(out, applicable=True, threshold=POLITENESS_THRESHOLD, metrics={"old": old, "new": new})
 
 
+# ---- 原文にない人や担当の足し（JSON の added_actors、レポートの「■ 原文にない人や担当を足した文」。2.4.0）----
+# 推敲で、原文（と資料）にない人・担当・部署を、主語か、知らせる・頼む相手として足した文を出す（SKILL.md の「元にない担当者を
+# 創作しない」と、persona.md 5章の「役割の名前や人の名前を主語として作らない」）。意味が変わる恐れの kind ではないので、
+# meaning_risk_count、candidate_count、状態、状態の行、--fail-on には入れない（JSON の最後のキーとして足す）。
+# 見るのは書き直した文（全文差分の hunk の文）だけ。語が原文か資料のどこかにあれば出さない。依頼の文は diff から見えないので、
+# 依頼にだけ書いてある人も出る（節の見出しに、依頼にもいなければ戻すと書く）。意味が変わったかは判定しない。
+# 区分（JSON の tier）: A = 知らせる・頼む相手に足した、B = 具体的な役割・部署・人名を主語に足した、C = 一般の担い手（開発者、利用者、
+# 全員、チームなど）を主語に足した、W = 書き手・読み手の人称（私たち、弊社、皆さん）を足した。
+# 試作（corpus48 の担当者の足しの19か所を全部拾い、1,415組と v2.1.3〜v2.3.0 の出力で誤った候補が0）を移し、
+# yomiyasu 自身が勧めるカタカナの役割語の和語への言い換え（ステークホルダー → 関係者など）を出さないよう、同じ人を指す語の表を足した。
+
+# 具体的な役割・立場（区分 B）
+_ACTOR_SPECIFIC = (
+    "担当者", "担当", "管理者", "責任者", "上長", "上司", "運用者", "オペレーター", "オペレータ", "当番", "オンコール",
+    "SRE", "PdM", "PM", "マネージャー", "マネージャ", "マネジャー", "リーダー", "事務局", "窓口", "情シス", "承認者", "決裁者",
+    "申請者", "依頼者", "発注者", "受注者", "作成者", "起票者", "レビュアー", "レビュワー", "レビューア", "テスター",
+    "顧客", "お客様", "お客さま", "取引先", "ベンダー", "委託先", "協力会社", "関係者", "関係部署", "各部署", "各チーム",
+    "部長", "課長", "係長", "主任", "室長", "所長", "社長", "役員", "経営層", "幹部", "管理職", "上層部", "人事", "総務",
+    "経理", "法務", "保守チーム", "サポートチーム", "サポート担当", "サポート窓口", "オーナー", "ステークホルダー", "アドミン",
+)
+# 一般の担い手（区分 C。前に語が付けば B）
+_ACTOR_GENERIC = ("開発者", "利用者", "ユーザー", "ユーザ", "読者", "読み手", "参加者", "メンバー", "全員", "各自",
+                  "エンジニア", "チーム", "運用側", "開発側", "運営", "スタッフ")
+# 書き手・読み手の人称（区分 W）。読み手を呼ぶ語は、原文に書き手の自称があっても出す
+_ACTOR_PERSON = ("私たち", "私達", "我々", "弊社", "当社", "当チーム", "私", "僕", "自分たち", "皆さん", "皆様", "みなさん",
+                 "皆さま", "各位", "あなた")
+_ACTOR_READER = frozenset(("皆さん", "皆様", "みなさん", "皆さま", "各位", "あなた"))
+_ACTOR_SPECIFIC_SET = frozenset(_ACTOR_SPECIFIC)
+_ACTOR_CHAR = "一-鿿㐀-䶿々〆ァ-ヴーA-Za-z0-9"
+_ACTOR_PREFIX_CHAR = re.compile("[" + _ACTOR_CHAR + "]")
+_ACTOR_NAME_CHAR = re.compile("[一-鿿㐀-䶿々〆ァ-ヴーA-Za-z]")
+_ACTOR_PREFIX_MAX = 8
+# 役割の語（長いものから当てる）。前に続く漢字・片仮名・英数字（運用担当者、バックエンドチーム、システム管理者）は、
+# 見つけたあとで前へたどって語に含める（語の頭から正規表現で探すより速い）
+_ACTOR_HEAD = re.compile("|".join(re.escape(head) for head in sorted(_ACTOR_SPECIFIC + _ACTOR_GENERIC, key=len,
+                                                                       reverse=True)))
+_ACTOR_HONORIFIC = re.compile(r"様|さま|さん|殿|の方|方々|たち|達|ら(?![しれ])")
+_ACTOR_PERSON_RE = re.compile("(?P<head>{})(?P<hon>たち|達|ども)?".format(
+    "|".join(re.escape(h) for h in sorted(_ACTOR_PERSON, key=len, reverse=True))))
+# 「〜さん」「〜様」「〜氏」「〜殿」の人名（敬称の前の漢字・片仮名・英字を1〜6字）
+_ACTOR_TITLE = re.compile(r"さん|様|さま|氏|殿")
+_ACTOR_TITLE_BAD = frozenset(("皆", "お客", "みな", "皆々", "奥", "お子", "お母", "お父", "神", "仏"))
+# 人を指さない「〜様」「〜殿」（仕様、同様、宮殿など。敬称の前の1字との組で見る）
+_ACTOR_NOT_TITLE = frozenset(("仕様", "同様", "模様", "多様", "一様", "異様", "有様", "態様", "文様", "両様", "別様", "今様",
+                              "様様", "宮殿", "神殿", "御殿", "拝殿", "本殿", "湯殿", "社殿", "仏殿", "寝殿", "貴殿"))
+# 部署の語（〜部、〜課、〜グループ、〜班。前の語は2〜10字）
+_ACTOR_ORG_SUFFIX = r"(?:事業部|本部|部門|部署|部|課|グループ|班)"
+_ACTOR_ORG = re.compile(_ACTOR_ORG_SUFFIX + r"(?![分題金税品材門署外内面所長期限屋位数活下])")
+_ACTOR_ORG_END = re.compile(_ACTOR_ORG_SUFFIX + "$")
+_ACTOR_ORG_STEM_BAD = frozenset((
+    "一", "全", "内", "外", "上", "下", "細", "頭", "後", "前", "局", "中", "北", "南", "西", "東", "大", "腹", "胸", "日", "放", "学",
+    "幹", "本", "支", "接続", "表示", "入力", "出力", "制御", "本体", "冒頭", "末尾", "先頭", "上層", "底", "一般", "最上", "最下",
+    "外側", "内側", "中央", "上位", "下位", "中心", "周辺", "右", "左", "前半", "後半", "中盤", "終盤", "序盤", "導入", "結論",
+    "本論", "付録", "巻末", "文末", "文頭", "上半", "下半"))
+# 文書の部や課（第1部、第三課）
+_ACTOR_ORG_NUMBERED = re.compile(r"^第|[0-9０-９一二三四五六七八九十百千]$")
+# 部品や処理の「〜部」（特許や装置の文書の 記憶部、処理部 など）。前の語の末尾で見る
+_ACTOR_ORG_PART = re.compile(
+    r"(?:処理|制御|記憶|表示|入力|出力|通信|検出|受信|送信|判定|演算|接続|接合|可動|開口|断面|記述|条件|本文|先端|後端|前端|"
+    r"外周|内周|駆動|操作|取得|生成|変換|解析|算出|検知|撮像|発光|受光|給電|電源|筐体|基板|収容|保持|固定|支持|連結|係合|挿入|"
+    r"排出|供給|搬送|冷却|加熱|貯留|格納|設定|記録|読取|書込|照合|認証|通知|送受信|ヘッダー|ヘッダ|フッター|フッタ|ボディー|"
+    r"ボディ|コア|ベース|ヘッド|エッジ|センサー|センサ|モーター|モータ|ドライバー|ドライバ|コントローラー|コントローラ|数)$")
+# 「担当の人」「当番の方」
+_ACTOR_NO_HITO = re.compile(r"(?:担当|当番|運用|管理|責任|窓口|保守|経理|総務|人事|法務|情シス)の(?:人|方|者)")
+# 「〇〇の担当者」のように、前の人や担当の語を受けて同じ人を指す語（前の語が原文にあれば、あるとみなす）
+_ACTOR_OF_HEADS = frozenset(("担当者", "担当", "人", "方", "者", "メンバー", "チーム", "窓口", "スタッフ", "皆さん", "皆様",
+                             "各位", "方々"))
+# 部署や担当の語の入れ替え（開発側 ⇔ 開発チーム ⇔ 開発部 ⇔ 開発担当。前の語が2字以上で同じなら、あるとみなす）
+_ACTOR_SWAP = tuple(sorted(("側", "陣", "担当", "担当者", "チーム", "部", "部門", "部署", "グループ", "班", "課", "係", "メンバー",
+                            "の人", "の方", "の担当者", "者", "スタッフ"), key=len, reverse=True))
+# 同じ人を指す別の書き方（どれかが原文か資料にあれば、あるとみなす）。前に語が付いた形（システム管理者 ← システムのアドミン）も見る。
+# 後半はカタカナと和語の役割語の対応（yomiyasu の katakana_term などが和語への言い換えを勧める語）
+_ACTOR_SAME = (
+    ("PM", "プロジェクトマネージャー", "プロジェクトマネジャー", "プロジェクトマネージャ"),
+    ("PdM", "プロダクトマネージャー", "プロダクトマネジャー", "プロダクトマネージャ"),
+    ("情シス", "情報システム部", "情報システム部門", "情報システム", "情報システム担当"),
+    ("SRE", "サイトリライアビリティ"),
+    ("お客様", "お客さま", "顧客", "利用者", "ユーザー", "ユーザ", "カスタマー", "クライアント"),
+    ("上長", "上司"),
+    ("当番", "オンコール", "当直"),
+    ("担当者", "担当", "担当の人", "担当の方", "担当の者"),
+    ("全員", "各自", "みんな", "皆", "一人ひとり", "一人一人", "それぞれ"),
+    ("ステークホルダー", "関係者", "関係部署", "利害関係者", "関係各所"),
+    ("アドミン", "管理者", "アドミニストレーター", "アドミニストレータ", "admin", "Admin"),
+    ("レビュアー", "レビュワー", "レビューア", "レビュー担当者", "レビュー担当", "査読者"),
+    ("オーナー", "責任者", "持ち主", "所有者"),
+    ("サポート", "サポート窓口", "サポート担当", "サポート担当者", "サポートチーム", "サポートデスク"),
+    ("オペレーター", "オペレータ", "運用者", "運用担当者", "運用担当"),
+    ("ベンダー", "委託先", "外部業者", "業者", "協力会社"),
+    ("マネージャー", "マネージャ", "マネジャー", "管理職"),
+    ("エンジニア", "技術者"),
+    ("テスター", "テスト担当者", "試験担当者", "検証担当者"),
+)
+# 動詞にもなるカタカナ語（「サポートする」）は、人や窓口として出た所だけを原文にあるとみなす
+_ACTOR_VERB_NOUN = {"サポート": re.compile(r"サポート(?=に|へ|が|は|から|まで|窓口|担当|チーム|デスク|センター|部|課|宛)")}
+# 原文の書き手の自称（あれば、書き手の人称（区分 W）は出さない。こちら → 弊社 のような言い換えは人を足していない）
+_ACTOR_SELF_REF = re.compile(r"私|わたし|僕|ぼく|俺|自分|こちら|こっち|当方|うち|弊社|当社|我々|われわれ|私ども|わたくし|"
+                             r"当チーム|小社")
+# 主語の助詞（「〜から」「〜より」「〜によって」も動作主に数える）と、知らせる・頼む相手の助詞
+_ACTOR_SUBJECT = re.compile(r"(?:は|が|も(?!し)|では|には|から|より|によって|により|による|の手で|側で|として)")
+_ACTOR_RECIPIENT = re.compile(
+    r"(?:に(?!とって|おいて|ついて|対し|関し|関す|向け|応じ|合わ|比べ|なる|なっ|なり|なれ|なら|よる|よっ|より|よれ|限|際し|"
+    r"伴|沿|基づ|すぎ|過ぎ|似|近|は)|へ|宛てに|宛に|あてに|まで(?!に)|にも|へも)")
+_ACTOR_NOTIFY = re.compile(
+    r"知らせ|しらせ|通知|連絡|報告|送(?:る|り|っ|ら|信|付)|依頼|頼(?:む|み|ん|ま)|求め|共有|伝え|伝わ|エスカレ|相談|提出|申請|"
+    r"問い合わせ|問合せ|届(?:け|く|き)|アラート|メール|呼び出|引き継|渡(?:す|し)|回(?:す|し)|任せ|割り当て|割当|付与|"
+    r"承認|確認|お願い|案内|周知|通報|発報|警告|コール|ページ|見て(?:もら|いただ|くだ)")
+_ACTOR_NOTIFY_WINDOW = 48
+_ACTOR_CORE = re.compile(r"(?:様|さま|さん|殿|の方|方々|たち|達|ら|ども)$")
+_ACTOR_SKIP_KINDS = frozenset(("code", "frontmatter", "html_block", "reference_definition", "thematic_break", "blank",
+                               "heading_underline"))
+_ACTOR_FRAME_NAMES = {"subject": "主語", "recipient": "知らせる・頼む相手"}
+
+
+def _actor_norm(text):
+    """原文と語を比べる形（NFKC、空白を除く）。"""
+    return re.sub(r"\s+", "", unicodedata.normalize("NFKC", text))
+
+
+def _actor_core(word):
+    """語の芯（様、さん、の方、たち などを外した形）。"""
+    return _ACTOR_CORE.sub("", word)
+
+
+class _ActorMention(tuple):
+    """文の中の人や担当の語1つ。start と end は文の中の位置、word は語（敬称を含む）、head は一覧の語、prefix は前に続く語、
+    kind は role、person、title（〜さん、〜様）、org（〜部、〜課）、nohito（担当の人）、modifier は「〇〇の担当者」の〇〇の語。"""
+    __slots__ = ()
+
+    def __new__(cls, start, end, word, head, prefix, kind, modifier=None):
+        return tuple.__new__(cls, (start, end, word, head, prefix, kind, modifier))
+
+    start = property(lambda self: self[0])
+    end = property(lambda self: self[1])
+    word = property(lambda self: self[2])
+    head = property(lambda self: self[3])
+    prefix = property(lambda self: self[4])
+    kind = property(lambda self: self[5])
+    modifier = property(lambda self: self[6])
+
+
+def _actor_prefix_start(text, start, floor, limit):
+    """位置 start の前へ、語の続きの字（漢字、片仮名、英数字）を limit 字までたどった位置（floor より前には行かない）。"""
+    position = start
+    while position > floor and start - position < limit and _ACTOR_PREFIX_CHAR.match(text, position - 1):
+        position -= 1
+    return position
+
+
+def _actor_mentions(text):
+    """文の中の人や担当の語（_ActorMention の並び）。重なりは早く始まるもの、同じなら長いものを取る。"""
+    found = []
+    last = 0
+    for match in _ACTOR_HEAD.finditer(text):
+        head, start, end = match.group(), match.start(), match.end()
+        if head.isascii():
+            # 英字の語（PM、SRE、PdM）は英数字の語の一部なら取らない（RPM、10PM、SREs）
+            if (start and text[start - 1].isascii() and text[start - 1].isalnum()) or (
+                    end < len(text) and text[end].isascii() and text[end].isalnum()):
+                continue
+            begin = start
+        else:
+            begin = _actor_prefix_start(text, start, last, _ACTOR_PREFIX_MAX)
+        honorific = _ACTOR_HONORIFIC.match(text, end)
+        stop = honorific.end() if honorific else end
+        found.append(_ActorMention(begin, stop, text[begin:stop], head, text[begin:start], "role"))
+        last = end
+    for match in _ACTOR_PERSON_RE.finditer(text):
+        if match.start() and _ACTOR_NAME_CHAR.match(text, match.start() - 1):
+            # 語の続きの字（公私の「私」、関係者各位の「各位」）は、人称の語として取らない
+            continue
+        found.append(_ActorMention(match.start(), match.end(), match.group(), match.group("head"), "", "person"))
+    for match in _ACTOR_TITLE.finditer(text):
+        start = match.start()
+        begin = start
+        while begin > 0 and start - begin < 6 and _ACTOR_NAME_CHAR.match(text, begin - 1):
+            begin -= 1
+        name = text[begin:start]
+        if (not name or name in _ACTOR_TITLE_BAD or name[-1] + match.group() in _ACTOR_NOT_TITLE
+                or (match.end() < len(text) and re.match("[一-鿿㐀-䶿ァ-ヴー]", text[match.end()]))):
+            continue
+        found.append(_ActorMention(begin, match.end(), text[begin:match.end()], name, "", "title"))
+    for match in _ACTOR_NO_HITO.finditer(text):
+        found.append(_ActorMention(match.start(), match.end(), match.group(), match.group(), "", "nohito"))
+    for match in _ACTOR_ORG.finditer(text):
+        begin = _actor_prefix_start(text, match.start(), 0, 10)
+        stem = text[begin:match.start()]
+        if (len(stem) < 2 or stem in _ACTOR_ORG_STEM_BAD or stem[-1] in _ACTOR_ORG_STEM_BAD
+                or _ACTOR_ORG_NUMBERED.search(stem) or (match.group() == "部" and _ACTOR_ORG_PART.search(stem))
+                or (match.group() == "グループ" and not re.search("[一-鿿㐀-䶿々]$", stem))):
+            continue
+        found.append(_ActorMention(begin, match.end(), text[begin:match.end()], text[begin:match.end()], "", "org"))
+    # 同じ所なら人称の語（当チーム）を先に取る
+    found.sort(key=lambda mention: (mention.start, -(mention.end - mention.start), mention.kind != "person"))
+    out = []
+    for mention in found:
+        if out and mention.start < out[-1].end:
+            continue
+        if (out and mention.start == out[-1].end + 1 and text[out[-1].end] == "の"
+                and _actor_core(mention.word) in _ACTOR_OF_HEADS):
+            # 「当番の担当者」「経理のメンバー」: 前の語を受けた1つの語にする（前の語は「の」で受けるので、それだけでは出ない）
+            previous = out[-1]
+            mention = _ActorMention(previous.start, mention.end, text[previous.start:mention.end], mention.head,
+                                    mention.prefix, mention.kind, previous)
+        out.append(mention)
+    return out
+
+
+def _actor_frame(text, end):
+    """語のすぐ後の助詞から、主語（subject）か、知らせる・頼む相手（recipient）か。どちらでもなければ None。"""
+    if _ACTOR_SUBJECT.match(text, end):
+        return "subject"
+    if _ACTOR_RECIPIENT.match(text, end) and _ACTOR_NOTIFY.search(text, end, end + _ACTOR_NOTIFY_WINDOW):
+        return "recipient"
+    return None
+
+
+def _actor_tier(mention, frame):
+    if mention.kind == "person":
+        return "W"
+    if frame == "recipient":
+        return "A"
+    if mention.kind in ("title", "org", "nohito") or mention.head in _ACTOR_SPECIFIC_SET or mention.modifier is not None:
+        return "B"
+    return "B" if mention.prefix else "C"
+
+
+class _ActorSource:
+    """原文と資料の、人や担当の語を探す文字列（NFKC、空白なし）。語ごとの答えは覚えておく（同じ語が何度も出る文書で探し直さない）。"""
+
+    def __init__(self, texts):
+        self.text = _actor_norm("\n".join(texts))
+        self.self_ref = bool(_ACTOR_SELF_REF.search(self.text))
+        self._present = {}
+
+    def has(self, word):
+        pattern = _ACTOR_VERB_NOUN.get(word)
+        if pattern is not None:
+            return bool(pattern.search(self.text))
+        return bool(word) and word in self.text
+
+    def present(self, mention):
+        """語が原文か資料にあるとみなすか。"""
+        key = (mention.word, mention.kind, mention.modifier.word if mention.modifier is not None else None)
+        if key not in self._present:
+            found = self._find(_actor_norm(mention.word), _actor_norm(_actor_core(mention.word)), mention.kind)
+            if not found and mention.modifier is not None and _actor_core(mention.word[len(mention.modifier.word) + 1:]) in _ACTOR_OF_HEADS:
+                found = self.present(mention.modifier)
+            self._present[key] = found
+        return self._present[key]
+
+    def _find(self, word, core, kind):
+        """語そのもの、芯、語尾の「者」を外した複合語（運用担当者 ← 運用担当）、「の」を詰めた複合語（受付担当者 ← 受付の担当者）、
+        部署の語の芯（総務部 ← 総務）、部署や担当の語の入れ替え（開発チーム ← 開発側）、同じ人を指す別の書き方のどれかがあれば、ある。"""
+        text = self.text
+        if word in text or (core and core in text):
+            return True
+        if core.endswith("者") and len(core) >= 4 and core[:-1] in text:
+            return True
+        if any(core[:i] + "の" + core[i:] in text for i in range(1, len(core))):
+            return True
+        if kind == "org":
+            stem = _ACTOR_ORG_END.sub("", core)
+            if len(stem) >= 2 and stem in text:
+                return True
+        match = re.match(r"(.+)の(?:人|方|者)$", core)
+        if match and (match.group(1) + "者" in text or match.group(1) + "担当" in text):
+            return True
+        for suffix in _ACTOR_SWAP:
+            stem = core[:-len(suffix)]
+            if core.endswith(suffix) and len(stem) >= 2:
+                if any(stem + other in text for other in _ACTOR_SWAP):
+                    return True
+                break
+        for group in _ACTOR_SAME:
+            for name in group:
+                if not core.endswith(name):
+                    continue
+                rest = core[:-len(name)]
+                for other in group:
+                    if other == name:
+                        continue
+                    if rest:
+                        if rest + other in text or rest + "の" + other in text:
+                            return True
+                    elif self.has(other):
+                        return True
+        return False
+
+
+def _actor_candidates(text, source):
+    """文1つ（伏せる範囲を除いたもの）の、原文と資料にない人や担当の語（[{"word", "frame", "tier", "narrowed_from"}]）。"""
+    text = unicodedata.normalize("NFKC", text)
+    out = []
+    for mention in _actor_mentions(text):
+        frame = _actor_frame(text, mention.end)
+        if frame is None or source.present(mention):
+            continue
+        if mention.kind == "person" and source.self_ref and mention.head not in _ACTOR_READER:
+            continue
+        narrowed = None
+        if mention.prefix and mention.modifier is None and source.has(_actor_norm(mention.head)):
+            narrowed = mention.head
+        out.append(OrderedDict((("word", mention.word), ("frame", frame), ("tier", _actor_tier(mention, frame)),
+                                ("narrowed_from", narrowed))))
+    return out
+
+
+def _actor_old(group, index, pairs, paired):
+    """書き直した文 index に対応する元の文。組になっていなければ、前後の組の間で位置から見込んだ元の文の近く（前後3文まで）から、
+    いちばん似た文（ratio 0.3 以上）。paired は組になった書き直した文の番号の昇順の並び（比べる文の数を抑え、全面を書き換えた
+    長い塊でも文の数に比例する時間にする）。"""
+    if index in pairs:
+        return group["old"][pairs[index]]
+    old = group["old"]
+    if not old:
+        return None
+    k = bisect_left(paired, index)
+    before = paired[k - 1] if k else -1
+    after = paired[k] if k < len(paired) else len(group["new"])
+    low = pairs[before] if before >= 0 else 0
+    high = pairs[after] if after < len(group["new"]) else len(old) - 1
+    position = low + (index - before) * (high - low) // (after - before) if high > low else low
+    target = group["new"][index].text
+    best, best_ratio = None, 0.3
+    for sentence in old[max(low, position - 3):min(high, position + 3) + 1]:
+        matcher = difflib.SequenceMatcher(None, sentence.text, target, autojunk=False)
+        if matcher.real_quick_ratio() < best_ratio or matcher.quick_ratio() < best_ratio:
+            continue
+        ratio = matcher.ratio()
+        if ratio >= best_ratio:
+            best, best_ratio = sentence, ratio
+    return best
+
+
+def _added_actors(sides, groups, materials=()):
+    """書き直した文のうち、原文と資料にない人や担当を、主語か、知らせる・頼む相手に足した文（JSON の added_actors）。
+    [{"old_line", "new_line", "old", "new", "actors": [{"word", "frame", "tier", "narrowed_from"}]}] を新しい文の順に返す。"""
+    source = _ActorSource([sides.texts[0]] + list(materials))
+    masker = _Masker(sides, 1, skip_kinds=_ACTOR_SKIP_KINDS)
+    seen = {}
+    out = []
+    for group in groups:
+        pairs = dict((j, i) for i, j in group["pairs"])
+        paired = sorted(pairs)
+        for index, sentence in enumerate(group["new"]):
+            body = masker.body(sentence)
+            if body is None or not body.text.strip():
+                continue
+            if body.text not in seen:
+                seen[body.text] = _actor_candidates(body.text, source)
+            actors = seen[body.text]
+            if not actors:
+                continue
+            old = _actor_old(group, index, pairs, paired)
+            out.append(OrderedDict((("old_line", old.line if old is not None else None), ("new_line", sentence.line),
+                                    ("old", old.text if old is not None else None), ("new", sentence.text),
+                                    ("actors", [OrderedDict(actor) for actor in actors]))))
+    return out
+
+
+def _added_actor_section(d):
+    """「■ 原文にない人や担当を足した文」の節（なければ空の文字列）。"""
+    items = d.get("added_actors") or []
+    if not items:
+        return ""
+    lines = ["■ 原文にない人や担当を足した文（{}件。原文、資料、依頼のどれにもない人や担当なら、原文の書き方に戻す）".format(
+        len(items))]
+    for item in items:
+        added = []
+        for actor in item["actors"]:
+            text = "{}に「{}」".format(_ACTOR_FRAME_NAMES.get(actor["frame"], actor["frame"]), actor["word"])
+            if actor.get("narrowed_from"):
+                text += "（原文の「{}」を狭めたかもしれない）".format(actor["narrowed_from"])
+            added.append(text)
+        lines.append("- {}を足しました{}".format("、".join(added), _where(item["old_line"], item["new_line"])))
+        if item.get("old") is not None:
+            lines.append("  元: " + item["old"])
+        lines.append("  後: " + item["new"])
+    return "\n".join(lines)
+
+
 def _new_review_section(d, key):
     section = d.get(key) or {}
     candidates = section.get("candidates") or []
@@ -9643,7 +10033,8 @@ def _new_review_section(d, key):
     return "\n".join(lines)
 
 
-def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_type=None, reader=None, words=None) -> dict:
+def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_type=None, reader=None, words=None,
+         materials=None) -> dict:
     """元の文と書き直した文を比べる（JSON の形式2）。
 
     渡された文字列をそのまま使う（BOM を外したり、改行をそろえたりしない。CLI と check は読むときに decode_source で
@@ -9654,7 +10045,9 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
     どの種類でも数えない候補（modality_review）。文体の硬化の検査（stiffness）と勢いの検査（tone）は、種類で level を決める
     （paper の硬化と勢いも参考の info。mail の勢いは絵文字・見出しも review）。mail だけ敬語の度合いも検査する。値は中で正規化し、使えない値は ValueError。
     words は語の一覧（markdown_visibility.resolve_words の値）。渡すと context.words（場所、語の数、SHA-256）に残すだけで、
-    差分と候補は変えない（diff には allow.txt で外す規則がない）。None なら一覧なし。"""
+    差分と候補は変えない（diff には allow.txt で外す規則がない）。None なら一覧なし。
+    materials は資料の文字列の並び（2.4.0）。原文にない人や担当を足した文の検査（added_actors）だけが使い、資料にある人や担当は
+    出さない。ほかのキーは変えず、context にも残さない。"""
     context = {"doc_type": normalize_doc_type(doc_type), "reader": normalize_reader(reader)}
     if words is not None:
         context["words"] = words_context(words)
@@ -9696,6 +10089,9 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
     out["immutable"] = sides.immutable
     out["politeness"] = _politeness(sides, context["doc_type"])
     out["register"] = _register_changes(sides, groups, out["politeness"])
+    # 2.4.0: 原文と資料にない人や担当を、主語か、知らせる・頼む相手に足した文。candidate_count、meaning_risk_count、状態、
+    # --fail-on には入れない（既存の出力の形を変えないよう、最後のキーとして足す）
+    out["added_actors"] = _added_actors(sides, groups, [materials] if isinstance(materials, str) else materials or ())
     return out
 
 
@@ -9820,20 +10216,20 @@ def _risk_line(risk):
                     where, detail["from"], "、".join(detail["old_hits"]), detail["to"], "、".join(detail["new_hits"])))
     if kind == "number_qualifier":
         def side(number, names, markers):
-            label = "・".join(_QUALIFIER_LABELS[name] for name in names) or "印なし"
+            label = "・".join(_QUALIFIER_LABELS[name] for name in names) or "なし"
             return "{}（{}）".format(number, label) if not markers else "{}（{}: {}）".format(number, label, "、".join(markers))
         change = "{} → {}".format(side(detail["old_number"], detail["from"], detail["old_markers"]),
                                   side(detail["new_number"], detail["to"], detail["new_markers"]))
         if subkind == "lost":
-            advice = ("原文は、数に概数か範囲の印を付けています。印を落として、ちょうどその数と読める書き方に変えていないか"
-                      "確かめ、変えていれば原文の印を戻してください。")
+            advice = ("原文は、数に概数か範囲を表す語を付けています。その語を落として、ちょうどその数と読める書き方に変えていないか"
+                      "確かめ、変えていれば原文の語を戻してください。")
         elif subkind == "added":
-            advice = ("原文は、数に概数や範囲の印を付けていません。依頼にない印を足して、数の意味を変えていないか確かめ、"
+            advice = ("原文は、数に概数や範囲を表す語を付けていません。依頼にない語を足して、数の意味を変えていないか確かめ、"
                       "足していれば外してください。")
         else:
-            advice = ("原文と印の種類が違います（以上と超、以下と未満は、その数を含むかどうかが違います）。数の範囲を"
-                      "変えていないか確かめ、変えていれば原文の印に戻してください。")
-        return "数に付いた概数・範囲の印が変わった{}: {}。{}".format(where, change, advice)
+            advice = ("原文と語の種類が違います（以上と超、以下と未満は、その数を含むかどうかが違います）。数の範囲を"
+                      "変えていないか確かめ、変えていれば原文の語に戻してください。")
+        return "数に付いた概数・範囲を表す語が変わった{}: {}。{}".format(where, change, advice)
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(
@@ -9885,7 +10281,7 @@ def _risk_line(risk):
             text += "（資料にある値）"
         return text
     if kind == "citation":
-        return "引用の印が変わった{}: {} → {}".format(where, "、".join(detail.get("removed", [])) or "なし",
+        return "引用の書き方が変わった{}: {} → {}".format(where, "、".join(detail.get("removed", [])) or "なし",
                                               "、".join(detail.get("added", [])) or "なし")
     if kind == "negation":
         return "否定の有無が変わった{}: {} → {}".format(where, detail.get("old", ""), detail.get("new", ""))
@@ -9939,7 +10335,7 @@ def _risk_section(d):
         if risk.get("new") is not None:
             lines.append("  後: " + risk["new"])
     if marks:
-        lines.append("- 文の種類の印が変わった: {}件（下の「■ 文の種類の印が変わった文」を見る）".format(marks))
+        lines.append("- 文の種類を表す語が変わった: {}件（下の「■ 文の種類を表す語が変わった文」を見る）".format(marks))
     return "\n".join(lines)
 
 
@@ -9969,11 +10365,11 @@ def _rule_lines(d, rewritten_only=True):
             sent = c["rewrite"] if len(c["rewrite"]) <= 44 else c["rewrite"][:44] + "…"
             lines.append(f"- {c['orig_kind']} → {c['rewrite_kind']}: {sent}")
     if d.get("type_changes"):
-        lines.append("■ 文の種類の印が変わった文（伝聞・推量・意見・例え・依頼が、元の文と同じか見る）")
+        lines.append("■ 文の種類を表す語が変わった文（伝聞・推量・意見・例え・依頼が、元の文と同じか見る）")
         for c in d["type_changes"]:
             lines.append(f"- 元: {c['orig'] if len(c['orig']) <= 60 else c['orig'][:60] + '…'}")
             lines.append(f"  後: {c['rewrite'] if len(c['rewrite']) <= 60 else c['rewrite'][:60] + '…'}")
-            for label, side in (("消えた印", "lost"), ("増えた印", "added")):
+            for label, side in (("消えた語", "lost"), ("増えた語", "added")):
                 if c[side]:
                     lines.append(f"  {label}: " + "、".join(f"{m['kind']}（{'、'.join(m['hits'])}）" for m in c[side]))
     if rewritten_only and e.get("flags"):
@@ -10111,7 +10507,7 @@ def _hunk_heading(hunk):
         if note["kind"] == "whitespace_only":
             notes.append("空白だけ")
         elif note["kind"] == "heading_level":
-            notes.append("見出しの段 {} → {}".format(note["old"], note["new"]))
+            notes.append("見出しのレベル {} → {}".format(note["old"], note["new"]))
         elif note["kind"] == "moved_to":
             notes.append("移した行。後{}行目へ".format(note["line"]))
         elif note["kind"] == "moved_from":
@@ -10336,19 +10732,21 @@ def detector_summary(d, key):
 
 def report_parts(d: dict) -> dict:
     """レポートの節の文字列（{"risks", "rules", "stiffness", "tone", "full_diff"}）。ない節は空の文字列。末尾に改行は付けない。
-    stiffness と tone は diff の詰めで足した（文体の硬化の検査と勢いの検査。候補がなければ空）。"""
-    return {"risks": _risk_section(d), "rules": _rule_section(d), "stiffness": _detector_section(d, "stiffness"),
+    stiffness と tone は diff の詰めで足した（文体の硬化の検査と勢いの検査。候補がなければ空）。added_actors は 2.4.0 で足した
+    （原文にない人や担当を足した文。候補がなければ空）。"""
+    return {"risks": _risk_section(d), "rules": _rule_section(d), "added_actors": _added_actor_section(d),
+            "stiffness": _detector_section(d, "stiffness"),
             "tone": _detector_section(d, "tone"), "full_diff": _full_diff_section(d),
             **{key: _new_review_section(d, key) for key in NEW_REVIEW_SECTIONS}}
 
 
 def report(d: dict) -> str:
-    """人が読むレポート。1行目、状態の行、断り、意味が変わる恐れ、規則の見直し候補、文体の硬化、勢い、全文差分、
-    状態の行の順（文体の硬化と勢いは diff の詰めで足した。候補がなければ出さない）。最後の状態の行の添え書きは「上の節」。
-    末尾に改行は付けない。"""
+    """人が読むレポート。1行目、状態の行、断り、意味が変わる恐れ、規則の見直し候補、原文にない人や担当を足した文、文体の硬化、
+    勢い、全文差分、状態の行の順（文体の硬化と勢いは diff の詰めで、人や担当の足しは 2.4.0 で足した。候補がなければ出さない）。
+    最後の状態の行の添え書きは「上の節」。末尾に改行は付けない。"""
     status = _status_line(d)
     parts = report_parts(d)
-    body = [part for part in (parts["risks"], parts["rules"], parts["stiffness"], parts["tone"],
+    body = [part for part in (parts["risks"], parts["rules"], parts["added_actors"], parts["stiffness"], parts["tone"],
                              parts["hedges"], parts["immutable"], parts["politeness"], parts["register"], parts["full_diff"]) if part]
     head = [_REPORT_FIRST_LINE, status, _REPORT_DISCLAIMER]
     context = d.get("context") or {}
@@ -10370,14 +10768,14 @@ def read_text(path):
 
 _EXIT_CODES = """終了コード:
   0  比べ終わり、--fail-on の条件に当たらなかった（候補の有無によらない）。--endings の正常終了、-h と --version も0
-  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の印・確度・状態の語・約束・許可の言い方・選ぶ範囲・因果の恐れが1件以上）
+  1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の書き方・確度・状態の語・約束・許可の言い方・選ぶ範囲・因果の恐れが1件以上）
   2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える）、--words と --no-words を一緒に指定した）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk]\n"
-          "                        [--words フォルダ | --no-words] 元の文 書き直した文\n"
+          "                        [--words フォルダ | --no-words] [--material 資料 ...] 元の文 書き直した文\n"
           "       yomiyasu_diff.py --endings ファイル [--stance 立場]\n"
           "       yomiyasu_diff.py --version")
-_FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類の印）、引用の印の変化、"
+_FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語と目的語の入れ替え、文の種類（問いと平叙、文の種類を表す語）、引用の書き方の変化、"
                  "確度を強めた書き換え（かもしれない → 見込み、見込み → 予定、と思われる → 断定など）、"
                  "原文の状態の語（未定、未確認、調査中など）が消えた書き換え、原文にない書き手の約束・保証・再発防止の誓いの足しが"
                  "1件でもあれば、終了コード1で終わります。許可の言い方（してよい、してもよい、構わない）が消えたか増えた書き換えも数えます。"
@@ -10387,12 +10785,12 @@ _FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語�
                  "コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
                  "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、"
                  "数えない語だけの確度の変化、予定の言い切り（する予定です → します）、かぎかっこの中の言葉の変化も数えません。"
-                 "推量の印が同じ強さの慎重な言い方に替わっただけの文（かもしれません → 恐れがあります、と思われます → 見込みです）も数えません。"
-                 "原文にない因果のつながりの足しと、書き手の行為と読む印（いたします、今後・改めて、"
+                 "推量の言い方が、同じ強さの別の慎重な言い方に替わっただけの文（かもしれません → 恐れがあります、と思われます → 見込みです）も数えません。"
+                 "原文にない因果のつながりの足しと、書き手の行為と読む言い方（いたします、今後・改めて、"
                  "弊社などの主語）のない「〜します」の足し（説明や手順の文かもしれないもの）も数えません。"
                  "ただし、関連・相関を述べた原文の文に因果の言い方（因果、原因、引き起こす など）を足した書き換えと、"
                  "選ぶ範囲が入れ替わった書き換え（または・どちらか → 両方・すべて、またはその逆）、"
-                 "同じ数に付いた概数や範囲の印（約、ほど、以上、未満 など）が消えたか増えた書き換えは数えます。"
+                 "同じ数に付いた概数や範囲を表す語（約、ほど、以上、未満 など）が消えたか増えた書き換えは数えます。"
                  "候補は確かめる場所で、意味が変わったという判定ではありません。"
                  "条件に当たらなくても、意味が同じだという証明にはなりません。")
 
@@ -10493,10 +10891,14 @@ def _build_parser():
                               "探します。diff では一覧の場所と語の数を表示と JSON に書きます（差分と候補は変わりません）。")
     options.add_argument("--no-words", action="store_true",
                          help="語の一覧を探さず、読みません（--words と一緒には使えません）。")
+    options.add_argument("--material", action="append", dest="materials", metavar="資料",
+                         help="資料のファイル。何度でも指定できます。原文にない人や担当を足した文の検査で、資料にある"
+                              "人や担当は出しません。ほかの検査と、意味が変わる恐れの数は変わりません。")
     options.add_argument("--endings", action="store_true",
-                         help="1つのファイルの文末の種類と、立場の混ざりだけを見ます（--json、--fail-on、--words、--no-words は使えません）。")
-    options.add_argument("--version", action="store_true", help="版を表示して終わります。")
-    parser.set_defaults(fail_on=[])
+                         help="1つのファイルの文末の種類と、立場の混ざりだけを見ます（--json、--fail-on、--words、--no-words、"
+                              "--material は使えません）。")
+    options.add_argument("--version", action="store_true", help="バージョンを表示して終わります。")
+    parser.set_defaults(fail_on=[], materials=[])
     return parser
 
 
@@ -10618,13 +11020,15 @@ def _run(argv):
         if args.words is not None or args.no_words:
             # 文末だけを見るときは語の一覧を探さない。指定は無視せずに使い方の誤りにする（--doc-type と同じ）
             parser.error("--endings は --words と --no-words に対応していません")
+        if args.materials:
+            parser.error("--endings は --material に対応していません")
         if len(files) != 1:
             parser.error("--endings のときは、ファイルを1つだけ渡してください（渡されたのは{}つ）".format(len(files)))
     elif len(files) != 2:
         parser.error("元の文と書き直した文の2つのファイルを渡してください（渡されたのは{}つ）".format(len(files)))
     if args.words is not None and args.no_words:
         parser.error("--words と --no-words は一緒に使えません")
-    if files.count("-") > 1:
+    if files.count("-") + args.materials.count("-") > 1:
         parser.error("標準入力（-）は1か所だけに使えます")
     fail_on, problem = _fail_on(args.fail_on)
     if problem:
@@ -10660,13 +11064,20 @@ def _run(argv):
             return 2
         texts.append(text)
         infos.append(info)
+    materials = []
+    for path in args.materials:
+        text, _, problem = _read_input(path)
+        if problem:
+            _error(problem)
+            return 2
+        materials.append(text)
 
     if args.endings:
         print(_endings_report(texts[0], stance))
         code = 0
     else:
         result = diff(texts[0], texts[1], stance, encoding_notes=_encoding_notes(infos[0], infos[1]),
-                      doc_type=doc_type, reader=reader, words=words)
+                      doc_type=doc_type, reader=reader, words=words, materials=materials)
         counted = result["fail_on_meaning_risk_count"]
         hit = fail_on and counted > 0
         if args.json:

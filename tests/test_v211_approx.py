@@ -419,19 +419,19 @@ class DetectTest(unittest.TestCase):
 
     def test_human_lines(self):
         rows = [("影響を受けた利用者は約120人です。", "影響を受けた利用者は120人です。",
-                 "数に付いた概数・範囲の印が変わった（1行目）: 120人（概数: 約） → 120人（印なし）。原文は、数に概数か範囲の印を"),
+                 "数に付いた概数・範囲を表す語が変わった（1行目）: 120人（概数: 約） → 120人（なし）。原文は、数に概数か範囲を表す語を"),
                 ("影響を受けた利用者は120人です。", "影響を受けた利用者は約120人です。",
-                 "120人（印なし） → 120人（概数: 約）。原文は、数に概数や範囲の印を付けていません。"),
+                 "120人（なし） → 120人（概数: 約）。原文は、数に概数や範囲を表す語を付けていません。"),
                 ("参加者は100人以上です。", "参加者は100人超です。",
-                 "100人（その数を含む下限: 以上） → 100人（その数を含まない下限: 超）。原文と印の種類が違います"),
-                ("費用は10万円以上です。", "費用は10万円です。", "10万円（その数を含む下限: 以上） → 10万円（印なし）。"),
-                ("来場者は約1万5000人でした。", "来場者は1万5000人でした。", "1万5000人（概数: 約） → 1万5000人（印なし）。"),
-                ("応募は100件を超えた。", "応募は100件だった。", "100件（動詞で言う範囲: を超え） → 100件（印なし）。")]
+                 "100人（その数を含む下限: 以上） → 100人（その数を含まない下限: 超）。原文と語の種類が違います"),
+                ("費用は10万円以上です。", "費用は10万円です。", "10万円（その数を含む下限: 以上） → 10万円（なし）。"),
+                ("来場者は約1万5000人でした。", "来場者は1万5000人でした。", "1万5000人（概数: 約） → 1万5000人（なし）。"),
+                ("応募は100件を超えた。", "応募は100件だった。", "100件（動詞で言う範囲: を超え） → 100件（なし）。")]
         for before, after, text in rows:
             with self.subTest(before=before, after=after):
                 report = yomiyasu_diff.report(run(before, after))
                 self.assertIn(text, report)
-                line = [row for row in report.splitlines() if row.startswith("- 数に付いた概数・範囲の印が変わった")][0]
+                line = [row for row in report.splitlines() if row.startswith("- 数に付いた概数・範囲を表す語が変わった")][0]
                 # 印の説明のかっこを入れ子にしない
                 self.assertNotRegex(line.split("。")[0], r"（[^）]*（")
 
@@ -521,7 +521,7 @@ class HelpMentionsQualifiersTest(unittest.TestCase):
                 out = subprocess.run([sys.executable, "-B"] + argv, cwd=str(root), capture_output=True,
                                      env=dict(os.environ, COLUMNS="2000"))
                 text = out.stdout.decode("utf-8")
-                self.assertIn("概数や範囲の印（約、ほど、以上、未満 など）が消えたか増えた書き換え", text)
+                self.assertIn("概数や範囲を表す語（約、ほど、以上、未満 など）が消えたか増えた書き換え", text)
 
 if __name__ == "__main__":
     unittest.main()
