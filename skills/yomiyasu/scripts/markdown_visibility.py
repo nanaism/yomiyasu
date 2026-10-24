@@ -3,7 +3,7 @@
 Offsets are half-open Python string positions. This is a targeted scanner,
 not a claim to implement every CommonMark or GFM construct.
 """
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 
 import os
 import re
@@ -802,7 +802,7 @@ def normalize_reader(value):
 
 
 def context_label(doc_type, reader):
-    """lint と diff の人が読む出力の1行の頭（「文書の種類: スライド（slides）、読者: 指定なし。」）。"""
+    """lint と diff の人が読む出力で、種類と読者を書く行の初めの部分（「文書の種類: スライド（slides）、読者: 指定なし。」）。"""
     doc_type, reader = normalize_doc_type(doc_type), normalize_reader(reader)
     kinds, readers = dict(row[:2] for row in DOC_TYPES), dict(READER_LEVELS)
     return "文書の種類: {}、読者: {}。".format(
@@ -815,7 +815,7 @@ def context_label(doc_type, reader):
 # 探し方は状態フォルダ（check の state_dir_for）と同じたどり方で、.yomiyasu/ の中は探さない。
 
 WORDS_FOLDER = ".yomiyasu-words"
-# (キーの頭, ファイルの名前)。context.words のキーと出力の行の順もこの順
+# (キーの先頭に付ける語, ファイルの名前)。context.words のキーと出力の行の順もこの順
 WORDS_FILES = (("allow", "allow.txt"), ("flag", "flag.txt"))
 WORDS_MAX_LINES = 10000
 # ないファイル（とフォルダ）は一覧なし。ほかの読めない理由は終了コード2

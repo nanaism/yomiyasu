@@ -7,7 +7,7 @@ Python標準ライブラリだけで動作する。
 mail は絵文字と meta_filler の返信・結びの5型を外す。宛名・挨拶・署名・クッション言葉を削る専用規則はない。
 paper は慎重表現をぼかしとして削る規則がないので、外す規則はない。
 """
-__version__ = "2.3.0"
+__version__ = "2.4.0"
 
 import os
 import errno
@@ -50,7 +50,7 @@ try:
             name=(__package__ + ".markdown_visibility") if __package__ else "markdown_visibility") from error
     except ImportError as error:
         # spec_from_file_location で直接読まれると、このファイルのフォルダが sys.path にないことがある。
-        # 別の版の markdown_visibility がすでに読まれていて、要る名前がないこともある。
+        # 別のバージョンの markdown_visibility がすでに読まれていて、要る名前がないこともある。
         # どちらのときも、このファイルの隣にある markdown_visibility.py を読む。
         expected = (__package__ + ".markdown_visibility") if __package__ else "markdown_visibility"
         parent = __package__.split(".")[0] if __package__ else "markdown_visibility"
@@ -103,7 +103,7 @@ else:
     _IMPORT_ERROR = None
 
 
-# --json の出力の形の版。キーを足すだけなら上げない。キーの意味や型を変えたときに上げる。
+# --json の出力の形式のバージョン。キーを足すだけなら上げない。キーの意味や型を変えたときに上げる。
 # v1.1.2 までの形（score、is_clean、metrics、findings）を1とみなす。
 # 公開前の形式2の中の変更（2.0.0 の rule_penalty_score の式）では上げない。
 LINT_FORMAT_VERSION = 2
@@ -132,7 +132,7 @@ DOC_TYPE_SKIP_RULES = {
     "promo": ("bare_verb_chain", "emoji_prohibited", "fragment_run", "metaphor_label"),
     "mail": ("emoji_prohibited",),
     "paper": (),
-    # 2.2.0: 台詞では、短い文の重ね（fragment_run）と同じ語尾の続き（sentence_end_repetition）が普通に出る
+    # 2.2.0: 台詞では、短い文を重ねる形（fragment_run）と同じ語尾の続き（sentence_end_repetition）が普通に出る
     "script": ("bare_verb_chain", "fragment_run", "metaphor_label", "sentence_end_repetition"),
 }
 # meta_filler 全体を外すと誇張や無関係な前置きまで残すため、既存の型の説明で5型だけを選ぶ。
@@ -677,7 +677,7 @@ def _emoji_matches(text):
 # 句点、感嘆符、疑問符は飾りではないので、除かずに位置だけを詰める
 # （「見ていきましょう🚀！」は「見ていきましょう！」として読み、「見ていきましょう？🚀」は「見ていきましょう？」として読む）。
 # 閉じかっこ（）)】〕〉》］）、矢印（←↑→↓）、波線（〜～）を飾りに数えるのは、文の型を見る規則だけ（_END_CLOSERS）。
-# 閉じかっこは、対の開きかっこが文の頭か、句点か述語（です、ます、た など）の直後にあるとき
+# 閉じかっこは、対の開きかっこが文頭か、句点か述語（です、ます、た など）の直後にあるとき
 # （「（見ていきましょう）」「〜まとめました（後半で見ていきましょう）」）だけ除く。目次の副題（「実践編（〜）」）は除かない。
 # 閉じかぎと引用符（」』”’"'）は、同じ段落のその行までに対の開きがない行でだけ除く（_end_quote_closers）。
 # リンクの文字列の終わりになる ASCII の ] は、どの規則でも飾りに数えない。
@@ -714,7 +714,7 @@ _END_BRACKET_AFTER_PREDICATE = re.compile(r"(?:です|ます|でした|ました
 
 
 def _bracket_opens_sentence(text, position, closer):
-    """text[position] の閉じかっこと対の開きかっこが、文の頭か、句点か述語の直後にあるか。
+    """text[position] の閉じかっこと対の開きかっこが、文頭か、句点か述語の直後にあるか。
 
     見るのは閉じかっこの前の256字まで。そこで分からなければ除かない（長い行でも手間を抑える）。"""
     opener = _END_BRACKETS[closer]
@@ -900,7 +900,7 @@ _DEVICE_LITERAL_PREFIXES = (
     "空圧", "真空", "排煙", "消音", "防音", "供給", "回収", "循環", "浄水", "揚水", "貯蔵", "運搬", "牽引", "計装",
     "電波", "音波", "取り", "読取り",
 )
-# 前が漢字か平仮名か文の頭で、上の語でないときだけ拾う。カタカナと英数字の語のあと（レーザー装置、X線装置）は機器の名前として除く。
+# 前が漢字か平仮名か文頭で、上の語でないときだけ拾う。カタカナと英数字の語のあと（レーザー装置、X線装置）は機器の名前として除く。
 # 機器の操作や状態の語が同じ文で後ろに続く単独の「装置」（「この装置は、毎朝自動で起動します」）も除く。
 _DEVICE_PATTERN = (r"(?:(?<![ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ線])|(?<=イデオロギー))"
                    + "".join("(?<!" + "|".join(group) + ")" for group in (
@@ -937,7 +937,7 @@ _PUBLICATION_WORDS = (r"(?:(?<![ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ])"
                       r"|第[0-9０-９一二三四五六七八九十百]+版)"
                       r"|(?<![一-龥々ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ])(?:本書|原書|新書))" + _PUBLICATION_AFTER
                       + r"|(?<![一-龥々0-9０-９])本(?![一-龥々ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ])")
-# 文の頭（行頭か、。．！？!? の直後）から出版物の語を通らずに「この版では」などまで届くときだけ拾う（ソフトウェアの「この版では」は拾う）。
+# 文頭（行頭か、。．！？!? の直後）から出版物の語を通らずに「この版では」などまで届くときだけ拾う（ソフトウェアの「この版では」は拾う）。
 _VERSION_DEMONSTRATIVE_PATTERN = (r"(?:^|(?<=[。．！？!?]))(?:(?!" + _PUBLICATION_WORDS + r")[^。．！？!?])*?"
                                   r"(この|その|あの|新しい|古い|最新の|前の|次の|今の|現在の|以前の)版(では|で|に|から|を|が|へ|の)")
 TRANSLATED_TERM_PATTERNS = [
@@ -1282,7 +1282,7 @@ METAPHOR_VERB_PATTERNS = [
 ]
 
 # メタフィラー・定型句
-# 文ごとに当てる（^ と $ は文の頭と終わり）。
+# 文ごとに当てる（^ と $ は文頭と文末）。
 # 文末の推量・確信・念押し（でしょう、かもしれません、と思います、ね）や、文末の短い補足カッコが付いても拾う。
 # 「〜ではないとは思わない」や、読点で文が続く形（「〜ではないかもしれない、という表現」）は文末でないので拾わない。
 _OVERSTATEMENT_PATTERN = (r"とも?(?:言|い)(?:い切|いき)?っても(?:過言|言い過ぎ|言いすぎ|いいすぎ)"
@@ -2324,7 +2324,7 @@ def _preserves_other_emphasis(original, repaired, i, j, delta):
     return True
 
 
-# ---- 1つの段落に崩れた太字が多いときの、直し方の案の確かめ ----
+# ---- 1つの段落に崩れた太字が多いときに、直し方の案を確かめる ----
 # 案を1つ試すたびにブロック全体を書き換えて解析し直すと、1つの段落の中の崩れの数の2乗で時間がかかる。
 # そこで、書き換えが近くの数文字だけを動かすことを使い、ブロック全体を解析し直したときと同じ答えになると
 # 言える場合に限って、元の解析の結果から答えを出す。言えない場合は、今までどおり解析し直す。
@@ -2333,7 +2333,7 @@ def _preserves_other_emphasis(original, repaired, i, j, delta):
 # 同じ答えになることは、次の3段で確かめる。
 #   1. 行の種類とブロックの分かれ方が変わらない（行頭の印を読む処理が、変わる位置より前で止まる）
 #   2. インラインの保護範囲（コード、エスケープ、リンク、URL など）が、位置のずれを除いて変わらない
-#   3. 印の組み合わせ（2つの表示の規則）で、狙いの組ができ、ほかの組がすべて残る
+#   3. 太字の記号の組み合わせ（2つの表示の規則）で、狙いの組ができ、ほかの組がすべて残る
 # 3は、書き換えた位置より前の状態を元の解析から読み、書き換えた2つの印だけをその上で処理して決める。
 # 元の段落で相手のない印（書き換え前の2つの印）は、それより後で一度も相手に選ばれないので、なくなっても
 # 後ろの組み合わせは変わらない。閉じる相手が見つからなかった位置の記録（bottoms）が食い違う場合だけ、
@@ -2406,7 +2406,7 @@ def _bold_repair_index(text, context):
 
 
 class _BoldRepairIndex:
-    """1つのブロックの、案の確かめに使う元の解析の結果。"""
+    """1つのブロックの元の解析の結果。案を確かめるときに使う。"""
 
     def __init__(self, text, context, analysis):
         self.text = text
@@ -2467,7 +2467,7 @@ class _BoldRepairIndex:
         return parser
 
     def decide(self, i, j, shape, middle):
-        """案で直した文がもとの確かめを通るなら True、通らないなら False、ここで決められないなら None。"""
+        """案で直した文が、ブロックを解析し直して確かめたときに通るなら True、通らないなら False、ここで決められないなら None。"""
         text = self.text
         before = self.run_index.get((i, i + 2))
         if before is None or self.run_index.get((j, j + 2)) != before + 1:
@@ -2555,7 +2555,7 @@ class _BoldRepairIndex:
             if close_a and state.finds_opener(2, open_a):
                 return None  # 元の解析と食い違う（起きないはずの形）
             # 閉じる相手が見つからなかった位置の記録（bottoms）を、書き換えの前と後で比べる。
-            # failed には、相手が見つからなかった閉じの印を (記録の鍵, 開けられるか, そのときの下限) で集める。
+            # failed には、相手が見つからなかった閉じる側の記号を (記録の鍵, 開けられるか, そのときの下限) で集める。
             gfm_bounds = punct is _bold_punct_gfm
             original, repaired, failed = {}, {}, []
             if close_a:
@@ -2578,9 +2578,9 @@ class _BoldRepairIndex:
                 # 片方だけが kept のまま。手前の印のうち kept 以降のものが、後ろの閉じの印から選ばれうると食い違う。
                 if not state.openers or state.openers[-1]["start"] < kept:
                     continue
-                # この鍵で kept を下限に相手を探して見つからなかった閉じの印があれば、そのとき選べた組の印は
-                # どれも kept より前にある。CommonMark の規則では、同じ鍵の閉じの印はいつも同じ組を選べるので、
-                # 食い違わない。GFM の規則では、開けられる閉じの印が選べない (1, False) の組だけが残る。
+                # この鍵で kept を下限に相手を探して見つからなかった閉じる側の記号があれば、そのとき選べた組の記号は
+                # どれも kept より前にある。CommonMark の規則では、同じ鍵の閉じる側の記号はいつも同じ組を選べるので、
+                # 食い違わない。GFM の規則では、開く側にもなれる閉じる側の記号が選べない (1, False) の組だけが残る。
                 proofs = [opens for failed_key, opens, bottom in failed if failed_key == key and bottom == kept]
                 if proofs and (not gfm_bounds or not all(proofs)):
                     continue
@@ -3076,7 +3076,7 @@ def _pause_comma_prev_segment(t, j, starts):
 
 
 def _pause_comma_list_before(t, j, starts):
-    """句が名詞の並べの最後の項目か（「A、B、Cは、」「AやB、Cは、」）。"""
+    """句が、並んだ名詞の最後の項目か（「A、B、Cは、」「AやB、Cは、」）。"""
     prev, k = _pause_comma_prev_segment(t, j, starts)
     if not prev or not _PAUSE_NOUNISH_END.search(prev) or _PAUSE_ADVERBIAL_NOUN.search(prev):
         return False
@@ -3165,14 +3165,14 @@ def _pause_comma_hits(plain_text):
         if plen > _PAUSE_SHORT_CLAUSE and _PAUSE_CLAUSE_IN.search(masked):
             continue
         # q: あとの主語。先頭60字と、その直後の定型を判定できれば足りる。
-        # 18字の並べの終わりを見分ける余裕も含め84字に限り、長い接尾辞をコピーしない。
+        # 並んだ語句の1項目（18字まで）の終わりを見分ける余裕も含め84字に限り、長い接尾辞をコピーしない。
         # かっこの中（引用や題名）の助詞と読点は、あとの主語や並べに数えない。
         if unquoted is None:
             unquoted = "".join("〇" if d else ch for ch, d in zip(t, depth))
         after = unquoted[i + 2:min(send + 1, i + 2 + 84)]
         if _pause_comma_next_subject(after):
             continue
-        # r: 同じ文の並べ、句の中の並べ、直前の「と、」「や、」。
+        # r: 同じ文で並んだ句、句の中で並んだ語、直前の「と、」「や、」。
         if counts[sentence_ids[i]].get(chunk, 0) > 1:
             continue
         if re.search(r"[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9さみ](と|や)[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9]", phrase):
@@ -4025,7 +4025,7 @@ def _v220_doc_tech(text):
 
 
 def _entry_subject_end(sentence, cache):
-    """要求や呼び出しの主題（_CALQUE_ENTRY_SUBJECT）のいちばん早い終わり（なければ -1）。入口の一致ごとに文の頭から
+    """要求や呼び出しの主題（_CALQUE_ENTRY_SUBJECT）のいちばん早い終わり（なければ -1）。入口の一致ごとに文頭から
     読み直さず、文1つにつき1回だけ探す。"""
     if "subject" not in cache:
         first = _CALQUE_ENTRY_SUBJECT.search(sentence)
@@ -4376,7 +4376,7 @@ def _v220_word_findings(analysis):
                     doc_tech = _v220_doc_tech(text)
                 finders.append((3, functools.partial(_calque_type3, doc_tech=doc_tech)))
             if not _CALQUE_KANJI1_CHARS.isdisjoint(scan):
-                # 同じ行に translated_term の版の直訳があれば、型4の版は重ねない（ほかの語の translated_term では止めない）
+                # 同じ行に「版」の translated_term があれば、型4の「版」は重ねない（ほかの語の translated_term では止めない）
                 finders.append((4, functools.partial(_calque_type4, skip_version=line_no in blocked_version)))
         thin_possible = thin_re is not None and thin_noun_re.search(scan) is not None
         sentences = ()
@@ -4986,7 +4986,7 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
         })
 
     def _vocabulary_findings(plain_text, line_no, snippet):
-        """AI頻出語彙と比喩動詞。見出しの行にも当てる（文の頭と終わりを前提にした型は当てない）。"""
+        """AI頻出語彙と比喩動詞。見出しの行にも当てる（文頭と文末を前提にした型は当てない）。"""
         # スロップ語彙
         # 語の一覧の allow.txt で外すため、候補の内部の欄 _words に当たった語（型の語は、型の名前と当たった文字列）を入れる
         if narrowed is None:

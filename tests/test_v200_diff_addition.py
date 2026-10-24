@@ -282,10 +282,10 @@ class Contracts(unittest.TestCase):
         line = diff._fail_on_line(len(found) + 1, diff.fail_on_count(found), found)
         self.assertIn('・状態の語・約束', line)
         self.assertIn('原文の状態の語', diff._FAIL_ON_HELP)
-        self.assertIn('原文にない因果のつながりの足しと', diff._FAIL_ON_HELP)
+        self.assertIn('原文にない因果のつながりを足した書き換えと', diff._FAIL_ON_HELP)
         self.assertNotIn('一般化', diff._FAIL_ON_HELP)
         self.assertNotIn('評価', diff._FAIL_ON_HELP)
-        self.assertIn('「〜します」の足し（説明や手順の文かもしれないもの）も数えません', diff._FAIL_ON_HELP)
+        self.assertIn('「〜します」を足した書き換え（説明や手順の文かもしれないもの）も数えません', diff._FAIL_ON_HELP)
 
     def test_shared_sentence_groups_and_maskers(self):
         with mock.patch.object(diff, '_sentence_pairs', wraps=diff._sentence_pairs) as pairs, \

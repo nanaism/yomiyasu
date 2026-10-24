@@ -2179,11 +2179,11 @@
       "stdin": "06495d7f4c92566e"
     },
     "raw_ai/04_slack_announce_sonnet_casual.md|raw_ai/04_slack_announce_sonnet_default.md": {
-      "plain": "c0e1d06ec974c0b5",
-      "stance": "0de1f6728e932d1d",
-      "fail_on": "5ad510cf8bdbc091",
-      "json": "eaa7ceec442f6107",
-      "stdin": "c0e1d06ec974c0b5"
+      "plain": "92d180a5a298a0b6",
+      "stance": "977c2e549af7c880",
+      "fail_on": "052a9f348b0e930f",
+      "json": "baf03b28c5cdcb97",
+      "stdin": "92d180a5a298a0b6"
     },
     "raw_ai/04_slack_announce_sonnet_default.md|raw_ai/04_slack_announce_sonnet_formal.md": {
       "plain": "5fcd4199af190fbb",
@@ -3109,7 +3109,7 @@
       "verify": "7b509f1b129c38da"
     },
     "raw_ai/04_slack_announce_sonnet_casual.md|raw_ai/04_slack_announce_sonnet_default.md": {
-      "run": "75621482ffe05511",
+      "run": "ce9d74062e20e3a6",
       "verify": "325700e6e000dadb"
     },
     "raw_ai/04_slack_announce_sonnet_default.md|raw_ai/04_slack_announce_sonnet_formal.md": {
@@ -3223,6 +3223,7 @@
     "2026-10-21 v2.1.1 の最後の見直しのあとの直しで、check run の頭の候補の一覧の構造の候補（見出しの変化の文）に、最初に挙げた行の番号を添えて行の順に並べるようにしたときの作り直し: unchanged_check() で check の136組を作り直して比べ、値が変わったのは check の2組（12行）で、どれも run の人が読む出力の4行目だけだった（推敲の48組では2組）。diff と lint の行、verify と verify --replay の出力、run --json の値は変わらなかった。",
     "2026-10-23 v2.2.0 の新しい info の規則（直訳語、見出しの比喩ラベル、「と言えるでしょう」など11の規則）を入れたときの作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、値が変わったのは、直訳語の型1（calque）の候補が L3（送信側は相手の生死を気にせず）に1件出る raw_ai/01_tech_arch_sonnet_casual.md の lint の5通りと、この文書を含む check の2組（推敲の組の compose、fail_on、json、no_record、rerun、run、stdin と、raw_ai の隣の組の run。どれも lint の候補が1件増えた分）だけだった。新しい規則は info なので、lint の終了コード（--strict、--fail-on warn と error を含む）と点数（rule_penalty_score）は変わらなかった。diff の行と、ほかの162本の lint の行は変わらなかった。語の一覧（.yomiyasu-words/）はリポジトリにないので読まれない。",
     "2026-10-24 v2.4.0 で、diff と check の人が読む出力の語を言い換えたとき（「文の種類の印が変わった」→「文の種類を表す語が変わった」、「消えた印」「増えた印」→「消えた語」「増えた語」、「引用の印が変わった」→「引用の書き方が変わった」など。JSON のキーと kind などの値は変えていない）の作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、値が変わったのは diff の29組（plain、stance、fail_on、stdin の116行）と、check の29組（54行。推敲の5組は run、rerun、compose、stdin、fail_on、no_record、ほかの24組は run）だけだった。どれも変える前の出力に文言の置き換えだけを当てると、変えたあとの出力と1字も違わなかった（当たったのは上の4つの言い換えだけ）。lint の行、diff と check の --json の値、verify と verify --replay の出力、終了コードは変わらなかった。",
-    "2026-10-24 v2.4.0 で、diff に原文にない人や担当を足した文の検査（JSON の最後のキー added_actors と、人が読む出力の「■ 原文にない人や担当を足した文」の節。check run は同じ節と頭の一覧の「原文にない人や担当: …」を出し、資料を diff に渡す）を足したときの作り直し: unchanged_diff() と unchanged_check() を作って比べ、値が変わったのは、diff の --json の136組（キーが1つ増えた）と、人や担当の足しが出る27組（推敲の17組と、隣り合うだけの別の文書の10組）の plain、stance、fail_on、stdin、check の run --json の推敲の48組（子の diff の JSON のキー）と、27組の run と推敲の17組の rerun、compose、stdin、fail_on、no_record だけだった（diff 244行、check 160行）。検査を外したツリーでは diff と check のどの行も fixture と1字も違わず、今のツリーの出力からこの節と頭の一覧の項目と JSON のキーを除くと、136組の diff（人が読む形と --json）とcheck run（--no-record の人が読む形と --json）が外したツリーと1字も違わなかった。終了コード、状態の行、meaning_risk=、verify と verify --replay の出力、lint の行は変わらなかった。"
+    "2026-10-24 v2.4.0 で、diff に原文にない人や担当を足した文の検査（JSON の最後のキー added_actors と、人が読む出力の「■ 原文にない人や担当を足した文」の節。check run は同じ節と頭の一覧の「原文にない人や担当: …」を出し、資料を diff に渡す）を足したときの作り直し: unchanged_diff() と unchanged_check() を作って比べ、値が変わったのは、diff の --json の136組（キーが1つ増えた）と、人や担当の足しが出る27組（推敲の17組と、隣り合うだけの別の文書の10組）の plain、stance、fail_on、stdin、check の run --json の推敲の48組（子の diff の JSON のキー）と、27組の run と推敲の17組の rerun、compose、stdin、fail_on、no_record だけだった（diff 244行、check 160行）。検査を外したツリーでは diff と check のどの行も fixture と1字も違わず、今のツリーの出力からこの節と頭の一覧の項目と JSON のキーを除くと、136組の diff（人が読む形と --json）とcheck run（--no-record の人が読む形と --json）が外したツリーと1字も違わなかった。終了コード、状態の行、meaning_risk=、verify と verify --replay の出力、lint の行は変わらなかった。",
+    "2026-10-24 v2.4.0 の自己適用の1回目で、原文にない人や担当の検査の誤った候補を直したとき（「逆さま」の敬称、都市部・データ部などの「〜部」、比べる「より」、同じ人を指す語の表（お客様・お客さん・顧客、読者と読み手、開発者とエンジニア、スタッフと社員）、「お」を付けた呼び名）の作り直し: 1,415組と tests/corpus の136組の diff を直す前と後で比べ、added_actors が変わったのは隣り合うだけの別の文書の組 raw_ai/04_slack_announce_sonnet_casual.md|raw_ai/04_slack_announce_sonnet_default.md の1組だけだった（原文の「顧客」と同じ人を指す「お客様」を、知らせる・頼む相手の足しとして出さなくなった）。値を作り直したのはこの組の diff の5通り（plain、stance、fail_on、json、stdin）と check の run だけで、人が読む出力の違いは「■ 原文にない人や担当を足した文」の節と頭の一覧の「原文にない人や担当:」の項目から「お客様」が消えたことだけだった。ほかの組と、終了コード、状態の行、meaning_risk= は変わらなかった。"
   ]
 }
