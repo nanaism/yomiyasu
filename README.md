@@ -160,6 +160,12 @@ npx skills update yomiyasu
 
 Claude Codeなどのエージェントの設定ディレクトリへ、スキルをインストール・更新します。スキル定義は `skills/yomiyasu/SKILL.md` の1か所に配置しています。
 
+Grok Build に入れるときは、`-a grok` を付けます。`-g` を付けるとユーザーの `~/.grok/skills/yomiyasu/`（`GROK_HOME` を設定しているときはその下の `skills/`）に、付けないと作業するリポジトリの `.grok/skills/yomiyasu/` に入ります。更新は上と同じ `npx skills update yomiyasu` です（`-g` で入れたときは `-g` も付けます）。
+
+```bash
+npx skills add nanaism/yomiyasu -g -a grok
+```
+
 ### 2. `gh skill install`
 
 GitHub CLIの `gh skill` コマンドからインストールできます。
