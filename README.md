@@ -400,11 +400,21 @@ yomiyasu は推敲した本文のあとに、変えたところと確認の記�
 
 種類ごとの決まり、敬語の上げ方、事実を補う決まり、完了報告の欄の詳しい説明は [docs/usage.md](./docs/usage.md) にまとめています。
 
+### 承認する人がいない実行で使うとき
+
+2.5.0 から、SKILL.md の `allowed-tools` に、付属の lint と check を `python3`、`python`、`py -3` で呼ぶ6つのルールを書いています。Claude Code では yomiyasu を呼んだターンのあいだ、この呼び出しを確認なしで実行します（Bash の許可のルールを渡さない `claude -p` で、lint、check の run と verify が断られずに動くことを確かめました。原稿の読み書きの道具とスキルの Read、Write、Edit、Skill は許し、`--permission-mode dontAsk` で動かしています）。ほかのコマンドは許していません。続けて送った指示から検査をやり直すときや、許可を確かめる画面のない実行で同じ呼び出しを許すときは、`--allowedTools` か、settings の `permissions.allow` に同じ形のルールを書いてください。パスはスキルを置いたフォルダに読み替えます。原稿の読み書きに使う道具とスキルも、実行の仕方に合わせて許してください。
+
+```bash
+claude -p "draft.md を yomiyasu で読みやすくして" --allowedTools "Read" "Write" "Edit" "Skill" "Bash(python3 /path/to/yomiyasu/scripts/yomiyasu_lint.py *)" "Bash(python3 /path/to/yomiyasu/scripts/yomiyasu_check.py *)"
+```
+
 ## 付属ツール
 
 文章の表現と書式を見る `yomiyasu_lint.py`、推敲の前後を比べる `yomiyasu_diff.py`、2つをまとめて実行して記録を残す `yomiyasu_check.py` を同梱しています。設定に貼ったときだけ動く任意のフック `yomiyasu_hook.py` もあります。どれも外部ライブラリは要らず、Python の標準ライブラリだけで動きます（テストは Python 3.9 と 3.14 で実行しています）。
 
 検査は見直し候補と変わった箇所を出すだけで、意味が保たれたかどうかや、読みやすいかどうかは判定しません。候補が出た所を直すかどうかは、元の文や文脈と照らし合わせて決めてください。
+
+下の例は `python3` で書いています。Windows では `py -3 scripts/yomiyasu_lint.py article.md` のように `py -3` で実行してください。
 
 ### 1. yomiyasu_lint.py（表現と書式の検査）
 

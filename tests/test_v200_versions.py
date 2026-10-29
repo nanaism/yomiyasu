@@ -3,8 +3,8 @@
 
 スクリプトは import せず、ast と正規表現で読む。CLI は子プロセスで動かす。
 v1.1.2 には metadata.version、__version__、CHANGELOG.md、--version がないので、それらの試験は失敗する。
-manifest どうしの一致と frontmatter のキーの試験は v1.1.2 でも通るので、
-docstring に「（v1.1.2 でも通る後戻り防止）」と書いて分けた。
+manifest どうしの一致の試験は v1.1.2 でも通るので、docstring に「（v1.1.2 でも通る後戻り防止）」と書いて分けた。
+frontmatter のキーの試験（5）は、2.5.0 で allowed-tools を確かめる形に変えたので、v1.1.2 では通らない。
 """
 
 from datetime import datetime
@@ -29,6 +29,13 @@ CHECK = ROOT / "scripts" / "yomiyasu_check.py"
 
 # 4章の5: skill-creator の quick_validate.py が許す最上位のキー（skill-creator には依存しない）
 ALLOWED_FRONTMATTER_KEYS = {"name", "description", "license", "allowed-tools", "metadata", "compatibility"}
+# 2.5.0: allowed-tools に書くルール。yomiyasu の lint と check を、python3、python、py -3 で呼ぶ6つだけ
+# （承認する人がいない実行で、check が許可の確認に止まらないため。スクリプトを限らない Bash(python3 *) のようなルールは書かない）
+ALLOWED_TOOL_RULES = tuple("Bash({} ${{CLAUDE_SKILL_DIR}}/scripts/{} *)".format(command, script)
+                           for command in ("python3", "python", "py -3")
+                           for script in ("yomiyasu_lint.py", "yomiyasu_check.py"))
+ALLOWED_TOOL_RULE = re.compile(r"^Bash\((?:python3|python|py -3) \$\{CLAUDE_SKILL_DIR\}/scripts/"
+                               r"(?:yomiyasu_lint|yomiyasu_check)\.py \*\)$")
 # 4章の2つ目: 出力の形の版の定数と、設計が決めた値
 FORMAT_CONSTANTS = (
     "LINT_FORMAT_VERSION", "DIFF_FORMAT_VERSION", "MATERIALS_FORMAT_VERSION",
@@ -79,6 +86,23 @@ def top_level_keys(lines):
         if match:
             keys.append(match.group(1))
     return keys
+
+
+def allowed_tools_problems(lines):
+    """2.5.0: frontmatter の allowed-tools の問題の並び（なければ空）。1行に書いた Bash(...) のルールが ALLOWED_TOOL_RULES と
+    同じ並びで、どれも yomiyasu の lint か check を指すかを見る。"""
+    values = [re.match(r"^allowed-tools\s*:\s*(.*)$", line).group(1) for line in lines
+              if re.match(r"^allowed-tools\s*:", line)]
+    if len(values) != 1:
+        return ["allowed-tools の行が{}行".format(len(values))]
+    rules = re.findall(r"Bash\([^)]*\)", values[0])
+    problems = []
+    if re.sub(r"Bash\([^)]*\)|[\s,]", "", values[0]):
+        problems.append("Bash(...) のほかの字がある")
+    problems.extend("スクリプトを限らないルール: " + rule for rule in rules if not ALLOWED_TOOL_RULE.match(rule))
+    if tuple(rules) != ALLOWED_TOOL_RULES:
+        problems.append("ルールの並びが6つのルールと違う")
+    return problems
 
 
 def metadata_version(lines):
@@ -220,14 +244,24 @@ class TestVersionStrings(unittest.TestCase):
         datetime.strptime(match.group(2), "%Y-%m-%d")
 
     def test_frontmatter_top_level_keys_are_allowed(self):
-        """5. SKILL.md の frontmatter の最上位のキーが許された6つの中だけ。compatibility と allowed-tools は入れない。（v1.1.2 でも通る後戻り防止）"""
+        """5. SKILL.md の frontmatter の最上位のキーが許された6つの中だけ。compatibility は入れない。allowed-tools は 2.5.0 から
+        入れ、yomiyasu の lint と check を python3、python、py -3 で呼ぶ6つのルールだけを書く（スクリプトを限らないルールは
+        書かない）。allowed-tools を消したとき、広いルールを足したときに、この確かめが失敗することも見る。"""
         lines = frontmatter_lines(PACKAGE / "SKILL.md")
         self.assertIsNotNone(lines, "SKILL.md に frontmatter がない")
         keys = top_level_keys(lines)
         self.assertTrue(keys)
         self.assertEqual(sorted(set(keys) - ALLOWED_FRONTMATTER_KEYS), [])
         self.assertNotIn("compatibility", keys)
-        self.assertNotIn("allowed-tools", keys)
+        self.assertIn("allowed-tools", keys)
+        self.assertEqual(allowed_tools_problems(lines), [])
+        index = next(i for i, line in enumerate(lines) if line.startswith("allowed-tools"))
+        removed = lines[:index] + lines[index + 1:]
+        self.assertNotEqual(allowed_tools_problems(removed), [])
+        for broad in ("Bash(python3 *)", "Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/*)", "Bash"):
+            with self.subTest(broad=broad):
+                widened = lines[:index] + [lines[index] + " " + broad] + lines[index + 1:]
+                self.assertNotEqual(allowed_tools_problems(widened), [])
 
     def test_codex_manifest_has_only_the_name(self):
         """6. skills/yomiyasu/.codex-plugin/plugin.json は名前だけを持つ（Codex の .agents/skills で yomiyasu:yomiyasu の名前にするため。版を持たないので、版を上げるときに変えない）。skills/yomiyasu には .claude-plugin を置かない（Claude のプラグインの設定は、ルートの .claude-plugin の1組だけにする）。"""
@@ -316,13 +350,13 @@ class TestCliVersions(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         self.assertEqual(process.stdout, "yomiyasu_lint.py {} (JSON format {})\n".format(version, format_version))
         # 10.1 L1: 完全一致
-        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.4.0 (JSON format 2)\n")
+        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.5.0 (JSON format 2)\n")
         self.assertEqual(process.stderr, "")
 
     def test_diff_and_check_version_lines(self):
         """diff と check の --version は 10.1 L1 の1行（完全一致）で0。"""
-        # diff `yomiyasu_diff.py 2.4.0 (JSON format 2)`、
-        # check `yomiyasu_check.py 2.4.0 (record format 1, result format 1, materials format 1)`。
+        # diff `yomiyasu_diff.py 2.5.0 (JSON format 2)`、
+        # check `yomiyasu_check.py 2.5.0 (record format 1, result format 1, materials format 1)`。
         expected = {
             DIFF: lambda version: "yomiyasu_diff.py {} (JSON format {})".format(
                 version, self.format_constant("DIFF_FORMAT_VERSION")),
@@ -331,8 +365,8 @@ class TestCliVersions(unittest.TestCase):
                 self.format_constant("MATERIALS_FORMAT_VERSION")),
         }
         literal = {
-            DIFF: "yomiyasu_diff.py 2.4.0 (JSON format 2)",
-            CHECK: "yomiyasu_check.py 2.4.0 (record format 1, result format 1, materials format 1)",
+            DIFF: "yomiyasu_diff.py 2.5.0 (JSON format 2)",
+            CHECK: "yomiyasu_check.py 2.5.0 (record format 1, result format 1, materials format 1)",
         }
         for script in (DIFF, CHECK):
             with self.subTest(script=script.name):

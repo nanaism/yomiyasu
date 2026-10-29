@@ -30,8 +30,8 @@ CHECK = SCRIPTS / "yomiyasu_check.py"
 HOOK = SCRIPTS / "yomiyasu_hook.py"
 
 WORD_KEYS = ["path", "allow_lines", "flag_lines", "allow_sha256", "flag_sha256"]
-ALLOW_RULES = ["calque", "katakana_term", "metaphor_label", "metaphor_verb", "project_term", "renyo_noun", "slop_vocabulary",
-               "translated_term"]
+ALLOW_RULES = ["ai_phrase", "calque", "katakana_term", "metaphor_label", "metaphor_verb", "project_term", "renyo_noun",
+               "slop_vocabulary", "translated_term"]
 # 既存の3つの規則に当たる合成の文（v2.1.3 の lint が warn を出す）
 SLOP_LINE = "この方針は思考のOSとして働きます。"
 METAPHOR_LINE = "このままでは、夜間の処理が静かに壊れる。"
@@ -272,8 +272,8 @@ class LintAllowTest(FolderCase):
         self.assertEqual(plain["candidate_count"], 5)
         self.assertEqual([f["rule"] for f in result["findings"]], ["say_hedge", "thin_evaluation"])
         self.assertEqual(result["context"]["words"]["allow_removed"],
-                         {"calque": 1, "katakana_term": 1, "metaphor_label": 1, "metaphor_verb": 0, "project_term": 0,
-                          "renyo_noun": 0, "slop_vocabulary": 0, "translated_term": 0})
+                         {"ai_phrase": 0, "calque": 1, "katakana_term": 1, "metaphor_label": 1, "metaphor_verb": 0,
+                          "project_term": 0, "renyo_noun": 0, "slop_vocabulary": 0, "translated_term": 0})
         self.assertEqual(result["counts"]["info"], 2)
         self.assertEqual(other["candidate_count"], 5)
         self.assertNotIn("_words", json.dumps(result))

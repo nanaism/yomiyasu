@@ -272,7 +272,7 @@ class G15CLI(unittest.TestCase):
                     data = json.loads(p.stdout)
                     def strip_added(obj):
                         if isinstance(obj, dict):
-                            return {k:strip_added(v) for k,v in obj.items() if k not in ('label','found_in','evidence','bare_in','values','fact_gaps','kept_marks','added_actors')}
+                            return {k:strip_added(v) for k,v in obj.items() if k not in ('label','found_in','evidence','bare_in','values','fact_gaps','kept_marks','added_actors','heading_shapes','comma_increase')}
                         if isinstance(obj,list): return [strip_added(v) for v in obj]
                         return obj
                     self.assertEqual(strip_added(data), row['json'])

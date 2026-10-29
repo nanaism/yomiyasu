@@ -381,12 +381,13 @@ class TestOutputShape(unittest.TestCase):
         # diff の詰め: full_diff のあとに文体の硬化の検査（stiffness）と勢いの検査（tone）
         # diff の詰めの直し（反証で見つけた例）: 気持ちの語の一覧の出どころ（feeling）
         # 2.4.0: 原文にない人や担当を足した文（added_actors）を最後に
+        # 2.5.0: 見出しの形の変化（heading_shapes）と、読点が増えた候補（comma_increase）を最後に
         self.assertEqual(list(result), ["format", "format_version", "tool_version", "status", "changed",
                                         "candidate_count", "meaning_risk_count", "fail_on_meaning_risk_count",
                                         "not_judged", "context", "meaning_risks",
                                         "markers", "new_words", "lost_words", "structure", "spans", "logic", "bold",
                                         "endings", "type_changes", "full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register",
-                                        "added_actors"])
+                                        "added_actors", "heading_shapes", "comma_increase"])
         self.assertEqual(set(result["type_changes"][0]), {"orig", "rewrite", "lost", "added"})
 
     def test_report_has_the_new_heading_only_when_needed(self):

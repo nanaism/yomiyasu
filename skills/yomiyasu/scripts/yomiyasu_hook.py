@@ -5,7 +5,7 @@ sys.dont_write_bytecode = True
 import json
 import os
 
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 _EVENTS = ("UserPromptExpansion", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd")
 _BUDGETS = {"UserPromptExpansion": 4, "UserPromptSubmit": 4, "PreToolUse": 7,
             "PostToolUse": 7, "Stop": 20, "SessionEnd": 0.8}

@@ -244,7 +244,7 @@ def corpus_files():
 
 
 def corpus_pairs():
-    """diff の組（tools/existing_keys_check.py と同じ136組）。推敲の48組が先。"""
+    """diff の組（tools/existing_keys_check.py と同じ136組に、2.5.0 で edge_cases に足した6本の組を加えた142組）。推敲の48組が先。"""
     pairs = []
     for name in sorted(os.listdir(str(CORPUS / "yomiyasu_rewritten"))):
         source = ("blacklist_ai", name[:-6] + ".md") if name.endswith("_bl.md") else ("raw_ai", name)
@@ -443,8 +443,8 @@ class UnchangedOutputTest(unittest.TestCase):
         self.assertEqual(changed, [], "{} の出力が fixture と違う（行の出どころは fixture の source_commit）".format(name))
 
     def test_fixture_covers_the_whole_corpus(self):
-        self.assertEqual(len(corpus_files()), 163)
-        self.assertEqual(len(corpus_pairs()), 136)
+        self.assertEqual(len(corpus_files()), 169)
+        self.assertEqual(len(corpus_pairs()), 142)
         self.assertEqual(sorted(self.fixture["lint"]), corpus_files())
         self.assertEqual(sorted(self.fixture["diff"]), sorted(a + "|" + b for a, b in corpus_pairs()))
 
@@ -1119,10 +1119,10 @@ class OptionTest(DocTypeCase):
 
     def test_d8_versions_do_not_change(self):
         """D8: --version と形式の版は変えない（9.7）。"""
-        self.assertEqual(call(yomiyasu_lint.main, ["--version"])[1], "yomiyasu_lint.py 2.4.0 (JSON format 2)\n")
-        self.assertEqual(call(yomiyasu_diff.main, ["--version"])[1], "yomiyasu_diff.py 2.4.0 (JSON format 2)\n")
+        self.assertEqual(call(yomiyasu_lint.main, ["--version"])[1], "yomiyasu_lint.py 2.5.0 (JSON format 2)\n")
+        self.assertEqual(call(yomiyasu_diff.main, ["--version"])[1], "yomiyasu_diff.py 2.5.0 (JSON format 2)\n")
         self.assertEqual(call(yomiyasu_check.main, ["--version"])[1],
-                         "yomiyasu_check.py 2.4.0 (record format 1, result format 1, materials format 1)\n")
+                         "yomiyasu_check.py 2.5.0 (record format 1, result format 1, materials format 1)\n")
 
 
 # ---- E. 速さ ----

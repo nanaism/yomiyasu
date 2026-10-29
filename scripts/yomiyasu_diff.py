@@ -24,7 +24,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
   名詞化の言い回し、強める語、気持ちの語、慎重表現の一覧は ../references/lists/ から読み、なければ内蔵の一覧を使う。
 意味が同じかどうか、つながりが合っているか、文末が立場に合っているかの最終判断は、この結果を見たモデル（または人）がする。
 """
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 
 import os
 import errno
@@ -113,6 +113,7 @@ except ImportError as _import_error:
 else:
     _IMPORT_ERROR = None
 from collections import Counter, OrderedDict
+from fractions import Fraction
 
 
 # --json の出力の形式のバージョン。キーを足すだけなら上げない。キーの意味や型を変えたときに上げる。
@@ -3287,8 +3288,101 @@ def _heading_counterpart(hunks, side, index):
     return found
 
 
-def _heading_structure(sides, hunks):
-    """見出しの変化を、「構造」の見直し候補の文の並びにする（_rule_candidates の structure の後ろに足す）。"""
+_HEADING_PAIR_LIMIT = 300      # 2.5.0: 組にし直す見出しの数の上限（hunk の片側。超えたら組にし直さない）
+
+
+def _heading_bigrams(key):
+    return frozenset(key[k:k + 2] for k in range(len(key) - 1)) or frozenset((key,))
+
+
+_HEADING_BODY_CHARS = 300       # 見出しの組み直しで比べる、見出しのあとの節の本文の字数
+_HEADING_PAIR_MIN = 0.1         # 組み直す見出しの似かた（見出しの文字と節の本文の重なりの和）の下限
+_HEADING_SAME_LEVEL = 0.2       # 段が同じ見出しどうしに足す似かた
+
+
+def _heading_body(lines, heads, index):
+    """見出し（index 行目、0から）のあとの節の本文（次の見出しの前まで、_HEADING_BODY_CHARS 字まで）。"""
+    pieces, size = [], 0
+    for at in range(index + 1, len(lines)):
+        if at in heads:
+            break
+        piece = lines[at].strip()
+        if piece:
+            pieces.append(piece)
+            size += len(piece)
+            if size >= _HEADING_BODY_CHARS:
+                break
+    return "".join(pieces)[:_HEADING_BODY_CHARS]
+
+
+def _jaccard(left, right):
+    return len(left & right) / len(left | right) if left and right else 0.0
+
+
+def _heading_order_pairs(sides, hunks, old_heads, new_heads, used_old, used_new):
+    """2.5.0: 組にならなかった見出しを、同じ置き換えの hunk の中で順を保って組にする。似かたは、見出しの文字と、見出しのあとの
+    節の本文の、2文字の組の重なり（段が同じなら少し足す）。似かたが _HEADING_PAIR_MIN に満たない見出しは組にしない（消した見出しと
+    足した見出し）。その中で組の数をいちばん多くし、似かたの和がいちばん大きい組み方を選ぶ（節の本文ごと書き換えた見出し、まとめの
+    節を消した hunk の中の見出し、段を変えて書き換えた見出し）。(元の位置, 後の位置) の並びを返す。"""
+    found = []
+    # 見出しの位置の並びは1回だけ作り、hunk ごとに二分探索で切り出す（見出しの多い長い文書で遅くしない）
+    old_at, new_at = sorted(old_heads), sorted(new_heads)
+    for hunk in hunks:
+        if hunk["tag"] != "replace":
+            continue
+        old = [i for i in old_at[bisect_left(old_at, hunk["old_start"] - 1):bisect_left(old_at, hunk["old_end"])]
+               if i not in used_old and old_heads[i][1]]
+        new = [j for j in new_at[bisect_left(new_at, hunk["new_start"] - 1):bisect_left(new_at, hunk["new_end"])]
+               if j not in used_new and new_heads[j][1]]
+        if not old or not new or len(old) > _HEADING_PAIR_LIMIT or len(new) > _HEADING_PAIR_LIMIT:
+            continue
+        grams = ([_heading_bigrams(old_heads[i][1]) for i in old], [_heading_bigrams(new_heads[j][1]) for j in new])
+        bodies = ([_heading_bigrams(_heading_body(sides.lines[0], old_heads, i)) for i in old],
+                  [_heading_bigrams(_heading_body(sides.lines[1], new_heads, j)) for j in new])
+        rows, cols = len(old), len(new)
+        best = [[(0, 0.0)] * (cols + 1) for _ in range(rows + 1)]
+        for a in range(1, rows + 1):
+            for b in range(1, cols + 1):
+                choice = max(best[a - 1][b], best[a][b - 1])
+                score = _jaccard(grams[0][a - 1], grams[1][b - 1]) + _jaccard(bodies[0][a - 1], bodies[1][b - 1])
+                if score >= _HEADING_PAIR_MIN:
+                    if old_heads[old[a - 1]][0] == new_heads[new[b - 1]][0]:
+                        score += _HEADING_SAME_LEVEL
+                    count, total = best[a - 1][b - 1]
+                    choice = max(choice, (count + 1, total + score))
+                best[a][b] = choice
+        a, b, picked = rows, cols, []
+        while a and b:
+            if best[a][b] == best[a - 1][b]:
+                a -= 1
+            elif best[a][b] == best[a][b - 1]:
+                b -= 1
+            else:
+                picked.append((old[a - 1], new[b - 1]))
+                a, b = a - 1, b - 1
+        found.extend(reversed(picked))
+    return found
+
+
+def _heading_shape_like(key):
+    """2.5.0: 見出しの形の検査で見る元の見出しか（句点で終わる、読点を含む、15字を超える）。"""
+    return key.endswith(("。", "．")) or "、" in key or "，" in key or len(key) > _HEADING_SHAPE_CHARS
+
+
+_HEADING_SHAPE_CHARS = 15
+_HEADING_REMOVED_SHOWN = 3
+
+
+def _heading_text(line, cut=True):
+    """見出しの行から、ATX の # を除いた文字（空白は残す。cut なら、長いときに _heading_shown と同じく切る）。"""
+    text = _ATX_MARKERS.sub("", line.strip())
+    return _heading_shown(text) if cut else text
+
+
+def _heading_structure(sides, hunks, shapes=None):
+    """見出しの変化を、「構造」の見直し候補の文の並びにする（_rule_candidates の structure の後ろに足す）。
+    2.5.0: 見出しの数が変わったときは、消えた見出しの文字をその文に足す。shapes に並びを渡すと、見出しの形の変化
+    （JSON の heading_shapes）を足す。"""
     (old_heads, old_inside), (new_heads, new_inside) = _heading_rows(sides.analyses[0]), _heading_rows(sides.analyses[1])
     out = []
     if len(old_heads) != len(new_heads):
@@ -3429,6 +3523,27 @@ def _heading_structure(sides, hunks):
                 if ((headings_only and ordinal[0][i] == ordinal[1][j])
                         or difflib.SequenceMatcher(None, old[2], new[2], autojunk=False).ratio() >= 0.5):
                     pairs.append((i, old, j, new))
+    # 2.5.0: 見出しどうしの組に、組にならなかった見出しを順に組にし直した組を足し、形の変化と消えた見出しを見る
+    # （段の変化と、見出しと本文の行の入れ替わりの候補は、ここまでの組だけで作る。出力を 2.4.0 と変えないため）
+    heading_pairs = [(i, j) for i, old, j, new in pairs if old[0] == "heading" and new[0] == "heading"]
+    heading_pairs += _heading_order_pairs(sides, hunks, old_heads, new_heads, {i for i, _, _, _ in pairs},
+                                          {j for _, _, j, _ in pairs})
+    if shapes is not None:
+        for i, j in sorted(heading_pairs):
+            if old_heads[i][1] != new_heads[j][1] and _heading_shape_like(old_heads[i][1]):
+                shapes.append(OrderedDict((("old_line", i + 1), ("new_line", j + 1),
+                                           ("old", _heading_text(sides.lines[0][i], cut=False)),
+                                           ("new", _heading_text(sides.lines[1][j], cut=False)))))
+    if out:
+        kept = {i for i, _, _, _ in pairs} | {i for i, _ in heading_pairs}
+        new_keys = {key for _, key in new_heads.values()}
+        removed = [_heading_text(sides.lines[0][i]) for i in sorted(old_heads)
+                   if i not in kept and old_heads[i][1] and old_heads[i][1] not in new_keys]
+        if removed:
+            shown = "、".join(removed[:_HEADING_REMOVED_SHOWN])
+            if len(removed) > _HEADING_REMOVED_SHOWN:
+                shown += "ほか{}件".format(len(removed) - _HEADING_REMOVED_SHOWN)
+            out[0] += "（消えた見出し: {}）".format(shown)
     groups = OrderedDict((("bold", []), ("body", []), ("to_body", []), ("level", [])))
     for i, old, j, new in sorted(pairs, key=lambda pair: pair[0]):
         if old[0] == "heading" and new[0] == "heading":
@@ -10033,6 +10148,160 @@ def _added_actor_section(d):
     return "\n".join(lines)
 
 
+# ---- 見出しの形の変化（JSON の heading_shapes。2.5.0）と、読点が増えた候補（JSON の comma_increase。2.5.0）----
+# 見出しの形: 元の見出しが句点で終わる、読点を含む、15字を超えるのどれかで、組になった後の見出しの文字が変わったもの
+# （_heading_structure が作る）。依頼で見出しの形を指定されたのに、推敲で項目名にしてしまった所を見つけるため（SKILL.md の
+# 「案内用の見出し」）。依頼の中身は diff からは見えないので判定しない。
+# 読点: 推敲で読点を足しすぎていないかを見る（SKILL.md「文長と読点の調整」の、新しく読点を置くのは残す読点の所だけ、の決まり）。
+# 最終稿の地の文の読点が原文より3個以上多く、1文あたりの読点が0.3個以上増えたときに出す。数えるのは地の文の「、」「，」だけで、
+# コード、表、見出し、引用、HTML、カギ括弧と二重カギ括弧の中、URL、インラインのコードは数えない。候補には、読点が2個以上
+# 増えた文を、元の近い文（_actor_old。2文をつないだ文は、つないだ元の文も合わせる）と並べて最大5文まで出す。元の文が見つから
+# ない文（足した文）は挙げない。1文あたりの増え方は分数で比べる（0.3個ちょうどの増え方も出す）。
+# どちらも意味が変わる恐れの kind ではないので、meaning_risk_count、candidate_count、状態、状態の行、--fail-on には入れない。
+# 原文と最終稿が同じか、行の差がなければ、どちらも出さない（comma_increase は None）。
+_COMMA_MARKS = re.compile(r"[、，]")
+_COMMA_MIN_ADDED = 3
+_COMMA_MIN_RATE = Fraction(3, 10)
+_COMMA_SENTENCE_ADDED = 2
+_COMMA_SHOWN = 5
+
+
+class _CommaCounter:
+    """1つの側の、文ごとの地の文の読点の数。カギ括弧と二重カギ括弧の中は、行ごとに範囲を取って外す（中に「。」があって文が
+    分かれた引用も外すため）。インラインのコードや URL のような伏せる範囲は、位置で外す。"""
+
+    def __init__(self, sides, side):
+        self.masker = _Masker(sides, side)
+        self.rows = self.masker.rows
+        self.quotes = {}
+
+    def _quote_spans(self, index):
+        spans = self.quotes.get(index)
+        if spans is None:
+            row = self.rows[index]
+            spans = [(row["start"] + left, row["start"] + right) for left, right in _line_quotes(row["raw"])[1]]
+            self.quotes[index] = spans
+        return spans
+
+    def count(self, sentence):
+        """文の読点の数。数えない行（コード、表、見出し、引用など）の文と、伏せると何も残らない文は None。"""
+        index = sentence.line - 1
+        if index >= len(self.rows):
+            return None
+        row = self.rows[index]
+        if _is_quote_row(row) or row["kind"] in self.masker.skip_kinds:
+            return None
+        text = _blank_masked(self.masker, sentence.text, sentence.start)
+        if not text.replace("\x00", "").strip():
+            return None
+        quotes = self._quote_spans(index)
+        return sum(1 for match in _COMMA_MARKS.finditer(text)
+                   if not any(left <= sentence.start + match.start() < right for left, right in quotes))
+
+
+_COMMA_JOIN_SHARE = 0.6        # 元の文の2文字の組のうち、書き直した文に入っている割合がこれ以上なら、つないだ元の文とみなす
+_COMMA_JOIN_MAX = 4            # 1つの書き直した文につないだとみなす元の文の数の上限
+
+
+def _comma_old(group, index, pairs, paired, counter):
+    """書き直した文 index と比べる元の文の並び。_actor_old の文と、その前後で組にならなかった元の文のうち、中身が書き直した文に
+    入っている文（2文をつないだ推敲）。元の文がなければ空の並び。"""
+    old = _actor_old(group, index, pairs, paired)
+    if old is None:
+        return []
+    olds = group["old"]
+    at = next(n for n, sentence in enumerate(olds) if sentence is old)
+    used = set(pairs.values())
+    grams = _heading_bigrams(group["new"][index].text)
+    chosen = [at]
+    for step in (-1, 1):
+        n = at + step
+        while 0 <= n < len(olds) and n not in used and len(chosen) < _COMMA_JOIN_MAX:
+            piece = _heading_bigrams(olds[n].text)
+            if len(piece & grams) < _COMMA_JOIN_SHARE * len(piece) or counter.count(olds[n]) is None:
+                break
+            chosen.append(n)
+            n += step
+    return [olds[n] for n in sorted(chosen)]
+
+
+def _comma_increase(sides, full, groups):
+    """読点が増えた候補（JSON の comma_increase）。当たらなければ None。当たれば
+    {"old_count", "new_count", "old_sentences", "new_sentences", "sentences": [{"old_line", "new_line", "old", "new",
+    "old_count", "new_count"}]}。"""
+    if not full["hunks"]:
+        return None
+    counters = (_CommaCounter(sides, 0), _CommaCounter(sides, 1))
+    totals = []
+    for side in (0, 1):
+        commas = sentences = 0
+        for sentence in _line_sentences(sides, side, 0, len(sides.lines[side])):
+            found = counters[side].count(sentence)
+            if found is None:
+                continue
+            commas += found
+            sentences += 1
+        totals.append((commas, sentences))
+    (old_commas, old_sentences), (new_commas, new_sentences) = totals
+    old_rate = Fraction(old_commas, old_sentences) if old_sentences else Fraction(0)
+    new_rate = Fraction(new_commas, new_sentences) if new_sentences else Fraction(0)
+    if new_commas - old_commas < _COMMA_MIN_ADDED or new_rate - old_rate < _COMMA_MIN_RATE:
+        return None
+    listed = []
+    for group in groups:
+        pairs = dict((j, i) for i, j in group["pairs"])
+        paired = sorted(pairs)
+        for index, sentence in enumerate(group["new"]):
+            if len(listed) >= _COMMA_SHOWN:
+                break
+            new_count = counters[1].count(sentence)
+            if new_count is None or new_count < _COMMA_SENTENCE_ADDED:
+                continue
+            olds = _comma_old(group, index, pairs, paired, counters[0])
+            counts = [counters[0].count(old) for old in olds]
+            if not olds or counts[0] is None:
+                continue
+            old_count = sum(count or 0 for count in counts)
+            if new_count - old_count < _COMMA_SENTENCE_ADDED:
+                continue
+            listed.append(OrderedDict((("old_line", olds[0].line), ("new_line", sentence.line),
+                                       ("old", "".join(old.text for old in olds)), ("new", sentence.text),
+                                       ("old_count", old_count), ("new_count", new_count))))
+    return OrderedDict((("old_count", old_commas), ("new_count", new_commas), ("old_sentences", old_sentences),
+                        ("new_sentences", new_sentences), ("sentences", listed)))
+
+
+def _heading_shape_section(d):
+    """「■ 見出しの形が変わった」の節（なければ空の文字列）。"""
+    items = d.get("heading_shapes") or []
+    if not items:
+        return ""
+    lines = ["■ 見出しの形が変わった（{}件。依頼で見出しの形や長さを指定されていれば、元の形に戻す）".format(len(items))]
+    for item in items:
+        lines.append("- 見出しを書き換えました{}".format(_where(item["old_line"], item["new_line"])))
+        lines.append("  元: " + item["old"])
+        lines.append("  後: " + item["new"])
+    return "\n".join(lines)
+
+
+def _comma_section(d):
+    """「■ 読点が増えた」の節（なければ空の文字列）。"""
+    item = d.get("comma_increase")
+    if not item:
+        return ""
+    old_rate = item["old_count"] / item["old_sentences"] if item["old_sentences"] else 0.0
+    new_rate = item["new_count"] / item["new_sentences"] if item["new_sentences"] else 0.0
+    lines = ["■ 読点が増えた（{}個 → {}個。1文あたり {:.2f}個 → {:.2f}個。足した読点が、誤読を防ぐ所、長い修飾や節の切れ目、"
+             "並べ、条件・逆接・理由の切れ目、主題のあとに別の動作主が続く所のどれかに当たるか確かめる。当たらなければ外す）".format(
+                 item["old_count"], item["new_count"], old_rate, new_rate)]
+    for sentence in item["sentences"]:
+        lines.append("- 読点が{}個から{}個に増えました{}".format(sentence["old_count"], sentence["new_count"],
+                                                         _where(sentence["old_line"], sentence["new_line"])))
+        lines.append("  元: " + sentence["old"])
+        lines.append("  後: " + sentence["new"])
+    return "\n".join(lines)
+
+
 def _new_review_section(d, key):
     section = d.get(key) or {}
     candidates = section.get("candidates") or []
@@ -10108,7 +10377,9 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
         _LAST_TYPE_RANGES[0] = None
     full, sides = _build_full_diff(orig_raw, rw_raw, encoding_notes)
     # 見出しの数、段、見出しと本文の行の入れ替わりは、全文差分の注記だけでなく「構造」の見直し候補にも出す
-    rules["structure"].extend(_heading_structure(sides, full["hunks"]))
+    # （2.5.0: 見出しの形の変化は heading_shapes に分けて出す）
+    shapes = []
+    rules["structure"].extend(_heading_structure(sides, full["hunks"], shapes))
     groups = _sentence_pairs(sides, full)
     risks = _meaning_risks(sides, full, rules["type_changes"], groups, doc_type=context["doc_type"], modality=modality,
                            logic=logic)
@@ -10138,6 +10409,10 @@ def diff(orig_raw: str, rw_raw: str, stance=None, *, encoding_notes=None, doc_ty
     # 2.4.0: 原文と資料にない人や担当を、主語か、知らせる・頼む相手に足した文。candidate_count、meaning_risk_count、状態、
     # --fail-on には入れない（既存の出力の形を変えないよう、最後のキーとして足す）
     out["added_actors"] = _added_actors(sides, groups, [materials] if isinstance(materials, str) else materials or ())
+    # 2.5.0: 見出しの形の変化と、読点が増えた候補。added_actors と同じく、candidate_count、meaning_risk_count、状態、
+    # --fail-on には入れない（最後のキーとして足す）
+    out["heading_shapes"] = shapes
+    out["comma_increase"] = _comma_increase(sides, full, groups)
     return out
 
 
@@ -10779,21 +11054,24 @@ def detector_summary(d, key):
 def report_parts(d: dict) -> dict:
     """レポートの節の文字列（{"risks", "rules", "stiffness", "tone", "full_diff"}）。ない節は空の文字列。末尾に改行は付けない。
     stiffness と tone は diff の詰めで足した（文体の硬化の検査と勢いの検査。候補がなければ空）。added_actors は 2.4.0 で足した
-    （原文にない人や担当を足した文。候補がなければ空）。"""
+    （原文にない人や担当を足した文。候補がなければ空）。heading_shapes と comma_increase は 2.5.0 で足した（見出しの形が変わった
+    見出しと、読点が増えた候補。候補がなければ空）。"""
     return {"risks": _risk_section(d), "rules": _rule_section(d), "added_actors": _added_actor_section(d),
+            "heading_shapes": _heading_shape_section(d), "comma_increase": _comma_section(d),
             "stiffness": _detector_section(d, "stiffness"),
             "tone": _detector_section(d, "tone"), "full_diff": _full_diff_section(d),
             **{key: _new_review_section(d, key) for key in NEW_REVIEW_SECTIONS}}
 
 
 def report(d: dict) -> str:
-    """人が読むレポート。1行目、状態の行、断り、意味が変わる恐れ、規則の見直し候補、原文にない人や担当を足した文、文体の硬化、
-    勢い、全文差分、状態の行の順（文体の硬化と勢いは diff の詰めで、原文にない人や担当を足した文は 2.4.0 で足した。候補がなければ
-    出さない）。
+    """人が読むレポート。1行目、状態の行、断り、意味が変わる恐れ、規則の見直し候補、原文にない人や担当を足した文、見出しの形、
+    読点の増加、文体の硬化、勢い、全文差分、状態の行の順（文体の硬化と勢いは diff の詰めで、原文にない人や担当を足した文は 2.4.0 で、
+    見出しの形と読点の増加は 2.5.0 で足した。候補がなければ出さない）。
     最後の状態の行の添え書きは「上の節」。末尾に改行は付けない。"""
     status = _status_line(d)
     parts = report_parts(d)
-    body = [part for part in (parts["risks"], parts["rules"], parts["added_actors"], parts["stiffness"], parts["tone"],
+    body = [part for part in (parts["risks"], parts["rules"], parts["added_actors"], parts["heading_shapes"],
+                              parts["comma_increase"], parts["stiffness"], parts["tone"],
                              parts["hedges"], parts["immutable"], parts["politeness"], parts["register"], parts["full_diff"]) if part]
     head = [_REPORT_FIRST_LINE, status, _REPORT_DISCLAIMER]
     context = d.get("context") or {}

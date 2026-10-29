@@ -36,9 +36,11 @@ NINE_KEYS = ["markers", "new_words", "lost_words", "structure", "spans", "logic"
 # G7（種類と読者の設計 9.4、10.1）: not_judged の次に context を足す（キーを足すだけで、形式2のまま）
 # diff の詰め（追加文書 2.4、勢いの文書 3.3）: 文体の硬化の検査（stiffness）と勢いの検査（tone）を full_diff のあとに足す
 # diff の詰めの直し（反証で見つけた例）: 気持ちの語の一覧の出どころ（feeling）を最後に足す
+# 2.5.0: 見出しの形の変化（heading_shapes）と、読点が増えた候補（comma_increase）を最後に足す
 TOP_KEYS = (["format", "format_version", "tool_version", "status", "changed", "candidate_count", "meaning_risk_count",
              "fail_on_meaning_risk_count", "not_judged", "context", "meaning_risks"] + NINE_KEYS
-            + ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register", "added_actors"])
+            + ["full_diff", "stiffness", "tone", "feeling", "hedges", "immutable", "politeness", "register", "added_actors",
+               "heading_shapes", "comma_increase"])
 FIRST_LINE = "差分の検査を実行しました。"
 # v2.1.1: v1.1.2 の合成20組のうち、見出しを変えた組で structure の後ろに足す見出しの変化の文
 HEADING_ADDED = {"heading_and_code": ["見出しのレベルを変えた（元1行目 レベル2「## 手順」→ 後1行目 レベル3「### 手順」）"]}
@@ -766,12 +768,13 @@ class TestPresentation(DiffCase):
     def test_report_parts_make_the_report(self):
         """2.10: report() は report_parts() の節（risks、rules、full_diff）を並べたもの。ない節は空の文字列。
         check は節ごとに使い、照合の unsupported も同じ形の行にする（3.5 の例3）。
-        diff の詰めで、文体の硬化の検査と勢いの検査の節（stiffness、tone）を rules と full_diff の間に足した（候補がなければ空）。"""
+        diff の詰めで、文体の硬化の検査と勢いの検査の節（stiffness、tone）を rules と full_diff の間に足した（候補がなければ空）。
+        2.5.0 で、見出しの形と読点の増加の節（heading_shapes、comma_increase）を足した（候補がなければ空）。"""
         report_parts = self.need_function("report_parts")
         result = self.diff2(C_OLD, C_NEW)
         parts = report_parts(result)
-        self.assertEqual(sorted(parts), ["added_actors", "full_diff", "hedges", "immutable", "politeness", "register", "risks", "rules",
-                                         "stiffness", "tone"])
+        self.assertEqual(sorted(parts), ["added_actors", "comma_increase", "full_diff", "heading_shapes", "hedges", "immutable",
+                                         "politeness", "register", "risks", "rules", "stiffness", "tone"])
         status = self.report(result).split("\n")[1]
         body = [part for part in (parts["risks"], parts["rules"], parts["stiffness"], parts["tone"], parts["full_diff"])
                 if part]
@@ -781,7 +784,8 @@ class TestPresentation(DiffCase):
         self.assertTrue(parts["full_diff"].startswith("■ 全文差分（変更 2か所。省略していません）"), parts["full_diff"])
         same = report_parts(self.diff2(A_OLD, A_OLD))
         self.assertEqual(same, {"risks": "", "rules": "", "stiffness": "", "tone": "", "hedges": "", "immutable": "", "politeness": "", "register": "",
-                                "added_actors": "", "full_diff": "■ 全文差分: 変わった箇所はありません。"})
+                                "added_actors": "", "heading_shapes": "", "comma_increase": "",
+                                "full_diff": "■ 全文差分: 変わった箇所はありません。"})
         unsupported = {"kind": "unsupported", "subkind": "number", "old_line": None, "new_line": 4, "old": None,
                        "new": "再試行は最大3回です。", "detail": {"text": "3回", "value": "3", "unit": "回"}, "basis": None}
         name = dict(unsupported, subkind="name", new_line=2, new="移行先はMySQLです。", detail={"text": "MySQL"})
@@ -1765,7 +1769,7 @@ class TestCliContract(DiffCase):
         """2.1: main(argv=None) は終了コードを返す（CLI は sys.exit(main()) の形）。"""
         self.assertTrue(callable(getattr(yomiyasu_diff, "main", None)), "main がない")
         self.assertIn("argv", inspect.signature(yomiyasu_diff.main).parameters)
-        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_diff.py 2.4.0 (JSON format 2)\n", ""))
+        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_diff.py 2.5.0 (JSON format 2)\n", ""))
         self.assertEqual(self.call_main([str(self.a_old), str(self.a_new)]), (0, EXAMPLE_A + "\n", ""))
         self.assertEqual(self.call_main(["--fail-on=meaning-risk", str(self.a_old), str(self.a_new)]),
                          (1, EXAMPLE_A + "\n\n" + FAIL_LINE_A + "\n", ""))

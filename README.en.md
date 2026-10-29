@@ -116,6 +116,8 @@ The skill comes with four Python scripts. They need only the Python standard lib
 - `scripts/yomiyasu_check.py` runs lint on the final draft and diff on the original and the final draft, and keeps a record in `.yomiyasu/` at the top of the git repository (or in the working folder outside git). `verify` checks right before submitting that the final draft is the one that was checked.
 - `scripts/yomiyasu_hook.py` is an optional hook for Claude Code and Codex. It runs only if you add it to your own settings.
 
+On Windows, run them with `py -3` instead of `python3`, as in `py -3 scripts/yomiyasu_lint.py article.md`.
+
 ```bash
 python3 scripts/yomiyasu_lint.py article.md
 python3 scripts/yomiyasu_lint.py article.md --fail-on warn   # exit code 1 if there are warn or error items

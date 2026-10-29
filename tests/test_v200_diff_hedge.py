@@ -199,7 +199,7 @@ class DesignExamples(unittest.TestCase):
             self.assertEqual(section['candidate_count'], int(expected))
             self.assertEqual(section['threshold'], {'min_sentences': 3, 'min_ratio': 0.5})
             self.assertEqual(section['skipped_by'], 'politeness' if tag == 'R5' else None)
-            self.assertEqual(list(result)[-2:], ['register', 'added_actors'])
+            self.assertEqual(list(result)[-4:], ['register', 'added_actors', 'heading_shapes', 'comma_increase'])
             if expected:
                 item = section['candidates'][0]
                 self.assertEqual(item['subkind'], 'to_plain' if tag == 'R7' else 'to_polite')
@@ -257,7 +257,7 @@ class Contracts(unittest.TestCase):
             with self.subTest(tag=tag):
                 result = diff.diff(*EXAMPLES[tag])
                 self.assertEqual({key: result[key] for key in expected}, expected)
-                self.assertEqual(list(result)[-2:], ['register', 'added_actors'])
+                self.assertEqual(list(result)[-4:], ['register', 'added_actors', 'heading_shapes', 'comma_increase'])
                 if tag == 'R1':
                     self.assertEqual(result['fail_on_meaning_risk_count'], 0)
                     with mock.patch.object(diff, '_register_changes', return_value=diff._review_section([])):

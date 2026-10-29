@@ -12,7 +12,7 @@ mail（メール・チャット）と paper（論文・研究レポート）も�
 同じ権限で原稿と記録の両方を書き換えられる環境では、記録は実行漏れを見つけるためのもので、
 改ざんの防止や人の承認の証明にはならない。
 """
-__version__ = "2.4.0"
+__version__ = "2.5.0"
 
 import sys
 
@@ -1963,15 +1963,20 @@ def _decide(ctx, recorded, problem=None, attempt=None, run_id=None, fix_count=0,
             line = ("検査を実行しました（1回目）。下の候補を原文と資料に照らして確かめてください。直すのは1回までです。"
                     "直したら同じコマンドをもう一度実行し、直さないなら" + finalize)
             following = "review"
-        elif _detector_reviews(ctx) or _added_actor_count(ctx):
+        elif (_detector_reviews(ctx) or _added_actor_count(ctx) or _diff_list_count(ctx, "heading_shapes")
+              or _diff_list_count(ctx, "comma_increase")):
             # 文体の硬化と勢いの見直し候補（level review）は1行目の「候補あり／なし」に数えないが、「候補はない」だけ
             # だと節を見落とす（diff を詰めたときに足した。反証で見つけた例）。参考（info）だけなら添えない。
-            # 原文にない人や担当を足した文（2.4.0）も同じ扱い（数えないが、節があることを書く）
+            # 原文にない人や担当を足した文（2.4.0）、見出しの形と読点の増加（2.5.0）も同じ扱い（数えないが、節があることを書く）
             found = []
             if _detector_reviews(ctx):
                 found.append("文体の硬化と勢いの見直し候補が{}件".format(_detector_reviews(ctx)))
             if _added_actor_count(ctx):
                 found.append("原文にない人や担当を足した文が{}件".format(_added_actor_count(ctx)))
+            if _diff_list_count(ctx, "heading_shapes"):
+                found.append("形が変わった見出しが{}件".format(_diff_list_count(ctx, "heading_shapes")))
+            if _diff_list_count(ctx, "comma_increase"):
+                found.append("読点が増えた候補が1件")
             line = ("検査を実行しました（1回目）。規則に当たる候補はありませんが、{}あります。"
                     "その節を原文と{}照らし、全文差分で意図しない変更がないかを確かめ、直すなら1回まで、直さないなら".format(
                         "、".join(found), "資料と依頼に" if _added_actor_count(ctx) else "") + finalize)
@@ -2276,6 +2281,17 @@ def _head_lines(ctx, diff_module):
                                 item.get("new_line") if isinstance(item.get("new_line"), int) else None))
             if entries:
                 parts.append(_head_part("原文にない人や担当", entries, len(entries)))
+        # 2.5.0: 見出しの形が変わった見出しと、読点が増えた候補（diff の候補の数には入れない）
+        shapes = result.get("heading_shapes")
+        if isinstance(shapes, list) and shapes:
+            entries = [(_head_where(item.get("old_line"), item.get("new_line")) + "見出し", 1,
+                        _head_line_of(item.get("old_line"), item.get("new_line")))
+                       for item in shapes if isinstance(item, dict)]
+            if entries:
+                parts.append(_head_part("見出しの形", entries, len(entries)))
+        commas = result.get("comma_increase")
+        if isinstance(commas, dict):
+            parts.append("読点の増加: {} → {}個".format(commas.get("old_count"), commas.get("new_count")))
         entries = []
         for key in ("stiffness", "tone", "hedges", "immutable", "politeness", "register"):
             section = result.get(key)
@@ -2333,6 +2349,29 @@ def _detector_reviews(ctx):
             count += sum(1 for candidate in section["candidates"]
                          if isinstance(candidate, dict) and candidate.get("level") == "review")
     return count
+
+
+# 2.5.0: 資料（依頼の文を渡したときも資料）に見出し、まとめ、字数の指定の語（30字、40文字、二十字、字数、文字数、字以内 など）が
+# あるときは、diff の見出しの形の節と、見出しの数の候補（消えた見出し）がある規則の見直し候補の節を、run の出力の節の先に出す。
+# 依頼の中身は判定しない。「文字」「数字」「漢字」だけの語では動かさない
+_HEADING_REQUEST = re.compile(r"見出し|まとめ|[0-9０-９〇一二三四五六七八九十百千]+\s*文?字|文?字数|字以内|字まで|字程度|字前後")
+
+
+def _heading_request(ctx):
+    return any(_HEADING_REQUEST.search(item.text) for item in ctx.materials)
+
+
+def _diff_list_count(ctx, key):
+    """diff の 2.5.0 のキー（heading_shapes の数、comma_increase は当たれば1）。diff が最後まで動かなかったときは0
+    （_added_actor_count と同じ条件）。"""
+    if ctx.final_changed or ctx.diff_result is None or "diff" not in ctx.required:
+        return 0
+    if ctx.entries.get("diff", {}).get("status") != "ran":
+        return 0
+    value = ctx.diff_result.get(key)
+    if key == "comma_increase":
+        return 1 if isinstance(value, dict) else 0
+    return len(value) if isinstance(value, list) else 0
 
 
 def _added_actor_count(ctx):
@@ -2502,13 +2541,25 @@ def _sections(ctx, lint_module, diff_module):
         sections.append(_KEPT_MARK_SECTION.format(len(kept)) + "\n"
                         + "\n".join("- " + _kept_marks_text([mark]) for mark in kept))
     parts = ctx.diff_parts
+    rules = None
     if parts is not None and parts["rules"]:
-        rules = parts["rules"]
-        sections.append(rules.replace("■ 規則の見直し候補（", "■ 差分の見直し候補（diff、", 1))
-    # diff の詰め: 文体の硬化の検査と勢いの検査の節（候補があるときだけ）。2.4.0 の原文にない人や担当を足した文の節を先に置く
-    # （diff のレポートと同じ順）
-    for key in ("added_actors", "stiffness", "tone", "hedges", "immutable", "politeness", "register"):
-        if parts is not None and parts.get(key):
+        rules = parts["rules"].replace("■ 規則の見直し候補（", "■ 差分の見直し候補（diff、", 1)
+    # 2.5.0: 資料に見出しやまとめ、字数の指定の語があれば、見出しの形の節と、見出しの数の候補がある規則の節を先に出す
+    front = []
+    if parts is not None and _heading_request(ctx):
+        if parts.get("heading_shapes"):
+            front.append(parts["heading_shapes"])
+        if rules and "見出しの数が変わった" in rules:
+            front.append(rules)
+            rules = None
+    sections[:0] = front
+    if rules:
+        sections.append(rules)
+    # diff の詰め: 文体の硬化の検査と勢いの検査の節（候補があるときだけ）。2.4.0 の原文にない人や担当を足した文の節と、2.5.0 の
+    # 見出しの形と読点の増加の節を先に置く（diff のレポートと同じ順）
+    for key in ("added_actors", "heading_shapes", "comma_increase", "stiffness", "tone", "hedges", "immutable", "politeness",
+                "register"):
+        if parts is not None and parts.get(key) and parts[key] not in front:
             sections.append(parts[key])
     if ctx.lint_result is not None and ctx.lint_result.get("candidate_count"):
         sections.append("■ 表現・書式の見直し候補（lint、最終稿、{}件）\n".format(ctx.lint_result["candidate_count"])

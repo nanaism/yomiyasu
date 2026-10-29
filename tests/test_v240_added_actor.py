@@ -210,7 +210,8 @@ class NotAMeaningRiskTest(unittest.TestCase):
     def test_other_keys_do_not_change(self):
         result = yomiyasu_diff.diff(self.OLD, self.NEW)
         self.assertEqual(len(result["added_actors"]), 2)
-        self.assertEqual(list(result)[-1], "added_actors")
+        # 2.5.0 で、見出しの形の変化（heading_shapes）と、読点が増えた候補（comma_increase）を後ろに足した
+        self.assertEqual(list(result)[-3:], ["added_actors", "heading_shapes", "comma_increase"])
         plain = self.without_actors()
         self.assertEqual(dict(result, added_actors=[]), plain)
         self.assertFalse([risk for risk in result["meaning_risks"] if "actor" in risk["kind"]])

@@ -308,13 +308,15 @@ TOP_KEYS = ['format',
  'immutable',
  'politeness',
  'register',
- 'added_actors']
+ 'added_actors',
+ 'heading_shapes',
+ 'comma_increase']
 
 RULES_BASELINE = '■ 規則の見直し候補（4件）\n■ 元の文にない語: 拡張、暫定的\n■ 消えた語: 暫定引\n■ 文末の種類が変わった文（立場に合う向きか見る）\n- 推量・考え → 説明（〜ます）: プールサイズの暫定的な拡張は、別の負荷問題を誘発するおそれがあります。\n■ 文の種類を表す語が変わった文（伝聞・推量・意見・例え・依頼が、元の文と同じか見る）\n- 元: プールサイズの暫定引き上げは、別の負荷問題を誘発するかもしれません。\n  後: プールサイズの暫定的な拡張は、別の負荷問題を誘発するおそれがあります。\n  消えた語: 推量（かもしれません）'
 
 RESTORED_BASELINE = {'format': 'yomiyasu-diff',
  'format_version': 2,
- 'tool_version': '2.4.0',
+ 'tool_version': '2.5.0',
  'status': 'has_candidates',
  'changed': True,
  'candidate_count': 6,
@@ -497,7 +499,9 @@ RESTORED_BASELINE = {'format': 'yomiyasu-diff',
               'candidates': [],
               'threshold': {'min_sentences': 3, 'min_ratio': 0.5},
               'skipped_by': None},
- 'added_actors': []}
+ 'added_actors': [],
+ 'heading_shapes': [],
+ 'comma_increase': None}
 
 def risks(result, kind, subkind=None):
     return [r for r in result['meaning_risks']

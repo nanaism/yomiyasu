@@ -337,7 +337,7 @@ class NoDetailsUnchangedTest(unittest.TestCase):
 
     def test_corpus_has_no_details_and_keeps_the_old_keys(self):
         files = sorted(CORPUS.rglob("*.md"))
-        self.assertEqual(len(files), 163)
+        self.assertEqual(len(files), 169)
         for path in files:
             text = path.read_text(encoding="utf-8")
             self.assertNotIn("<details", text.lower(), path.name)
