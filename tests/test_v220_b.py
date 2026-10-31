@@ -5,6 +5,7 @@
 from pathlib import Path
 from unittest import mock
 import json
+import re
 import sys
 import unittest
 
@@ -260,8 +261,10 @@ class TableTest(unittest.TestCase):
 
     def test_skill_md_and_readme(self):
         skill = (PACKAGE / "SKILL.md").read_text(encoding="utf-8")
-        self.assertIn("文書の種類は下の表の13種類です。", skill)
-        self.assertIn("   | script（台詞・脚本） | ", skill)
+        # 2.6.0 で種類の表を Step 1 の文の一覧にした。一覧が13種類で、script に日本語の名前が付いていることを見る
+        lists = re.findall(r"種類は ([^\n]+?)の13種類で", skill)
+        self.assertEqual(len(lists), 1, lists)
+        self.assertTrue(lists[0].endswith("script（台詞・脚本）"), lists[0])
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
         self.assertEqual(readme.count("13種類"), 2)
         self.assertNotIn("12種類", readme)

@@ -570,7 +570,7 @@ class TestK1RecordAndOutput(CheckCase):
                                                                        "katakana-terms", "thin-evaluation", "renyo-nouns")]
         self.assertEqual(set(record["tools"]), set(TOOL_NAMES) | set(list_keys))
         for name in TOOL_NAMES:
-            self.assertEqual(record["tools"][name], {"version": "2.5.0", "sha256": sha256_file(SCRIPTS / name)})
+            self.assertEqual(record["tools"][name], {"version": "2.6.0", "sha256": sha256_file(SCRIPTS / name)})
         for key in list_keys:
             self.assertEqual(record["tools"][key], {"version": None, "sha256": sha256_file(ROOT / key)})
         # unicode_version は check の固め（反証レビュー compat 4）で足した。似かたを求めた Unicode の版
@@ -677,7 +677,7 @@ class TestK1RecordAndOutput(CheckCase):
             self.assertIn(key, result)
         self.assertEqual(list(result)[:3], ["format", "format_version", "tool_version"])
         self.assertEqual((result["format"], result["format_version"], result["tool_version"], result["command"]),
-                         ("yomiyasu-check-result", 1, "2.5.0", "run"))
+                         ("yomiyasu-check-result", 1, "2.6.0", "run"))
         self.assertEqual(result["status"], "executed")
         self.assertRegex(result["status_line"], K1_STATUS)
         self.assertEqual(result["message"], RUN_REWRITE_FIRST + self.finalize_file())
@@ -741,7 +741,7 @@ class TestRunThenVerify(CheckCase):
             self.assertIn(key, result)
         self.assertEqual(list(result)[:3], ["format", "format_version", "tool_version"])
         self.assertEqual((result["format"], result["format_version"], result["tool_version"], result["command"]),
-                         ("yomiyasu-check-result", 1, "2.5.0", "verify"))
+                         ("yomiyasu-check-result", 1, "2.6.0", "verify"))
         self.assertEqual(result["status"], "executed")
         self.assertEqual(self.status(result["status_line"])[0], "executed")
         self.assertEqual(result["message"], VERIFY_LINE1["executed"].format(checks="lint、diff"))
@@ -2493,7 +2493,7 @@ class TestReviewFixes(CheckCase):
         diff の形式の版（MATERIALS_FORMAT_VERSION）はファイルの行から読む。diff が壊れていても版の行を出す（spec F5）。"""
         scripts = self.copy_scripts("skill-version")
         script = scripts / "yomiyasu_check.py"
-        expected = "yomiyasu_check.py 2.5.0 (record format 1, result format 1, materials format 1)\n"
+        expected = "yomiyasu_check.py 2.6.0 (record format 1, result format 1, materials format 1)\n"
         process = subprocess.run([sys.executable, "-B", "-c", LOAD_WORKER, str(scripts), str(script), "--version"],
                                  cwd=str(self.root), env=self.env(), capture_output=True, encoding="utf-8", timeout=30)
         self.assertEqual(process.returncode, 0, process.stderr)
