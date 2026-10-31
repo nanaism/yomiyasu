@@ -138,10 +138,20 @@ class HiraganaNounKnownLimitTest(unittest.TestCase):
 class MinutesHeadingPrincipleTest(unittest.TestCase):
     def test_guide_headings_keep_minutes_headings(self):
         text = section_text(ROOT / "skills" / "yomiyasu" / "SKILL.md", "### 案内用の見出し")
-        lines = [line for line in text.split("\n") if "議事録を推敲する" in line]
+        # 3.0.0 で「議事録を推敲するときは〜（`references/domains/business.md` 3章）」の文を、直さないものを並べた文の
+        # 「議事録の見出し」にまとめた。business.md への指し先は、Step 1 で必ず読む doc-types/minutes.md の3章にある
+        lines = [line for line in text.split("\n") if "議事録の見出し" in line]
         self.assertEqual(len(lines), 1, text)
-        self.assertIn("見出し", lines[0])
-        self.assertIn("domains/business.md", lines[0])
+        self.assertRegex(lines[0], r"議事録の見出し[^。]*は直しません。")
+        self.assertIn("書き直す前に必ず `references/doc-types/<種類>.md` を読み",
+                      section_text(ROOT / "skills" / "yomiyasu" / "SKILL.md", "### Step 1: 種類と読み手"))
+        for base in (ROOT / "references", ROOT / "skills" / "yomiyasu" / "references"):
+            with self.subTest(base=str(base.relative_to(ROOT))):
+                minutes = section_text(base / "doc-types" / "minutes.md", "## 3. 長さと省略")
+                self.assertIn("話題の順と見出しの扱い（推敲では変えない。", minutes)
+                self.assertIn("domains/business.md 3章", minutes)
+                business = section_text(base / "domains" / "business.md", "## 3. 文体")
+                self.assertIn("議事録を推敲するときは、話題の順と見出しを変えません。", business)
 
 
 # ---- T3: 参考の5種類の理由の文と、--doc-type のヘルプ ----
