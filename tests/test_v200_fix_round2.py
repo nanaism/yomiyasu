@@ -138,7 +138,7 @@ class HiraganaNounKnownLimitTest(unittest.TestCase):
 class MinutesHeadingPrincipleTest(unittest.TestCase):
     def test_guide_headings_keep_minutes_headings(self):
         text = section_text(ROOT / "skills" / "yomiyasu" / "SKILL.md", "### 案内用の見出し")
-        # 2.6.0 で「議事録を推敲するときは〜（`references/domains/business.md` 3章）」の文を、直さないものを並べた文の
+        # 3.0.0 で「議事録を推敲するときは〜（`references/domains/business.md` 3章）」の文を、直さないものを並べた文の
         # 「議事録の見出し」にまとめた。business.md への指し先は、Step 1 で必ず読む doc-types/minutes.md の3章にある
         lines = [line for line in text.split("\n") if "議事録の見出し" in line]
         self.assertEqual(len(lines), 1, text)

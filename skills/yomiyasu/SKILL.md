@@ -4,7 +4,7 @@ description: AIが生成した日本語を推敲するスキル。利用者が y
 license: MIT
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_lint.py *) Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_check.py *) Bash(python ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_lint.py *) Bash(python ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_check.py *) Bash(py -3 ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_lint.py *) Bash(py -3 ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_check.py *)
 metadata:
-  version: "2.6.0"
+  version: "3.0.0"
 ---
 
 # yomiyasu

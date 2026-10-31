@@ -23,9 +23,9 @@ Since 2.0.0, the instructions tell yomiyasu to run the bundled checks on its fin
 
 The package is a set of instructions (SKILL.md) plus these checks. In the comparisons below, AI judges rated rewriting without the skill and a few lines of instructions as easier to read than yomiyasu; see [Comparisons](#comparisons).
 
-If your environment cannot load the full skill, two versions built from it are published in separate repositories. Both are 1.2.0, built from 2.5.0, and have not yet been updated to 2.6.0. Use the full skill when your environment can load it.
+If your environment cannot load the full skill, two versions built from it are published in separate repositories. Both are 1.2.0, built from 2.5.0, and have not yet been updated to 3.0.0. Use the full skill when your environment can load it.
 
-- [yomiyasu-mini](https://github.com/nanaism/yomiyasu-mini) is a skill packed into eight files, for hosts that limit the number or size of files, such as Microsoft 365 Copilot declarative agents. The full skill has many reference files, and its lint, diff and check scripts are each over 100KB. mini keeps each script at 90KB or less and each reference file at 100KB or less. It includes the meaning-change check, with the same results as the 2.5.0 diff. Its SKILL.md is 17,959 characters including the YAML front matter, which is longer than the 15,098-character SKILL.md of 2.6.0.
+- [yomiyasu-mini](https://github.com/nanaism/yomiyasu-mini) is a skill packed into eight files, for hosts that limit the number or size of files, such as Microsoft 365 Copilot declarative agents. The full skill has many reference files, and its lint, diff and check scripts are each over 100KB. mini keeps each script at 90KB or less and each reference file at 100KB or less. It includes the meaning-change check, with the same results as the 2.5.0 diff. Its SKILL.md is 17,959 characters including the YAML front matter, which is longer than the 15,098-character SKILL.md of 3.0.0.
 - [yomiyasu-pocket](https://github.com/nanaism/yomiyasu-pocket) is a 400 to 500 character instruction to paste into an AI's instructions field, such as an email app's AI or a chat app's custom instructions. It has no bundled checks.
 
 ## Install
@@ -148,13 +148,13 @@ The author of natural-japanese published a comparison, [推敲の比較](https:/
 - The weak points the judges named for yomiyasu included removing bold labels so that the text was harder to skim (6 drafts), removing commas so that it was harder to read (5 drafts), and joining sentences into longer ones (3 drafts).
 - Rewriting the 12 drafts cost $10.29 with yomiyasu and $3.39 without a skill.
 
-### A, B and C comparison (2.5.0 and 2.6.0)
+### A, B and C comparison (2.5.0 and 3.0.0)
 
 With the same 12 drafts, the same request text, and the same two judges and judging prompts as above, we compared three conditions. In every condition, Claude Code `claude -p` (Claude Opus 5.5, effort high) rewrote the 12 drafts, and the rewriting and the judging were each done twice.
 
 - A is no skill. The agent gets only the request text. This is the same setup as "no skill" above, but the rewriting and the judging were run again, so the numbers differ.
 - B is a few lines of instructions. The five lines below are placed before the request text. A new agent that had not read SKILL.md wrote them from the README and the skill description alone, and they were not edited afterwards.
-- C is yomiyasu. We measured 2.5.0 and 2.6.0 separately. The 2.6.0 measured here is the published SKILL.md (15,098 characters). The selection of 2.6.0 compared a 15,000-character candidate, before three 2.5.0 rules were restored to it. Its numbers are in the 2.6.0 section of [CHANGELOG.md](./CHANGELOG.md).
+- C is yomiyasu. We measured 2.5.0 and 3.0.0 separately. The 3.0.0 measured here is the published SKILL.md (15,098 characters). The selection of 3.0.0 compared a 15,000-character candidate, before three 2.5.0 rules were restored to it. Its numbers are in the 3.0.0 section of [CHANGELOG.md](./CHANGELOG.md).
 
 <details>
 <summary>The five lines given to B (in Japanese)</summary>
@@ -170,7 +170,7 @@ AIが書いた日本語の下書きを、意味を変えずに読みやすく直
 They ask the agent to make the draft easier to read without changing the meaning, to put unclear metaphors and overstated phrases in plain words, to make clear who does what, to keep bold and other decoration to what is needed, to add no information that is not in the original, to leave unclear parts alone and list them at the end as points to check, and to leave parts that read naturally as they are.
 </details>
 
-For readability, each judge saw the three outputs for a draft without the condition names and ranked them (1 is best, 3 is worst). The ranks are taken within a set of three, so the values for A and B also change between the set with 2.5.0 as C and the set with 2.6.0 as C.
+For readability, each judge saw the three outputs for a draft without the condition names and ranked them (1 is best, 3 is worst). The ranks are taken within a set of three, so the values for A and B also change between the set with 2.5.0 as C and the set with 3.0.0 as C.
 
 | Set | Judge | A | B | C |
 |---|---|---|---|---|
@@ -178,10 +178,10 @@ For readability, each judge saw the three outputs for a draft without the condit
 | A, B, 2.5.0 (run 1) | Claude Opus 5.5 | 1.17 | 2.00 | 2.83 |
 | A, B, 2.5.0 (run 2) | GPT-6.1 Sol | 1.58 | 1.50 | 2.92 |
 | A, B, 2.5.0 (run 2) | Claude Opus 5.5 | 1.08 | 1.92 | 3.00 |
-| A, B, 2.6.0 (run 1) | GPT-6.1 Sol | 1.50 | 1.58 | 2.92 |
-| A, B, 2.6.0 (run 1) | Claude Opus 5.5 | 1.25 | 1.83 | 2.92 |
-| A, B, 2.6.0 (run 2) | GPT-6.1 Sol | 1.67 | 1.42 | 2.92 |
-| A, B, 2.6.0 (run 2) | Claude Opus 5.5 | 1.08 | 1.92 | 3.00 |
+| A, B, 3.0.0 (run 1) | GPT-6.1 Sol | 1.50 | 1.58 | 2.92 |
+| A, B, 3.0.0 (run 1) | Claude Opus 5.5 | 1.25 | 1.83 | 2.92 |
+| A, B, 3.0.0 (run 2) | GPT-6.1 Sol | 1.67 | 1.42 | 2.92 |
+| A, B, 3.0.0 (run 2) | Claude Opus 5.5 | 1.08 | 1.92 | 3.00 |
 
 Wins and losses were counted one-to-one over the 24 judgments of both judges in each run, 48 over the two runs. Each cell gives the wins and losses of the condition named first.
 
@@ -189,14 +189,14 @@ Wins and losses were counted one-to-one over the 24 judgments of both judges in 
 |---|---|---|---|
 | A vs 2.5.0 | 22-2 | 23-1 | 45-3 |
 | B vs 2.5.0 | 22-2 | 24-0 | 46-2 |
-| A vs 2.6.0 | 23-1 | 23-1 | 46-2 |
-| B vs 2.6.0 | 23-1 | 24-0 | 47-1 |
+| A vs 3.0.0 | 23-1 | 23-1 | 46-2 |
+| B vs 3.0.0 | 23-1 | 24-0 | 47-1 |
 
-A beat B 17 to 7 in both runs of the sets with 2.5.0, and 16 to 8 in both runs of the sets with 2.6.0. All 96 rankings in the four sets called the difference small.
+A beat B 17 to 7 in both runs of the sets with 2.5.0, and 16 to 8 in both runs of the sets with 3.0.0. All 96 rankings in the four sets called the difference small.
 
 Each cell below gives run 1, then run 2.
 
-| | A no skill | B few lines | C 2.5.0 | C 2.6.0 |
+| | A no skill | B few lines | C 2.5.0 | C 3.0.0 |
 |---|---|---|---|---|
 | Changes in meaning reported (both judges combined, major ones in parentheses) | 14 (1), 12 (0) | 44 (5), 42 (2) | 1 (1), 1 (0) | 4 (1), 0 (0) |
 | Possible meaning changes found by the bundled diff | 25, 22 | 59, 57 | 7, 7 | 6, 11 |
@@ -209,7 +209,7 @@ Each cell below gives run 1, then run 2.
 
 In run 1, 12 of B's 44 reported changes in meaning came from one draft, the essay. C runs the same diff while rewriting, so the diff row favors C.
 
-Single runs vary under the same conditions. Over the six yomiyasu runs (2.5.0, 2.6.0 and the selected 15,000-character candidate, twice each), reported changes in meaning ranged from 0 to 4 and diff findings from 5 to 11. The one major finding for 2.6.0 in run 1 was in a technical article, where 「ノード起動待ちの時間を削ぎ落としました」 (cut down the wait for nodes to start) became 「なくしました」 (eliminated it), which makes the claim stronger. In run 2 of 2.5.0 (minor) and run 2 of the candidate (major), the same sentence was rewritten as 「省きました」 (omitted it) and flagged for the same strengthening. The wording differs, but yomiyasu has made this error on this sentence since 2.5.0.
+Single runs vary under the same conditions. Over the six yomiyasu runs (2.5.0, 3.0.0 and the selected 15,000-character candidate, twice each), reported changes in meaning ranged from 0 to 4 and diff findings from 5 to 11. The one major finding for 3.0.0 in run 1 was in a technical article, where 「ノード起動待ちの時間を削ぎ落としました」 (cut down the wait for nodes to start) became 「なくしました」 (eliminated it), which makes the claim stronger. In run 2 of 2.5.0 (minor) and run 2 of the candidate (major), the same sentence was rewritten as 「省きました」 (omitted it) and flagged for the same strengthening. The wording differs, but yomiyasu has made this error on this sentence since 2.5.0.
 
 ### Audit with the critique article's ABC prompt (2.5.0)
 
@@ -223,19 +223,19 @@ The audit agent had 10 drafts rewritten once in each of the three conditions, an
 - Per draft, C cost about 3.8 times as much as B and took about 2.2 times as long.
 - On drafts written by recent models, C changed very little (one comma in the incident report, nothing in the Slack announcement).
 
-The audit's B (six lines of instructions) was written by the audit agent after it had read SKILL.md, so it was made differently from B in the comparison above. The audit also found that the Japanese README could be read as saying that yomiyasu does better than a bare AI or earlier approaches, with no evidence for it, and that this English page stated "keeps the meaning" and "does not add facts" as if they were guarantees. 2.6.0 removes or softens that wording in both READMEs.
+The audit's B (six lines of instructions) was written by the audit agent after it had read SKILL.md, so it was made differently from B in the comparison above. The audit also found that the Japanese README could be read as saying that yomiyasu does better than a bare AI or earlier approaches, with no evidence for it, and that this English page stated "keeps the meaning" and "does not add facts" as if they were guarantees. 3.0.0 removes or softens that wording in both READMEs.
 
 ### What these results show
 
-On readability alone, these AI judges rated no skill and the few lines of instructions above yomiyasu. Over both runs of the 12 drafts, 2.6.0 won 2 and lost 46 one-to-one against A, and won 1 and lost 47 against B. In the 12 drafts, the judges reported fewer changes in meaning for yomiyasu: over both runs, 26 for A and 86 for B, against 2 for 2.5.0 and 4 for 2.6.0, of which 1, 7, 1 and 1 were major. In the audit's 10 drafts, yomiyasu had about as many as B. yomiyasu also leaves a record of what was checked. On the other hand, it costs more and takes longer. Rewriting the 12 drafts with 2.6.0 cost about 30 percent less than with 2.5.0, but about 2.8 times as much as A. The median number of turns was higher for 2.6.0 than for 2.5.0.
+On readability alone, these AI judges rated no skill and the few lines of instructions above yomiyasu. Over both runs of the 12 drafts, 3.0.0 won 2 and lost 46 one-to-one against A, and won 1 and lost 47 against B. In the 12 drafts, the judges reported fewer changes in meaning for yomiyasu: over both runs, 26 for A and 86 for B, against 2 for 2.5.0 and 4 for 3.0.0, of which 1, 7, 1 and 1 were major. In the audit's 10 drafts, yomiyasu had about as many as B. yomiyasu also leaves a record of what was checked. On the other hand, it costs more and takes longer. Rewriting the 12 drafts with 3.0.0 cost about 30 percent less than with 2.5.0, but about 2.8 times as much as A. The median number of turns was higher for 3.0.0 than for 2.5.0.
 
-All judges were AI models. The 12-draft comparison was run twice, and the 10-draft audit once. No person has read the 2.6.0 outputs yet. In a blind reading comparison during 2.0.0 development, the author preferred 1.1.2 in 6 of the 7 Claude Code pairs whose text differed, the in-development version in 0, with 1 tie; on Codex output it was 4 to 4 over 8 pairs ([docs/limitations.md](./docs/limitations.md#確かめた範囲)). The other 2.6.0 measurements, and the conditions that were fixed before measuring and were not met, are in [docs/limitations.md](./docs/limitations.md) and in the 2.6.0 section of [CHANGELOG.md](./CHANGELOG.md). These pages are in Japanese.
+All judges were AI models. The 12-draft comparison was run twice, and the 10-draft audit once. No person has read the 3.0.0 outputs yet. In a blind reading comparison during 2.0.0 development, the author preferred 1.1.2 in 6 of the 7 Claude Code pairs whose text differed, the in-development version in 0, with 1 tie; on Codex output it was 4 to 4 over 8 pairs ([docs/limitations.md](./docs/limitations.md#確かめた範囲)). The other 3.0.0 measurements, and the conditions that were fixed before measuring and were not met, are in [docs/limitations.md](./docs/limitations.md) and in the 3.0.0 section of [CHANGELOG.md](./CHANGELOG.md). These pages are in Japanese.
 
 ## Limits
 
 The checks catch fixed patterns only. Places without any item still need to be read against the original.
 
-The rewriting was checked with Claude Code and Codex on macOS through their non-interactive commands (`claude -p` and `codex exec`). Rewriting has not been tested in the interactive interfaces, in installs through the Claude Code plugin, skills CLI, GitHub CLI or openskills, in Codex Cloud, in Cursor, with the Claude.ai ZIP upload, or on Windows. After the 2.0.2 release, installing from nanaism/yomiyasu on GitHub through the Claude Code plugin, skills CLI (`npx skills add`), GitHub CLI (`gh skill install`) and openskills (`npx openskills install`) was checked up to the point where Claude Code or Codex loads the skill (for openskills, up to reading it with `npx openskills read yomiyasu`). Rewriting with the 2.6.0 SKILL.md was measured only with Claude Code `claude -p` on macOS, and not on Codex. [docs/limitations.md](./docs/limitations.md) (Japanese) lists what the checks miss and what was measured.
+The rewriting was checked with Claude Code and Codex on macOS through their non-interactive commands (`claude -p` and `codex exec`). Rewriting has not been tested in the interactive interfaces, in installs through the Claude Code plugin, skills CLI, GitHub CLI or openskills, in Codex Cloud, in Cursor, with the Claude.ai ZIP upload, or on Windows. After the 2.0.2 release, installing from nanaism/yomiyasu on GitHub through the Claude Code plugin, skills CLI (`npx skills add`), GitHub CLI (`gh skill install`) and openskills (`npx openskills install`) was checked up to the point where Claude Code or Codex loads the skill (for openskills, up to reading it with `npx openskills read yomiyasu`). Rewriting with the 3.0.0 SKILL.md was measured only with Claude Code `claude -p` on macOS, and not on Codex. [docs/limitations.md](./docs/limitations.md) (Japanese) lists what the checks miss and what was measured.
 
 ## License
 

@@ -129,7 +129,7 @@ class TestSkillMentionsFactCheck(FactRecoveryCase):
     def test_fact_sentence_sits_after_rephrase_test(self):
         """Step 2 の事実の確かめの文は、言い直しテストのあと、本文を直す項目の前にある（設計の手順3の位置。
         材料を決めるのが書き直しの前になる）。
-        2.6.0 で Step 2 の1〜15の手順をなくし、事実の確かめの文は言い直しテストの項目3の末尾に、本文を直す項目は4になった。"""
+        3.0.0 で Step 2 の1〜15の手順をなくし、事実の確かめの文は言い直しテストの項目3の末尾に、本文を直す項目は4になった。"""
         step2 = self.skill.find("### Step 2:")
         step3 = self.skill.find("### Step 3:")
         rephrase = self.skill.find("（言い直しテスト）", step2)
@@ -148,7 +148,7 @@ class TestSkillMentionsFactCheck(FactRecoveryCase):
 
     def test_question_place_is_report_and_grounds_are_limited(self):
         """設計 5.1 の相殺（確認は報告で行う）と、根拠を限る「だけ」が入っている。
-        2.6.0 では、読み取れないことの質問を本文に入れない文が「情報が足りない場合の暫定文」にあり、確かめられなかった
+        3.0.0 では、読み取れないことの質問を本文に入れない文が「情報が足りない場合の暫定文」にあり、確かめられなかった
         事実の行き先は雛形の「事実の確かめ」の括弧に書いてある。根拠の文は「〜に書いてあることだけです」になった。"""
         self.assertNotIn("不明な点の確認は「書き手に確かめたい点」で行います", self.skill)
         provisional = self.skill[self.skill.index("### 情報が足りない場合の暫定文"):self.skill.index("### 文書の立場と文末")]

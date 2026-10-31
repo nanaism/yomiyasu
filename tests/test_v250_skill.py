@@ -62,7 +62,7 @@ class SkillTextTest(unittest.TestCase):
         step3 = section(self.skill, "### Step 3:")
         only_when = "ファイルを書けないとき（ファイルに保存しないよう頼まれたときを含みます）だけ `run --stdin` を使い"
         self.assertIn(only_when, step3)
-        # 2.6.0 で標準入力の例の前の文から条件を外し（条件は上の文にある）、「標準入力では次のように渡します」にした。
+        # 3.0.0 で標準入力の例の前の文から条件を外し（条件は上の文にある）、「標準入力では次のように渡します」にした。
         # 条件の文のあとに例の前置きがあり、そのあとに標準入力の run の例があることを見る
         intro = "標準入力では次のように渡します"
         self.assertIn(intro, step3)
@@ -75,10 +75,10 @@ class SkillTextTest(unittest.TestCase):
                 self.assertNotRegex(plain, r"(?m)^\s*cd\s|&&|2>&1|\s>{1,2}\s*\S")
 
     def test_chapter1_paragraph(self):
-        # 2.6.0 で「擬人化の解消」の節を「比喩動詞の具体化と擬人化の解消」にまとめた
+        # 3.0.0 で「擬人化の解消」の節を「比喩動詞の具体化と擬人化の解消」にまとめた
         part = section(self.skill, "### 比喩動詞の具体化と擬人化の解消")
         # 「書き手に確かめたい点」で尋ねる文は「分からなければ残して尋ねます」になった（尋ねる先は暫定文の節にある）。
-        # 設計の用語の並びは 2.6.0 で「責務を持つ、依存する」の2つにした。「委譲する」は字数のため外した。
+        # 設計の用語の並びは 3.0.0 で「責務を持つ、依存する」の2つにした。「委譲する」は字数のため外した。
         # 「呼び出す、返す、受け取る」は、直す先の「何を受け取り、何を返し、何を呼ぶかの文」で確かめる。
         # オブジェクト指向の説明で使う「〜はデータを知っている」を残す決まりは、設計の用語と同じ文に入れた
         for word in ("何を受け取り、何を返し、何を呼ぶか", "知っている", "語る", "人の知識や役目にたとえた言い方",
@@ -86,7 +86,7 @@ class SkillTextTest(unittest.TestCase):
                      "設計の用語（責務を持つ、依存する）と、原文や資料がその用語で書いたオブジェクト指向の「〜はデータを知っている」は残します"):
             with self.subTest(word=word):
                 self.assertIn(word, part)
-        # 人の役目のたとえの例（門番、交通整理、引き受ける）は 2.6.0 で字数のため SKILL.md から外した。
+        # 人の役目のたとえの例（門番、交通整理、引き受ける）は 3.0.0 で字数のため SKILL.md から外した。
         # 例は tech.md と slop-catalog.md 8章にある
         tech = [line for line in text(REFS / "domains" / "tech.md").split("\n") if "人の役目にたとえた言い方" in line]
         self.assertEqual(len(tech), 1)
@@ -102,30 +102,30 @@ class SkillTextTest(unittest.TestCase):
 
     def test_chapter6_paragraphs_keep_the_rephrase_test(self):
         negation = section(self.skill, "### セルフラベリングと否定対比の整理")
-        # 2.6.0 で「〜ではありません」「〜を意味するわけではありません」で終わる説明の文を、「〜ではありません」だけで
+        # 3.0.0 で「〜ではありません」「〜を意味するわけではありません」で終わる説明の文を、「〜ではありません」だけで
         # 薄い用語の説明の文にまとめた
         self.assertIn("用語の説明が「〜ではありません」だけで薄いときは、原文や資料から何であるかを先に書き、否定はあとに残します",
                       negation)
         nouns = section(self.skill, "### 内容に合わない大げさな名詞の整理")
-        # 漢語の名詞の例は 2.6.0 で字数のため「分離」「保証」「管理」にした（「対応」「担保」は例から外した）。
+        # 漢語の名詞の例は 3.0.0 で字数のため「分離」「保証」「管理」にした（「対応」「担保」は例から外した）。
         # 「〜を行う」はこの文に入った
         self.assertIn("「分離」「保証」「管理」のような漢語の名詞や「〜を行う」だけで動作を済ませた文は、"
                       "原文や資料に動作と条件があるときだけその文に書き直し、なければ残して尋ねます", nouns)
-        # 2.6.0 で節ごとの「言い直しテストの6点は変えません」を外し、Step 2 の項目3で、直すすべての案に言い直しテストを
+        # 3.0.0 で節ごとの「言い直しテストの6点は変えません」を外し、Step 2 の項目3で、直すすべての案に言い直しテストを
         # 当てる文にした
         step2 = section(self.skill, "### Step 2:")
         self.assertIn("直す前に案を1つ書き、原文と6点を比べます（言い直しテスト）", step2)
         self.assertIn("1つでも変わる案は捨てて原文を残し", step2)
         self.assertIn("（例は `references/rephrase-test.md`）", step2)
-        # 「語を同じ意味の別の漢語に替えるだけでは済ませません」は 2.6.0 で字数のため外した（docs/limitations.md の、2.6.0 の SKILL.md に入れていない決まりの一覧）
+        # 「語を同じ意味の別の漢語に替えるだけでは済ませません」は 3.0.0 で字数のため外した（docs/limitations.md の、3.0.0 の SKILL.md に入れていない決まりの一覧）
 
     def test_chapter8a_paragraph_and_step5(self):
         commas = section(self.skill, "### 文長と読点の調整")
-        # 2.6.0 で、推敲で新しく置く読点を残す読点に限る文は、この節の「間を作るだけの読点は外し、新しく足しません」と、
+        # 3.0.0 で、推敲で新しく置く読点を残す読点に限る文は、この節の「間を作るだけの読点は外し、新しく足しません」と、
         # Step 5 の「増えた読点が残す読点に当たらなければ外す」に分かれた
         self.assertIn("短い目的語の「を」のすぐあとで間を作るだけの読点は外し、新しく足しません", commas)
         self.assertIn("外すのは読点だけで、語順と述語は変えません", commas)
-        # 「6字以内の短い目的語の「を、」も候補に出ます」（lint の pause_comma の候補の説明）は 2.6.0 で SKILL.md から外した。
+        # 「6字以内の短い目的語の「を、」も候補に出ます」（lint の pause_comma の候補の説明）は 3.0.0 で SKILL.md から外した。
         # 同じ説明は review-points.md の pause_comma の項にある
         for base in (REFS, ROOT / "skills" / "yomiyasu" / "references"):
             with self.subTest(base=str(base.relative_to(ROOT))):
@@ -137,13 +137,13 @@ class SkillTextTest(unittest.TestCase):
                       section(self.skill, "### Step 5:"))
 
     def test_chapter5a_sentence_and_references(self):
-        # 2.6.0 で、依頼で指定された見出しの形とまとめの節を直さない文を、直さないものを並べた1文にした（「〜を指定された
+        # 3.0.0 で、依頼で指定された見出しの形とまとめの節を直さない文を、直さないものを並べた1文にした（「〜を指定された
         # とき、」の形にすると、議事録の見出しや文書の題まで、指定されたときだけ残すように読めるので、名詞を並べる形にした）。
         # 見出しの形の中身（長さ、言い切り、番号、記号）とまとめのページは slides.md にある
         heading = section(self.skill, "### 案内用の見出し")
         self.assertRegex(heading, r"依頼で指定された見出しの形とまとめの節、[^。]*文書の題、[^。]*議事録の見出し、[^。]*は直しません。")
         self.assertNotIn("を指定されたとき、", heading)
-        # 繰り返すだけの「まとめ」を削る文の例外は、2.6.0 で「段落と文の論理構造（つながり）」の残すものの並びに入った
+        # 繰り返すだけの「まとめ」を削る文の例外は、3.0.0 で「段落と文の論理構造（つながり）」の残すものの並びに入った
         self.assertRegex(section(self.skill, "### 段落と文の論理構造（つながり）"),
                          r"「まとめ」は削ります。[^。]*依頼で指定されたまとめ[^。]*は残します。")
         slides = text(REFS / "doc-types" / "slides.md")

@@ -1119,10 +1119,10 @@ class OptionTest(DocTypeCase):
 
     def test_d8_versions_do_not_change(self):
         """D8: --version と形式の版は変えない（9.7）。"""
-        self.assertEqual(call(yomiyasu_lint.main, ["--version"])[1], "yomiyasu_lint.py 2.6.0 (JSON format 2)\n")
-        self.assertEqual(call(yomiyasu_diff.main, ["--version"])[1], "yomiyasu_diff.py 2.6.0 (JSON format 2)\n")
+        self.assertEqual(call(yomiyasu_lint.main, ["--version"])[1], "yomiyasu_lint.py 3.0.0 (JSON format 2)\n")
+        self.assertEqual(call(yomiyasu_diff.main, ["--version"])[1], "yomiyasu_diff.py 3.0.0 (JSON format 2)\n")
         self.assertEqual(call(yomiyasu_check.main, ["--version"])[1],
-                         "yomiyasu_check.py 2.6.0 (record format 1, result format 1, materials format 1)\n")
+                         "yomiyasu_check.py 3.0.0 (record format 1, result format 1, materials format 1)\n")
 
 
 # ---- E. 速さ ----
@@ -1205,7 +1205,7 @@ class SkillFilesTest(unittest.TestCase):
         """C5: SKILL.md の種類の一覧（Step 1 の「種類は 〜 の13種類で」の文）に13の値がちょうど1回ずつあり、3つの読者の値、
         「ここに説明が必要です」、--doc-type、--reader がある（--doc-type と --reader が check run の --help にあることは
         TableTest.test_help_texts）。
-        2.6.0 で種類の表を文の一覧にした（種類ごとの当てない規則は references/doc-types/<値>.md の「普通な書き方」にある）。"""
+        3.0.0 で種類の表を文の一覧にした（種類ごとの当てない規則は references/doc-types/<値>.md の「普通な書き方」にある）。"""
         text = (PACKAGE / "SKILL.md").read_text(encoding="utf-8")
         lists = re.findall(r"種類は (.+?)の13種類で", text)
         self.assertEqual(len(lists), 1, lists)

@@ -261,7 +261,7 @@ class TableTest(unittest.TestCase):
 
     def test_skill_md_and_readme(self):
         skill = (PACKAGE / "SKILL.md").read_text(encoding="utf-8")
-        # 2.6.0 で種類の表を Step 1 の文の一覧にした。一覧が13種類で、script に日本語の名前が付いていることを見る
+        # 3.0.0 で種類の表を Step 1 の文の一覧にした。一覧が13種類で、script に日本語の名前が付いていることを見る
         lists = re.findall(r"種類は ([^\n]+?)の13種類で", skill)
         self.assertEqual(len(lists), 1, lists)
         self.assertTrue(lists[0].endswith("script（台詞・脚本）"), lists[0])
