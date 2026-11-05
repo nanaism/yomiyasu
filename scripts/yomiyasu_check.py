@@ -1688,11 +1688,17 @@ def _words_arguments(words):
 
 
 def _report_words(context):
-    """子の JSON の context.words から、check が比べる5つのキー（lint の allow_removed を除く）。ないときは None。"""
+    """子の JSON の context.words から、check が比べる5つのキー（lint の allow_removed を除く）。ないときは None。
+    3.0.0: flag-patterns.txt のキー（flag_patterns_lines、flag_patterns_sha256）があれば、その2つも足して7つにする。"""
     words = context.get("words")
     if not isinstance(words, dict):
         return None
-    return OrderedDict((key, words.get(key)) for key in ("path", "allow_lines", "flag_lines", "allow_sha256", "flag_sha256"))
+    keys = _WORDS_KEYS + (_WORDS_PATTERN_KEYS if any(key in words for key in _WORDS_PATTERN_KEYS) else ())
+    return OrderedDict((key, words.get(key)) for key in keys)
+
+
+_WORDS_KEYS = ("path", "allow_lines", "flag_lines", "allow_sha256", "flag_sha256")
+_WORDS_PATTERN_KEYS = ("flag_patterns_lines", "flag_patterns_sha256")
 
 
 def _context_problem(parsed, doc_type, reader, words=None):
@@ -2088,7 +2094,8 @@ _HEAD_NOTE = "候補の中身は下の節にあります。出力を切らずに
 # 候補です」と「語の一覧（flag.txt）の語（語、語）の候補です」。語に「）」があっても読めるよう、末尾の「）の候補です」まで取る。
 # 語に「、」がある語の一覧の語は分かれる）。run の「残した指摘の語」の節と冒頭の行、verify の行、記録の lint の要約に使う
 _KEPT_MARK_RULES = {"calque": ("直訳語", re.compile(r"当たった言い方: (.*)）の候補です")),
-                    "project_term": ("語の一覧", re.compile(r"語の一覧（flag\.txt）の語（(.*)）の候補です"))}
+                    "project_term": ("語の一覧", re.compile(
+                        r"語の一覧（flag(?:\.txt|-patterns\.txt|\.txt、flag-patterns\.txt)）の語（(.*)）の候補です"))}
 _KEPT_MARK_SHOWN_LINES = 5
 _KEPT_MARK_SHOWN_WORDS = 10
 _KEPT_MARK_HEAD = "残した指摘の語: {}。下の「■ 残した指摘の語」のとおり、書き直すか、尋ねるか、残す理由を書いてください。"
@@ -2101,6 +2108,8 @@ _KEPT_MARK_SECTION = (
     "- 直訳語の指摘で、その分野で定着した言い方か、文字どおりの意味（音、実物の場所など）: 残す理由を「残したAIっぽいところ」に書く。"
     "語の一覧（flag.txt）の語は、定着した言い方でも残さない。\n"
     "- 本文だけを返す指定では、確かめたい点も説明も付けないので、書き直せない語は本文のまま残す。")
+# 3.0.0: 語の一覧に flag-patterns.txt があった run だけ、2つ目の項目の「語の一覧（flag.txt）の語」のあとに足す
+_KEPT_MARK_PATTERNS_NOTE = "（flag-patterns.txt の語も同じ）"
 _KEPT_MARK_VERIFY = ("残した指摘の語: {}。完了報告を付けるときは、「書き手に確かめたい点」で尋ねたか（3点を超える分は「ほかに N か所」"
                      "に数える）、残す理由を「残したAIっぽいところ」に書いたかを確かめてから提出してください。")
 
@@ -2538,7 +2547,10 @@ def _sections(ctx, lint_module, diff_module):
         sections.append(diff_module.report_parts(dict(base, meaning_risks=ctx.risks))["risks"])
     kept = ctx.kept_marks if ctx.lint_result is not None and not ctx.final_changed else []
     if kept:
-        sections.append(_KEPT_MARK_SECTION.format(len(kept)) + "\n"
+        section = _KEPT_MARK_SECTION.format(len(kept))
+        if ctx.words is not None and ctx.words.get("flag_patterns_sha256") is not None:
+            section = section.replace("語の一覧（flag.txt）の語は、", "語の一覧（flag.txt）の語" + _KEPT_MARK_PATTERNS_NOTE + "は、", 1)
+        sections.append(section + "\n"
                         + "\n".join("- " + _kept_marks_text([mark]) for mark in kept))
     parts = ctx.diff_parts
     rules = None
@@ -3692,10 +3704,18 @@ def _record_shape(record):
 
 
 def _words_shape(words):
-    """記録の options.words が、run の書く形（context.words の5つのキー）か。"""
+    """記録の options.words が、run の書く形（context.words の5つのキーか、flag-patterns.txt の2つを足した7つのキー）か。"""
     def digest(value):
         return value is None or (isinstance(value, str) and len(value) == 64 and all(c in "0123456789abcdef" for c in value))
-    return (isinstance(words, dict) and list(words) == ["path", "allow_lines", "flag_lines", "allow_sha256", "flag_sha256"]
+    if isinstance(words, dict) and list(words) == list(_WORDS_KEYS + _WORDS_PATTERN_KEYS):
+        if not (type(words["flag_patterns_lines"]) is int and words["flag_patterns_lines"] >= 0
+                and isinstance(words["flag_patterns_sha256"], str) and digest(words["flag_patterns_sha256"])):
+            return False
+        words = OrderedDict((key, words[key]) for key in _WORDS_KEYS)
+        return (isinstance(words["path"], str) and os.path.isabs(words["path"])
+                and all(type(words[key]) is int and words[key] >= 0 for key in ("allow_lines", "flag_lines"))
+                and digest(words["allow_sha256"]) and digest(words["flag_sha256"]))
+    return (isinstance(words, dict) and list(words) == list(_WORDS_KEYS)
             and isinstance(words["path"], str) and os.path.isabs(words["path"])
             and all(type(words[key]) is int and words[key] >= 0 for key in ("allow_lines", "flag_lines"))
             and digest(words["allow_sha256"]) and digest(words["flag_sha256"])

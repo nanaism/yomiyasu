@@ -818,6 +818,15 @@ WORDS_FOLDER = ".yomiyasu-words"
 # (キーの先頭に付ける語, ファイルの名前)。context.words のキーと出力の行の順もこの順
 WORDS_FILES = (("allow", "allow.txt"), ("flag", "flag.txt"))
 WORDS_MAX_LINES = 10000
+# 3.0.0: 語の正規表現の一覧（1行に「名前<TAB>正規表現」）。WORDS_FILES とは別に読み、ファイルがあるときだけ context.words に
+# flag_patterns_lines と flag_patterns_sha256 を足す（ないときの出力は前と一字も同じ）
+PATTERNS_FILE = "flag-patterns.txt"
+PATTERNS_MAX = 1000             # パターンの数
+PATTERN_NAME_MAX = 40           # 名前の字数
+PATTERN_MAX_LENGTH = 200        # 正規表現の字数
+PATTERN_MAX_REPEAT = 30         # {m,n} の n
+PATTERN_MAX_COST = 1024         # 1つのパターンが1か所で試す数（繰り返しの幅と選択肢の数の積）
+PATTERNS_MAX_COST = 1024        # 全パターンの試す数の合計（10万字の行で、最短一致の繰り返しを重ねた最悪の組でも2秒より短く終わる数）
 # ないファイル（とフォルダ）は一覧なし。ほかの読めない理由は終了コード2
 _WORDS_ABSENT = (FileNotFoundError, NotADirectoryError)
 
@@ -879,6 +888,17 @@ def find_words_folder(cwd, option=None):
 
 def _words_lines(path, data):
     """1つのファイルのバイト列を語の並びにする。UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
+    words = []
+    for row in _words_text_rows(path, data):
+        word = row.strip()
+        if word and not word.startswith("#"):
+            words.append(word)
+    return words
+
+
+def _words_text_rows(path, data):
+    """1つのファイルのバイト列を行の並びにする（BOM を外し、改行をそろえる）。UTF-8 でないときと1万行を超えるときは
+    WordsError（行番号つき）。"""
     try:
         data.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -892,12 +912,228 @@ def _words_lines(path, data):
     if len(rows) > WORDS_MAX_LINES:
         raise WordsError("Error opening file {}: 行が多すぎます（{}行目。{:,}行までです）".format(
             path, WORDS_MAX_LINES + 1, WORDS_MAX_LINES))
-    words = []
-    for row in rows:
-        word = row.strip()
-        if word and not word.startswith("#"):
-            words.append(word)
-    return words
+    return rows
+
+
+class _PatternError(ValueError):
+    """flag-patterns.txt の1行の正規表現を使えない理由。"""
+
+
+_PATTERN_META = frozenset(".^$*+?{}[]\\|()")
+# \ のあとに書ける英字（字の種類と、幅のない位置）。\z（3.14 から）、\x、\u、\N、後方参照などは使えない
+_PATTERN_ESCAPE_CLASS = frozenset("dDwWsS")
+_PATTERN_ESCAPE_ZERO = frozenset("bBAZ")
+_PATTERN_ESCAPE_CHAR = {"t": "\t", "n": "\n"}
+
+
+def _pattern_escape(pattern, index, in_class):
+    """index の \\ のあと。(次の位置, 種類（"lit"、"cls"、"zero"）, 字か None)。"""
+    if index + 1 >= len(pattern):
+        raise _PatternError("行の終わりに \\ だけがあります")
+    char = pattern[index + 1]
+    if char in _PATTERN_ESCAPE_CLASS:
+        return index + 2, "cls", None
+    if char in _PATTERN_ESCAPE_CHAR:
+        return index + 2, "lit", _PATTERN_ESCAPE_CHAR[char]
+    if char in _PATTERN_ESCAPE_ZERO and not in_class:
+        return index + 2, "zero", None
+    if char.isascii() and char.isalnum():
+        raise _PatternError("\\{} は使えません（使えるのは \\d \\D \\w \\W \\s \\S \\b \\B \\A \\Z \\t \\n と、記号の前の \\）"
+                            .format(char))
+    return index + 2, "lit", char
+
+
+def _pattern_class(pattern, index):
+    """index の [ から ] までの字の組。次の位置。入れ子の [ と、--、&&、~~、|| は断る（Python が FutureWarning を出す）。"""
+    position = index + 1
+    if position < len(pattern) and pattern[position] == "^":
+        position += 1
+    first = True
+    previous = None
+    while True:
+        if position >= len(pattern):
+            raise _PatternError("[ が閉じていません")
+        char = pattern[position]
+        if char == "]" and not first:
+            return position + 1
+        if char == "\\":
+            position = _pattern_escape(pattern, position, True)[0]
+            previous = None
+        else:
+            if char == "[":
+                raise _PatternError("[ ] の中の [ は \\[ と書いてください")
+            if char in "-&~|" and previous == char:
+                raise _PatternError("[ ] の中の {0}{0} は使えません（\\{0} と書いてください）".format(char))
+            previous = char
+            position += 1
+        first = False
+
+
+def _pattern_sequence(pattern, index, depth):
+    """選択肢の並びを読む。(次の位置, 選択肢ごとの必ず当たる字の並びのリスト, 試す数)。試す数は、選択肢の試す数の和。"""
+    branches = []
+    runs = []
+    run = ""
+    cost = 1
+    total = 0
+    while index < len(pattern) and pattern[index] != ")":
+        char = pattern[index]
+        if char == "|":
+            if run:
+                runs.append(run)
+            branches.append(runs)
+            total += cost
+            runs, run, cost = [], "", 1
+            index += 1
+            continue
+        inner_runs = None
+        if char == "(":
+            if pattern.startswith("(?:", index):
+                kind, start = "group", index + 3
+            elif pattern.startswith("(?=", index) or pattern.startswith("(?!", index):
+                kind, start = "look", index + 3
+            elif pattern.startswith("(?<=", index) or pattern.startswith("(?<!", index):
+                kind, start = "look", index + 4
+            elif pattern.startswith("(?", index):
+                raise _PatternError("(? の組は (?: (?= (?! (?<= (?<! だけです（印、名前、原子団、注釈、条件は使えません）")
+            else:
+                raise _PatternError("取り込む組 ( ) は使えません。(?: ) と書いてください")
+            end, inner, inner_cost = _pattern_sequence(pattern, start, depth + 1)
+            if end >= len(pattern):
+                raise _PatternError("( が閉じていません")
+            end += 1
+            single = False
+            if kind == "group" and len(inner) == 1:
+                inner_runs = inner[0]
+            atom_kind = kind
+        elif char == "[":
+            end, atom_kind, literal, inner_cost, single = _pattern_class(pattern, index), "cls", None, 1, True
+        elif char == "\\":
+            end, atom_kind, literal = _pattern_escape(pattern, index, False)
+            inner_cost, single = 1, atom_kind != "zero"
+        elif char == ".":
+            end, atom_kind, literal, inner_cost, single = index + 1, "cls", None, 1, True
+        elif char in "^$":
+            end, atom_kind, literal, inner_cost, single = index + 1, "zero", None, 1, False
+        elif char in _PATTERN_META:
+            raise _PatternError("{0} は、字として使うなら \\{0} と書いてください（繰り返しなら、前に字か組が要ります）".format(char))
+        else:
+            end, atom_kind, literal, inner_cost, single = index + 1, "lit", char, 1, True
+        # 繰り返し
+        quantifier = pattern[end] if end < len(pattern) else ""
+        width, optional, repeated = 1, False, False
+        if quantifier in ("*", "+"):
+            raise _PatternError("上限のない繰り返し（* と +）は使えません。{0,30} のように上限を書いてください")
+        if quantifier == "{":
+            close = pattern.find("}", end)
+            body = pattern[end + 1:close] if close >= 0 else ""
+            pieces = body.split(",")
+            if close < 0 or len(pieces) > 2 or not all(piece.isdigit() and piece.isascii() for piece in pieces):
+                raise _PatternError("{ の書き方は {m} か {m,n} です（上限のない {m,} と、{,n} は使えません）")
+            low, high = int(pieces[0]), int(pieces[-1])
+            if high > PATTERN_MAX_REPEAT or low > high:
+                raise _PatternError("繰り返しの上限は {} までです".format(PATTERN_MAX_REPEAT))
+            if not single:
+                raise _PatternError("{m,n} を付けられるのは1字の要素だけです（組に付けられるのは ? だけです）")
+            width, optional, repeated, end = high - low + 1, low == 0, high > 1, close + 1
+        elif quantifier == "?":
+            if atom_kind in ("zero", "look"):
+                raise _PatternError("幅のない位置（^ $ \\b や先読み・後読み）には ? を付けられません")
+            width, optional, end = 2, True, end + 1
+        if quantifier in ("{", "?") and end < len(pattern):
+            if pattern[end] == "+":
+                raise _PatternError("所有の繰り返し（?+ など）は Python 3.9 で使えません")
+            if pattern[end] == "?":
+                end += 1        # 最短一致
+            if end < len(pattern) and pattern[end] in "*+?{":
+                raise _PatternError("繰り返しが重なっています")
+        # 必ず当たる字（? と {0,n} の外で、先読み・後読みの外の字）
+        if atom_kind == "lit" and not optional:
+            run += literal
+            if repeated:
+                # x{m,n} の x は2回以上続くことがあるので、x の前と後で字の並びを分ける（ba{2}c は ba と ac）
+                runs.append(run)
+                run = literal
+        else:
+            if run:
+                runs.append(run)
+                run = ""
+            if inner_runs is not None and not optional:
+                runs.extend(inner_runs)
+        cost *= width * inner_cost
+        if cost > PATTERN_MAX_COST:
+            raise _PatternError("試す組み合わせが多すぎます（繰り返しの幅と選択肢の数の積は {:,} までです）".format(PATTERN_MAX_COST))
+        index = end
+    if run:
+        runs.append(run)
+    branches.append(runs)
+    total += cost
+    if total > PATTERN_MAX_COST:
+        raise _PatternError("試す組み合わせが多すぎます（繰り返しの幅と選択肢の数の積は {:,} までです）".format(PATTERN_MAX_COST))
+    return index, branches, total
+
+
+def check_pattern(pattern):
+    """flag-patterns.txt の正規表現を確かめる。(組んだ正規表現, 一番上の選択肢ごとの必ず当たる字の並び, 試す数)。
+    使えない書き方は _PatternError（理由の文）。Python の版で意味の変わる書き方と、手間が行の長さに比例しない書き方を断る。"""
+    import warnings
+    if not pattern:
+        raise _PatternError("正規表現が空です")
+    if len(pattern) > PATTERN_MAX_LENGTH:
+        raise _PatternError("正規表現は {} 字までです".format(PATTERN_MAX_LENGTH))
+    end, branches, cost = _pattern_sequence(pattern, 0, 0)
+    if end != len(pattern):
+        raise _PatternError(") が多すぎます")
+    required = []
+    for runs in branches:
+        runs = tuple(run for run in runs if run.strip())
+        if not runs:
+            raise _PatternError("どの選択肢にも、? や繰り返し、先読み・後読みの外に、必ず当たる字を1字以上書いてください")
+        required.append(runs)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            compiled = re.compile(pattern)
+        except re.error as error:
+            raise _PatternError("正規表現の誤り（{}）".format(error))
+    if caught:
+        raise _PatternError("Python が警告を出す書き方です（{}）".format(caught[0].message))
+    if compiled.groups:
+        raise _PatternError("取り込む組 ( ) は使えません。(?: ) と書いてください")
+    return compiled, tuple(required), cost
+
+
+def _patterns_lines(path, data):
+    """flag-patterns.txt のバイト列を [(名前, 正規表現の文字列, 組んだ正規表現, 必ず当たる字の並び)] にする。
+    使えない行は WordsError（ファイル名と行番号つき）。"""
+    rows = _words_text_rows(path, data)
+    patterns = []
+    total = 0
+    for number, row in enumerate(rows, 1):
+        if not row.strip() or row.lstrip().startswith("#"):
+            continue
+        if "\t" not in row:
+            raise WordsError("Error opening file {}: {}行目に、名前と正規表現を分けるタブがありません".format(path, number))
+        name, pattern = row.split("\t", 1)
+        # 正規表現の前後は半角の空白とタブだけを除く（全角の空白は正規表現の字として残す。空白で終わる形は [ ] と書く）
+        name, pattern = name.strip(), pattern.strip(" \t")
+        if not name:
+            raise WordsError("Error opening file {}: {}行目の名前が空です".format(path, number))
+        if len(name) > PATTERN_NAME_MAX:
+            raise WordsError("Error opening file {}: {}行目の名前は {} 字までです".format(path, number, PATTERN_NAME_MAX))
+        if len(patterns) >= PATTERNS_MAX:
+            raise WordsError("Error opening file {}: パターンが多すぎます（{}行目。{:,}個までです）".format(
+                path, number, PATTERNS_MAX))
+        try:
+            compiled, required, cost = check_pattern(pattern)
+        except _PatternError as error:
+            raise WordsError("Error opening file {}: {}行目の正規表現を使えません（{}）".format(path, number, error))
+        total += cost
+        if total > PATTERNS_MAX_COST:
+            raise WordsError("Error opening file {}: {}行目までで、試す組み合わせの合計が多すぎます（{:,} までです）".format(
+                path, number, PATTERNS_MAX_COST))
+        patterns.append((name, pattern, compiled, required))
+    return patterns
 
 
 def load_words(folder):
@@ -905,23 +1141,28 @@ def load_words(folder):
 
     戻り値は {"path": フォルダ, "allow": 語のタプル, "flag": 語のタプル, "allow_lines": 語の数, "flag_lines": 語の数,
     "allow_sha256": 中身の SHA-256 か None, "flag_sha256": …}。ないほうのファイルは、語なし、数0、SHA-256 は None。
-    読めないファイルは WordsError。"""
+    3.0.0: flag-patterns.txt があれば、"flag_patterns"（(名前, 正規表現の文字列, 組んだ正規表現, 必ず当たる字の並び) の
+    タプル）、"flag_patterns_lines"（パターンの数）、"flag_patterns_sha256" も足す（ないときは、この3つのキーを足さない）。
+    flag-patterns.txt だけがあっても一覧ありとみなす。読めないファイルと使えないパターンは WordsError。"""
     import hashlib
     result = {"path": folder}
     found = False
-    for key, name in WORDS_FILES:
+    for key, name in WORDS_FILES + (("flag_patterns", PATTERNS_FILE),):
         path = os.path.join(folder, name)
         try:
             with open(path, "rb") as handle:
                 data = handle.read()
         except _WORDS_ABSENT:
+            if key == "flag_patterns":
+                continue
             words, digest = [], None
         except (OSError, ValueError) as error:
             reason = getattr(error, "strerror", None) or error
             raise WordsError("Error opening file {}: ファイルを開けません（{}）".format(path, reason))
         else:
             found = True
-            words, digest = _words_lines(path, data), hashlib.sha256(data).hexdigest()
+            reader = _patterns_lines if key == "flag_patterns" else _words_lines
+            words, digest = reader(path, data), hashlib.sha256(data).hexdigest()
         result[key] = tuple(words)
         result[key + "_lines"] = len(words)
         result[key + "_sha256"] = digest
@@ -946,11 +1187,20 @@ def current_directory():
 
 
 def words_context(words):
-    """JSON の context.words と check の記録の options.words に入れる5つのキー（この順）。"""
-    return {"path": words["path"], "allow_lines": words["allow_lines"], "flag_lines": words["flag_lines"],
-            "allow_sha256": words["allow_sha256"], "flag_sha256": words["flag_sha256"]}
+    """JSON の context.words と check の記録の options.words に入れる5つのキー（この順）。flag-patterns.txt があるときだけ、
+    そのあとに flag_patterns_lines と flag_patterns_sha256 を足して7つにする。"""
+    context = {"path": words["path"], "allow_lines": words["allow_lines"], "flag_lines": words["flag_lines"],
+               "allow_sha256": words["allow_sha256"], "flag_sha256": words["flag_sha256"]}
+    if words.get("flag_patterns_sha256") is not None:
+        context["flag_patterns_lines"] = words["flag_patterns_lines"]
+        context["flag_patterns_sha256"] = words["flag_patterns_sha256"]
+    return context
 
 
 def words_label(context):
-    """人が読む出力の「語の一覧: <パス>（allow N語、flag N語）。」。context は words_context の値（読むだけ）。"""
-    return "語の一覧: {}（allow {}語、flag {}語）。".format(context["path"], context["allow_lines"], context["flag_lines"])
+    """人が読む出力の「語の一覧: <パス>（allow N語、flag N語）。」。flag-patterns.txt があれば「、flag-patterns N行」を足す。
+    context は words_context の値（読むだけ）。"""
+    patterns = ("、flag-patterns {}行".format(context["flag_patterns_lines"])
+                if context.get("flag_patterns_sha256") is not None else "")
+    return "語の一覧: {}（allow {}語、flag {}語{}）。".format(context["path"], context["allow_lines"], context["flag_lines"],
+                                                           patterns)

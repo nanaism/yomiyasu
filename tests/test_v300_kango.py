@@ -50,7 +50,7 @@ class KangoSkillTest(unittest.TestCase):
                 self.assertIn(words, self.part)
 
     def test_persona_and_general_reader_stay_outside(self):
-        """ペルソナで敬語を上げる言い換えと、general の読み手の言い換えは、この決まりの外（大賀さんの最後の A/B の H07）。"""
+        """ペルソナで敬語を上げる言い換えと、general の読み手の言い換えは、この決まりの外。"""
         self.assertIn("ペルソナで敬語を上げる言い換え（同じこと → 同様のこと）と、読み手を general に指定されたときの言い換え"
                       "（`references/audience.md` 8章）は、この決まりの外です。", self.part)
 

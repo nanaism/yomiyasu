@@ -1285,11 +1285,21 @@ METAPHOR_VERB_PATTERNS = [
     (r"代わりに添え[るた]", "比喩動詞「添える」"),
     (r"(議論|意見|結論|方向性|価格|話題|検討)が[^。！？!?]*?収斂", "比喩動詞「収斂する」"),
     (_MOMENT_PATTERN, "英語直訳「〜した瞬間 (the moment ...)」"),
-    (r"(前提|基盤)が崩れ[るた]", "抽象比喩「前提が崩れる」"),
+    (r"(前提|基盤)(?:が|も)崩れ[るた]?", "抽象比喩「前提が崩れる」"),
     (r"文化が醸成", "非生物主語「文化が醸成される」"),
     (r"プロセスが定着", "非生物主語「プロセスが定着する」"),
     (r"事例が残した", "非生物主語「事例が残した」"),
 ]
+
+# 3.0.0: 規則の正規表現ごとに、指摘の文の「（desc）が検出されました。」のあとを差し替える表（ほかの規則の文は変えない）。
+# 「前提が崩れる」は、言い換えを促すと中身のない行に中身を足しやすいので、前後の文に中身があるかを見る手順の文にする
+_METAPHOR_VERB_MESSAGE_TAILS = {
+    r"(前提|基盤)(?:が|も)崩れ[るた]?": "前提の中身が前後の文にあれば、その中身で書いてください。なければ本文を残し、何が成り立たなくなったかを"
+                                 "尋ねてください（references/slop-catalog.md 10章）。文字どおりの地盤や土台のことなら、直さずに"
+                                 "残してください。",
+}
+_METAPHOR_VERB_MESSAGE_TAIL = ("不自然な比喩動詞であれば、ふだん使う動詞や客観的な表現に書き直してください。ただし、文字どおりの動作や"
+                               "状態変化を表している場合は無理に言い換える必要はありません。")
 
 # メタフィラー・定型句
 # 文ごとに当てる（^ と $ は文頭と文末）。
@@ -1354,7 +1364,7 @@ _PATTERN_LITERAL_HINTS = {
     r"代わりに添え[るた]": ("代わりに添え",),
     r"(議論|意見|結論|方向性|価格|話題|検討)が[^。！？!?]*?収斂": ("収斂",),
     _MOMENT_PATTERN: ("した瞬間",),
-    r"(前提|基盤)が崩れ[るた]": ("が崩れ",),
+    r"(前提|基盤)(?:が|も)崩れ[るた]?": ("崩れ",),
     r"文化が醸成": ("文化が醸成",),
     r"プロセスが定着": ("プロセスが定着",),
     r"事例が残した": ("事例が残した",),
@@ -3383,7 +3393,8 @@ _V220_MESSAGE_TAIL = "の候補です。文脈を見て、誰が何をどうす�
 _CALQUE_TYPE_NAMES = {1: "型1: 機械やシステムが人の動作をする言い方",
                       2: "型2: 実物の名前の代わりに場所のたとえを使う名詞",
                       3: "型3: 英語の言い方を一語ずつ写した句",
-                      4: "型4: 英語の短い術語に当てた漢字1字の名詞"}
+                      4: "型4: 英語の短い術語に当てた漢字1字の名詞",
+                      5: "型5: 英語の術語に当てた2字以上の名詞"}
 # 伏せる所: 引用符の中（カギ括弧は _mask_quoted_segments で伏せる）と、英数字の識別子
 _V220_QUOTES = _V220Lazy(r"“[^”\n]*”|\"[^\"\n]*\"|‘[^’\n]*’")
 _V220_IDENTIFIER = _V220Lazy(r"(?<![A-Za-z0-9])[A-Za-z0-9]+(?:[_./\\][A-Za-z0-9]+)+[_./]?|(?<![a-z])[a-z]+[A-Z][A-Za-z0-9]*|[_./\\][A-Za-z0-9_]+")
@@ -3929,12 +3940,15 @@ _V220_TRIGGER_LITERALS = tuple((
     "質問を持 真剣に取 目を保 テーブルに置 テーブルに載 テーブルに乗 テーブルに出 次のレベルに 機械 ターン "
     # 2.5.0 の型3の句（ここで効くのが は型1の動詞の頭で拾う）
     "レベルの テーブルにあ テーブルの上に "
-    # 型4（2.4.0）の漢字1字の名詞
-    "版 印 頭 "
+    # 型4（2.4.0）の漢字1字の名詞と、3.0.0 で足した字
+    "版 印 頭 枝 題 罫 "
+    # 型5（3.0.0）の2字以上の名詞（上罫、下罫などは、型4の罫の形が前の漢字で外すので、型5で拾う）
+    "背景 基準線 時間窓 上罫 下罫 左罫 右罫 偽緑 根因 生成器 検査器 飛行中 見張り 台本 "
 ).split())
 _V220_TYPE1_END = _V220_TRIGGER_LITERALS.index("口")
 _V220_TYPE2_END = _V220_TRIGGER_LITERALS.index("秒を取")
 _V220_TYPE3_END = _V220_TRIGGER_LITERALS.index("版")
+_V220_TYPE4_END = _V220_TRIGGER_LITERALS.index("背景")
 
 
 def _v220_literal_re(literals):
@@ -3959,7 +3973,8 @@ def _v220_literal_re(literals):
 _CALQUE_VERB_STEMS = frozenset(stem for stem, _, _ in _CALQUE_VERB_EACH)     # どれも1字
 _CALQUE_PLACE_HEAD = _v220_literal_re(_V220_TRIGGER_LITERALS[_V220_TYPE1_END:_V220_TYPE2_END])
 _CALQUE_PHRASE_HEAD = _v220_literal_re(_V220_TRIGGER_LITERALS[_V220_TYPE2_END:_V220_TYPE3_END] + ("効", "足す", "足し", "響", "引", "通"))
-_CALQUE_KANJI1_CHARS = frozenset(_V220_TRIGGER_LITERALS[_V220_TYPE3_END:])     # どれも1字
+_CALQUE_KANJI1_CHARS = frozenset(_V220_TRIGGER_LITERALS[_V220_TYPE3_END:_V220_TYPE4_END])     # どれも1字
+_CALQUE_TERM_HEAD = _v220_literal_re(_V220_TRIGGER_LITERALS[_V220_TYPE4_END:])
 
 # thin_evaluation: 文が「（20字以下の読点のない前置き）名詞（が|は|も）（程度の副詞）述語（です|だ など）。」の形
 _THIN_PREFIX_MAX = 20
@@ -4411,8 +4426,24 @@ _CALQUE_HEAD = _V220Lazy(r"(?<![ァ-ヴー])(?:行|文|段落|項目|一覧|出�
                          r"|(?<![一-龥々])頭の(?:一覧|行|[0-9０-９一二三四五六七八九十]+(?:行|件|字|文|個|項目)|数行|並び)(?![一-龥々])")
 
 
+# 3.0.0 で足した型4の字（枝、題、罫）。字ごとに、技術の文書でしか使わない形か文脈の語に限る（人の文の木の枝、作文の題、
+# 便箋の罫を拾わないため。livedoor、human_oga、自分の文書で0件の形）。
+# 枝: 前後に漢字のない1字の枝で、同じ文に git の語（_CALQUE_BRANCH_CONTEXT）があるとき（branch）。マージンとブランチ（brunch）は
+#     git の語に数えない。
+# 題: PR、コミット、issue、README の「題」（title）の形だけ。自己PR、商品PR、ブランドPR のような前に漢字かカタカナが付く PR は外す。
+# 罫: 前後に漢字のない1字の罫で、同じ文にスタイルの語（_CALQUE_STYLE_CONTEXT。CSS、border、px、HTML）があるとき（border）。
+#     「表の罫」「セルの罫」は組版や表計算で使う言い方なので、それだけでは当てない。
+_CALQUE_BRANCH = _V220Lazy(r"(?<![一-龥々〆ヵヶ])枝(?![一-龥々〆ヵヶ])")
+_CALQUE_BRANCH_CONTEXT = _V220Lazy(r"(?<![A-Za-z])(?:git|Git|GitHub|main|master|rebase|worktree)(?![A-Za-z])|マージ(?!ン)|プルリク")
+_CALQUE_TITLE = _V220Lazy(r"(?:(?<![A-Za-z一-龥々〆ヵヶァ-ヴー])PR|(?<![A-Za-z])(?:プルリク(?:エスト)?|コミット|issue|Issue|イシュー|README))"
+                          r"\s?の題(?![一-龥々〆ヵヶ])")
+_CALQUE_RULE = _V220Lazy(r"(?<![一-龥々〆ヵヶ])(?<!飾り)罫(?![一-龥々〆ヵヶ])")
+_CALQUE_STYLE_CONTEXT_PATTERN = r"(?<![A-Za-z])(?:CSS|border|px|HTML)(?![A-Za-z])"
+_CALQUE_STYLE_CONTEXT = _V220Lazy(_CALQUE_STYLE_CONTEXT_PATTERN)
+
+
 def _calque_type4(sentence, words, skip_version=False):
-    """型4（英語の短い術語に当てた漢字1字の名詞）。当たった字（版、印、頭）を words に足す。"""
+    """型4（英語の短い術語に当てた漢字1字の名詞）。当たった字（版、印、頭、枝、題、罫）を words に足す。"""
     found = False
     if not skip_version and "版" in sentence and not _CALQUE_VERSION_PUB.search(sentence) \
             and any(pattern.search(sentence) for pattern in _CALQUE_VERSION):
@@ -4424,6 +4455,62 @@ def _calque_type4(sentence, words, skip_version=False):
     if "頭" in sentence and _CALQUE_HEAD.search(sentence):
         words.append("頭")
         found = True
+    if "枝" in sentence and _CALQUE_BRANCH.search(sentence) and _CALQUE_BRANCH_CONTEXT.search(sentence):
+        words.append("枝")
+        found = True
+    if "の題" in sentence and _CALQUE_TITLE.search(sentence):
+        words.append("題")
+        found = True
+    if "罫" in sentence and _CALQUE_RULE.search(sentence) and _CALQUE_STYLE_CONTEXT.search(sentence):
+        words.append("罫")
+        found = True
+    return found
+
+
+# 型5（3.0.0）: 英語の術語に2字以上の漢語を当てた名詞（背景実行 background job、基準線 baseline、時間窓 time window、
+# 根因 root cause、台本 script、見張り watcher など）。人の文で文字どおりに使う語（写真の背景、舞台の台本、見張りに立つ）は、
+# 語ごとに技術の文書でしか使わない形か文脈に限る（livedoor、human_oga、自分の文書で0件の形）。
+# (手掛かりの字, 語の正規表現, 前に要る形か None, 同じ文に要る語か None)。前に要る形は語の前の文字の終わりに当て、
+# 語の正規表現の当たり（match.group(0)）を当たった言い方（_words）にする（allow.txt に本文の字のまま書けば外れる）
+_CALQUE_NOT_KANJI_BEFORE = r"(?<![一-龥々〆ヵヶ])"
+_CALQUE_BEFORE_WINDOW = 20      # 前に要る形の字数の上限（どれも12字以下）
+_CALQUE_TERMS_V300 = tuple((head, _V220Lazy(pattern), _V220Lazy(before) if before else None,
+                            _V220Lazy(context) if context else None) for head, pattern, before, context in (
+    ("背景", r"背景実行", None, None),
+    ("背景", _CALQUE_NOT_KANJI_BEFORE + r"背景(?=で(?:実行|走らせ|回し|動かし|待機))", None, None),
+    ("背景", _CALQUE_NOT_KANJI_BEFORE + r"背景(?:ジョブ|タスク)", None, None),
+    ("基準線", _CALQUE_NOT_KANJI_BEFORE + r"基準線", None, r"性能|処理時間|ベンチマーク"),
+    ("時間窓", _CALQUE_NOT_KANJI_BEFORE + r"時間窓", None, r"直近|集計|件数|ログ|メトリクス"),
+    ("罫", _CALQUE_NOT_KANJI_BEFORE + r"[上下左右]罫(?!線)(?![一-龥々〆ヵヶ])", None, _CALQUE_STYLE_CONTEXT_PATTERN),
+    ("偽緑", r"偽緑", None, None),
+    ("根因", _CALQUE_NOT_KANJI_BEFORE + r"根因", None, None),
+    ("生成器", r"(?<![一-龥々〆ヵヶァ-ヴー])生成器", None, None),
+    ("検査器", r"(?<![一-龥々〆ヵヶァ-ヴー])検査器",
+     r"(?:入力|スキーマ|型|構文|書式|形式|値|引数|設定|JSON|YAML|XML|リクエスト|レスポンス|パラメーター?|フォーム)\s?の$", None),
+    ("飛行中", _CALQUE_NOT_KANJI_BEFORE + r"飛行中(?=の?(?:リクエスト|要求|ジョブ|タスク|書き込み|呼び出し|RPC|トランザクション))",
+     None, None),
+    ("見張り", r"見張り(?=の(?:ジョブ|プロセス|スクリプト))", None, None),
+    ("見張り", r"見張り", r"(?<![A-Za-z])(?:CI|cron|ジョブ|プロセス|ログ|サーバー|キュー)\s?の$", None),
+    ("台本", r"(?<![一-龥々〆ヵヶ])台本(?![一-龥々〆ヵヶ])(?=を(?:実行(?!委員)|走らせ))", None, None),
+    ("台本", r"(?<![一-龥々〆ヵヶ])台本(?![一-龥々〆ヵヶ])",
+     r"(?<![A-Za-z])(?:シェル|bash|移行|デプロイ|ビルド|セットアップ|E2E|e2e)\s?の$", None),
+))
+
+
+def _calque_type5(sentence, words):
+    """型5（英語の術語に当てた2字以上の名詞）。当たった言い方（本文の字のまま）を words に足す。"""
+    found = False
+    for head, pattern, before, context in _CALQUE_TERMS_V300:
+        if head not in sentence:
+            continue
+        if context is not None and not context.search(sentence):
+            continue
+        for match in pattern.finditer(sentence):
+            # 前に要る形は短いので、語の前の _CALQUE_BEFORE_WINDOW 字だけを見る（同じ語が多い長い文で手間を行の長さに比例させる）
+            if before is None or before.search(sentence, max(0, match.start() - _CALQUE_BEFORE_WINDOW), match.start()):
+                words.append(match.group(0))
+                found = True
+                break
     return found
 
 
@@ -4502,6 +4589,8 @@ def _v220_word_findings(analysis):
             if not _CALQUE_KANJI1_CHARS.isdisjoint(scan):
                 # 同じ行に「版」の translated_term があれば、型4の「版」は重ねない（ほかの語の translated_term では止めない）
                 finders.append((4, functools.partial(_calque_type4, skip_version=line_no in blocked_version)))
+            if _CALQUE_TERM_HEAD.search(scan):
+                finders.append((5, _calque_type5))
         thin_possible = thin_re is not None and thin_noun_re.search(scan) is not None
         sentences = ()
         if finders or thin_possible:
@@ -5174,10 +5263,31 @@ _ALLOW_RULES = ("ai_phrase", "calque", "katakana_term", "metaphor_label", "metap
 _LABEL_WORD = re.compile(r"「([^」]+)」")
 # 語の一覧の flag.txt の語の message。その行に出た flag の語を「語の一覧（flag.txt）の語（依存先、承認）」のように並べる
 _PROJECT_TERM_MESSAGE = "語の一覧（flag.txt）の語（{}）" + _V220_MESSAGE_TAIL
+# 3.0.0: flag-patterns.txt のパターンに当たった行の message。パターンだけなら名前を、flag.txt の語と同じ行なら両方を並べる
+_PROJECT_TERM_PATTERN_MESSAGE = "語の一覧（flag-patterns.txt）の語（{}）" + _V220_MESSAGE_TAIL
+_PROJECT_TERM_BOTH_MESSAGE = "語の一覧（flag.txt、flag-patterns.txt）の語（{}）" + _V220_MESSAGE_TAIL
+
+
+def _project_term_message(words, pattern_names, flag_hits=None):
+    """project_term の message。words は行の語（flag.txt の語とパターンの名前）、pattern_names はそのうちのパターンの名前、
+    flag_hits はそのうちの flag.txt の語（None なら、パターンの名前でない語）。パターンの名前と flag.txt の語が同じ字でも、
+    両方が当たった行では両方のファイルを並べる。"""
+    from_patterns = any(word in pattern_names for word in words)
+    if flag_hits is None:
+        from_flag = any(word not in pattern_names for word in words)
+    else:
+        from_flag = any(word in flag_hits for word in words)
+    if not from_patterns:
+        return _PROJECT_TERM_MESSAGE.format("、".join(words))
+    if not from_flag:
+        return _PROJECT_TERM_PATTERN_MESSAGE.format("、".join(words))
+    return _PROJECT_TERM_BOTH_MESSAGE.format("、".join(words))
 # 英数字で始まるか終わる語は、識別子（snake_case、camelCase、ドットや / を含む語）の一部では数えない
 _WORD_ASCII = re.compile(r"[A-Za-z0-9_]")
 _WORD_BEFORE = r"(?<![A-Za-z0-9_./\\-])"
 _WORD_AFTER = r"(?![A-Za-z0-9_])(?![./\\-][A-Za-z0-9_])"
+_WORD_KANJI_BEFORE = r"(?<![一-龥々〆ヵヶ])"
+_WORD_KANJI_AFTER = r"(?![一-龥々〆ヵヶ])"
 
 
 def _hit_words(label, match):
@@ -5205,16 +5315,27 @@ def _flag_pattern(flag):
             part = _WORD_BEFORE + part
         if _WORD_ASCII.match(word[-1]):
             part += _WORD_AFTER
+        # 3.0.0: 漢字と仮名を両方含む語（根の、の木）は、漢字の端の前後に漢字が続く所（大根の、の木構造）では数えない。
+        # 漢字だけの語（公開鍵）と仮名だけの語は、今のとおり語の一部にも当たる
+        if any(_v220_kanji(char) for char in word) and any(_v220_hiragana(char) or _v220_katakana(char) for char in word):
+            if _v220_kanji(word[0]):
+                part = _WORD_KANJI_BEFORE + part
+            if _v220_kanji(word[-1]):
+                part += _WORD_KANJI_AFTER
         parts.append(part)
     return re.compile("|".join(parts))
 
 
 def _project_term_findings(analysis, words):
     """語の一覧の flag.txt の語の候補（project_term）。見える文字（コード、URL、リンク先、HTML、frontmatter を伏せた行）に
-    flag の語が出る行に1件。引用（> の行）とカギ括弧・二重カギ括弧の中は数えない。_words にその行の flag の語。"""
-    if not words or not words.get("flag"):
+    flag の語が出る行に1件。引用（> の行）とカギ括弧・二重カギ括弧の中は数えない。_words にその行の flag の語。
+    3.0.0: flag-patterns.txt のパターンも同じ所に当て、当たったパターンの名前を _words に足す（flag の語のあと）。
+    パターンごとの当たった文字列は内部の欄 _pattern_matches に入れる（allow.txt で外すため）。パターンは、一番上の選択肢の
+    どれかの必ず当たる字が全部ある行にだけ当てる。"""
+    if not words or not (words.get("flag") or words.get("flag_patterns")):
         return []
-    pattern = _flag_pattern(words["flag"])
+    pattern = _flag_pattern(words["flag"]) if words.get("flag") else None
+    patterns = words.get("flag_patterns") or ()
     found = []
     for row in analysis["lines"]:
         if row["kind"] in ("code", "frontmatter", "html_block", "reference_definition", "quote") or row["quote_depth"]:
@@ -5222,11 +5343,24 @@ def _project_term_findings(analysis, words):
         visible = _prose_visible_text(analysis, row["line"])
         if not visible.strip():
             continue
-        hits = tuple(dict.fromkeys(match.group(0) for match in pattern.finditer(_mask_quoted_segments(visible))))
-        if hits:
-            found.append({"rule": "project_term", "line": row["line"], "severity": "info",
-                          "message": _PROJECT_TERM_MESSAGE.format("、".join(hits)), "snippet": row["raw"].strip(),
-                          "_words": hits})
+        masked = _mask_quoted_segments(visible)
+        hits = tuple(dict.fromkeys(match.group(0) for match in pattern.finditer(masked))) if pattern is not None else ()
+        matches = {}
+        for name, _, compiled, required in patterns:
+            if not any(all(literal in masked for literal in runs) for runs in required):
+                continue
+            strings = tuple(dict.fromkeys(match.group(0) for match in compiled.finditer(masked)))
+            if strings:
+                matches[name] = tuple(dict.fromkeys(matches.get(name, ()) + strings))
+        if hits or matches:
+            shown = tuple(dict.fromkeys(hits + tuple(matches)))
+            finding = {"rule": "project_term", "line": row["line"], "severity": "info",
+                       "message": _project_term_message(shown, matches, hits), "snippet": row["raw"].strip(),
+                       "_words": shown}
+            if matches:
+                finding["_pattern_matches"] = matches
+                finding["_flag_hits"] = hits
+            found.append(finding)
     return found
 
 
@@ -5246,8 +5380,13 @@ def _apply_words(findings, words):
         kept = []
         for finding in findings:
             hit = finding.get("_words") or ()
-            if finding["rule"] in removed and any(word in allow for word in hit):
-                rest = tuple(word for word in hit if word not in allow)
+            allowed = allow
+            if finding.get("_pattern_matches"):
+                # flag-patterns.txt のパターンは、名前が allow にあるか、その行で当たった文字列がどれも allow にあれば外す
+                allowed = allow | frozenset(name for name, strings in finding["_pattern_matches"].items()
+                                            if all(string in allow for string in strings))
+            if finding["rule"] in removed and any(word in allowed for word in hit):
+                rest = tuple(word for word in hit if word not in allowed)
                 if finding["rule"] in _ALLOW_PARTIAL_RULES and rest:
                     kept.append(_finding_with_words(finding, rest))
                 else:
@@ -5271,7 +5410,7 @@ def _finding_with_words(finding, rest):
         out["_word_types"] = word_types
         out["message"] = _calque_message(list(dict.fromkeys(number for _, number in word_types)), word_types)
     elif finding["rule"] == "project_term":
-        out["message"] = _PROJECT_TERM_MESSAGE.format("、".join(rest))
+        out["message"] = _project_term_message(rest, finding.get("_pattern_matches") or {}, finding.get("_flag_hits"))
     elif finding["rule"] == "renyo_noun":
         out["message"] = _RENYO_MESSAGE.format("、".join("の" + word for word in rest))
     elif finding["rule"] == "ai_phrase":
@@ -5399,7 +5538,8 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
                         "rule": "metaphor_verb",
                         "line": line_no,
                         "severity": "warn",
-                        "message": f"{desc}が検出されました。不自然な比喩動詞であれば、ふだん使う動詞や客観的な表現に書き直してください。ただし、文字どおりの動作や状態変化を表している場合は無理に言い換える必要はありません。",
+                        "message": desc + "が検出されました。"
+                                   + _METAPHOR_VERB_MESSAGE_TAILS.get(pattern.pattern, _METAPHOR_VERB_MESSAGE_TAIL),
                         "snippet": snippet,
                         "_words": _hit_words(desc, m)
                     })
@@ -5417,7 +5557,8 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
                     "rule": "metaphor_verb",
                     "line": line_no,
                     "severity": "warn",
-                    "message": f"{desc}が検出されました。不自然な比喩動詞であれば、ふだん使う動詞や客観的な表現に書き直してください。ただし、文字どおりの動作や状態変化を表している場合は無理に言い換える必要はありません。",
+                    "message": desc + "が検出されました。"
+                               + _METAPHOR_VERB_MESSAGE_TAILS.get(pattern.pattern, _METAPHOR_VERB_MESSAGE_TAIL),
                     "snippet": snippet,
                     "_words": _hit_words(desc, m)
                 })

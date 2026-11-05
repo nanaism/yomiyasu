@@ -664,6 +664,102 @@
       "stdin": "10fa74b964043101",
       "diff_endings": "22cfa09644caa366"
     },
+    "edge_cases/edge_yakugo_55.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "7f230f8867db103d",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "1aa6297e28d84d4e"
+    },
+    "edge_cases/edge_yakugo_56.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "35e8a771b39025d4",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "22cfa09644caa366"
+    },
+    "edge_cases/edge_yakugo_57.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "7f230f8867db103d",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "22cfa09644caa366"
+    },
+    "edge_cases/edge_yakugo_58.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "7f230f8867db103d",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "22cfa09644caa366"
+    },
+    "edge_cases/edge_yakugo_59.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "7f230f8867db103d",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "22cfa09644caa366"
+    },
+    "edge_cases/edge_yakugo_60.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "0bcdcc5b826c9f56",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "1aa6297e28d84d4e"
+    },
+    "edge_cases/edge_yakugo_61.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "d3425462a327a9fb",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "1aa6297e28d84d4e"
+    },
+    "edge_cases/edge_yakugo_62.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "0bcdcc5b826c9f56",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "22cfa09644caa366"
+    },
+    "edge_cases/edge_yakugo_63.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "eaa11f5584dc540a",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "22cfa09644caa366"
+    },
+    "edge_cases/edge_yakugo_64.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "eff43b014f7927e2",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "88e0552ab142a488"
+    },
+    "edge_cases/edge_yakugo_65.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "eff43b014f7927e2",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "6d8ab29fb30e24c5"
+    },
+    "edge_cases/edge_yakugo_66.md": {
+      "plain": "10fa74b964043101",
+      "strict": "10fa74b964043101",
+      "fail_error": "10fa74b964043101",
+      "json": "7f230f8867db103d",
+      "stdin": "10fa74b964043101",
+      "diff_endings": "6d8ab29fb30e24c5"
+    },
     "human/human_doc_09.md": {
       "plain": "10fa74b964043101",
       "strict": "10fa74b964043101",
@@ -2100,6 +2196,90 @@
       "json": "2da5dd46c8be2249",
       "stdin": "4c84c7e6a70d27a4"
     },
+    "edge_cases/edge_watasu_48.md|edge_cases/edge_yakugo_55.md": {
+      "plain": "171ae7c8fa2cc6bb",
+      "stance": "171ae7c8fa2cc6bb",
+      "fail_on": "171ae7c8fa2cc6bb",
+      "json": "78d8f2eaaa98e690",
+      "stdin": "171ae7c8fa2cc6bb"
+    },
+    "edge_cases/edge_yakugo_55.md|edge_cases/edge_yakugo_56.md": {
+      "plain": "831f9024291cb8fb",
+      "stance": "831f9024291cb8fb",
+      "fail_on": "831f9024291cb8fb",
+      "json": "b55c4fb8858057a0",
+      "stdin": "831f9024291cb8fb"
+    },
+    "edge_cases/edge_yakugo_56.md|edge_cases/edge_yakugo_57.md": {
+      "plain": "797c8691ee657b3e",
+      "stance": "797c8691ee657b3e",
+      "fail_on": "797c8691ee657b3e",
+      "json": "3058278ea11e8aa8",
+      "stdin": "797c8691ee657b3e"
+    },
+    "edge_cases/edge_yakugo_57.md|edge_cases/edge_yakugo_58.md": {
+      "plain": "8f1641a7936c8b9f",
+      "stance": "8f1641a7936c8b9f",
+      "fail_on": "8f1641a7936c8b9f",
+      "json": "4321d2c0fe0e9767",
+      "stdin": "8f1641a7936c8b9f"
+    },
+    "edge_cases/edge_yakugo_58.md|edge_cases/edge_yakugo_59.md": {
+      "plain": "3ba16cf2e9f41df0",
+      "stance": "3ba16cf2e9f41df0",
+      "fail_on": "3ba16cf2e9f41df0",
+      "json": "b674cf1d95094f9e",
+      "stdin": "3ba16cf2e9f41df0"
+    },
+    "edge_cases/edge_yakugo_59.md|edge_cases/edge_yakugo_60.md": {
+      "plain": "7738705358d8e816",
+      "stance": "7738705358d8e816",
+      "fail_on": "7738705358d8e816",
+      "json": "221791642246b17d",
+      "stdin": "7738705358d8e816"
+    },
+    "edge_cases/edge_yakugo_60.md|edge_cases/edge_yakugo_61.md": {
+      "plain": "829d690654e4efb6",
+      "stance": "829d690654e4efb6",
+      "fail_on": "829d690654e4efb6",
+      "json": "69006522ae9de549",
+      "stdin": "829d690654e4efb6"
+    },
+    "edge_cases/edge_yakugo_61.md|edge_cases/edge_yakugo_62.md": {
+      "plain": "9d7876c92492e166",
+      "stance": "9d7876c92492e166",
+      "fail_on": "9d7876c92492e166",
+      "json": "f9ba4d7301429ba2",
+      "stdin": "9d7876c92492e166"
+    },
+    "edge_cases/edge_yakugo_62.md|edge_cases/edge_yakugo_63.md": {
+      "plain": "d57af3e0bb959196",
+      "stance": "d57af3e0bb959196",
+      "fail_on": "d57af3e0bb959196",
+      "json": "2d58b0d1af9251f8",
+      "stdin": "d57af3e0bb959196"
+    },
+    "edge_cases/edge_yakugo_63.md|edge_cases/edge_yakugo_64.md": {
+      "plain": "bfce1f22aac844a9",
+      "stance": "bfce1f22aac844a9",
+      "fail_on": "f311d8f052872446",
+      "json": "dff22453f6f7d8ee",
+      "stdin": "bfce1f22aac844a9"
+    },
+    "edge_cases/edge_yakugo_64.md|edge_cases/edge_yakugo_65.md": {
+      "plain": "5f9e5cc24c6b5ce1",
+      "stance": "5f9e5cc24c6b5ce1",
+      "fail_on": "0f9f2c873e3d75dd",
+      "json": "fc05c8745f64ff0f",
+      "stdin": "5f9e5cc24c6b5ce1"
+    },
+    "edge_cases/edge_yakugo_65.md|edge_cases/edge_yakugo_66.md": {
+      "plain": "29682e1f9b89002e",
+      "stance": "29682e1f9b89002e",
+      "fail_on": "ab82977de0e82ec1",
+      "json": "52bc0399163f00fe",
+      "stdin": "29682e1f9b89002e"
+    },
     "human/human_doc_09.md|human/human_doc_10.md": {
       "plain": "4e8b3d59ed7847cd",
       "stance": "4e8b3d59ed7847cd",
@@ -3126,6 +3306,54 @@
       "run": "ab0cac032cef204e",
       "verify": "559838ff3edf8107"
     },
+    "edge_cases/edge_watasu_48.md|edge_cases/edge_yakugo_55.md": {
+      "run": "632268393f7a098f",
+      "verify": "fbfd4b7fba692971"
+    },
+    "edge_cases/edge_yakugo_55.md|edge_cases/edge_yakugo_56.md": {
+      "run": "2cdc13dcef9d924e",
+      "verify": "e175acf9c09bcba0"
+    },
+    "edge_cases/edge_yakugo_56.md|edge_cases/edge_yakugo_57.md": {
+      "run": "57f23e213945e57d",
+      "verify": "2f166bcebd80ed0b"
+    },
+    "edge_cases/edge_yakugo_57.md|edge_cases/edge_yakugo_58.md": {
+      "run": "bb1133f7a8d24ed8",
+      "verify": "8ff2c43fb219303a"
+    },
+    "edge_cases/edge_yakugo_58.md|edge_cases/edge_yakugo_59.md": {
+      "run": "759ab55fc8bc51ad",
+      "verify": "835f244a4eb5395c"
+    },
+    "edge_cases/edge_yakugo_59.md|edge_cases/edge_yakugo_60.md": {
+      "run": "915028340d01f71b",
+      "verify": "6407dea83d48a785"
+    },
+    "edge_cases/edge_yakugo_60.md|edge_cases/edge_yakugo_61.md": {
+      "run": "f3bceaf886fbe9ab",
+      "verify": "46df08099cf45913"
+    },
+    "edge_cases/edge_yakugo_61.md|edge_cases/edge_yakugo_62.md": {
+      "run": "02811df1548fffb2",
+      "verify": "ca1b3a95265ef2ae"
+    },
+    "edge_cases/edge_yakugo_62.md|edge_cases/edge_yakugo_63.md": {
+      "run": "618942e4e5336fa9",
+      "verify": "b3c563dbe31b3174"
+    },
+    "edge_cases/edge_yakugo_63.md|edge_cases/edge_yakugo_64.md": {
+      "run": "21dc373ded8f4531",
+      "verify": "3fffc7a7df60ce8c"
+    },
+    "edge_cases/edge_yakugo_64.md|edge_cases/edge_yakugo_65.md": {
+      "run": "dbd2283af1130210",
+      "verify": "631bcaa49ac5de63"
+    },
+    "edge_cases/edge_yakugo_65.md|edge_cases/edge_yakugo_66.md": {
+      "run": "575c244ec6da7cee",
+      "verify": "6ea4e1c76ed93d50"
+    },
     "human/human_doc_09.md|human/human_doc_10.md": {
       "run": "7006ee14ee7b6798",
       "verify": "11a171ce6ca4e4cf"
@@ -3340,6 +3568,7 @@
     "2026-10-24 v2.4.0 で、diff に原文にない人や担当を足した文の検査（JSON の最後のキー added_actors と、人が読む出力の「■ 原文にない人や担当を足した文」の節。check run は同じ節と頭の一覧の「原文にない人や担当: …」を出し、資料を diff に渡す）を足したときの作り直し: unchanged_diff() と unchanged_check() を作って比べ、値が変わったのは、diff の --json の136組（キーが1つ増えた）と、人や担当の足しが出る27組（推敲の17組と、隣り合うだけの別の文書の10組）の plain、stance、fail_on、stdin、check の run --json の推敲の48組（子の diff の JSON のキー）と、27組の run と推敲の17組の rerun、compose、stdin、fail_on、no_record だけだった（diff 244行、check 160行）。検査を外したツリーでは diff と check のどの行も fixture と1字も違わず、今のツリーの出力からこの節と頭の一覧の項目と JSON のキーを除くと、136組の diff（人が読む形と --json）とcheck run（--no-record の人が読む形と --json）が外したツリーと1字も違わなかった。終了コード、状態の行、meaning_risk=、verify と verify --replay の出力、lint の行は変わらなかった。",
     "2026-10-24 v2.4.0 の自己適用の1回目で、原文にない人や担当の検査の誤った候補を直したとき（「逆さま」の敬称、都市部・データ部などの「〜部」、比べる「より」、同じ人を指す語の表（お客様・お客さん・顧客、読者と読み手、開発者とエンジニア、スタッフと社員）、「お」を付けた呼び名）の作り直し: 1,415組と tests/corpus の136組の diff を直す前と後で比べ、added_actors が変わったのは隣り合うだけの別の文書の組 raw_ai/04_slack_announce_sonnet_casual.md|raw_ai/04_slack_announce_sonnet_default.md の1組だけだった（原文の「顧客」と同じ人を指す「お客様」を、知らせる・頼む相手の足しとして出さなくなった）。値を作り直したのはこの組の diff の5通り（plain、stance、fail_on、json、stdin）と check の run だけで、人が読む出力の違いは「■ 原文にない人や担当を足した文」の節と頭の一覧の「原文にない人や担当:」の項目から「お客様」が消えたことだけだった。ほかの組と、終了コード、状態の行、meaning_risk= は変わらなかった。",
     "2026-10-29 v2.5.0 で、diff に見出しの形の変化（JSON の heading_shapes と「■ 見出しの形が変わった」の節）と、読点が増えた候補（JSON の comma_increase と「■ 読点が増えた」の節）を足し、「見出しの数が変わった」の文に消えた見出しの文字を足したときの作り直し: unchanged_diff() と unchanged_check() を作って前からある136組と比べ、値が変わったのは、diff の --json の136組（キーが2つ増えた）と、81 組の plain、stance、fail_on、stdin（新しい節か、消えた見出しの文字）、check の run 81 組、推敲の48組の run --json（子の diff の JSON のキー）、推敲の組の rerun、compose、stdin、fail_on、no_record だった（diff 460行、check 214行）。2.4.0 の diff と check を同じ組で動かして比べ、diff の状態の行と --fail-on の数、check run の終了コード、1行目、状態の行（meaning_risk=）は、どの組も変わらなかった。lint の前からある行は作り直していない。",
-    "2026-10-29 v2.5.0 で tests/corpus に例文を足したときの行の追加: edge_cases に6章の例文6本（否定で終わる定義文の edge_hitei_49〜51 と、漢語の名詞で動作を省いた文の edge_kango_52〜54。どれも種類なしの lint の候補は0件）を足した。5a の例（見出しの形とまとめを依頼したスライドと、まとめの節がある記事の、元と後と依頼の文）は、新しいフォルダ requests に .txt で置いた（.md の数え方と組に入れない。2,000字未満の文書だけに出る短いまとめの見出しの候補があり、つなぐと点数が変わるので、フォルダごとの点数の試験に入れない）。lint の行は足した6本の分だけを今の出力で作り、edge_cases の並びで増えた6組（edge_hitei_49|edge_hitei_50 から edge_kango_54|edge_kiku_45 まで）の diff と check の行を今の出力で作った。名前が edge_kiku_45 より前に並ぶので、前からある組は1つも変わらない。"
+    "2026-10-29 v2.5.0 で tests/corpus に例文を足したときの行の追加: edge_cases に6章の例文6本（否定で終わる定義文の edge_hitei_49〜51 と、漢語の名詞で動作を省いた文の edge_kango_52〜54。どれも種類なしの lint の候補は0件）を足した。5a の例（見出しの形とまとめを依頼したスライドと、まとめの節がある記事の、元と後と依頼の文）は、新しいフォルダ requests に .txt で置いた（.md の数え方と組に入れない。2,000字未満の文書だけに出る短いまとめの見出しの候補があり、つなぐと点数が変わるので、フォルダごとの点数の試験に入れない）。lint の行は足した6本の分だけを今の出力で作り、edge_cases の並びで増えた6組（edge_hitei_49|edge_hitei_50 から edge_kango_54|edge_kiku_45 まで）の diff と check の行を今の出力で作った。名前が edge_kiku_45 より前に並ぶので、前からある組は1つも変わらない。",
+    "2026-11-05 3.0.0 で tests/corpus に例文を足したときの行の追加: edge_cases に直訳語の型4と型5の字と語を文字どおりに使った文12本（edge_yakugo_55〜66。どれも種類なしの lint の候補は0件、点数100）を足した。lint の行は足した12本の分だけを今の出力で作り、edge_cases の並びで増えた12組（edge_watasu_48|edge_yakugo_55 から edge_yakugo_65|edge_yakugo_66 まで）の diff と check の行を今の出力で作った。名前が edge_watasu_48 よりあとに並ぶので、前からある組は1つも変わらない。"
   ]
 }
