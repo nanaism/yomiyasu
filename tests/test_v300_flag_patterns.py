@@ -158,12 +158,12 @@ INVALID = (
     ("a\t[[a]枝\n", 1),                        # FutureWarning を出す字の組
     ("a\t[a--b]枝\n", 1),
     ("a\t[a&&b]枝\n", 1),
-    ("a\t" + "(?:枝|葉)" * 11 + "\n", 1),      # 選択肢の数の積が 2,048
-    ("".join("p{}\t枝\n".format(n) for n in range(1001)), 1001),
-    ("".join("p{}\t枝{{0,1}}葉\n".format(n) for n in range(513)), 513),     # 試す数の合計が 1,026
-    # 最短一致の繰り返しを重ねた組（合計 1,500。10万字の行で2秒ほどかかる）
+    ("a\t" + "(?:枝|葉)" * 10 + "\n", 1),      # 選択肢の数の積が 1,024（1つのパターンの上限は 512）
+    ("".join("p{}\t枝\n".format(n) for n in range(501)), 501),
+    ("".join("p{}\t枝{{0,1}}葉\n".format(n) for n in range(257)), 257),     # 試す数の合計が 514
+    # 最短一致の繰り返しを重ねた組（1行目は 512 で受け付け、2行目で合計が 768 になり上限の 512 を超える）
     ("".join("p{}\t{}\n".format(n, p) for n, p in enumerate(
-        ["a??" * 10 + "ab", "a??" * 8 + "ab", "a??" * 7 + "ab", "a??" * 6 + "ab", "a??" * 4 + "ab"] + ["ab"] * 12)), 2),
+        ["a??" * 9 + "ab", "a??" * 8 + "ab", "a??" * 7 + "ab", "a??" * 6 + "ab", "a??" * 4 + "ab"] + ["ab"] * 12)), 2),
 )
 
 
@@ -186,7 +186,7 @@ class InvalidPatternTest(PatternCase):
                         r"背景(?=で(?:実行|回|走|待)|実行|ジョブ|タスク)",
                         r"(?<!公開)(?<!秘密)(?<!署名)(?<!暗号)(?<!SSH)鍵(?![括盤穴])",
                         r"偽実装を[^。、]{0,6}通[さしすせ]", r"(?:main|ブランチ) ?に入れ", r"枝\Z", r"\b(?:PR|issue) ?の題\b",
-                        r"枝{2}", r"枝??葉", "(?:枝|葉)" * 10 + "x"):
+                        r"枝{2}", r"枝??葉", "(?:枝|葉)" * 9 + "x"):
             with self.subTest(pattern=pattern):
                 compiled, required, cost = markdown_visibility.check_pattern(pattern)
                 self.assertEqual(compiled.pattern, pattern)
@@ -258,16 +258,37 @@ class CheckRecordTest(PatternCase):
         self.assertTrue(yomiyasu_check._words_shape(patterns_only))
 
 
+class HelpTest(unittest.TestCase):
+    """--help の --words の説明が flag-patterns.txt を挙げ、終了コード2の行が使えない行を挙げる。"""
+
+    def test_help_names_flag_patterns(self):
+        import yomiyasu_diff
+        import yomiyasu_hook
+        exit_line = "flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す"
+        words_help = "語の一覧（allow.txt と flag.txt。名前と正規表現を書く flag-patterns.txt も置けます）のフォルダ"
+        lint_help = "".join(yomiyasu_lint._build_parser().format_help().split())
+        diff_help = "".join(yomiyasu_diff._build_parser().format_help().split())
+        run_help = "".join(yomiyasu_check._build_parser()[1].format_help().split())
+        for name, text in (("lint", lint_help), ("diff", diff_help), ("check run", run_help)):
+            with self.subTest(command=name):
+                self.assertIn("".join(words_help.split()), text)
+                self.assertIn("".join(exit_line.split()), text)
+        self.assertIn("「名前<TAB>正規表現」を書き、当たった行に、パターンの名前を入れた", lint_help)
+        for module in (yomiyasu_lint, yomiyasu_diff, yomiyasu_check):
+            self.assertIn(exit_line, module._EXIT_CODES)
+        self.assertIn("語の一覧（allow.txt と flag.txt。flag-patterns.txt も置けます）のフォルダ", yomiyasu_hook._HELP)
+
+
 class LongLineTest(unittest.TestCase):
     def test_long_lines_worst_patterns_quick(self):
         """受け付ける上限いっぱいの最悪の形のパターンと、10万字の行で、2.0秒未満。"""
         line = "a" * 99999 + "x\n"
-        sets = (["a" + "(?:a|a)" * 10 + "x"],
-                ["a(?:a|a)x"] * 512,
-                ["a" + "(?:a|a)" * 3 + "x"] * 128,
-                ["ax"] * 1000,
-                ["a??" * 10 + "ab"],
-                ["a??" * 9 + "ab", "a??" * 8 + "ab", "a??" * 7 + "ab", "a??" * 6 + "ab"] + ["ab"] * 64)
+        sets = (["a" + "(?:a|a)" * 9 + "x"],
+                ["a(?:a|a)x"] * 256,
+                ["a" + "(?:a|a)" * 3 + "x"] * 64,
+                ["ax"] * 500,
+                ["a??" * 9 + "ab"],
+                ["a??" * 8 + "ab", "a??" * 7 + "ab", "a??" * 6 + "ab", "a??" * 5 + "ab"] + ["ab"] * 32)
         for patterns in sets:
             rows = []
             for number, pattern in enumerate(patterns):

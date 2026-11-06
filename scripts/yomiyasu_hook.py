@@ -26,8 +26,9 @@ _HELP = """使い方: yomiyasu_hook.py --host claude-code|codex [--state-dir DIR
   --state-dir DIR           登録を探す状態フォルダ。省くと環境変数 YOMIYASU_STATE_DIR（空白だけの値と ${ を
                             含む値は使いません）、git の最上位（なければ作業ディレクトリ）の .yomiyasu/ の順に探します。
                             Claude Code では、環境変数 CLAUDE_PROJECT_DIR のプロジェクトの .yomiyasu/ も探します。
-  --words フォルダ          語の一覧（allow.txt と flag.txt）のフォルダ。フックは lint を動かさないので、続けさせるときや
-                            止めるときに案内する yomiyasu_check.py run のコマンドに --words と絶対パスを付けます。
+  --words フォルダ          語の一覧（allow.txt と flag.txt。flag-patterns.txt も置けます）のフォルダ。フックは lint を
+                            動かさないので、続けさせるときや止めるときに案内する yomiyasu_check.py run のコマンドに
+                            --words と絶対パスを付けます。
                             一覧を読めないときは付けず、check が作った状態フォルダの hook-errors.log に1行残します。
   --no-words                案内する yomiyasu_check.py run のコマンドに --no-words を付けます（--words と一緒には使えず、
                             両方あればどちらも付けません）。どちらも省くと、run が自分で .yomiyasu-words/ を探します。

@@ -108,8 +108,11 @@ class RephraseTestWordingTest(unittest.TestCase):
         self.assertNotIn("候補に出ない", row)
 
     def test_wrong_fix_example_matches_the_diff(self):
-        """文書の例を今の diff に通すと、文書のとおり逆転の候補が出る。"""
-        self.assertEqual(reversal_words("見た目ではなく、読み込みの速さを優先した。", "見た目と読み込みの速さを優先した。"),
+        """文書の例を今の diff に通すと、文書のとおり逆転の候補が出る。3.0.0 の仕上げで、文書の原文を「なく」のあとの
+        読点を外す決まりにそろえた（読点つきの形は test_v200_fix_round3 が見る）。"""
+        self.assertIn("| 見た目ではなく読み込みの速さを優先した。 | 見た目と読み込みの速さを優先した。 |",
+                      (REFERENCES / "rephrase-test.md").read_text(encoding="utf-8"))
+        self.assertEqual(reversal_words("見た目ではなく読み込みの速さを優先した。", "見た目と読み込みの速さを優先した。"),
                          ["見た目"])
 
 

@@ -25,7 +25,7 @@ The package is a set of instructions (SKILL.md) plus these checks. In the compar
 
 If your environment cannot load the full skill, two versions built from it are published in separate repositories. Both are 1.2.0, built from 2.5.0, and have not yet been updated to 3.0.0. Use the full skill when your environment can load it.
 
-- [yomiyasu-mini](https://github.com/nanaism/yomiyasu-mini) is a skill packed into eight files, for hosts that limit the number or size of files, such as Microsoft 365 Copilot declarative agents. The full skill has many reference files, and its lint, diff and check scripts are each over 100KB. mini keeps each script at 90KB or less and each reference file at 100KB or less. It includes the meaning-change check, with the same results as the 2.5.0 diff. Its SKILL.md is 17,959 characters including the YAML front matter, which is longer than the 15,497-character SKILL.md of 3.0.0.
+- [yomiyasu-mini](https://github.com/nanaism/yomiyasu-mini) is a skill packed into eight files, for hosts that limit the number or size of files, such as Microsoft 365 Copilot declarative agents. The full skill has many reference files, and its lint, diff and check scripts are each over 100KB. mini keeps each script at 90KB or less and each reference file at 100KB or less. It includes the meaning-change check, with the same results as the 2.5.0 diff. Its SKILL.md is 17,959 characters including the YAML front matter, which is longer than the 15,656-character SKILL.md of 3.0.0.
 - [yomiyasu-pocket](https://github.com/nanaism/yomiyasu-pocket) is a 400 to 500 character instruction to paste into an AI's instructions field, such as an email app's AI or a chat app's custom instructions. It has no bundled checks.
 
 ## Install
@@ -154,7 +154,7 @@ With the same 12 drafts, the same request text, and the same two judges and judg
 
 - A is no skill. The agent gets only the request text. This is the same setup as "no skill" above, but the rewriting and the judging were run again, so the numbers differ.
 - B is a few lines of instructions. The five lines below are placed before the request text. A new agent that had not read SKILL.md wrote them from the README and the skill description alone, and they were not edited afterwards.
-- C is yomiyasu. We measured 2.5.0 and 3.0.0 separately. The 3.0.0 measured here is the SKILL.md before the paragraph on Sino-Japanese words was added (15,098 characters). The selection of 3.0.0 compared a 15,000-character candidate, before three 2.5.0 rules were restored to it. Its numbers are in the 3.0.0 section of [CHANGELOG.md](./CHANGELOG.md).
+- C is yomiyasu. We measured 2.5.0 and 3.0.0 separately. The 3.0.0 measured here is the released SKILL.md (15,656 characters), described after the tables. The 3.0.0 section of [CHANGELOG.md](./CHANGELOG.md) has the numbers for the 15,000-character candidate compared when 3.0.0 was selected (before three 2.5.0 rules were restored to it), for the two runs of the 15,098-character SKILL.md released in the PR, and for the single runs of the intermediate SKILL.md versions after it.
 
 <details>
 <summary>The five lines given to B (in Japanese)</summary>
@@ -179,9 +179,9 @@ For readability, each judge saw the three outputs for a draft without the condit
 | A, B, 2.5.0 (run 2) | GPT-6.1 Sol | 1.58 | 1.50 | 2.92 |
 | A, B, 2.5.0 (run 2) | Claude Opus 5.5 | 1.08 | 1.92 | 3.00 |
 | A, B, 3.0.0 (run 1) | GPT-6.1 Sol | 1.50 | 1.58 | 2.92 |
-| A, B, 3.0.0 (run 1) | Claude Opus 5.5 | 1.25 | 1.83 | 2.92 |
-| A, B, 3.0.0 (run 2) | GPT-6.1 Sol | 1.67 | 1.42 | 2.92 |
-| A, B, 3.0.0 (run 2) | Claude Opus 5.5 | 1.08 | 1.92 | 3.00 |
+| A, B, 3.0.0 (run 1) | Claude Opus 5.5 | 1.17 | 1.92 | 2.92 |
+| A, B, 3.0.0 (run 2) | GPT-6.1 Sol | 1.58 | 1.50 | 2.92 |
+| A, B, 3.0.0 (run 2) | Claude Opus 5.5 | 1.17 | 1.83 | 3.00 |
 
 Wins and losses were counted one-to-one over the 24 judgments of both judges in each run, 48 over the two runs. Each cell gives the wins and losses of the condition named first.
 
@@ -192,26 +192,26 @@ Wins and losses were counted one-to-one over the 24 judgments of both judges in 
 | A vs 3.0.0 | 23-1 | 23-1 | 46-2 |
 | B vs 3.0.0 | 23-1 | 24-0 | 47-1 |
 
-A beat B 17 to 7 in both runs of the sets with 2.5.0, and 16 to 8 in both runs of the sets with 3.0.0. All 96 rankings in the four sets called the difference small.
+A beat B 17 to 7 in both runs of the sets with 2.5.0. All 96 rankings in the four sets called the difference small.
 
 Each cell below gives run 1, then run 2.
 
 | | A no skill | B few lines | C 2.5.0 | C 3.0.0 |
 |---|---|---|---|---|
-| Changes in meaning reported (both judges combined, major ones in parentheses) | 14 (1), 12 (0) | 44 (5), 42 (2) | 1 (1), 1 (0) | 4 (1), 0 (0) |
-| Possible meaning changes found by the bundled diff | 25, 22 | 59, 57 | 7, 7 | 6, 11 |
-| Edit rate (difference between original and output, mean of 12) | 5.4%, 4.9% | 8.8%, 8.3% | 1.6%, 1.9% | 2.0%, 1.7% |
-| Bold count (105 in the originals) | 110, 113 | 15, 25 | 38, 34 | 29, 28 |
-| Total cost for 12 drafts | $2.60, $2.66 | $2.80, $2.92 | $10.16, $10.48 | $7.32, $7.29 |
-| Mean time per draft | 43 s, 50 s | 51 s, 59 s | 91 s, 109 s | 112 s, 106 s |
-| Median number of turns | 3, 3 | 3, 3 | 12, 11.5 | 13, 14 |
-| Median input tokens | 61k, 62k | 60k, 64k | 504k, 534k | 350k, 321k |
+| Changes in meaning reported (both judges combined, major ones in parentheses) | 14 (1), 12 (0) | 44 (5), 42 (2) | 1 (1), 1 (0) | 3 (1), 0 (0) |
+| Possible meaning changes found by the bundled diff | 25, 22 | 59, 57 | 7, 7 | 10, 6 |
+| Edit rate (difference between original and output, mean of 12) | 5.4%, 4.9% | 8.8%, 8.3% | 1.6%, 1.9% | 1.9%, 2.1% |
+| Bold count (105 in the originals) | 110, 113 | 15, 25 | 38, 34 | 27, 28 |
+| Total cost for 12 drafts | $2.60, $2.66 | $2.80, $2.92 | $10.16, $10.48 | $7.77, $7.80 |
+| Mean time per draft | 43 s, 50 s | 51 s, 59 s | 91 s, 109 s | 104 s, 107 s |
+| Median number of turns | 3, 3 | 3, 3 | 12, 11.5 | 11.5, 15 |
+| Median input tokens | 61k, 62k | 60k, 64k | 504k, 534k | 307k, 363k |
 
 In run 1, 12 of B's 44 reported changes in meaning came from one draft, the essay. C runs the same diff while rewriting, so the diff row favors C.
 
-Single runs vary under the same conditions. Over the six yomiyasu runs (2.5.0, 3.0.0 and the selected 15,000-character candidate, twice each), reported changes in meaning ranged from 0 to 4 and diff findings from 5 to 11. The one major finding for 3.0.0 in run 1 was in a technical article, where 「ノード起動待ちの時間を削ぎ落としました」 (cut down the wait for nodes to start) became 「なくしました」 (eliminated it), which makes the claim stronger. In run 2 of 2.5.0 (minor) and run 2 of the candidate (major), the same sentence was rewritten as 「省きました」 (omitted it) and flagged for the same strengthening. The wording differs, but yomiyasu has made this error on this sentence since 2.5.0.
+Single runs vary under the same conditions. Over the six yomiyasu runs (2.5.0, the 15,098-character SKILL.md and the selected 15,000-character candidate, twice each), reported changes in meaning ranged from 0 to 4 and diff findings from 5 to 11. The two runs of the released SKILL.md (3 and 0 reported changes, 10 and 6 diff findings) fall within that range. The one major finding for the released SKILL.md in run 1 was in a technical article, where 「ノード起動待ちの時間を削ぎ落としました」 (cut down the wait for nodes to start) became 「なくしました」 (eliminated it), which makes the claim stronger. The other judge rated the same change minor. Run 1 of the 15,098-character SKILL.md made the same change and got a major finding, and in run 2 of 2.5.0 (minor) and run 2 of the candidate (major), the same sentence was rewritten as 「省きました」 (omitted it) and flagged for the same strengthening. The wording differs, but yomiyasu has made this error on this sentence since 2.5.0.
 
-After these two runs, a user reported that yomiyasu turned too many Sino-Japanese words (kango) into native Japanese words (wago). We added a paragraph to SKILL.md that keeps the original's choice between the two, and the 3.0.0 SKILL.md is now 15,497 characters. The reported pattern did not reproduce in our own drafts; it appeared only when the agent was told to read the references, so the paragraph was added as a precaution. The proposals from [heguro's gist](https://gist.github.com/heguro/8fa8e1d2658f514ecb61015f2c53fce7) (in Japanese) changed the bundled scripts and the references, not SKILL.md. We ran the same 12 drafts once with the kango paragraph added, and once with the final version that also has the gist proposals. With the kango paragraph, the judges reported 2 changes in meaning (0 major), the bundled diff found 9 possible meaning changes, the 12 drafts cost $7.32, and the median number of turns was 11.5. Its average readability rank was 2.75 from GPT-6.1 Sol and 2.92 from Claude Opus 5.5; in this run it was ranked against the natural-japanese and no-skill outputs from the natural-japanese author's comparison, not against A and B. With the final version, the judges reported 4 changes in meaning (0 major), the bundled diff found 7 possible meaning changes, the 12 drafts cost $7.35, the median number of turns was 12, and its average readability rank against the same two outputs was 2.58 from GPT-6.1 Sol and 2.92 from Claude Opus 5.5. Each of these was a single run judged by AI. The tables above and the conclusions below come from the two runs of the 15,098-character SKILL.md.
+The 3.0.0 in the tables is the released SKILL.md (15,656 characters including the YAML front matter), and the 12 drafts were run twice with it. After the two runs of the 15,098-character SKILL.md, three changes went in: a paragraph that keeps the original's choice between Sino-Japanese words (kango) and native Japanese words (wago), added after a user reported that yomiyasu turned too many kango into wago; proposals 1 to 5 from [heguro's gist](https://gist.github.com/heguro/8fa8e1d2658f514ecb61015f2c53fce7) (in Japanese), which changed the bundled scripts and the references; and fixes for the inconsistencies found in a check before release.
 
 ### Audit with the critique article's ABC prompt (2.5.0)
 
@@ -229,7 +229,7 @@ The audit's B (six lines of instructions) was written by the audit agent after i
 
 ### What these results show
 
-On readability alone, these AI judges rated no skill and the few lines of instructions above yomiyasu. Over both runs of the 12 drafts, 3.0.0 won 2 and lost 46 one-to-one against A, and won 1 and lost 47 against B. In the 12 drafts, the judges reported fewer changes in meaning for yomiyasu: over both runs, 26 for A and 86 for B, against 2 for 2.5.0 and 4 for 3.0.0, of which 1, 7, 1 and 1 were major. In the audit's 10 drafts, yomiyasu had about as many as B. yomiyasu also leaves a record of what was checked. On the other hand, it costs more and takes longer. Rewriting the 12 drafts with 3.0.0 cost about 30 percent less than with 2.5.0, but about 2.8 times as much as A. The median number of turns was higher for 3.0.0 than for 2.5.0.
+On readability alone, these AI judges rated no skill and the few lines of instructions above yomiyasu. Over both runs of the 12 drafts, 3.0.0 won 2 and lost 46 one-to-one against A, and won 1 and lost 47 against B. In the 12 drafts, the judges reported fewer changes in meaning for yomiyasu: over both runs, 26 for A and 86 for B, against 2 for 2.5.0 and 3 for 3.0.0, of which 1, 7, 1 and 1 were major. In the audit's 10 drafts, yomiyasu had about as many as B. yomiyasu also leaves a record of what was checked. On the other hand, it costs more and takes longer. Rewriting the 12 drafts with 3.0.0 cost less than with 2.5.0, but about 3 times as much as A. The median number of turns was 11.5 and 15 for 3.0.0, and 12 and 11.5 for 2.5.0.
 
 All judges were AI models. The 12-draft comparison was run twice, and the 10-draft audit once. No person has read the 3.0.0 outputs yet. In a blind reading comparison during 2.0.0 development, the author preferred 1.1.2 in 6 of the 7 Claude Code pairs whose text differed, the in-development version in 0, with 1 tie; on Codex output it was 4 to 4 over 8 pairs ([docs/limitations.md](./docs/limitations.md#確かめた範囲)). The other 3.0.0 measurements, and the conditions that were fixed before measuring and were not met, are in [docs/limitations.md](./docs/limitations.md) and in the 3.0.0 section of [CHANGELOG.md](./CHANGELOG.md). These pages are in Japanese.
 

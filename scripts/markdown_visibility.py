@@ -821,12 +821,12 @@ WORDS_MAX_LINES = 10000
 # 3.0.0: 語の正規表現の一覧（1行に「名前<TAB>正規表現」）。WORDS_FILES とは別に読み、ファイルがあるときだけ context.words に
 # flag_patterns_lines と flag_patterns_sha256 を足す（ないときの出力は前と一字も同じ）
 PATTERNS_FILE = "flag-patterns.txt"
-PATTERNS_MAX = 1000             # パターンの数
+PATTERNS_MAX = 500              # パターンの数
 PATTERN_NAME_MAX = 40           # 名前の字数
 PATTERN_MAX_LENGTH = 200        # 正規表現の字数
 PATTERN_MAX_REPEAT = 30         # {m,n} の n
-PATTERN_MAX_COST = 1024         # 1つのパターンが1か所で試す数（繰り返しの幅と選択肢の数の積）
-PATTERNS_MAX_COST = 1024        # 全パターンの試す数の合計（10万字の行で、最短一致の繰り返しを重ねた最悪の組でも2秒より短く終わる数）
+PATTERN_MAX_COST = 512          # 1つのパターンが1か所で試す数（繰り返しの幅と選択肢の数の積）
+PATTERNS_MAX_COST = 512         # 全パターンの試す数の合計（時間はこの合計にほぼ比例する。10万字の行で、最短一致の繰り返しを重ねた最悪の組が手元の macOS で約0.7秒、CI の Linux でも2秒より十分短く終わる数。1,024 では CI で2秒を超えた）
 # ないファイル（とフォルダ）は一覧なし。ほかの読めない理由は終了コード2
 _WORDS_ABSENT = (FileNotFoundError, NotADirectoryError)
 

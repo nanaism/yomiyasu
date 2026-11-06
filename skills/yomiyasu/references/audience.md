@@ -60,7 +60,7 @@ SKILL.md 2章 Step 1 の種類と読者の決め方の細部。種類か読者�
 
 ## 5. 決めないとき
 
-- 種類を決めない: SKILL.md 2章 Step 1 の種類の表と doc-types のファイルを使わない。分野が分かれば domains のファイルを読む。check に `--doc-type` を付けない（lint はすべての規則を当てる）。
+- 種類を決めない: doc-types のファイル（SKILL.md 2章 Step 1）を使わない。分野が分かれば domains のファイルを読む。check に `--doc-type` を付けない（lint はすべての規則を当てる）。
 - 読者を決めない: 用語は SKILL.md「専門用語と名称の扱い」のとおりに扱う。説明が要る所は返さない。check に `--reader` を付けない。
 - どちらも、SKILL.md 1章の規則だけで直す。
 
@@ -140,7 +140,7 @@ SKILL.md 2章 Step 1 の種類と読者の決め方の細部。種類か読者�
 
 ## 13. 種類と外す規則の全体の表
 
-SKILL.md 1章の規則のうち当てない範囲は、SKILL.md 2章 Step 1 の種類の表のとおり。lint が外す規則と根拠は次のとおり。
+SKILL.md 1章の規則のうち当てない範囲は、種類ごとの `references/doc-types/` のファイルのとおり（SKILL.md 2章 Step 1）。lint が外す規則と根拠は次のとおり。
 
 | 種類 | lint で外す規則 | 根拠 |
 |---|---|---|
@@ -152,7 +152,7 @@ SKILL.md 1章の規則のうち当てない範囲は、SKILL.md 2章 Step 1 の�
 | manual | excess_list | 番号つきの手順は並列が明確な箇条書き |
 | slides | bare_verb_chain、bold_label_list、cleft_list_ending、count_declaration、excess_list、short_summary_heading | 短い見出しと箇条書き、目次の数の宣言、まとめのページが普通の構成。箇条で強調として選ぶ「〜のは、A、B、C。」と、主語を書かずに動詞を並べる箇条も普通の書き方 |
 | essay | bare_verb_chain、metaphor_label | 読み取れる比喩を残し、成り立たない比喩を直すのは、エージェントが doc-types/essay.md に従って行う。見出しの短い比喩と、動詞を並べて止める形は書き手の文体として外す。metaphor_verb の候補（エッセイの比喩動詞）は外さない |
-| formal | なし | 硬い語の言い換えと「〜を行う」の外枠は、エージェントが当てない（SKILL.md 2章 Step 1 の表）。diff の文体の硬化の候補は参考としてだけ出る |
+| formal | なし | 硬い語の言い換えと「〜を行う」の外枠は、エージェントが当てない（doc-types/formal.md）。diff の文体の硬化の候補は参考としてだけ出る |
 | promo | bare_verb_chain、emoji_prohibited、fragment_run、metaphor_label | 書き手が気持ちや勢いを表す絵文字と、本文で評価の語を短く重ねる型（安い。うまい。早い。）、見出しの短い比喩、動詞を並べて止める形は普通の書き方。「！」、見出しのキャッチコピー、勢いのある語と強める語、同じ褒め言葉の繰り返しは、エージェントが doc-types/promo.md に従って残す |
 | mail | emoji_prohibited、meta_filler（返信と結びの5つの型だけ） | 宛名、挨拶、結び、署名と、相手への返信の言葉（「ご質問ありがとうございます」「参考になれば幸いです」など）は普通の書き方。書き手が気持ちを表す絵文字も残す。meta_filler のほかの型（誇張や中身のない前置き）は外さない。敬語の度合い、クッション言葉、チャットの口語は、エージェントが doc-types/mail.md に従って残す |
 | paper | なし | 慎重な言い方、引用の書き方、専門用語、「である」調、条件と結果をまとめた長い文は、エージェントが doc-types/paper.md に従って残す。diff の文体の硬化と勢いの候補は参考としてだけ出る |
