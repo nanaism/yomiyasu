@@ -25,6 +25,8 @@ import time
 import unittest
 from unittest import mock
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import working_folder  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = ROOT / "scripts"
@@ -260,6 +262,9 @@ class ClosedOutputTests(unittest.TestCase):
     def setUp(self):
         folder = tempfile.TemporaryDirectory(prefix="yomiyasu-v213-tools-")
         self.addCleanup(folder.cleanup)
+        # 3.0.0: lint と diff は作業フォルダの外のファイルを読まないので、ファイルを置く一時フォルダで動かす
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(folder.name)
         source, final = Path(folder.name) / "source.md", Path(folder.name) / "final.md"
         source.write_bytes(SOURCE_TEXT.encode("utf-8"))
         final.write_bytes(FINAL_TEXT.encode("utf-8"))
@@ -519,7 +524,7 @@ class ArmedLockTests(_StateCase):
         out, err = io.StringIO(), io.StringIO()
         begin = time.monotonic()
         with mock.patch.object(os, "unlink", refuse), mock.patch.object(check, "_busy_on_windows", lambda: True), \
-                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+                contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), working_folder(source.parent):
             code = check.main(["start", "--source", str(source), "--state-dir", str(self.state)])
         self.assertLess(time.monotonic() - begin, 3)
         self.assertEqual(code, 3, err.getvalue())

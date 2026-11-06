@@ -2152,8 +2152,9 @@ class TestStateFolderPlace(CheckCase):
                     (top / ".git").mkdir()
                 else:
                     (top / ".git").write_bytes("gitdir: /nonexistent/worktree\n".encode("utf-8"))
-                a = self.write(kind + "/docs/a.md", "保存期間は3日です。\n")
-                b = self.write(kind + "/docs/b.md", "保存期間は30日です。\n")
+                # 3.0.0: check は作業フォルダの外のファイルを読まないので、原稿は作業フォルダ（deep）に置く
+                a = self.write(kind + "/docs/deep/a.md", "保存期間は3日です。\n")
+                b = self.write(kind + "/docs/deep/b.md", "保存期間は30日です。\n")
                 process = self.run_without_state_env(top, deep, "run", "--source", a, "--final", b)
                 self.assertNotIn("BLOCKED-WRITES", process.stderr)
                 self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
@@ -2744,10 +2745,47 @@ class TestReviewFixes(CheckCase):
         """3.4 の6: 最終稿は検査のあとで読み直すので、読み直せないパイプのパス（/dev/stdin、<(…)）は2にして、
         --final - を案内する（変わっていない最終稿を「途中で変わった」と報告しない。robust R8）。"""
         a = self.write("a.md", "保存期間は3日です。\n")
+        # 3.0.0: /dev/stdin は作業フォルダの外なので、開く前に断り、- を案内する
         process = self.check("run", "--source", a, "--final", "/dev/stdin", stdin="保存期間は30日です。\n")
         self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
         self.assertEqual(process.stdout, "")
         self.assertIn("Error opening file /dev/stdin: ", process.stderr)
+        self.assertIn("ファイルの名前の代わりに - を渡して", process.stderr)
+        self.assertFalse(self.state.exists())
+        if not hasattr(os, "mkfifo"):
+            return
+        # 作業フォルダの中のパイプ（名前付きパイプ）は、今までどおり開いてから断り、--final - を案内する
+        fifo = self.root / "final.fifo"
+        os.mkfifo(str(fifo))
+        import threading
+
+        stop = threading.Event()
+
+        def feed():
+            # check は読む前にも綴りを確かめるためにパイプを開いて閉じる（macOS）。1回だけ書くと、その相手に書いて終わり、
+            # 読む側の open が書き手を待ち続けることがあるので、check が終わるまで書き手として開き直す
+            while not stop.is_set():
+                try:
+                    with open(str(fifo), "wb") as handle:
+                        handle.write("保存期間は30日です。\n".encode("utf-8"))
+                except OSError:
+                    pass  # check は読まずに閉じるので、書く側は BrokenPipeError になることがある
+        writer = threading.Thread(target=feed)
+        writer.daemon = True
+        writer.start()
+        try:
+            process = self.check("run", "--source", a, "--final", "final.fifo")
+        finally:
+            stop.set()
+            try:
+                # 書き手の open が読み手を待っていれば、読み手として開いて閉じ、抜けさせる
+                os.close(os.open(str(fifo), os.O_RDONLY | os.O_NONBLOCK))
+            except OSError:
+                pass
+            writer.join(10)
+        self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
+        self.assertEqual(process.stdout, "")
+        self.assertIn("Error opening file final.fifo: 通常のファイルではありません", process.stderr)
         self.assertIn("--final -", process.stderr)
         self.assertFalse(self.state.exists())
 

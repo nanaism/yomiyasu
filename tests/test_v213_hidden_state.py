@@ -44,6 +44,9 @@ class HiddenNameTest(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.mkdtemp(prefix="yomiyasu-v213-")
         self.addCleanup(lambda: __import__("shutil").rmtree(self.folder, ignore_errors=True))
+        # 3.0.0: check は作業フォルダの外のファイルを読まないので、原稿を置く一時フォルダで動かす
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.folder)
         self.state = os.path.join(self.folder, "state")
         os.mkdir(self.state)
         # ほかのユーザーが作った状態フォルダ。.gitignore と state.json は見える

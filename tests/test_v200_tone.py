@@ -232,7 +232,8 @@ class NotCountedTest(unittest.TestCase):
             a.write_bytes("最強のお土産！\n".encode("utf-8"))
             b.write_bytes("最強のお土産、\n".encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(SCRIPTS / "yomiyasu_diff.py"), "--fail-on=meaning-risk",
-                                      str(a), str(b)], capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+                                      str(a), str(b)], capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"),
+                                     cwd=folder)
         self.assertEqual(process.returncode, 0)
         out = process.stdout.decode("utf-8")
         self.assertIn("■ 勢い（見直し候補 1件", out)

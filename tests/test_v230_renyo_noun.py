@@ -210,7 +210,7 @@ class RenyoNounTest(unittest.TestCase):
             path = Path(folder) / "a.md"
             path.write_bytes("誤字の直しは明日です。\n".encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(SCRIPTS / "yomiyasu_lint.py"), "--json", "--no-words", str(path)],
-                                     capture_output=True)
+                                     capture_output=True, cwd=folder)
         self.assertEqual(process.returncode, 0, process.stderr)
         data = json.loads(process.stdout.decode("utf-8"))
         self.assertEqual([finding["rule"] for finding in data["findings"]], ["renyo_noun"])

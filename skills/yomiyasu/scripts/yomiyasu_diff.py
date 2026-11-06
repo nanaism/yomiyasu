@@ -45,17 +45,20 @@ if __name__ == "__main__":
     sys.dont_write_bytecode = True
 _VISIBILITY_NAMES = ("analyze_markdown", "inline_protected_spans", "unicode_whitespace", "decode_source",
                      "normalize_doc_type", "normalize_reader", "context_label", "DOC_TYPES",
-                     "WordsError", "resolve_words", "current_directory", "words_context", "words_label")
+                     "WordsError", "resolve_words", "current_directory", "words_context", "words_label",
+                     "input_path_problem")
 try:
     try:
         if __package__:
             from .markdown_visibility import analyze_markdown, inline_protected_spans, unicode_whitespace, decode_source
             from .markdown_visibility import normalize_doc_type, normalize_reader, context_label, DOC_TYPES
             from .markdown_visibility import WordsError, resolve_words, current_directory, words_context, words_label
+            from .markdown_visibility import input_path_problem
         else:
             from markdown_visibility import analyze_markdown, inline_protected_spans, unicode_whitespace, decode_source
             from markdown_visibility import normalize_doc_type, normalize_reader, context_label, DOC_TYPES
             from markdown_visibility import WordsError, resolve_words, current_directory, words_context, words_label
+            from markdown_visibility import input_path_problem
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
@@ -101,6 +104,7 @@ try:
         WordsError = _visibility_module.WordsError
         resolve_words = _visibility_module.resolve_words
         current_directory = _visibility_module.current_directory
+        input_path_problem = _visibility_module.input_path_problem
         words_context = _visibility_module.words_context
         words_label = _visibility_module.words_label
 except ImportError as _import_error:
@@ -11094,7 +11098,7 @@ def read_text(path):
 _EXIT_CODES = """終了コード:
   0  比べ終わり、--fail-on の条件に当たらなかった（候補の有無によらない）。--endings の正常終了、-h と --version も0
   1  --fail-on=meaning-risk の条件に当たった（数値、否定、主語と目的語の入れ替え、文の種類・引用の書き方・確度・状態の語・約束・許可の言い方・選ぶ範囲・因果の恐れが1件以上）
-  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）
+  2  使い方か入力の誤り（ファイルを開けない、読まないファイル（作業フォルダの外、名前が点で始まる部分を含むパス）を渡した、UTF-8 として読めない、標準入力を読めない、使えない --stance、--fail-on、--doc-type、--reader の値、ファイルの数の誤り、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_diff.py [--stance 立場] [--doc-type 種類] [--reader 読者] [--json] [--fail-on meaning-risk]\n"
           "                        [--words フォルダ | --no-words] [--material 資料 ...] 元の文 書き直した文\n"
@@ -11279,6 +11283,15 @@ def _fail_on_line(total, counted, risks=()):
                                if any(r["kind"] == kind for r in risks)), counted))
 
 
+def _path_problem(path):
+    """コマンドラインで渡されたファイルを読まないときの誤りの文か None（3.0.0。markdown_visibility.input_path_problem）。"""
+    reason = input_path_problem(path)
+    if reason is None:
+        return None
+    return "Error opening file {}: {}。このファイルを渡すときは、標準入力から渡してください（ファイルの名前の代わりに - を渡します。1か所だけ）".format(
+        path, reason)
+
+
 def _read_input(path):
     """ファイルか標準入力（-）を読み、(文字列, decode_source の情報, None) か (None, None, 誤りの文) を返す。"""
     if path != "-":
@@ -11381,6 +11394,12 @@ def _run(argv):
             words = resolve_words(current_directory(), args.words, args.no_words)
         except WordsError as error:
             _error(str(error))
+            return 2
+    for path in list(files) + list(args.materials):
+        # 3.0.0: 作業フォルダの外のファイルと、点で始まる部分を含むパスは、どれかを読む前に断る
+        problem = _path_problem(path)
+        if problem:
+            _error(problem)
             return 2
     texts, infos = [], []
     for path in files:

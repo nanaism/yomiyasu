@@ -158,7 +158,7 @@ class NumberOrderSwapTest(unittest.TestCase):
                     with self.subTest(before=before, options=options):
                         process = subprocess.run([sys.executable, "-B", str(diff_script)] + options + [str(a), str(b)],
                                                  stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                                 timeout=60)
+                                                 timeout=60, cwd=folder)
                         self.assertEqual(process.returncode, code, process.stderr.decode("utf-8", "replace"))
 
 

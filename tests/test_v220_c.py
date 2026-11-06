@@ -521,7 +521,12 @@ class CheckTest(FolderCase):
         self.words(elsewhere / ".yomiyasu-words", allow="入口\n")
         for cwd in (self.root, elsewhere):
             with self.subTest(cwd=cwd):
-                process = self.check("verify", "--final", str(self.b), "--replay", cwd=cwd)
+                if cwd == self.root:
+                    process = self.check("verify", "--final", str(self.b), "--replay", cwd=cwd)
+                else:
+                    # 3.0.0: check は作業フォルダの外のファイルを読まないので、別のフォルダからは最終稿を標準入力で渡す
+                    with open(str(self.b), "rb") as handle:
+                        process = run([CHECK, "verify", "--final", "-", "--replay"], cwd, self.env, stdin=handle)
                 self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
                 self.assertIn("replay=ok", process.stdout)
         # 記録のあとで一覧が変われば、作り直したレポートが合わない

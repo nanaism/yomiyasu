@@ -216,7 +216,7 @@ class SameSentenceUnitTest(unittest.TestCase):
                     a.write_bytes((before + "\n").encode("utf-8"))
                     b.write_bytes((after + "\n").encode("utf-8"))
                     process = subprocess.run([sys.executable, "-B", str(SCRIPTS / "yomiyasu_diff.py"), "--fail-on", "meaning-risk",
-                                              str(a), str(b)], capture_output=True, encoding="utf-8", timeout=60)
+                                              str(a), str(b)], capture_output=True, encoding="utf-8", timeout=60, cwd=folder)
                     self.assertEqual(process.returncode, 1, process.stdout + process.stderr)
                     self.assertIn("- 数値が変わった（1行目）: ", process.stdout)
 

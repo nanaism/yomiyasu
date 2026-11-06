@@ -41,15 +41,17 @@ import subprocess  # noqa: E402
 import unicodedata  # noqa: E402
 from collections import Counter, OrderedDict  # noqa: E402
 _VISIBILITY_NAMES = ("decode_source", "DOC_TYPES", "READER_LEVELS", "normalize_doc_type", "normalize_reader",
-                     "WordsError", "resolve_words", "words_context", "words_label")
+                     "WordsError", "resolve_words", "words_context", "words_label", "input_path_problem")
 try:
     try:
         if __package__:
             from .markdown_visibility import decode_source, DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader
             from .markdown_visibility import WordsError, resolve_words, words_context, words_label
+            from .markdown_visibility import input_path_problem
         else:
             from markdown_visibility import decode_source, DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader
             from markdown_visibility import WordsError, resolve_words, words_context, words_label
+            from markdown_visibility import input_path_problem
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
@@ -88,6 +90,7 @@ try:
         normalize_reader = _visibility_module.normalize_reader
         WordsError = _visibility_module.WordsError
         resolve_words = _visibility_module.resolve_words
+        input_path_problem = _visibility_module.input_path_problem
         words_context = _visibility_module.words_context
         words_label = _visibility_module.words_label
 except ImportError as _import_error:
@@ -1182,6 +1185,30 @@ def _split_stdin(data, with_labels=False):
     return [(role, data[start:end]) for role, start, end, _ in parts], None
 
 
+_PATH_HINTS = {
+    "run": "このファイルを検査するときは、--stdin の区切りの行（<<<yomiyasu:original>>>、<<<yomiyasu:final>>> など）で"
+           "標準入力から渡すか、ファイルの名前の代わりに - を渡してください（- は1か所だけ）",
+    "verify": "このファイルを照らすときは、ファイルの名前の代わりに - を渡して、標準入力から渡してください（--final と --source で1か所だけ）",
+    "start": "start は標準入力を使えません。作業フォルダの中の、名前が点で始まらないファイルを渡してください",
+    "export": "export は標準入力を使えません。作業フォルダの中の、名前が点で始まらないファイルを渡すか、verify --final - で照らしてください",
+}
+
+
+def _path_problem(command, paths):
+    """コマンドラインで渡されたファイルのうち、読まないものがあれば誤りの文、なければ None（3.0.0。
+    markdown_visibility.input_path_problem）。どのファイルも読む前、状態フォルダに何かを書く前に呼ぶ。
+    作業ディレクトリが消えているときは、ほかの所と同じ _NoWorkingDirectory（終了コード2）にする。"""
+    if any(path is not None and path != "-" for path in paths):
+        _getcwd()
+    for path in paths:
+        if path is None:
+            continue
+        reason = input_path_problem(path)
+        if reason is not None:
+            return "Error opening file {}: {}。{}".format(path, reason, _PATH_HINTS[command])
+    return None
+
+
 def _read_inputs(args):
     """原文、資料、最終稿を1回ずつ読む。((原文 or None, [資料], 最終稿), None) か (None, 誤りの文)。"""
     if args.stdin:
@@ -1389,11 +1416,15 @@ class _Children(object):
     """lint と diff の子プロセスを、同じ締め切り（開始から --timeout 秒）で並べて動かす。
 
     check が外から止められたとき（SIGTERM、SIGHUP、Ctrl+C）は、呼ぶ側が stop() で動いている子を止める。止めないと、
-    子は親を失ったまま最後まで動き続ける（反証で見つけた例）。"""
+    子は親を失ったまま最後まで動き続ける（反証で見つけた例）。
 
-    def __init__(self, timeout, environment):
+    cwd は子の作業フォルダ（3.0.0）。lint と diff は作業フォルダの外のファイルと点で始まる部分を含むパスを読まないので、
+    写しのフォルダ（.yomiyasu/inputs/ か一時フォルダ）を子の作業フォルダにして、写しはファイルの名前だけで渡す。"""
+
+    def __init__(self, timeout, environment, cwd=None):
         self.deadline = time.monotonic() + timeout
         self.environment = environment
+        self.cwd = cwd
         self.lock = threading.Lock()
         self.processes = []
         self.stopped = False
@@ -1435,7 +1466,7 @@ class _Children(object):
                     self.results[name] = ("error", None, None, "", 0, "子プロセスを動かす前に止められました")
                     return
                 process = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                           stderr=subprocess.PIPE, env=self.environment)
+                                           stderr=subprocess.PIPE, env=self.environment, cwd=self.cwd)
                 self.processes.append(process)
         except Exception as error:  # 起動できない。結果を必ず残し、状態を partial にする
             self.results[name] = cannot(error)
@@ -1722,6 +1753,9 @@ def _run_checks(ctx, snapshots, stance, timeout):
     """lint と diff を子プロセスで（並べて）動かし、資料があればプロセスの中で照らす。"""
     lint_module, diff_module = _lint_module(), _diff_module()
     environment = dict(os.environ, PYTHONIOENCODING="utf-8")
+    # 写しはすべて同じフォルダにある。子はそのフォルダで動かし、写しをファイルの名前で渡す（_Children の cwd）
+    folder = os.path.dirname(os.path.abspath(snapshots[id(ctx.final)]))
+    snapshots = {key: os.path.basename(path) for key, path in snapshots.items()}
     final_snapshot = snapshots[id(ctx.final)]
     context = _context_arguments(ctx.doc_type, ctx.reader) + _words_arguments(ctx.words)
     commands = OrderedDict()
@@ -1751,7 +1785,7 @@ def _run_checks(ctx, snapshots, stance, timeout):
     for name in ctx.required:
         ctx.entries[name] = _check_entry(name, targets[name])
 
-    children = _Children(timeout, environment)
+    children = _Children(timeout, environment, cwd=folder)
     try:
         for name, command in commands.items():
             children.start(name, command)
@@ -2895,6 +2929,12 @@ def _run_impl(args, parser):
             shown = args.stance if args.stance.strip() else "（空）"
             _error("--stance に使えない値です: {}。使えるのは {} です。".format(shown, "、".join(diff_module.STANCES)))
             return 2
+    if not args.stdin:
+        # 3.0.0: 作業フォルダの外のファイルと、点で始まる部分を含むパスは、どれも読む前に断る（何も書かない）
+        problem = _path_problem("run", args.final + list(args.source or []) + list(args.materials or []))
+        if problem:
+            _error(problem)
+            return 2
     original_snapshot = None
     snapshot_id = None
     if (not args.stdin and args.source and "-" not in (args.source[0], args.final[0])
@@ -3950,8 +3990,14 @@ def _replay(state, record, timeout):
     inputs = record["inputs"]
     entries = OrderedDict((entry["name"], entry) for entry in record["checks"] if entry["status"] == "ran")
 
+    folder = os.path.abspath(os.path.join(state, "inputs"))
+
     def snapshot(item):
-        return os.path.join(state, "inputs", item["sha256"] + ".bin")
+        return os.path.join(folder, item["sha256"] + ".bin")
+
+    def snapshot_name(item):
+        # 子には写しのフォルダを作業フォルダにして、ファイルの名前で渡す（run の _run_checks と同じ。3.0.0）
+        return item["sha256"] + ".bin"
 
     # 記録と同じ種類と読者と語の一覧を付ける（付けないと lint のレポートが合わない）。語の一覧は記録の場所を渡し、
     # 一覧を使わなかった記録は --no-words（verify の作業ディレクトリから探し直さない）
@@ -3959,18 +4005,18 @@ def _replay(state, record, timeout):
     commands = OrderedDict()
     if "lint" in entries:
         commands["lint"] = ([sys.executable, "-B", os.path.join(_HERE, "yomiyasu_lint.py"), "--json"] + context
-                            + [snapshot(inputs["final"])])
+                            + [snapshot_name(inputs["final"])])
     if "diff" in entries:
         command = [sys.executable, "-B", os.path.join(_HERE, "yomiyasu_diff.py"), "--json"]
         if record["options"].get("stance") is not None:
             command += ["--stance", record["options"]["stance"]]
         # run と同じく資料の写しも渡す（2.4.0）
         for item in inputs.get("materials") or []:
-            command += ["--material", snapshot(item)]
+            command += ["--material", snapshot_name(item)]
         # 新規作成で資料を原文とみなした記録は、その資料の写しと比べる
-        commands["diff"] = command + context + [snapshot(_diff_source_item(record)), snapshot(inputs["final"])]
+        commands["diff"] = command + context + [snapshot_name(_diff_source_item(record)), snapshot_name(inputs["final"])]
     environment = dict(os.environ, PYTHONIOENCODING="utf-8")
-    children = _Children(timeout, environment)
+    children = _Children(timeout, environment, cwd=folder)
     problems = []
     rebuilt = {}
     try:
@@ -4282,6 +4328,12 @@ def _verify(args, parser, _final=None, _return=False):
     if problem:
         _error(problem)
         return 2
+    if _final is None:
+        # 3.0.0: 作業フォルダの外のファイルと、点で始まる部分を含むパスは、読む前に断る（export は _management で確かめる）
+        problem = _path_problem("verify", (args.final, args.source))
+        if problem:
+            _error(problem)
+            return 2
     stdin_data = None
     if _final is None and "-" in (args.final, args.source):
         stdin_data, problem = _read_stdin_bytes()
@@ -4871,6 +4923,12 @@ def _management(command, args, parser):
         parser.error(_run_id_problem(args.run_id))
     if args.source == "-" or getattr(args, "final", None) == "-":
         parser.error("標準入力（-）は使えません")
+    if command in ("start", "export"):
+        # 3.0.0: 作業フォルダの外のファイルと、点で始まる部分を含むパスは、読む前と書く前に断る。start の --final は
+        # まだ読まないが、あとで run と export に渡すファイルなので同じに確かめる。end の --source は登録と比べるだけで読まない
+        problem = _path_problem(command, (args.source, args.final))
+        if problem:
+            parser.error(problem)
     if command == "start":
         # 語の一覧（run と同じ探し方）。読めなければ、状態フォルダを決める前に2で断る
         words, problem = _resolve_words(args, parser, _getcwd())
@@ -4979,7 +5037,7 @@ _RECORD_NOTE = ("記録はこのコマンドだけが作ります。同じ権限
 _EXIT_CODES = """終了コード:
   0  run: 検査を最後まで実行し、--fail-on の条件に当たらなかった（状態 executed か unrecorded。候補の有無によらない）。verify: 記録と照合が合った（executed）。-h と --version も0。start: 登録した（started）。export: 写しを書いた（exported）。end: 登録を終えた（ended）
   1  run: --fail-on の条件に当たった（記録は残す）。verify: 記録がない、または記録と合わない（理由は2行目の状態の行と --json の problems）。run: 登録の上限で実行しなかった（unverified）。export: 照合が合わない。end: 登録がない
-  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、区切りの誤り、使えない値、原文と最終稿が同じファイル、資料と最終稿が同じ中身、空の最終稿、別の原文の実行ID、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）。何も書かない（状態 not_run）
+  2  使い方か入力の誤り（ファイルを開けない、読まないファイル（作業フォルダの外、名前が点で始まる部分を含むパス）を渡した、UTF-8 として読めない、区切りの誤り、使えない値、原文と最終稿が同じファイル、資料と最終稿が同じ中身、空の最終稿、別の原文の実行ID、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）。何も書かない（状態 not_run）
   3  検査の一部を実行できなかった（lint か diff が内部の誤りか時間切れで終わらなかった、途中で最終稿が変わった。状態 partial）か、check の予期しない内部の誤り、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_check.py run --final 最終稿 (--source 原文 | --material 資料) [オプション]\n"
           "       yomiyasu_check.py run --stdin [オプション]\n"

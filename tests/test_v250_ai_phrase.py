@@ -15,6 +15,8 @@ SCRIPTS = ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS))
 import yomiyasu_lint  # noqa: E402
 from markdown_visibility import resolve_words  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import working_folder  # noqa: E402
 
 
 def ai(text, **options):
@@ -115,7 +117,7 @@ class AiPhraseTest(unittest.TestCase):
         self.assertEqual([f["rule"] for f in result["findings"]], ["ai_phrase"])
         self.assertEqual(result["rule_penalty_score"], 100)
         self.assertIn("ai_phrase", yomiyasu_lint._V250_RULES)
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             path = Path(folder) / "a.md"
             path.write_bytes((text).encode("utf-8"))
             for args in (["--strict"], ["--fail-on", "warn"], ["--fail-on", "error"]):

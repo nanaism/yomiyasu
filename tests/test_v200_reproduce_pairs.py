@@ -9,6 +9,7 @@ v1.1.2 では、この試験はすべて失敗する。
 
 from pathlib import Path
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -93,6 +94,9 @@ class PairCase(unittest.TestCase):
         folder = tempfile.TemporaryDirectory(prefix="yomiyasu-v200-pairs-")
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)
+        # 3.0.0: lint と diff は作業フォルダの外のファイルを読まないので、ファイルを置く一時フォルダで動かす（子のプロセスも）
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(folder.name)
 
     def write(self, name, text):
         path = self.root / name

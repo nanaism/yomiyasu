@@ -15,6 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import yomiyasu_diff  # noqa: E402
 import yomiyasu_lint  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import working_folder  # noqa: E402
 
 SHAPE_RULES = ("say_hedge", "copy_comma_noun", "bare_verb_chain")
 COMMON_TAIL = "文脈を見て、誰が何をどうするかを書き直すか確かめてください。"
@@ -298,7 +300,7 @@ class CommonTest(unittest.TestCase):
         self.assertEqual(sorted(finding["rule"] for finding in result["findings"]), sorted(rule for _, rule in OWNER_SEEDS))
         self.assertEqual(result["counts"], {"error": 0, "warn": 0, "info": 3})
         self.assertEqual(result["rule_penalty_score"], 100)
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             path = Path(folder) / "seed.md"
             path.write_bytes(text.encode("utf-8"))
             for argv in (["--strict", str(path)], ["--fail-on=warn", str(path)], ["--fail-on=error", str(path)]):

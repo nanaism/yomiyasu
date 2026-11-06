@@ -574,7 +574,8 @@ class HedgeMarks(unittest.TestCase):
                         cmd = [sys.executable, '-B', str(ROOT / 'scripts/yomiyasu_diff.py'), '--json']
                         if fail_on:
                             cmd.append('--fail-on=meaning-risk')
-                        process = subprocess.run(cmd + [str(old), str(new)], capture_output=True, text=True, encoding='utf-8')
+                        process = subprocess.run(cmd + [str(old), str(new)], capture_output=True, text=True, encoding='utf-8',
+                                                 cwd=tmp)
                         self.assertEqual(process.returncode, int(fail_on and tag != 'S1'), process.stderr)
                         self.assertEqual(json.loads(process.stdout), diff.diff(*EXAMPLES[tag]))
 

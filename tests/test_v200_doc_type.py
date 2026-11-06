@@ -391,6 +391,9 @@ class DocTypeCase(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.root = Path(os.path.realpath(folder.name))
         self.state = self.root / ".yomiyasu"
+        # 3.0.0: lint、diff、check は作業フォルダの外のファイルを読まないので、ファイルを置く一時フォルダで動かす
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(str(self.root))
 
     def write(self, name, text):
         path = self.root / name

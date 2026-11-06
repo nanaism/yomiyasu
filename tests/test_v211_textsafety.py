@@ -348,11 +348,12 @@ class StdinLineEndTests(_Case):
     def outputs(self, eol):
         source = eol.join(self.SOURCE) + eol
         final = eol.join(self.FINAL) + eol
-        (self.root / "s.md").write_bytes(source.encode("utf-8"))
-        (self.root / "f.md").write_bytes(final.encode("utf-8"))
+        # 3.0.0: check は作業フォルダ（self.project）の外のファイルを読まないので、原稿は作業フォルダに置く
+        (self.project / "s.md").write_bytes(source.encode("utf-8"))
+        (self.project / "f.md").write_bytes(final.encode("utf-8"))
         stdin = eol.join(["<<<yomiyasu:original>>>", source + "<<<yomiyasu:final>>>", final]).encode("utf-8")
         piped = self.check("run", "--stdin", "--json", stdin=stdin, state=self.root / ("st-in-" + str(len(eol))))
-        filed = self.check("run", "--source", str(self.root / "s.md"), "--final", str(self.root / "f.md"), "--json",
+        filed = self.check("run", "--source", str(self.project / "s.md"), "--final", str(self.project / "f.md"), "--json",
                            state=self.root / ("st-file-" + str(len(eol)) + eol.replace("\r", "r").replace("\n", "n")))
         return piped, filed
 

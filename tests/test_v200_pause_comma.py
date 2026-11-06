@@ -16,6 +16,8 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import yomiyasu_lint as lint
 import yomiyasu_check as check
 from test_v200_lint_output import EXAMPLE1_INPUT, EXAMPLE2_INPUT, JSON_KEYS, FINDING_KEYS
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import working_folder  # noqa: E402
 
 TYPES = ("pr", "article", "incident", "proposal", "minutes", "manual", "slides", "essay", "formal", "mail", "paper")
 
@@ -283,7 +285,7 @@ class PauseCommaTest(unittest.TestCase):
             self.assertEqual(result["rule_penalty_score"], expected)
             for flags in ([], ["--strict"], ["--fail-on=warn"], ["--fail-on=error"]):
                 self.assertEqual(call(lint.main, ["-", "--doc-type", "article"] + flags, text)[0], 0)
-        with tempfile.TemporaryDirectory() as tmp:
+        with tempfile.TemporaryDirectory() as tmp, working_folder(tmp):
             source, final = Path(tmp) / "source.md", Path(tmp) / "final.md"
             source.write_bytes(REMOVE[3][0].replace("、", "").encode("utf-8"))
             final.write_bytes(REMOVE[3][0].encode("utf-8"))

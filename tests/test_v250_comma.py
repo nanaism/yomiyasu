@@ -221,11 +221,12 @@ class CommaIncreaseTest(unittest.TestCase):
             old.write_bytes((ORIGINAL).encode("utf-8"))
             new.write_bytes((REWRITES["plus8"]).encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(SCRIPTS / "yomiyasu_diff.py"), "--fail-on", "meaning-risk",
-                                      str(old), str(new)], capture_output=True, text=True, encoding="utf-8")
+                                      str(old), str(new)], capture_output=True, text=True, encoding="utf-8", cwd=folder)
             self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
             self.assertIn("■ 読点が増えた", process.stdout)
             check = subprocess.run([sys.executable, "-B", str(SCRIPTS / "yomiyasu_check.py"), "run", "--no-record",
-                                    "--source", str(old), "--final", str(new)], capture_output=True, text=True, encoding="utf-8")
+                                    "--source", str(old), "--final", str(new)], capture_output=True, text=True, encoding="utf-8",
+                                   cwd=folder)
             self.assertEqual(check.returncode, 0, check.stdout + check.stderr)
             self.assertIn("読点の増加: 3 → 11個", check.stdout.split("\n")[3])
             self.assertIn("■ 読点が増えた", check.stdout)

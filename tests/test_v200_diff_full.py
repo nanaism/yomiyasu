@@ -28,7 +28,7 @@ sys.path.insert(0, str(SCRIPTS))
 sys.path.insert(0, str(ROOT / "tests"))
 
 import yomiyasu_diff  # noqa: E402
-from portable import run_text  # noqa: E402
+from portable import run_text, files_folder  # noqa: E402
 
 
 NINE_KEYS = ["markers", "new_words", "lost_words", "structure", "spans", "logic", "bold", "endings", "type_changes"]
@@ -268,13 +268,13 @@ def split_lines(text):
     return lines
 
 
-def run_diff(args, stdin=None, env=None):
+def run_diff(args, stdin=None, env=None, cwd=None):
     """標準入力を渡さないときは空にする（親の標準入力を受け継ぐと、誤って読む実装が端末でだけ timeout まで止まる）。
     渡す文字列は、改行を変えずに UTF-8 のバイト列で渡す（portable.run_text）。"""
     feed = {"stdin": subprocess.DEVNULL} if stdin is None else {"input": stdin}
     return run_text(
         [sys.executable, "-B", str(DIFF)] + [str(a) for a in args],
-        encoding="utf-8", capture_output=True, timeout=30, env=env, **feed
+        encoding="utf-8", capture_output=True, timeout=30, env=env, cwd=cwd, **feed
     )
 
 
@@ -471,6 +471,9 @@ class DiffCase(unittest.TestCase):
         folder = tempfile.TemporaryDirectory(prefix="yomiyasu-v200-diff-")
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)
+        # 3.0.0: diff は作業フォルダの外のファイルを読まないので、ファイルを置く一時フォルダで動かす（子のプロセスも）
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(folder.name)
 
     def write(self, name, data):
         """文字列は UTF-8 にし、改行を変えずにそのまま書く。"""
@@ -1232,7 +1235,7 @@ class TestDeterminism(DiffCase):
                 outputs = []
                 for seed in ("0", "1"):
                     env = dict(os.environ, PYTHONHASHSEED=seed)
-                    process = run_diff(["--json", source, rewritten], env=env)
+                    process = run_diff(["--json", source, rewritten], env=env, cwd=files_folder(source, rewritten))
                     self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
                     outputs.append(process.stdout)
                 self.assertEqual(outputs[0], outputs[1])

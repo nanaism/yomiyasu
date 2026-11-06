@@ -19,6 +19,8 @@ import sys
 import tempfile
 import time
 import unittest
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import working_folder  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 CHECK = ROOT / "scripts" / "yomiyasu_check.py"
@@ -137,7 +139,7 @@ class MkdtempTest(unittest.TestCase):
 
     def test_check_no_longer_uses_tempfile_to_make_names(self):
         """記録を残さない run（一時フォルダに写しを置く）も、tempfile の名前を試す関数を使わない。"""
-        with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder:
+        with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder, working_folder(folder):
             a, b = os.path.join(folder, "a.md"), os.path.join(folder, "b.md")
             Path(a).write_bytes("設定を更新します。\n".encode("utf-8"))
             Path(b).write_bytes("設定を更新しました。\n".encode("utf-8"))
@@ -156,6 +158,9 @@ class RunEndsWhenStateIsNotWritableTest(unittest.TestCase):
     def setUp(self):
         self.folder = tempfile.mkdtemp(prefix="yomiyasu-v212-")
         self.addCleanup(lambda: __import__("shutil").rmtree(self.folder, ignore_errors=True))
+        # 3.0.0: check は作業フォルダの外のファイルを読まないので、原稿を置く一時フォルダで動かす
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(self.folder)
         self.state = os.path.join(self.folder, "state")
         os.mkdir(self.state)
         self.a, self.b = os.path.join(self.folder, "a.md"), os.path.join(self.folder, "b.md")
@@ -241,7 +246,7 @@ class RecordingRunUsesBoundedNamesTest(unittest.TestCase):
     _place_new_file か _write_atomic を tempfile.mkstemp に戻すと落ちる。"""
 
     def test_run_and_start_with_a_writable_state(self):
-        with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder:
+        with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder, working_folder(folder):
             state = os.path.join(folder, "state")
             a, b = os.path.join(folder, "a.md"), os.path.join(folder, "b.md")
             Path(a).write_bytes("設定を更新します。\n".encode("utf-8"))
@@ -261,7 +266,7 @@ class RecordingRunUsesBoundedNamesTest(unittest.TestCase):
 class StartLockTimeoutTest(unittest.TestCase):
     def test_lock_timeout_is_not_reported_as_unwritable(self):
         """同じ原稿の登録のロックを待ちきれなかったときは、書けないとは案内せず、今までどおり内部エラーにする。"""
-        with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder:
+        with tempfile.TemporaryDirectory(prefix="yomiyasu-v212-") as folder, working_folder(folder):
             a = os.path.join(folder, "a.md")
             Path(a).write_bytes("原稿です。\n".encode("utf-8"))
             with mock.patch.object(check._ArmedLock, "__enter__", side_effect=TimeoutError("armed_lock")):

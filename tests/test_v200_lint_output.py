@@ -242,6 +242,9 @@ class LintCase(unittest.TestCase):
         folder = tempfile.TemporaryDirectory(prefix="yomiyasu-v200-lint-")
         self.addCleanup(folder.cleanup)
         self.root = Path(folder.name)
+        # 3.0.0: lint、diff、check は作業フォルダの外のファイルを読まないので、ファイルを置く一時フォルダで動かす（子のプロセスも）
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(folder.name)
 
     def write(self, name, text):
         path = self.root / name

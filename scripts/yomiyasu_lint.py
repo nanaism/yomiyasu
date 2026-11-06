@@ -31,17 +31,20 @@ if __name__ == "__main__":
 _VISIBILITY_NAMES = ("analyze_markdown", "line_visible_text", "range_overlaps_protected",
                      "inline_protected_spans", "unicode_whitespace", "decode_source",
                      "DOC_TYPES", "READER_LEVELS", "normalize_doc_type", "normalize_reader", "context_label",
-                     "WordsError", "resolve_words", "current_directory", "words_context", "words_label")
+                     "WordsError", "resolve_words", "current_directory", "words_context", "words_label",
+                     "input_path_problem")
 try:
     try:
         if __package__:
             from .markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
             from .markdown_visibility import DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader, context_label
             from .markdown_visibility import WordsError, resolve_words, current_directory, words_context, words_label
+            from .markdown_visibility import input_path_problem
         else:
             from markdown_visibility import analyze_markdown, line_visible_text, range_overlaps_protected, inline_protected_spans, unicode_whitespace, decode_source
             from markdown_visibility import DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader, context_label
             from markdown_visibility import WordsError, resolve_words, current_directory, words_context, words_label
+            from markdown_visibility import input_path_problem
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
@@ -90,6 +93,7 @@ try:
         WordsError = _visibility_module.WordsError
         resolve_words = _visibility_module.resolve_words
         current_directory = _visibility_module.current_directory
+        input_path_problem = _visibility_module.input_path_problem
         words_context = _visibility_module.words_context
         words_label = _visibility_module.words_label
 except ImportError as _import_error:
@@ -5983,7 +5987,7 @@ _MEANING_RISK_MESSAGE = (
 _EXIT_CODES = """終了コード:
   0  検査を最後まで実行し、--strict と --fail-on の条件に当たらなかった（候補の有無によらない）。-h と --version も0
   1  --strict か --fail-on の条件に当たった
-  2  使い方か入力の誤り（ファイルを開けない、UTF-8 として読めない、標準入力を読めない、使えない --fail-on、--doc-type、--reader の値、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）
+  2  使い方か入力の誤り（ファイルを開けない、読まないファイル（作業フォルダの外、名前が点で始まる部分を含むパス）を渡した、UTF-8 として読めない、標準入力を読めない、使えない --fail-on、--doc-type、--reader の値、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 
 
@@ -6168,6 +6172,15 @@ def _conditions(raw):
     return names, None
 
 
+def _path_problem(path):
+    """コマンドラインで渡されたファイルを読まないときの誤りの文か None（3.0.0。markdown_visibility.input_path_problem）。"""
+    reason = input_path_problem(path) if path is not None else None
+    if reason is None:
+        return None
+    return "Error opening file {}: {}。このファイルを検査するときは、標準入力から渡してください（ファイルの名前の代わりに - を渡すか、省きます）".format(
+        path, reason)
+
+
 def _read_input(path):
     """ファイルか標準入力を読み、(文字列, None) か (None, 誤りの文) を返す。"""
     if path is not None and path != "-":
@@ -6221,6 +6234,10 @@ def _run(argv):
         words = resolve_words(current_directory(), args.words, args.no_words)
     except WordsError as error:
         _error(str(error))
+        return 2
+    problem = _path_problem(args.file)
+    if problem:
+        _error(problem)
         return 2
     content, problem = _read_input(args.file)
     if problem:

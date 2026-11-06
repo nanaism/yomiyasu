@@ -20,6 +20,7 @@ import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_v200_check import CHECK, CheckCase, RUN_DISCLAIMER, RUN_HEAD_NOTE, split_lines  # noqa: E402
+from portable import working_folder  # noqa: E402
 
 STATUS_HEAD = "yomiyasu-check: "
 # lint の meta_filler が4件当たる推敲（一覧には3件までを出し、残りを「ほか1件」にする）
@@ -157,11 +158,13 @@ class OnlyTheTwoLinesTest(CheckCase):
     """一覧を作る関数を空にした出力と比べ、違いが足した2行だけで、--json は1字も変わらないことを確かめる。"""
 
     def outputs(self, module, argv, stdin=None):
-        human = call(module.main, argv, stdin)
-        data = call(module.main, argv + ["--json"], stdin)
-        with mock.patch.object(module, "_head_lines", return_value=[]):
-            plain = call(module.main, argv, stdin)
-            plain_data = call(module.main, argv + ["--json"], stdin)
+        # 3.0.0: check は作業フォルダの外のファイルを読まないので、ファイルを置く一時フォルダで動かす
+        with working_folder(self.root):
+            human = call(module.main, argv, stdin)
+            data = call(module.main, argv + ["--json"], stdin)
+            with mock.patch.object(module, "_head_lines", return_value=[]):
+                plain = call(module.main, argv, stdin)
+                plain_data = call(module.main, argv + ["--json"], stdin)
         return human, data, plain, plain_data
 
     def test_head_is_the_only_difference(self):

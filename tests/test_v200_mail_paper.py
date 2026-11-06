@@ -14,6 +14,8 @@ import yomiyasu_diff as diff
 import yomiyasu_lint as lint
 import yomiyasu_check as check
 import markdown_visibility as visibility
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import working_folder  # noqa: E402
 
 
 def call(main, args):
@@ -94,7 +96,7 @@ class DocTypes(unittest.TestCase):
         self.assertFalse(lint.lint_text('ありがとう！😀', doc_type='mail')['findings'])
 
     def test_cli_types_and_japanese_help(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             old, new = Path(folder)/'old.md', Path(folder)/'new.md'
             old.write_bytes('確認します。'.encode('utf-8'))
             new.write_bytes('確認します。'.encode('utf-8'))
@@ -286,7 +288,7 @@ class Politeness(unittest.TestCase):
 
 class CheckIntegration(unittest.TestCase):
     def test_record_summary_and_replay(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             root=Path(folder); old,new=root/'old.md',root/'new.md'; state=root/'state'
             old.write_bytes('田中様\n結果は関連を示唆する。確認いただきます。'.encode('utf-8'))
             new.write_bytes('佐藤様\n結果は関連を示す。確認する。'.encode('utf-8'))
@@ -308,7 +310,7 @@ class CheckIntegration(unittest.TestCase):
             self.assertEqual((code,err),(0,''),out)
 
     def test_fail_on_citation_and_certainty(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             old,new=Path(folder)/'old.md',Path(folder)/'new.md'
             for a,b,expected in [('既報 (山田 2020)。','既報 (佐藤 2020)。',1),
                                  ('関連を示唆する。','関連を示す。',1),('田中様','佐藤さん',0)]:

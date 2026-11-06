@@ -25,6 +25,8 @@ import sys
 import tempfile
 import unittest
 from unittest import mock
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import run_text  # noqa: E402
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -335,11 +337,20 @@ class HomeStateFolder(unittest.TestCase):
         self.check("run", "--source", "a.md", "--final", "b.md", env=env)
         gone = self.root / "gone"
         gone.mkdir()
+        # 3.0.0: 作業ディレクトリがないと、渡されたファイルが作業フォルダの中か決められないので、ファイルは読まずに2で止まる。
+        # 最終稿は標準入力（--final -）から渡す
+        process = run_text(["sh", "-c", 'cd "$1" && rmdir "$1" && shift && exec "$@"', "sh", str(gone),
+                            sys.executable, "-B", str(CHECK), "verify", "--final", "-"],
+                           cwd=str(self.root), env=env, capture_output=True, encoding="utf-8", timeout=30,
+                           input=(self.work / "b.md").read_text(encoding="utf-8"))
+        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
+        self.assertTrue(process.stdout.splitlines()[1].startswith("yomiyasu-check: executed via=verify "))
+        gone.mkdir()
         process = subprocess.run(["sh", "-c", 'cd "$1" && rmdir "$1" && shift && exec "$@"', "sh", str(gone),
                                   sys.executable, "-B", str(CHECK), "verify", "--final", str(self.work / "b.md")],
                                  cwd=str(self.root), env=env, capture_output=True, encoding="utf-8", timeout=30)
-        self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
-        self.assertTrue(process.stdout.splitlines()[1].startswith("yomiyasu-check: executed via=verify "))
+        self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
+        self.assertIn("作業ディレクトリを読めません", process.stderr)
 
 
 if __name__ == "__main__":

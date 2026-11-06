@@ -1186,6 +1186,81 @@ def current_directory():
         return None
 
 
+# ---- コマンドラインで渡されたファイルを読む範囲（3.0.0）----
+# lint、diff、check の3本は、コマンドラインで名前を渡されたファイルのうち、作業フォルダの中で、作業フォルダからの道筋に
+# 点で始まる部分（.env、.git/、sub/.secret/ など）がないものだけを読む。編集中の文書に紛れ込んだ指示で、事前に許された
+# コマンドが鍵や認証のファイルを読んで中身を出さないようにするため。標準入力（-）はいつでも読める。道具が自分で探すフォルダ
+# （状態フォルダ .yomiyasu/、語の一覧 .yomiyasu-words/、references/lists/）と --words のフォルダは、ここでは見ない。
+
+INPUT_PATH_OUTSIDE = "作業フォルダの外にあるファイルは読みません"
+INPUT_PATH_HIDDEN = "名前が点で始まるファイルと、名前が点で始まるフォルダの中のファイルは読みません"
+INPUT_PATH_NO_CWD = "作業フォルダを読めないため、読んでよいファイルか決められません"
+
+
+def input_path_problem(path):
+    """コマンドラインで渡されたファイルのパスを読んでよいか。読んでよければ None、読まないなら理由の文
+    （INPUT_PATH_OUTSIDE、INPUT_PATH_HIDDEN、INPUT_PATH_NO_CWD のどれか）を返す。ファイルは開かない。
+
+    - は標準入力なので読んでよい。ほかは、シンボリックリンクをたどった本当の場所（os.path.realpath）で比べる。
+    作業フォルダの外（Windows でドライブが違うときも）か、作業フォルダからの道筋に点で始まる部分があれば読まない。
+    パスに NUL を含むときは None を返し、開くときの誤りに任せる（どこも開けない）。ほかの理由で場所を決められないときは
+    外とみなす。"""
+    if path == "-":
+        return None
+    try:
+        base = os.path.normcase(os.path.realpath(os.getcwd()))
+    except OSError:
+        return INPUT_PATH_NO_CWD
+    if "\0" in path:
+        return None
+    try:
+        target = os.path.normcase(os.path.realpath(path))
+    except (OSError, ValueError, TypeError):
+        return INPUT_PATH_OUTSIDE
+    parts = _parts_inside(base, target)
+    if parts is None:
+        return INPUT_PATH_OUTSIDE
+    if any(part.startswith(".") for part in parts):
+        return INPUT_PATH_HIDDEN
+    return None
+
+
+def _parts_inside(base, target):
+    """target が作業フォルダ base の中なら、base からの道筋の部分のリスト（base そのものなら空）、外なら None。
+
+    まず文字列で比べる。合わないときは、target から上のフォルダをたどり、base と同じフォルダ（os.path.samestat）が
+    あるかを見る。macOS で大文字と小文字だけが違うパスや、日本語の名前の NFC と NFD だけが違うパスは、realpath と
+    normcase では同じ文字列にならないが、同じフォルダなので中とみなす（3.0.0）。"""
+    try:
+        if os.path.commonpath([base, target]) == base:
+            relative = os.path.relpath(target, base)
+            return [] if relative == os.curdir else relative.split(os.sep)
+    except ValueError:
+        # Windows でドライブが違う（C: と D:）など。下で同じフォルダかを見る
+        pass
+    try:
+        base_stat = os.stat(base)
+    except (OSError, ValueError):
+        return None
+    if not getattr(base_stat, "st_ino", 0):
+        # ファイルの番号を持たないファイルシステムでは、同じフォルダかを決められない
+        return None
+    parts = []
+    current = target
+    while True:
+        try:
+            if os.path.samestat(os.stat(current), base_stat):
+                parts.reverse()
+                return parts
+        except (OSError, ValueError):
+            pass
+        parent, name = os.path.split(current)
+        if not name or parent == current:
+            return None
+        parts.append(name)
+        current = parent
+
+
 def words_context(words):
     """JSON の context.words と check の記録の options.words に入れる5つのキー（この順）。flag-patterns.txt があるときだけ、
     そのあとに flag_patterns_lines と flag_patterns_sha256 を足して7つにする。"""

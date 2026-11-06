@@ -39,7 +39,8 @@ def run_cli(src, dst, *args):
         a.write_bytes(src.encode("utf-8"))
         b.write_bytes(dst.encode("utf-8"))
         return subprocess.run([sys.executable, "-B", str(ROOT / "scripts" / "yomiyasu_diff.py"), str(a), str(b)] + list(args),
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding="utf-8")
+                              stdout=subprocess.PIPE, stderr=subprocess.PIPE, universal_newlines=True, encoding="utf-8",
+                              cwd=tmp)
 
 
 class BoldToHeadingTest(unittest.TestCase):

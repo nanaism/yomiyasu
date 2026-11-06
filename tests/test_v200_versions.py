@@ -385,7 +385,7 @@ class TestCliVersions(unittest.TestCase):
                                        (DIFF, [before, after, "--json"], "DIFF_FORMAT_VERSION")):
             with self.subTest(script=script.name):
                 version = self.version_of(script)
-                process = run_cli(script, args)
+                process = run_cli(script, args, cwd=str(self.root))
                 self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
                 result = json.loads(process.stdout)
                 self.assert_first_keys(result)
