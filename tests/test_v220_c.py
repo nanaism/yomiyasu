@@ -656,8 +656,8 @@ class CheckTest(FolderCase):
         self.assertEqual(yomiyasu_check._words_arguments(None), ["--no-words"])
         self.assertEqual(yomiyasu_check._words_arguments(words), ["--words", words["path"]])
 
-    def test_record_shape(self):
-        words = {"path": "/x", "allow_lines": 0, "flag_lines": 1, "allow_sha256": None, "flag_sha256": "a" * 64}
+    def test_record_shape(self) -> None:
+        words = {"path": str(self.root / "words"), "allow_lines": 0, "flag_lines": 1, "allow_sha256": None, "flag_sha256": "a" * 64}
         self.assertTrue(yomiyasu_check._words_shape(words))
         for wrong in (dict(words, path="x"), dict(words, flag_sha256=None), dict(words, allow_lines=-1),
                       dict(words, flag_sha256="A" * 64), {key: words[key] for key in reversed(WORD_KEYS)},

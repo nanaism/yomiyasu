@@ -106,6 +106,7 @@ try:
         resolve_words = _visibility_module.resolve_words
         words_context = _visibility_module.words_context
         words_label = _visibility_module.words_label
+        absolute_path = _visibility_module.absolute_path
 except ImportError as _import_error:
     # スクリプトとして動かしたときは、main() が内部エラー（終了コード3）として出す。
     # モジュールとして読むときは、そのまま ImportError を出す。
