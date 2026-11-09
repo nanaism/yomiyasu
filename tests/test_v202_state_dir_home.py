@@ -125,7 +125,7 @@ class HomePathRule(unittest.TestCase):
 
         for replacement in (unchanged, broken, lambda path: "~" + path):
             with self.subTest(replacement=replacement):
-                with mock.patch("os.path.expanduser", replacement):
+                with mock.patch.object(Path, "home", lambda: replacement("~")):
                     self.assertEqual(self.both("~/state"), "~/state")
                     self.assertEqual(self.both("~"), "~")
 
@@ -145,7 +145,7 @@ class HomePathRule(unittest.TestCase):
         for profile in ("", "C:\\", "C:", "\\"):
             with self.subTest(profile=profile):
                 with mock.patch.dict(os.environ, {"USERPROFILE": profile}), mock.patch("os.sep", "\\"), \
-                        mock.patch("os.path.expanduser", ntpath.expanduser), \
+                        mock.patch.object(Path, "home", lambda: ntpath.expanduser("~")), \
                         mock.patch("os.path.splitdrive", ntpath.splitdrive):
                     for value in ("~", "~\\state", "~/state"):
                         self.assertEqual(self.both(value), value)
@@ -155,7 +155,7 @@ class HomePathRule(unittest.TestCase):
         C:\\Users\\x にするので、決まりの側で外す）。"""
         profile = "C:\\Users\\me"
         with mock.patch.dict(os.environ, {"USERPROFILE": profile}), \
-                mock.patch("os.sep", "\\"), mock.patch("os.path.expanduser", ntpath.expanduser):
+                mock.patch("os.sep", "\\"), mock.patch.object(Path, "home", lambda: ntpath.expanduser("~")):
             self.assertEqual(self.both("~\\state"), "C:\\Users\\me\\state")
             self.assertEqual(ntpath.normpath(self.both("~/state")), "C:\\Users\\me\\state")
             self.assertEqual(self.both("~"), profile)

@@ -3,9 +3,14 @@
 Offsets are half-open Python string positions. This is a targeted scanner,
 not a claim to implement every CommonMark or GFM construct.
 """
+
+from __future__ import annotations
 __version__ = "2.5.0"
 
 import os
+from pathlib import Path
+from collections.abc import Collection, Iterable, Sequence
+from typing import TypedDict
 import re
 import unicodedata
 from bisect import bisect_left, bisect_right
@@ -34,21 +39,38 @@ _FENCE_OPEN = re.compile(r'^ {0,3}(`{3,}|~{3,})(.*)$')
 _ATX_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]+|$)')
 
 
-def unicode_whitespace(ch):
+class MarkdownLine(TypedDict):
+    line: int
+    raw: str
+    start: int
+    ending: str
+    content_start: int
+    content: str
+    quote_depth: int
+    list_item: bool
+    kind: str
+
+
+class MarkdownBlock(TypedDict):
+    kind: str
+    lines: list[MarkdownLine]
+
+
+def unicode_whitespace(ch: str) -> bool:
     if not ch: return True
     if len(ch) > 1:
         return all(unicode_whitespace(c) for c in ch)
     return ch in '\t\n\r\f' or unicodedata.category(ch) == 'Zs'
 
 
-def _escaped(text, position):
+def _escaped(text: str, position: int) -> bool:
     start = position
     while start > 0 and text[start - 1] == '\\':
         start -= 1
     return (position - start) % 2 == 1
 
 
-def _tag_space_end(text, start):
+def _tag_space_end(text: str, start: int) -> int:
     """Spaces/tabs and at most one Markdown line ending, not Python isspace."""
     pos = start
     while pos < len(text) and text[pos] in ' \t': pos += 1
@@ -58,13 +80,13 @@ def _tag_space_end(text, start):
     return pos
 
 
-def _terminator_positions(text):
+def _terminator_positions(text: str) -> dict[str, list[int]]:
     return {token: [match.start() for match in re.finditer(re.escape(token), text)]
             for token in ('-->', '?>', ']]>', '>')}
 
 
-def _tag_end(text, start, terminators=None):
-    def closed(token, begin):
+def _tag_end(text: str, start: int, terminators: dict[str, list[int]] | None = None) -> int | None:
+    def closed(token: str, begin: int) -> int | None:
         if terminators is None:
             end = text.find(token, begin)
         else:
@@ -112,7 +134,7 @@ def _tag_end(text, start, terminators=None):
     return None
 
 
-def _link_end(text, opening):
+def _link_end(text: str, opening: int) -> int | None:
     """Return a validated inline destination/title end, or no opaque range."""
     pos = opening + 1
     while pos < len(text) and text[pos] in ' \t\n\r': pos += 1
@@ -160,7 +182,7 @@ def _link_end(text, opening):
     return pos + 1 if pos < len(text) and text[pos] == ')' else None
 
 
-def inline_protected_spans(text):
+def inline_protected_spans(text: str) -> list[tuple[int, int, str]]:
     """Code, escaped punctuation and opaque inline tokens, preserving labels."""
     runs = [(m.start(), m.end()) for m in re.finditer(r'`+', text)]
     by_width = {}
@@ -254,7 +276,7 @@ def inline_protected_spans(text):
     return sorted(spans)
 
 
-def _columns(text):
+def _columns(text: str) -> int:
     columns = 0
     for ch in text:
         if ch == ' ': columns += 1
@@ -263,7 +285,7 @@ def _columns(text):
     return columns
 
 
-def _containers(raw, allow_list=True):
+def _containers(raw: str, allow_list: bool = True) -> tuple[int, int, bool]:
     # Default containers can start only with an ASCII space, a quote marker,
     # a list marker, or a Unicode digit. isdigit() is a conservative superset
     # of regex \d; unusual custom marker patterns keep the original path.
@@ -292,7 +314,7 @@ def _containers(raw, allow_list=True):
     return pos, quotes, list_item
 
 
-def _physical_lines(text):
+def _physical_lines(text: str) -> list[tuple[int, str, str]]:
     rows = []
     start = 0
     for ending in re.finditer(r'\r\n|\r|\n', text):
@@ -302,12 +324,12 @@ def _physical_lines(text):
     return rows
 
 
-def _reference_definition(content):
+def _reference_definition(content: str) -> bool:
     """Only a complete one-line definition is hidden; never hide trailing prose."""
     return reference_definition_end([content], 0) == 0
 
 
-def _table_cells(content):
+def _table_cells(content: str) -> list[str]:
     """GFM cell boundaries; an escaped pipe is data even inside code spans."""
     stripped = content.strip(' \t')
     starts = [0]
@@ -324,29 +346,29 @@ def _table_cells(content):
 
 
 class _RowCursor:
-    def __init__(self, lines, row, column=0):
+    def __init__(self, lines: list[str], row: int, column: int = 0) -> None:
         self.lines = lines
         self.row = row
         self.column = column
 
-    def char(self):
+    def char(self) -> str | None:
         line = self.lines[self.row]
         if self.column < len(line):
             return line[self.column]
         return '\n' if self.row + 1 < len(self.lines) else None
 
-    def following(self):
+    def following(self) -> str | None:
         line = self.lines[self.row]
         return line[self.column + 1] if self.column + 1 < len(line) else None
 
-    def advance(self):
+    def advance(self) -> None:
         if self.column < len(self.lines[self.row]):
             self.column += 1
         elif self.row + 1 < len(self.lines):
             self.row += 1
             self.column = 0
 
-    def escape(self):
+    def escape(self) -> bool:
         if self.char() == '\\' and self.following() in _ASCII_PUNCT:
             self.advance()
             self.advance()
@@ -354,7 +376,7 @@ class _RowCursor:
         return False
 
 
-def _reference_gap(cursor):
+def _reference_gap(cursor: _RowCursor) -> bool:
     """Consume spaces/tabs and at most one row break; return whether present."""
     seen = False
     while cursor.char() in (' ', '\t'):
@@ -368,7 +390,7 @@ def _reference_gap(cursor):
     return seen
 
 
-def _reference_destination(cursor):
+def _reference_destination(cursor: _RowCursor) -> bool:
     if cursor.char() == '<':
         cursor.advance()
         while cursor.char() is not None:
@@ -383,8 +405,7 @@ def _reference_destination(cursor):
         return False
     count = 0
     depth = 0
-    while cursor.char() is not None and cursor.char() not in (' ', '\t', '\n'):
-        ch = cursor.char()
+    while (ch := cursor.char()) is not None and ch not in (' ', '\t', '\n'):
         if cursor.escape():
             count += 2
             continue
@@ -403,7 +424,7 @@ def _reference_destination(cursor):
     return count > 0 and depth == 0
 
 
-def _reference_title_end(cursor):
+def _reference_title_end(cursor: _RowCursor) -> int | None:
     opener = cursor.char()
     closer = ')' if opener == '(' else opener
     cursor.advance()
@@ -424,7 +445,7 @@ def _reference_title_end(cursor):
     return None
 
 
-def reference_definition_end(lines, start, paragraph_context=False):
+def reference_definition_end(lines: list[str], start: int, paragraph_context: bool = False) -> int | None:
     """Return the last definition row (inclusive), or no opaque boundary.
 
     Rows contain no line terminator and preserve row identity. The caller has
@@ -444,8 +465,7 @@ def reference_definition_end(lines, start, paragraph_context=False):
     cursor.advance()
     label_length = 0
     meaningful = False
-    while cursor.char() is not None and cursor.char() != ']':
-        ch = cursor.char()
+    while (ch := cursor.char()) is not None and ch != ']':
         if cursor.escape():
             label_length += 2
             meaningful = True
@@ -479,11 +499,11 @@ def reference_definition_end(lines, start, paragraph_context=False):
     return destination_row if title_row is None and title_on_later_row else title_row
 
 
-def analyze_markdown(text, skip_frontmatter=True):
-    lines = []
-    blocks = []
+def analyze_markdown(text: str, skip_frontmatter: bool = True) -> dict:
+    lines: list[MarkdownLine] = []
+    blocks: list[MarkdownBlock] = []
     protected = []
-    current = None
+    current: MarkdownBlock | None = None
     fence = None
     html_until = None
     active_list_indent = 0
@@ -516,7 +536,7 @@ def analyze_markdown(text, skip_frontmatter=True):
                 active_list_indent = 0
         content = raw[prefix:]
         stripped = content.strip(' \t')
-        info = {'line': index + 1, 'raw': raw, 'start': start, 'ending': ending,
+        info: MarkdownLine = {'line': index + 1, 'raw': raw, 'start': start, 'ending': ending,
                 'content_start': start + prefix, 'content': content,
                 'quote_depth': depth, 'list_item': list_item, 'kind': 'paragraph'}
         if prefix:
@@ -576,10 +596,14 @@ def analyze_markdown(text, skip_frontmatter=True):
                 elif html_start.startswith('<![CDATA['): html_until = r'\]\]>'
                 elif re.match(r'<![A-Z]', html_start): html_until = '>'
                 elif re.match(r'<(?:script|pre|style|textarea)(?:[ \t>]|$)', html_start, re.I):
-                    tag = re.match(r'<([A-Za-z]+)', html_start).group(1)
+                    opening = re.match(r'<([A-Za-z]+)', html_start)
+                    assert opening is not None
+                    tag = opening.group(1)
                     html_until = '</' + tag + r'\s*>'
                 elif re.match(r'</?([A-Za-z][A-Za-z0-9-]*)(?:[ \t/>]|$)', html_start):
-                    tag = re.match(r'</?([A-Za-z][A-Za-z0-9-]*)', html_start).group(1).lower()
+                    opening = re.match(r'</?([A-Za-z][A-Za-z0-9-]*)', html_start)
+                    assert opening is not None
+                    tag = opening.group(1).lower()
                     if tag in _HTML_BLOCK_TAGS: html_until = 'blank'
                     elif (current is None or current['kind'] not in ('paragraph', 'list', 'quote')):
                         end = _tag_end(html_start, 0)
@@ -599,7 +623,7 @@ def analyze_markdown(text, skip_frontmatter=True):
             protected.append((start, start + len(raw) + len(ending), kind))
         continue_block = (current is not None and current['kind'] == kind
                           and kind not in ('heading', 'table', 'list'))
-        if continue_block and kind == 'quote' and current['lines'][0]['quote_depth'] != depth:
+        if continue_block and kind == 'quote' and current is not None and current['lines'][0]['quote_depth'] != depth:
             continue_block = False
         if kind == 'list' and current is not None and current['kind'] == 'list' and not _containers(raw)[2]:
             continue_block = True
@@ -609,11 +633,12 @@ def analyze_markdown(text, skip_frontmatter=True):
         if not continue_block:
             current = {'kind': info['kind'], 'lines': []}
             blocks.append(current)
+        assert current is not None
         current['lines'].append(info)
     # Definitions are recognized only at the beginning of a completed leaf
     # paragraph. This both admits multiline labels/destinations/titles and
     # prevents a definition-shaped later row from interrupting existing prose.
-    reference_blocks = []
+    reference_blocks: list[MarkdownBlock] = []
     for block in blocks:
         rows = block['lines']
         offset = 0
@@ -657,7 +682,7 @@ def analyze_markdown(text, skip_frontmatter=True):
             'mask_ends': [right for _, right in merged]}
 
 
-def _merged_masks(spans):
+def _merged_masks(spans: Iterable[tuple[int, int, str]]) -> tuple[list[tuple[int, int]], list[int]]:
     merged = []
     for left, right, _ in sorted(spans):
         if merged and left <= merged[-1][1]:
@@ -667,7 +692,7 @@ def _merged_masks(spans):
     return merged, [right for _, right in merged]
 
 
-def line_visible_text(analysis, line_no, protected_kinds=None):
+def line_visible_text(analysis: dict, line_no: int, protected_kinds: Collection[str] | None = None) -> str:
     """Mask chosen opaque kinds; default masks every protected source interval."""
     key = None if protected_kinds is None else frozenset(protected_kinds)
     cached = analysis.setdefault('_line_visible_cache', {})
@@ -683,6 +708,7 @@ def line_visible_text(analysis, line_no, protected_kinds=None):
     if protected_kinds is None:
         masks, ends = analysis['mask_spans'], analysis['mask_ends']
     else:
+        assert key is not None
         cache = analysis.setdefault('_kind_mask_cache', {})
         if key not in cache:
             cache[key] = _merged_masks(span for span in analysis['protected_spans'] if span[2] in key)
@@ -702,7 +728,7 @@ def line_visible_text(analysis, line_no, protected_kinds=None):
     return result
 
 
-def range_overlaps_protected(analysis, start, end, protected_kinds=None):
+def range_overlaps_protected(analysis: dict, start: int, end: int, protected_kinds: Collection[str] | None = None) -> bool:
     """Whether a nonempty raw-source range intersects any protected atom."""
     if end <= start: return False
     if protected_kinds is None:
@@ -717,7 +743,7 @@ def range_overlaps_protected(analysis, start, end, protected_kinds=None):
     return index < len(masks) and masks[index][0] < end
 
 
-def decode_source(data):
+def decode_source(data: str | bytes | bytearray) -> tuple[str, dict]:
     """入力のバイト列を、検査に使う文字列にする。lint、diff、check で同じ読み方にするための関数。
 
     UTF-8 として厳密に解き（読めなければ UnicodeDecodeError）、先頭の BOM を1つ外し、
@@ -775,7 +801,7 @@ READER_LEVELS = (
 )
 
 
-def _normalize_choice(option, value, rows):
+def _normalize_choice(option: str, value: object, rows: Sequence[tuple]) -> str | None:
     """NFKC にし、前後の空白を外し、英字を小文字にして、使える値なら返す。None はそのまま返す。
     使えない値（空の文字列を含む）は、標準エラーにそのまま書ける1行の文の ValueError にする。"""
     if value is None:
@@ -791,17 +817,17 @@ def _normalize_choice(option, value, rows):
         option, shown, "、".join("{}（{}）".format(row[0], row[1]) for row in rows)))
 
 
-def normalize_doc_type(value):
+def normalize_doc_type(value: object) -> str | None:
     """--doc-type の値を正規化する（SLIDES、前後の空白、全角も slides）。None はそのまま。使えない値は ValueError。"""
     return _normalize_choice("--doc-type", value, DOC_TYPES)
 
 
-def normalize_reader(value):
+def normalize_reader(value: object) -> str | None:
     """--reader の値を正規化する。None はそのまま。使えない値は ValueError。"""
     return _normalize_choice("--reader", value, READER_LEVELS)
 
 
-def context_label(doc_type, reader):
+def context_label(doc_type: object, reader: object) -> str:
     """lint と diff の人が読む出力で、種類と読者を書く行の初めの部分（「文書の種類: スライド（slides）、読者: 指定なし。」）。"""
     doc_type, reader = normalize_doc_type(doc_type), normalize_reader(reader)
     kinds, readers = dict(row[:2] for row in DOC_TYPES), dict(READER_LEVELS)
@@ -827,12 +853,12 @@ class WordsError(Exception):
     str() は標準エラーにそのまま書ける1行の文（入力の誤りの「Error opening file …」と同じ形）。"""
 
 
-def _words_home(value):
+def _words_home(value: str) -> str:
     """--words の値の頭の ~ を、ホームフォルダに置き換える（check と hook の _home_path と同じ決まり）。"""
     if isinstance(value, str) and (value == "~" or value[:2] in ("~/", "~" + os.sep)):
         try:
-            home = os.path.expanduser("~")
-            expanded = os.path.expanduser(value)
+            home = str(Path("~").expanduser())
+            expanded = str(Path(value).expanduser())
         except Exception:  # pwd を読めない環境など
             return value
         if (not home.startswith("~") and os.path.splitdrive(home)[1].strip().strip("/" + os.sep)
@@ -841,7 +867,7 @@ def _words_home(value):
     return value
 
 
-def find_words_folder(cwd, option=None):
+def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
     """語の一覧のフォルダの絶対パスか None（フォルダがない）。
 
     1 option（--words）があれば、そのフォルダ（相対パスは cwd から。ないかフォルダでなければ WordsError）。
@@ -852,32 +878,32 @@ def find_words_folder(cwd, option=None):
         value = _words_home(option)
         if not str(value).strip():
             raise WordsError("--words に空の値は使えません")
-        if not os.path.isabs(value):
+        if not Path(value).is_absolute():
             if cwd is None:
                 raise WordsError("Error opening folder {}: 作業ディレクトリを読めないため、相対パスを決められません".format(option))
-            value = os.path.join(cwd, value)
-        folder = os.path.abspath(value)
-        if not os.path.isdir(folder):
-            reason = "フォルダではありません" if os.path.exists(folder) else "フォルダがありません"
+            value = str(Path(cwd) / value)
+        folder = str(Path(os.path.normpath(value)).absolute())
+        if not Path(folder).is_dir():
+            reason = "フォルダではありません" if Path(folder).exists() else "フォルダがありません"
             raise WordsError("Error opening folder {}: --words の{}".format(option, reason))
         return folder
     if cwd is None:
         return None
-    cwd = os.path.abspath(cwd)
-    current = cwd
+    origin = Path(os.path.normpath(cwd)).absolute()
+    current = origin
     while True:
-        if os.path.exists(os.path.join(current, ".git")):
-            folder = os.path.join(current, WORDS_FOLDER)
+        if (current / ".git").exists():
+            folder = current / WORDS_FOLDER
             break
-        parent = os.path.dirname(current)
+        parent = current.parent
         if parent == current:
-            folder = os.path.join(cwd, WORDS_FOLDER)
+            folder = origin / WORDS_FOLDER
             break
         current = parent
-    return folder if os.path.isdir(folder) else None
+    return str(folder) if folder.is_dir() else None
 
 
-def _words_lines(path, data):
+def _words_lines(path: str, data: bytes) -> list[str]:
     """1つのファイルのバイト列を語の並びにする。UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
     try:
         data.decode("utf-8")
@@ -900,7 +926,7 @@ def _words_lines(path, data):
     return words
 
 
-def load_words(folder):
+def load_words(folder: str) -> dict | None:
     """フォルダの allow.txt と flag.txt を読む。どちらもないときは None（一覧なし）。
 
     戻り値は {"path": フォルダ, "allow": 語のタプル, "flag": 語のタプル, "allow_lines": 語の数, "flag_lines": 語の数,
@@ -910,9 +936,9 @@ def load_words(folder):
     result = {"path": folder}
     found = False
     for key, name in WORDS_FILES:
-        path = os.path.join(folder, name)
+        path = str(Path(folder) / name)
         try:
-            with open(path, "rb") as handle:
+            with Path(path).open("rb") as handle:
                 data = handle.read()
         except _WORDS_ABSENT:
             words, digest = [], None
@@ -928,7 +954,7 @@ def load_words(folder):
     return result if found else None
 
 
-def resolve_words(cwd, option=None, disabled=False):
+def resolve_words(cwd: str | None, option: str | None = None, disabled: bool = False) -> dict | None:
     """--words と --no-words から語の一覧を決める。一覧を使うときは load_words の値、使わないときは None。
     disabled（--no-words）なら探さない。cwd は作業ディレクトリ（読めなければ None）。読めない一覧は WordsError。"""
     if disabled:
@@ -937,20 +963,20 @@ def resolve_words(cwd, option=None, disabled=False):
     return load_words(folder) if folder is not None else None
 
 
-def current_directory():
+def current_directory() -> str | None:
     """作業ディレクトリか、読めない（消えた）ときは None。"""
     try:
-        return os.getcwd()
+        return str(Path.cwd())
     except OSError:
         return None
 
 
-def words_context(words):
+def words_context(words: dict) -> dict:
     """JSON の context.words と check の記録の options.words に入れる5つのキー（この順）。"""
     return {"path": words["path"], "allow_lines": words["allow_lines"], "flag_lines": words["flag_lines"],
             "allow_sha256": words["allow_sha256"], "flag_sha256": words["flag_sha256"]}
 
 
-def words_label(context):
+def words_label(context: dict) -> str:
     """人が読む出力の「語の一覧: <パス>（allow N語、flag N語）。」。context は words_context の値（読むだけ）。"""
     return "語の一覧: {}（allow {}語、flag {}語）。".format(context["path"], context["allow_lines"], context["flag_lines"])

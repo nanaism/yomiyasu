@@ -163,6 +163,18 @@ class ReaderTest(FolderCase):
         # git の外では、上のフォルダの一覧は探さない
         self.assertIsNone(markdown_visibility.find_words_folder(str(sub)))
 
+    def test_explicit_folder_normalizes_dotdot_without_following_symlinks(self) -> None:
+        folder = self.words(self.root / "lists", allow="入口\n")
+        target = self.root / "elsewhere" / "child"
+        target.mkdir(parents=True)
+        link = self.root / "alias"
+        try:
+            link.symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("directory symlinks are unavailable")
+        selected = markdown_visibility.find_words_folder(str(self.root), "alias/../lists")
+        self.assertEqual(selected, str(folder))
+
     def test_search_inside_git_goes_to_the_first_git_folder(self):
         for kind in ("folder", "file"):
             with self.subTest(kind=kind):

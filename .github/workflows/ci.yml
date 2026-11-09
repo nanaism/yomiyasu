@@ -34,6 +34,22 @@ jobs:
           done
           exit "$status"
 
+  python-quality:
+    name: Python annotations and pathlib
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install Python checkers
+        run: python -m pip install --disable-pip-version-check ruff==0.17.3 ty==0.0.92
+      - name: Check annotations and path operations
+        run: ruff check --isolated --select ANN,PTH --target-version py39 skills/yomiyasu/scripts
+      - name: Check Python 3.9 types
+        run: ty check --python-version 3.9 skills/yomiyasu/scripts
+
   test:
     name: pytest (Python ${{ matrix.python-version }})
     # Pinned rather than ubuntu-latest: Python 3.9 is past its end of life and may not be built for newer images.
