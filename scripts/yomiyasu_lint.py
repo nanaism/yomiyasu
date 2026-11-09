@@ -4526,7 +4526,7 @@ _CALQUE_TERMS_V300 = tuple((head, _V220Lazy(pattern), _V220Lazy(before) if befor
 ))
 
 
-def _calque_type5(sentence, words):
+def _calque_type5(sentence: str, words: list[str]) -> bool:
     """型5（英語の術語に当てた2字以上の名詞）。当たった言い方（本文の字のまま）を words に足す。"""
     found = False
     for head, pattern, before, context in _CALQUE_TERMS_V300:
@@ -5303,7 +5303,7 @@ _PROJECT_TERM_PATTERN_MESSAGE = "語の一覧（flag-patterns.txt）の語（{}�
 _PROJECT_TERM_BOTH_MESSAGE = "語の一覧（flag.txt、flag-patterns.txt）の語（{}）" + _V220_MESSAGE_TAIL
 
 
-def _project_term_message(words, pattern_names, flag_hits=None):
+def _project_term_message(words: Sequence[str], pattern_names: Collection[str], flag_hits: Collection[str] | None = None) -> str:
     """project_term の message。words は行の語（flag.txt の語とパターンの名前）、pattern_names はそのうちのパターンの名前、
     flag_hits はそのうちの flag.txt の語（None なら、パターンの名前でない語）。パターンの名前と flag.txt の語が同じ字でも、
     両方が当たった行では両方のファイルを並べる。"""
@@ -6205,7 +6205,7 @@ def _conditions(raw: Sequence[tuple[str, str]]) -> tuple[list[str] | None, str |
     return names, None
 
 
-def _path_problem(path):
+def _path_problem(path: str | None) -> str | None:
     """コマンドラインで渡されたファイルを読まないときの誤りの文か None（3.0.0。markdown_visibility.input_path_problem）。"""
     reason = input_path_problem(path) if path is not None else None
     if reason is None:

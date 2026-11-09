@@ -941,7 +941,7 @@ def _words_lines(path: str, data: bytes) -> list[str]:
     return words
 
 
-def _words_text_rows(path, data):
+def _words_text_rows(path: str, data: bytes) -> list[str]:
     """1つのファイルのバイト列を行の並びにする（BOM を外し、改行をそろえる）。UTF-8 でないときと1万行を超えるときは
     WordsError（行番号つき）。"""
     try:
@@ -971,7 +971,7 @@ _PATTERN_ESCAPE_ZERO = frozenset("bBAZ")
 _PATTERN_ESCAPE_CHAR = {"t": "\t", "n": "\n"}
 
 
-def _pattern_escape(pattern, index, in_class):
+def _pattern_escape(pattern: str, index: int, in_class: bool) -> tuple[int, str, str | None]:
     """index の \\ のあと。(次の位置, 種類（"lit"、"cls"、"zero"）, 字か None)。"""
     if index + 1 >= len(pattern):
         raise _PatternError("行の終わりに \\ だけがあります")
@@ -988,7 +988,7 @@ def _pattern_escape(pattern, index, in_class):
     return index + 2, "lit", char
 
 
-def _pattern_class(pattern, index):
+def _pattern_class(pattern: str, index: int) -> int:
     """index の [ から ] までの字の組。次の位置。入れ子の [ と、--、&&、~~、|| は断る（Python が FutureWarning を出す）。"""
     position = index + 1
     if position < len(pattern) and pattern[position] == "^":
@@ -1014,7 +1014,7 @@ def _pattern_class(pattern, index):
         first = False
 
 
-def _pattern_sequence(pattern, index, depth):
+def _pattern_sequence(pattern: str, index: int, depth: int) -> tuple[int, list[list[str]], int]:
     """選択肢の並びを読む。(次の位置, 選択肢ごとの必ず当たる字の並びのリスト, 試す数)。試す数は、選択肢の試す数の和。"""
     branches = []
     runs = []
@@ -1094,6 +1094,7 @@ def _pattern_sequence(pattern, index, depth):
                 raise _PatternError("繰り返しが重なっています")
         # 必ず当たる字（? と {0,n} の外で、先読み・後読みの外の字）
         if atom_kind == "lit" and not optional:
+            assert literal is not None      # "lit" の要素はいつも字を持つ
             run += literal
             if repeated:
                 # x{m,n} の x は2回以上続くことがあるので、x の前と後で字の並びを分ける（ba{2}c は ba と ac）
@@ -1118,7 +1119,7 @@ def _pattern_sequence(pattern, index, depth):
     return index, branches, total
 
 
-def check_pattern(pattern):
+def check_pattern(pattern: str) -> tuple[re.Pattern[str], tuple[tuple[str, ...], ...], int]:
     """flag-patterns.txt の正規表現を確かめる。(組んだ正規表現, 一番上の選択肢ごとの必ず当たる字の並び, 試す数)。
     使えない書き方は _PatternError（理由の文）。Python の版で意味の変わる書き方と、手間が行の長さに比例しない書き方を断る。"""
     import warnings
@@ -1148,7 +1149,7 @@ def check_pattern(pattern):
     return compiled, tuple(required), cost
 
 
-def _patterns_lines(path, data):
+def _patterns_lines(path: str, data: bytes) -> list[tuple[str, str, re.Pattern[str], tuple[tuple[str, ...], ...]]]:
     """flag-patterns.txt のバイト列を [(名前, 正規表現の文字列, 組んだ正規表現, 必ず当たる字の並び)] にする。
     使えない行は WordsError（ファイル名と行番号つき）。"""
     rows = _words_text_rows(path, data)
@@ -1242,7 +1243,7 @@ INPUT_PATH_HIDDEN = "名前が点で始まるファイルと、名前が点で�
 INPUT_PATH_NO_CWD = "作業フォルダを読めないため、読んでよいファイルか決められません"
 
 
-def input_path_problem(path):
+def input_path_problem(path: str) -> str | None:
     """コマンドラインで渡されたファイルのパスを読んでよいか。読んでよければ None、読まないなら理由の文
     （INPUT_PATH_OUTSIDE、INPUT_PATH_HIDDEN、INPUT_PATH_NO_CWD のどれか）を返す。ファイルは開かない。
 
@@ -1253,7 +1254,7 @@ def input_path_problem(path):
     if path == "-":
         return None
     try:
-        base = os.path.normcase(os.path.realpath(os.getcwd()))
+        base = os.path.normcase(os.path.realpath(os.getcwd()))  # noqa: PTH109 -- same os module as the os.path calls (tests swap it for ntpath)
     except OSError:
         return INPUT_PATH_NO_CWD
     if "\0" in path:
@@ -1270,7 +1271,7 @@ def input_path_problem(path):
     return None
 
 
-def _parts_inside(base, target):
+def _parts_inside(base: str, target: str) -> list[str] | None:
     """target が作業フォルダ base の中なら、base からの道筋の部分のリスト（base そのものなら空）、外なら None。
 
     まず文字列で比べる。合わないときは、target から上のフォルダをたどり、base と同じフォルダ（os.path.samestat）が
@@ -1279,12 +1280,12 @@ def _parts_inside(base, target):
     try:
         if os.path.commonpath([base, target]) == base:
             relative = os.path.relpath(target, base)
-            return [] if relative == os.curdir else relative.split(os.sep)
+            return [] if relative == os.curdir else relative.split(os.sep)  # noqa: PTH206 -- split relpath by the os.path flavor
     except ValueError:
         # Windows でドライブが違う（C: と D:）など。下で同じフォルダかを見る
         pass
     try:
-        base_stat = os.stat(base)
+        base_stat = os.stat(base)  # noqa: PTH116 -- paired with os.path.samestat on the same os module
     except (OSError, ValueError):
         return None
     if not getattr(base_stat, "st_ino", 0):
@@ -1294,7 +1295,7 @@ def _parts_inside(base, target):
     current = target
     while True:
         try:
-            if os.path.samestat(os.stat(current), base_stat):
+            if os.path.samestat(os.stat(current), base_stat):  # noqa: PTH116 -- paired with os.path.samestat
                 parts.reverse()
                 return parts
         except (OSError, ValueError):

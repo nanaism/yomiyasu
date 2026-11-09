@@ -1235,7 +1235,7 @@ _PATH_HINTS = {
 }
 
 
-def _path_problem(command, paths):
+def _path_problem(command: str, paths: Sequence[str | None]) -> str | None:
     """コマンドラインで渡されたファイルのうち、読まないものがあれば誤りの文、なければ None（3.0.0。
     markdown_visibility.input_path_problem）。どのファイルも読む前、状態フォルダに何かを書く前に呼ぶ。
     作業ディレクトリが消えているときは、ほかの所と同じ _NoWorkingDirectory（終了コード2）にする。"""
@@ -1816,8 +1816,8 @@ def _run_checks(ctx: _Context, snapshots: dict[int, str], stance: str | None, ti
     lint_module, diff_module = _lint_module(), _diff_module()
     environment = dict(os.environ, PYTHONIOENCODING="utf-8")
     # 写しはすべて同じフォルダにある。子はそのフォルダで動かし、写しをファイルの名前で渡す（_Children の cwd）
-    folder = os.path.dirname(os.path.abspath(snapshots[id(ctx.final)]))
-    snapshots = {key: os.path.basename(path) for key, path in snapshots.items()}
+    folder = str(Path(absolute_path(snapshots[id(ctx.final)])).parent)
+    snapshots = {key: Path(path).name for key, path in snapshots.items()}
     final_snapshot = snapshots[id(ctx.final)]
     context = _context_arguments(ctx.doc_type, ctx.reader) + _words_arguments(ctx.words)
     commands = OrderedDict()
@@ -3854,7 +3854,7 @@ def _words_shape(words: object) -> bool:
                 and isinstance(words["flag_patterns_sha256"], str) and digest(words["flag_patterns_sha256"])):
             return False
         words = OrderedDict((key, words[key]) for key in _WORDS_KEYS)
-        return (isinstance(words["path"], str) and os.path.isabs(words["path"])
+        return (isinstance(words["path"], str) and os.path.isabs(words["path"])  # noqa: PTH117 -- keeps 3.0.0 isabs for rooted Windows paths
                 and all(type(words[key]) is int and words[key] >= 0 for key in ("allow_lines", "flag_lines"))
                 and digest(words["allow_sha256"]) and digest(words["flag_sha256"]))
     return (isinstance(words, dict) and list(words) == list(_WORDS_KEYS)

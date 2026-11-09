@@ -11346,7 +11346,7 @@ def _fail_on_line(total: int, counted: int, risks: Sequence = ()) -> str:
                                if any(r["kind"] == kind for r in risks)), counted))
 
 
-def _path_problem(path):
+def _path_problem(path: str) -> str | None:
     """コマンドラインで渡されたファイルを読まないときの誤りの文か None（3.0.0。markdown_visibility.input_path_problem）。"""
     reason = input_path_problem(path)
     if reason is None:
