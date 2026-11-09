@@ -55,15 +55,15 @@ class _TextWriter(Protocol):
 
 
 _VISIBILITY_NAMES = ("decode_source", "DOC_TYPES", "READER_LEVELS", "normalize_doc_type", "normalize_reader",
-                     "WordsError", "resolve_words", "words_context", "words_label")
+                     "WordsError", "resolve_words", "words_context", "words_label", "absolute_path")
 try:
     try:
         if __package__:
             from .markdown_visibility import decode_source, DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader
-            from .markdown_visibility import WordsError, resolve_words, words_context, words_label
+            from .markdown_visibility import WordsError, resolve_words, words_context, words_label, absolute_path
         else:
             from markdown_visibility import decode_source, DOC_TYPES, READER_LEVELS, normalize_doc_type, normalize_reader
-            from markdown_visibility import WordsError, resolve_words, words_context, words_label
+            from markdown_visibility import WordsError, resolve_words, words_context, words_label, absolute_path
     except SyntaxError as error:
         # 隣の markdown_visibility.py が壊れている。ほかの読めないときと同じく ImportError にする（スクリプトでは終了コード3）。
         raise ImportError(
@@ -307,7 +307,7 @@ def _abspath(path: str) -> str:
     """os.path.abspath と同じ。相対パスのときだけ作業ディレクトリを読む（読めなければ _NoWorkingDirectory）。"""
     if Path(path).is_absolute():
         return os.path.normpath(path)
-    return os.path.normpath(str(Path(_getcwd(), path)))
+    return absolute_path(str(Path(_getcwd(), path)))
 
 
 def _label(name: str) -> str:
@@ -537,7 +537,7 @@ def _mkstemp(folder: str) -> tuple[int, str]:
     """folder に一時ファイル（.tmp-<16進>）を作って開く。(ファイル記述子, 絶対パス) を返す。フラグとモードは tempfile.mkstemp
     と同じ（O_EXCL、0o600、O_NOFOLLOW、Windows では O_BINARY。O_NOINHERIT は Windows の os.open も足すものを明示しただけ）。
     名前を試すのは _TEMPORARY_TRIES 回まで（tempfile は TMP_MAX 回で、Python 3.12 までの Windows では約21億回）。"""
-    folder = str(Path(os.path.normpath(folder)).absolute())
+    folder = absolute_path(folder)
     flags = (os.O_RDWR | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOINHERIT", 0) | getattr(os, "O_BINARY", 0)
              | getattr(os, "O_NOFOLLOW", 0))
     for _ in range(_TEMPORARY_TRIES):
@@ -556,7 +556,7 @@ def _mkstemp(folder: str) -> tuple[int, str]:
 def _mkdtemp(prefix: str) -> str:
     """システムの一時フォルダに、自分だけが使うフォルダ（<prefix><16進>、0o700。tempfile.mkdtemp と同じ）を作り、絶対パスを
     返す。名前を試すのは _TEMPORARY_TRIES 回まで（tempfile は TMP_MAX 回）。"""
-    parent = str(Path(os.path.normpath(tempfile.gettempdir())).absolute())
+    parent = absolute_path(tempfile.gettempdir())
     for _ in range(_TEMPORARY_TRIES):
         path = str(Path(parent, prefix + os.urandom(8).hex()))
         try:
@@ -799,11 +799,11 @@ def state_dir_for(cwd: str, option: str | None = None) -> str:
     作業フォルダに「${CLAUDE_PROJECT_DIR}」のようなフォルダを作らない。反証で見つけた例）。
     1と2の値の頭の ~ は、_home_path の決まりでホームフォルダに置き換える。"""
     if option:
-        return str(Path(os.path.normpath(str(Path(cwd, _home_path(option))))).absolute())
+        return absolute_path(str(Path(cwd, _home_path(option))))
     environment = os.environ.get("YOMIYASU_STATE_DIR")
     if environment and environment.strip() and "${" not in environment:
-        return str(Path(os.path.normpath(str(Path(cwd, _home_path(environment))))).absolute())
-    cwd = str(Path(os.path.normpath(cwd)).absolute())
+        return absolute_path(str(Path(cwd, _home_path(environment))))
+    cwd = absolute_path(cwd)
     current = cwd
     while True:
         if _path_matches(Path(current, '.git').exists):
@@ -4726,7 +4726,7 @@ def _managed_input(path: str) -> _Input:
         data = stream.read(_MANAGED_BYTES + 1)
     if len(data) > _MANAGED_BYTES:
         raise ValueError("原文は2 MiBまでです。")
-    return _Input("source", 0, str(Path(os.path.normpath(path)).absolute()), data)
+    return _Input("source", 0, absolute_path(path), data)
 
 
 def start_run(state: str, source_path: str, final_path: str | None = None, run_id: str | None = None, session: str | None = None, host: str | None = None, by: str = "start",
@@ -4743,7 +4743,7 @@ def start_run(state: str, source_path: str, final_path: str | None = None, run_i
     source = _managed_input(str(Path(cwd, source_path)) if source_path != "-" else "-")
     if final_path == "-":
         raise ValueError("--final に標準入力は使えません。")
-    final_path = str(Path(os.path.normpath(str(Path(cwd, final_path)))).absolute()) if final_path is not None else None
+    final_path = absolute_path(str(Path(cwd, final_path))) if final_path is not None else None
     run_id = run_id or _new_run_id(state, moment)
     problem = _run_id_problem(run_id) or _run_id_case_problem(state, run_id)
     if problem:

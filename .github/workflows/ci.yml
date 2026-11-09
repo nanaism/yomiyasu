@@ -87,3 +87,19 @@ jobs:
         env:
           PYTHONUTF8: "1"
         run: python -m pytest -q -ra --durations=25
+
+  test-windows-drive-relative:
+    name: Drive-relative paths (Windows, Python 3.9)
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Keep line endings as committed
+        run: git config --global core.autocrlf false
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.9"
+      - name: Exercise native drive-relative records
+        env:
+          PYTHONUTF8: "1"
+        run: python -m unittest discover -s tests -p test_windows_drive_relative.py -v
