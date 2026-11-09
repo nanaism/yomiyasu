@@ -163,6 +163,36 @@ class ReaderTest(FolderCase):
         # git の外では、上のフォルダの一覧は探さない
         self.assertIsNone(markdown_visibility.find_words_folder(str(sub)))
 
+    def test_explicit_folder_normalizes_dotdot_without_following_symlinks(self) -> None:
+        folder = self.words(self.root / "lists", allow="入口\n")
+        target = self.root / "elsewhere" / "child"
+        target.mkdir(parents=True)
+        link = self.root / "alias"
+        try:
+            link.symlink_to(target, target_is_directory=True)
+        except (OSError, NotImplementedError):
+            self.skipTest("directory symlinks are unavailable")
+        selected = markdown_visibility.find_words_folder(str(self.root), "alias/../lists")
+        self.assertEqual(selected, str(folder))
+
+    @unittest.skipIf(os.name == "nt", "POSIX の権限で実際に読み取りを拒否する")
+    def test_explicit_folder_below_unreadable_directory_is_a_words_error(self) -> None:
+        denied = self.root / "denied"
+        denied.mkdir()
+        denied.chmod(0)
+        try:
+            try:
+                (denied / "probe").write_bytes(b"permission check")
+            except PermissionError:
+                pass
+            else:
+                self.skipTest("この利用者には chmod(0) の拒否を適用できません")
+            with self.assertRaises(markdown_visibility.WordsError):
+                markdown_visibility.find_words_folder(str(self.root), str(denied / "words"))
+            self.assertIsNone(markdown_visibility.find_words_folder(str(denied)))
+        finally:
+            denied.chmod(0o700)
+
     def test_search_inside_git_goes_to_the_first_git_folder(self):
         for kind in ("folder", "file"):
             with self.subTest(kind=kind):
@@ -631,8 +661,8 @@ class CheckTest(FolderCase):
         self.assertEqual(yomiyasu_check._words_arguments(None), ["--no-words"])
         self.assertEqual(yomiyasu_check._words_arguments(words), ["--words", words["path"]])
 
-    def test_record_shape(self):
-        words = {"path": "/x", "allow_lines": 0, "flag_lines": 1, "allow_sha256": None, "flag_sha256": "a" * 64}
+    def test_record_shape(self) -> None:
+        words = {"path": str(self.root / "words"), "allow_lines": 0, "flag_lines": 1, "allow_sha256": None, "flag_sha256": "a" * 64}
         self.assertTrue(yomiyasu_check._words_shape(words))
         for wrong in (dict(words, path="x"), dict(words, flag_sha256=None), dict(words, allow_lines=-1),
                       dict(words, flag_sha256="A" * 64), {key: words[key] for key in reversed(WORD_KEYS)},

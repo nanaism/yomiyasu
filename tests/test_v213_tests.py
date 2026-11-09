@@ -337,12 +337,12 @@ class ReplaceOpenFileTest(unittest.TestCase):
 class HomePathCompareTest(unittest.TestCase):
     """Windows の「~/state」は「C:\\...\\me/state」になる。区切りが違っても同じ場所なので、両方を normpath して比べる。"""
 
-    def test_windows_shape(self):
+    def test_windows_shape(self) -> None:
         check = load(CHECK, "_yomiyasu_check_v213_tests_home")
         hook = load(HOOK, "_yomiyasu_hook_v213_tests_home")
         profile = "C:\\Users\\試験"
         with mock.patch.dict(os.environ, {"USERPROFILE": profile}), \
-                mock.patch("os.sep", "\\"), mock.patch("os.path.expanduser", ntpath.expanduser):
+                mock.patch("os.sep", "\\"), mock.patch.object(Path, "home", lambda: ntpath.expanduser("~")):
             for value, parts in (("~/state", ("state",)), ("~/a/b", ("a", "b")), ("~//state", ("state",))):
                 with self.subTest(value=value):
                     result = check._home_path(value)

@@ -7,9 +7,13 @@ Python標準ライブラリだけで動作する。
 mail は絵文字と meta_filler の返信・結びの5型を外す。宛名・挨拶・署名・クッション言葉を削る専用規則はない。
 paper は慎重表現をぼかしとして削る規則がないので、外す規則はない。
 """
+
+from __future__ import annotations
 __version__ = "3.0.0"
 
 import os
+from pathlib import Path
+from collections.abc import Callable, Collection, Iterable, Iterator, Sequence
 import errno
 import functools
 import sys
@@ -21,7 +25,11 @@ import unicodedata
 from bisect import bisect_right
 from itertools import chain, compress
 from operator import is_
-from typing import List, Dict, Any, Tuple
+from typing import List, Dict, Any, Tuple, NoReturn, Protocol
+
+
+class _TextWriter(Protocol):
+    def write(self, value: str, /) -> object: ...
 
 # スクリプトとして動かしたときは、markdown_visibility を読み込む前に .pyc を書かないようにする
 # （スキルのフォルダに __pycache__ を作らない。yomiyasu_check.py と同じ）。モジュールとして読み込まれたときは、
@@ -63,6 +71,8 @@ try:
         from pathlib import Path
         _visibility_spec = importlib.util.spec_from_file_location(
             "_yomiyasu_markdown_visibility", Path(__file__).with_name("markdown_visibility.py"))
+        if _visibility_spec is None or _visibility_spec.loader is None:
+            raise ImportError('cannot load markdown_visibility.py', name=expected)
         _visibility_module = importlib.util.module_from_spec(_visibility_spec)
         try:
             _visibility_spec.loader.exec_module(_visibility_module)
@@ -615,15 +625,15 @@ _EMOJI_FLAG_REGION_CODES = (
     "UN US UY UZ VA VC VE VG VI VN VU WF WS XK YE YT ZA ZM ZW "
 ).split()
 
-def _emoji_character_class(ranges):
+def _emoji_character_class(ranges: Sequence[tuple[int, int]]) -> str:
     """Build a compact stdlib regex class from pinned scalar intervals."""
-    def escaped(cp):
+    def escaped(cp: int) -> str:
         return "\\u%04x" % cp if cp <= 0xFFFF else "\\U%08x" % cp
     return "[" + "".join(escaped(lo) if lo == hi else escaped(lo) + "-" + escaped(hi)
                          for lo, hi in ranges) + "]"
 
 
-def _emoji_flag_pattern():
+def _emoji_flag_pattern() -> str:
     """Recognize only flag pairs in the pinned registered-region data."""
     seconds = {}
     for code in _EMOJI_FLAG_REGION_CODES:
@@ -660,7 +670,7 @@ _EMOJI_START_PATTERN = re.compile(
 )
 
 
-def _emoji_matches(text):
+def _emoji_matches(text: str) -> list[str]:
     """Preserve findall order/non-overlap, and custom public-pattern behavior."""
     if EMOJI_PATTERN is not _EMOJI_DEFAULT_PATTERN:
         return EMOJI_PATTERN.findall(text)
@@ -687,7 +697,7 @@ def _emoji_matches(text):
 # （「（見ていきましょう）」「〜まとめました（後半で見ていきましょう）」）だけ除く。目次の副題（「実践編（〜）」）は除かない。
 # 閉じかぎと引用符（」』”’"'）は、同じ段落のその行までに対の開きがない行でだけ除く（_end_quote_closers）。
 # リンクの文字列の終わりになる ASCII の ] は、どの規則でも飾りに数えない。
-def _merged_ranges(ranges):
+def _merged_ranges(ranges: Iterable[tuple[int, int]]) -> tuple[tuple[int, int], ...]:
     merged = []
     for low, high in sorted(ranges):
         if merged and low <= merged[-1][1] + 1:
@@ -719,7 +729,7 @@ _END_MARKS = "。．！？!?"
 _END_BRACKET_AFTER_PREDICATE = re.compile(r"(?:です|ます|でした|ました|ません|ない|だ|た|る)$")
 
 
-def _bracket_opens_sentence(text, position, closer):
+def _bracket_opens_sentence(text: str, position: int, closer: str) -> bool:
     """text[position] の閉じかっこと対の開きかっこが、文頭か、句点か述語の直後にあるか。
 
     見るのは閉じかっこの前の256字まで。そこで分からなければ除かない（長い行でも手間を抑える）。"""
@@ -746,7 +756,7 @@ def _bracket_opens_sentence(text, position, closer):
     return False
 
 
-def _strip_end_decoration(text, closers=""):
+def _strip_end_decoration(text: str, closers: str = "") -> str:
     """文の終わりの後ろの飾りを除いた文を返す。飾りがなければ text をそのまま返す。
 
     句点、感嘆符、疑問符は残し、飾りとの並びの順も保つ。closers の字（閉じかっこ、矢印、波線と、
@@ -793,7 +803,7 @@ _END_BREAK_PAIRS = (("「", "」"), ("『", "』"), ("（", "）"), ("(", ")"), 
                     ("［", "］"), ("[", "]"))
 
 
-def _decoration_breaks(sentence):
+def _decoration_breaks(sentence: str) -> list[str] | None:
     """句点の代わりに絵文字の並びを置いて次の文を続けた所で分けた文の並びを返す。分けられなければ None。
 
     分けた文は後ろに絵文字の並びを残す（呼び出し側が _strip_end_decoration で除く）。
@@ -835,7 +845,7 @@ def _decoration_breaks(sentence):
     return pieces
 
 
-def _with_undecorated(sentences, closers=_END_CLOSERS):
+def _with_undecorated(sentences: Sequence[str], closers: str = _END_CLOSERS) -> list[str]:
     """文の並びに、文末の飾りを除いた文と、句点の代わりの絵文字で分けた文を足す（飾りのない文はそのまま）。"""
     result = list(sentences)
     for sentence in sentences:
@@ -847,7 +857,7 @@ def _with_undecorated(sentences, closers=_END_CLOSERS):
     return result
 
 
-def _end_quote_closers(analysis):
+def _end_quote_closers(analysis: dict) -> dict[int, str]:
     """行ごとに、文末の飾りとして除いてよい閉じ引用符を返す。
 
     同じ段落（箇条書きは項目ごと）のその行までに対の開き（「『“‘）がない閉じかぎと閉じ引用符だけを除く。
@@ -868,7 +878,7 @@ def _end_quote_closers(analysis):
     return allowed
 
 
-def _end_closers_for(analysis, line_no):
+def _end_closers_for(analysis: dict, line_no: int) -> str:
     """文の型を見る規則が、その行の文末で飾りとして除く字（閉じかっこ、矢印、波線と、対のない閉じ引用符）。"""
     allowed = analysis.get("_end_quote_closers")
     if allowed is None:
@@ -970,7 +980,7 @@ _ATTRIBUTION_ENGLISH = re.compile(r"^[A-Z][A-Za-z.'’−-]*(?:[ \t]+[A-Z][A-Za-
 _NON_ROUTE_ENDINGS = ("人間", "時間", "期間", "空間", "世間", "仲間", "手間", "目線", "視線", "動線", "光線", "伏線", "生命線", "方便", "利便", "不便")
 
 
-def _is_dash_attribution(text):
+def _is_dash_attribution(text: str) -> bool:
     text = text.strip()
     if not text or text[0] not in DASH_CHARS:
         return False
@@ -979,7 +989,7 @@ def _is_dash_attribution(text):
                 or _ATTRIBUTION_ENGLISH.match(credit))
 
 
-def _mask_quoted_segments(text):
+def _mask_quoted_segments(text: str) -> str:
     """Mask balanced quotes, including nesting, in one pass plus a prefix sum."""
     closing = {"「": "」", "『": "』", "[": "]"}
     stacks = {closer: [] for closer in closing.values()}
@@ -1002,7 +1012,7 @@ def _mask_quoted_segments(text):
 _QUOTE_MARKS = re.compile(r"[「」『』\[\]]")
 
 
-def _mask_quoted_segments_sparse(text):
+def _mask_quoted_segments_sparse(text: str) -> str:
     """Same output as _mask_quoted_segments, but visits only the bracket marks.
 
     Used for whole documents, where the per-character loop is the main cost.
@@ -1034,9 +1044,9 @@ def _mask_quoted_segments_sparse(text):
     return "".join(pieces)
 
 
-def _mask_route_dashes(text):
+def _mask_route_dashes(text: str) -> str:
     """Scan the adjacent noun runs once per dash, avoiding regex backtracking."""
-    def noun_char(char):
+    def noun_char(char: str) -> bool:
         return "一" <= char <= "龥" or "ァ" <= char <= "ヴ" or char in "ー々"
 
     result = list(text)
@@ -1082,7 +1092,7 @@ _WH_QUESTION = re.compile(
 )
 
 
-def _question_content_end(sentence):
+def _question_content_end(sentence: str) -> int:
     end = len(sentence)
     while end and (sentence[end - 1].isspace() or sentence[end - 1] in _QUESTION_CLOSERS
                    or _END_DECORATION_CHAR.match(sentence[end - 1])):
@@ -1090,7 +1100,7 @@ def _question_content_end(sentence):
     return end
 
 
-def _last_context_sentence(text):
+def _last_context_sentence(text: str) -> str:
     end = _question_content_end(text)
     if not end:
         return ""
@@ -1098,7 +1108,7 @@ def _last_context_sentence(text):
     return text[start:end]
 
 
-def _ends_with_question(sentence):
+def _ends_with_question(sentence: str) -> bool:
     """Recognize an adjacent yes/no question, not an arbitrary word ending in か."""
     end = _question_content_end(sentence)
     if not end:
@@ -1112,7 +1122,7 @@ def _ends_with_question(sentence):
     return _WH_QUESTION.search(sentence, 0, end) is None
 
 
-def _dash_finding(text, line_no, snippet):
+def _dash_finding(text: str, line_no: int, snippet: str) -> dict | None:
     """Flag decorative dashes once per line; diagrams, dividers and attributions are not prose."""
     if not _DASH_RUN.search(text):
         return None
@@ -1236,7 +1246,7 @@ _KIKU_CANDIDATE = re.compile(_KIKU_PATTERN)
 _KIKU_WINDOW_LINES = 3
 
 
-def _kiku_metaphor_in_line(text, before_lines=()):
+def _kiku_metaphor_in_line(text: str, before_lines: Sequence[str] = ()) -> bool:
     """行の中に比喩の「効く」として拾う文があれば True。before_lines は同じ文書の前の行（新しい行が後ろ）。"""
     patterns = _KIKU_RE
     earlier = []
@@ -1401,10 +1411,10 @@ _PATTERN_LITERAL_HINTS = {
     r"(?<!原点)(?<!への)(?<!先祖)(?<!平均)回帰(が|を)(出|発生|起こ|起き|生じ|防)": ("回帰",),
 }
 _ALWAYS_SCAN = object()
-_DOCUMENT_TABLES_CACHE = []
+_DOCUMENT_TABLES_CACHE: list[tuple] = []
 
 
-def _literal_can_cover(literal, other):
+def _literal_can_cover(literal: str, other: str) -> bool:
     return other != literal and any(
         other[index:].startswith(literal)
         or (index and literal.startswith(other[index:]))
@@ -1412,8 +1422,8 @@ def _literal_can_cover(literal, other):
     )
 
 
-def _document_tables():
-    tables = (SLOP_WORDS, SLOP_WORD_PATTERNS, METAPHOR_VERB_PATTERNS,
+def _document_tables() -> tuple | None:
+    tables: tuple[Sequence, ...] = (SLOP_WORDS, SLOP_WORD_PATTERNS, METAPHOR_VERB_PATTERNS,
               TRANSLATED_TERM_PATTERNS, FILLER_PATTERNS, INFO_SENTENCE_PATTERNS)
     if any(type(table) not in (list, tuple) for table in tables):
         return None
@@ -1430,12 +1440,12 @@ def _document_tables():
                and all(type(item) is str for item in row)
                for table, width in zip(families, (2, 2, 2, 2, 3)) for row in table):
         return None
-    saved = tuple(tuple(table) for table in tables)
+    saved: tuple[tuple, ...] = tuple(tuple(table) for table in tables)
     words, slop, metaphor, translated, filler, info = saved
-    literals = []
+    literals: list[str] = []
     alternatives = []
 
-    def keyed(rows, sources):
+    def keyed(rows: list | tuple, sources: Sequence[str]) -> tuple[list, list]:
         keys = []
         out = []
         for row, source in zip(rows, sources):
@@ -1461,7 +1471,7 @@ def _document_tables():
     word_keys = [word if word and len(word) <= 64
                  and not any(char in "*_" or char.isspace() for char in word)
                  else _ALWAYS_SCAN for word in words]
-    literals.extend(word for word in word_keys if word is not _ALWAYS_SCAN)
+    literals.extend(word for word in word_keys if isinstance(word, str))
     literals = list(dict.fromkeys(literals))
     if len(literals) > 128:
         return None
@@ -1475,7 +1485,7 @@ def _document_tables():
     return result
 
 
-def _narrowed_document_rows(text):
+def _narrowed_document_rows(text: str) -> list[list] | None:
     tables = _document_tables()
     if tables is None:
         return None
@@ -1508,7 +1518,7 @@ def _narrowed_document_rows(text):
             + [list(compress(rows, map(contains, keys))) for rows, keys in families])
 
 
-def _may_match_literals(literals, text):
+def _may_match_literals(literals: Sequence[str] | None, text: str) -> bool:
     if literals is None:
         return True
     for literal in literals:
@@ -1571,7 +1581,7 @@ _CLEFT_LIST_STEM = re.compile(r"[一-龥々〆ヵヶ]+(?=[ぁ-ん]*$)")
 _CLEFT_LIST_STOPS = "。！？!?"
 
 
-def _cleft_list_head(sentence):
+def _cleft_list_head(sentence: str) -> str | None:
     """「〜のは、A、B、C。」の形なら「のは」の前までを返す。当たらなければ None。"""
     if "のは、" not in sentence:
         return None
@@ -1588,13 +1598,14 @@ def _cleft_list_head(sentence):
     if not joiners:
         return None
     # 読点がなく「と・や」で1回つなぎ、最後の項目に「の」がある形（「父と母の笑顔」）は、1つの名詞句として当てない
+    joiner = _CLEFT_LIST_JOINER.search(items)
     if (joiners == 1 and not _CLEFT_LIST_COMMA_MARK.search(items)
-            and "の" in items[_CLEFT_LIST_JOINER.search(items).end():]):
+            and joiner is not None and "の" in items[joiner.end():]):
         return None
     return mixed.group("head")
 
 
-def _cleft_list_premise(head, previous):
+def _cleft_list_premise(head: str, previous: str) -> bool:
     """直前の文が問いか、「のは」の前の動詞の語幹の漢字を含めば、前提を書いてあるとみる。"""
     end = _question_content_end(previous)
     if end and (previous[end - 1] in "？?" or previous.endswith(("か。", "か"), 0, end)):
@@ -1603,7 +1614,7 @@ def _cleft_list_premise(head, previous):
     return bool(stem) and any(char in previous for char in stem.group())
 
 
-def _cleft_list_join(analysis, rows, position, text):
+def _cleft_list_join(analysis: dict, rows: list[dict], position: int, text: str) -> str:
     """rows[:position] の行を後ろから text の前につなぐ（改行で折り返した文を1つの文として読む）。
     最後の文が分かるだけ（句点などが2つになるまで）つなぐ。"""
     marks = sum(map(text.count, _CLEFT_LIST_STOPS))
@@ -1615,7 +1626,7 @@ def _cleft_list_join(analysis, rows, position, text):
     return text
 
 
-def _cleft_list_previous(analysis, line_no, before):
+def _cleft_list_previous(analysis: dict, line_no: int, before: str) -> str:
     """「〜のは、」の文の直前の文。同じ段落の前の文、なければ前の段落の最後の文、なければ直前の見出し。
 
     before はその行で「〜のは、」の文より前にある字。表、コード、引用などを挟んだときは前の文はないとみる。"""
@@ -1636,7 +1647,7 @@ def _cleft_list_previous(analysis, line_no, before):
     return _last_context_sentence(_cleft_list_join(analysis, rows, len(rows), ""))
 
 
-def _has_cleft_list_ending(analysis, line_no, contexts, line_sentences, filler_patterns):
+def _has_cleft_list_ending(analysis: dict, line_no: int, contexts: Sequence[tuple[str, str]], line_sentences: list[str], filler_patterns: Sequence[tuple]) -> bool:
     """行の文のどれかが、前提を書かずに「〜のは、A、B、C。」で終えていれば True。
 
     contexts は _rule9_context の行の文（引用を伏せた文と、同じブロックの次の文）。引用を伏せた文と伏せていない文の
@@ -1714,7 +1725,7 @@ _LIST_LINK_LINE = re.compile(r"[-*+]\s+\[.*?\]\(https?://")
 _LINE_SENTENCE_BREAK = re.compile(r"(?<=[。！？!?])")
 
 
-def _plain_sentence_records(analysis):
+def _plain_sentence_records(analysis: dict) -> list[tuple[int, str, str, tuple[int, int]]]:
     """Visible prose plus original source slices from the same scan boundary."""
     records = []
     for block_id, block in enumerate(analysis["blocks"]):
@@ -1756,7 +1767,7 @@ def check_sentence_end_repetitions(sentences: List[Tuple[int, str]]) -> List[Dic
     return _sentence_end_findings(sentences)
 
 
-def _sentence_end_type(s):
+def _sentence_end_type(s: str) -> str:
     """sentence_end_repetition が数える語尾の種類。数えない文は「その他」。"""
     # Scan ordinary short suffixes directly. Bound Python-level work for
     # long removable suffixes; the guarded regex starts only at run edges.
@@ -1797,7 +1808,7 @@ def _sentence_end_type(s):
     return end_type
 
 
-def _split_decoration_breaks(sentences, source_sentences, paragraph_groups):
+def _split_decoration_breaks(sentences: list[tuple[int, str]], source_sentences: list[tuple[int, str]], paragraph_groups: Sequence[object]) -> tuple[list[tuple[int, str]], list[tuple[int, str]], Sequence[object]]:
     """句点の代わりに絵文字を置いて続けた文（「これはAです🚀これはBです🚀」）を、句点で分けたときと同じように分ける。
 
     分けるのは、前後とも4字以上あるときだけ（句点で分けた文と同じく、3字以下の文は数えない）。
@@ -1832,7 +1843,7 @@ def _split_decoration_breaks(sentences, source_sentences, paragraph_groups):
     return split_sentences, split_sources, split_groups
 
 
-def _sentence_end_findings(sentences, source_sentences=None, paragraph_groups=None):
+def _sentence_end_findings(sentences: list[tuple[int, str]], source_sentences: list[tuple[int, str]] | None = None, paragraph_groups: Sequence[object] | None = None) -> list[dict]:
     """Keep visible ending decisions and original finding snippets separate."""
     findings = []
     end_types = [(line_no, s, _sentence_end_type(s)) for line_no, s in sentences]
@@ -1869,7 +1880,7 @@ _METRIC_OPAQUE_KINDS = frozenset((
 _PROSE_SCAN_KINDS = _METRIC_OPAQUE_KINDS | frozenset(("container_prefix",))
 
 
-def _prose_visible_text(analysis, line_no):
+def _prose_visible_text(analysis: dict, line_no: int) -> str:
     """Reuse the same immutable raw-source view for sentences and lexical scan."""
     cache = analysis.setdefault("_prose_line_cache", {})
     if line_no not in cache:
@@ -1877,7 +1888,7 @@ def _prose_visible_text(analysis, line_no):
     return cache[line_no]
 
 
-def _image_only_row(analysis, row, visible):
+def _image_only_row(analysis: dict, row: dict, visible: str) -> bool:
     """A real image with no visible prose; never skip prose after an image."""
     if not visible.strip():
         return range_overlaps_protected(analysis, row["start"], row["start"] + len(row["raw"]),
@@ -1913,7 +1924,7 @@ _DETAILS_HINT = re.compile(r"<details", re.I)
 _DETAILS_TOKEN = re.compile(r"<!--|<(/?)(details|script|style|textarea)(?=[\s/>]|$)", re.I)
 
 
-def _details_inner_lines(analysis):
+def _details_inner_lines(analysis: dict) -> set[int] | None:
     """組になった <details> と </details> の間にある行の番号の集合。組が1つもなければ None。
 
     開きと閉じは、HTML のブロックの行（引用の外）でだけ見る。段落の中、インラインのコード、コードの囲みとインデントした
@@ -1963,12 +1974,12 @@ def _details_inner_lines(analysis):
     return inside
 
 
-def _metrics_from_analysis(analysis):
+def _metrics_from_analysis(analysis: dict) -> dict[str, int | float]:
     """Use the same protected data boundary as lexical and sentence checks."""
     return _metrics_and_list_gate(analysis)[0]
 
 
-def _metrics_and_list_gate(analysis):
+def _metrics_and_list_gate(analysis: dict) -> tuple[dict[str, int | float], int, int]:
     """metrics、箇条書きの判定用字数（<details> 内の箇条書きを除く）、点数用の地の文字数を返す。"""
     plain_rows = []
     prose_chars = 0
@@ -2060,30 +2071,30 @@ def _bold_can_close(prev: str, nxt: str) -> bool:
     return all(not _bold_ws(prev) and (not p(prev) or _bold_ws(nxt) or p(nxt)) for p in (_bold_punct_gfm, _bold_punct_new))
 
 
-def _bold_code_spans(text: str):
+def _bold_code_spans(text: str) -> list[tuple[int, int]]:
     """Inline code ranges, with escapes recognized outside code only."""
     return [(left, right) for left, right, kind in inline_protected_spans(text)
             if kind == "inline_code"]
 
 
-def _bold_pairs(text: str):
+def _bold_pairs(text: str) -> list[tuple[int, int]]:
     """後方互換用: テキスト内の太字ペアを返す"""
     return _bold_pairs_in_block(text)
 
 
-def _direct_escape(text, position):
+def _direct_escape(text: str, position: int) -> bool:
     start = position
     while start > 0 and text[start - 1] == "\\":
         start -= 1
     return (position - start) % 2 == 1
 
 
-def _star_runs(text):
+def _star_runs(text: str) -> list[tuple[int, int]]:
     analysis = analyze_markdown(text, skip_frontmatter=False)
     return _runs_from_masks(text, analysis["mask_spans"])
 
 
-def _runs_from_masks(text, masked):
+def _runs_from_masks(text: str, masked: list[tuple[int, int]]) -> list[tuple[int, int]]:
     runs = []
     mask_index = 0
     for match in re.finditer(r"\*+", text):
@@ -2103,7 +2114,7 @@ def _runs_from_masks(text, masked):
     return runs
 
 
-def _roles(text, start, end, punct):
+def _roles(text: str, start: int, end: int, punct: Callable[[str], bool]) -> tuple[bool, bool]:
     prev = text[start - 1] if start else ""
     nxt = text[end] if end < len(text) else ""
     can_open = not _bold_ws(nxt) and (not punct(nxt) or _bold_ws(prev) or punct(prev))
@@ -2111,13 +2122,13 @@ def _roles(text, start, end, punct):
     return can_open, can_close
 
 
-def _strong_parse(text, punct, runs=None):
+def _strong_parse(text: str, punct: Callable[[str], bool], runs: list[tuple[int, int]] | None = None) -> tuple[list[tuple[int, int]], set[int]]:
     """Asterisk delimiter-stack matching with the multiple-of-three condition."""
     pairs, consumed, _ = _delimiter_parse(text, punct, runs)
     return pairs, consumed
 
 
-def _delimiter_parse(text, punct, runs=None, state=None, stop=None):
+def _delimiter_parse(text: str, punct: Callable[[str], bool], runs: list[tuple[int, int]] | None = None, state: _DelimiterStack | None = None, stop: int | None = None) -> tuple[list[tuple[int, int]], set[int], list[tuple[int, int, int]]]:
     """Same nearest-compatible opener, indexed by the six rule-3 classes.
 
     state（_DelimiterStack）を渡すと、その状態の続きから runs[state.index:stop] だけを処理し、state を書き換える。
@@ -2138,6 +2149,7 @@ def _delimiter_parse(text, punct, runs=None, state=None, stop=None):
     else:
         openers, buckets, gfm_bounds, bottoms = state.openers, state.buckets, state.gfm_bounds, state.bottoms
         pairs, emphasis, consumed = state.pairs, state.emphasis, state.consumed
+        assert stop is not None
         runs, state.index = runs[state.index:stop], stop
     for start, end in runs:
         can_open, can_close = _roles(text, start, end, punct)
@@ -2194,12 +2206,12 @@ class _DelimiterStack:
     __slots__ = ("text", "punct", "runs", "index", "openers", "buckets", "gfm_bounds",
                  "bottoms", "pairs", "emphasis", "consumed")
 
-    def __init__(self, text, punct, runs):
+    def __init__(self, text: str, punct: Callable[[str], bool], runs: list[tuple[int, int]]) -> None:
         self.text = text
         self.punct = punct
         self.runs = runs
         self.index = 0
-        self.openers = []
+        self.openers: list[dict] = []
         self.buckets = {(mod, closes): [] for mod in range(3) for closes in (False, True)}
         self.gfm_bounds = punct is _bold_punct_gfm
         self.bottoms = {}
@@ -2207,11 +2219,11 @@ class _DelimiterStack:
         self.emphasis = []
         self.consumed = set()
 
-    def advance(self, stop):
+    def advance(self, stop: int) -> None:
         if stop > self.index:
             _delimiter_parse(self.text, self.punct, self.runs, self, stop)
 
-    def finds_opener(self, closer_length, can_open):
+    def finds_opener(self, closer_length: int, can_open: bool) -> bool:
         """今の状態で、長さ closer_length の閉じられる印が、組む相手を1つでも見つけるか。状態は変えない。
 
         advance の中で opener が None のままになるかどうかと同じ条件を見る。
@@ -2226,7 +2238,7 @@ class _DelimiterStack:
         return False
 
 
-def _star_extent(text, position):
+def _star_extent(text: str, position: int) -> tuple[int, int]:
     left = position
     while left > 0 and text[left - 1] == "*" and not _direct_escape(text, left - 1):
         left -= 1
@@ -2236,7 +2248,7 @@ def _star_extent(text, position):
     return left, right
 
 
-def _local_pair_ok(text, i, j):
+def _local_pair_ok(text: str, i: int, j: int) -> bool:
     left_start, left_end = _star_extent(text, i)
     right_start, right_end = _star_extent(text, j)
     for punct in (_bold_punct_gfm, _bold_punct_new):
@@ -2251,22 +2263,22 @@ def _local_pair_ok(text, i, j):
     return True
 
 
-def _bold_pairs_in_block(block_text: str):
+def _bold_pairs_in_block(block_text: str) -> list[tuple[int, int]]:
     if "**" not in block_text:
         return []
     runs = _star_runs(block_text)
     return _bold_pairs_from_runs(block_text, runs)
 
 
-def _bold_pairs_from_runs(block_text, runs):
+def _bold_pairs_from_runs(block_text: str, runs: list[tuple[int, int]]) -> list[tuple[int, int]]:
     return _bold_scan_runs(block_text, runs)[0]
 
 
-def _bold_scan_runs(block_text, runs):
+def _bold_scan_runs(block_text: str, runs: list[tuple[int, int]]) -> tuple[list[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]]]:
     return _bold_scan_context(block_text, runs)[:3]
 
 
-def _bold_scan_context(block_text, runs):
+def _bold_scan_context(block_text: str, runs: list[tuple[int, int]]) -> tuple[list[tuple[int, int]], set[tuple[int, int]], set[tuple[int, int]], dict]:
     gfm, used_gfm, emphasis_gfm = _delimiter_parse(block_text, _bold_punct_gfm, runs)
     common, used_common, emphasis_common = _delimiter_parse(block_text, _bold_punct_new, runs)
     pairs = set(gfm + common)
@@ -2313,17 +2325,17 @@ def _bold_close_of(s: str) -> int:
     return -1
 
 
-def _bold_fix(text: str, i: int, j: int, k: int):
+def _bold_fix(text: str, i: int, j: int, k: int) -> tuple[str | None, str]:
     """k 番目の太字（i と j の **）の直し方の案。(直したあとの部分, 直し方) を返す"""
     return _bold_fix_checked(text, i, j, k, known_pair=False)
 
 
-def _bold_fix_checked(text: str, i: int, j: int, k: int, known_pair: bool):
+def _bold_fix_checked(text: str, i: int, j: int, k: int, known_pair: bool) -> tuple[str | None, str]:
     """Verify the intended repaired pair under both renderers; do not trust ordinal alone."""
     return _bold_fix_with_context(text, i, j, k, known_pair, _repair_context(text))
 
 
-def _repair_context(text, runs=None):
+def _repair_context(text: str, runs: list[tuple[int, int]] | None = None) -> dict:
     if runs is None:
         runs = _star_runs(text)
     return {"runs": runs,
@@ -2333,7 +2345,7 @@ def _repair_context(text, runs=None):
                        for left, right, kind in inline_protected_spans(text)]}
 
 
-def _preserves_other_emphasis(original, repaired, i, j, delta):
+def _preserves_other_emphasis(original: Collection[tuple[int, int, int]], repaired: Collection[tuple[int, int, int]], i: int, j: int, delta: int) -> bool:
     """Every existing outside/enclosing delimiter pair keeps its source match."""
     repaired = set(repaired)
     for left, right, width in original:
@@ -2369,7 +2381,7 @@ _WHITESPACE_CHAR = re.compile(r"\s")
 _LINK_DESTINATION_START = re.compile(r"\]\(")
 
 
-def _line_start_stopper(ch):
+def _line_start_stopper(ch: str) -> bool:
     """行頭の印（コンテナ、見出し、コードの柵など）を読む処理が、そこで必ず止まる文字か。
 
     行頭を読む処理が受ける文字は、半角スペース、タブ、> - + * . ) # ` ~ [ と数字だけ（数字は isdigit で広めにとる）。
@@ -2377,7 +2389,7 @@ def _line_start_stopper(ch):
     return ch != "" and ch not in _LINE_START_MARKS and not ch.isdigit()
 
 
-def _merged_intervals(spans):
+def _merged_intervals(spans: list[tuple[int, int, str]]) -> tuple[list[tuple[int, int]], list[int]]:
     merged = []
     for left, right in sorted((left, right) for left, right, _ in spans):
         if merged and left <= merged[-1][1]:
@@ -2387,23 +2399,23 @@ def _merged_intervals(spans):
     return merged, [right for _, right in merged]
 
 
-def _interval_overlaps(intervals, ends, left, right):
+def _interval_overlaps(intervals: list[tuple[int, int]], ends: list[int], left: int, right: int) -> bool:
     index = bisect_right(ends, left)
     return index < len(intervals) and intervals[index][0] < right
 
 
-def _interval_covers(intervals, ends, position):
+def _interval_covers(intervals: list[tuple[int, int]], ends: list[int], position: int) -> bool:
     index = bisect_right(ends, position)
     return index < len(intervals) and intervals[index][0] <= position
 
 
-def _interval_splits(intervals, ends, position):
+def _interval_splits(intervals: list[tuple[int, int]], ends: list[int], position: int) -> bool:
     """position の直前と直後の文字が、同じ範囲（つながった範囲）に入るか。"""
     index = bisect_right(ends, position)
     return index < len(intervals) and intervals[index][0] < position
 
 
-def _bold_run_index(context):
+def _bold_run_index(context: dict) -> dict[tuple[int, int], int]:
     """context のランから、ランの番号を引く表を作る（1回だけ）。"""
     run_index = context.get("run_index")
     if run_index is None:
@@ -2411,7 +2423,7 @@ def _bold_run_index(context):
     return run_index
 
 
-def _bold_repair_index(text, context):
+def _bold_repair_index(text: str, context: dict) -> _BoldRepairIndex | None:
     """ブロックごとに1回だけ作る。速く確かめられないブロックでは None を返す（今までどおり解析し直す）。"""
     if "repair_index" in context:
         return context["repair_index"]
@@ -2432,7 +2444,7 @@ def _bold_repair_index(text, context):
 class _BoldRepairIndex:
     """1つのブロックの元の解析の結果。案を確かめるときに使う。"""
 
-    def __init__(self, text, context, analysis):
+    def __init__(self, text: str, context: dict, analysis: dict) -> None:
         self.text = text
         self.runs = context["runs"]
         self.run_index = _bold_run_index(context)
@@ -2455,7 +2467,7 @@ class _BoldRepairIndex:
         self.parsers = {}
         self.emphasis = {_bold_punct_gfm: set(context["gfm"]), _bold_punct_new: set(context["common"])}
 
-    def _first_stopper(self, line):
+    def _first_stopper(self, line: int) -> int:
         position = self.first_stoppers.get(line)
         if position is None:
             text, position, end = self.text, self.line_starts[line], self.line_ends[line]
@@ -2464,7 +2476,7 @@ class _BoldRepairIndex:
             self.first_stoppers[line] = position
         return position
 
-    def _line_start_kept(self, edit, inserted, char_after):
+    def _line_start_kept(self, edit: int, inserted: bool, char_after: Callable[[int], str]) -> bool:
         """edit より前を変えない書き換えで、その行の行頭の読み方が変わらないか。"""
         line = bisect_right(self.line_starts, edit) - 1
         if line < 0 or edit < self.content_starts[line]:
@@ -2483,14 +2495,14 @@ class _BoldRepairIndex:
             return before and after
         return False
 
-    def _parser(self, punct, index):
+    def _parser(self, punct: Callable[[str], bool], index: int) -> _DelimiterStack:
         parser = self.parsers.get(punct)
         if parser is None or parser.index > index:
             parser = self.parsers[punct] = _DelimiterStack(self.text, punct, self.runs)
         parser.advance(index)
         return parser
 
-    def decide(self, i, j, shape, middle):
+    def decide(self, i: int, j: int, shape: str, middle: str) -> bool | None:
         """案で直した文が、ブロックを解析し直して確かめたときに通るなら True、通らないなら False、ここで決められないなら None。"""
         text = self.text
         before = self.run_index.get((i, i + 2))
@@ -2523,7 +2535,7 @@ class _BoldRepairIndex:
             first, second, delta = i + left, j + left, left + right
         end = i + len(middle)
 
-        def char_after(position):
+        def char_after(position: int) -> str:
             """書き換えたあとの文字（範囲の外は空の文字列）。"""
             if position < 0:
                 return ""
@@ -2615,7 +2627,7 @@ class _BoldRepairIndex:
         return verdict
 
 
-def _bold_fix_with_context(text, i, j, k, known_pair, context):
+def _bold_fix_with_context(text: str, i: int, j: int, k: int, known_pair: bool, context: dict) -> tuple[str | None, str]:
     """Only a proved target repair is suggested; ambiguous star runs stay manual."""
     open_start, open_end = _star_extent(text, i)
     close_start, close_end = _star_extent(text, j)
@@ -2709,7 +2721,7 @@ def _bold_fix_with_context(text, i, j, k, known_pair, context):
     return None, "手で直す"
 
 
-def _line_containers(line: str):
+def _line_containers(line: str) -> tuple[bool, int, str]:
     """行のコンテナ（リストマーカー、引用の深さ）と、内部のコンテンツを簡易解析する"""
     is_list = False
     m_list = re.match(r"^\s{0,3}(?:[*+-]|\d+[.)])\s+", line)
@@ -2736,7 +2748,7 @@ def _line_containers(line: str):
     return is_list, depth, content
 
 
-def bold_problems(text: str, skip_frontmatter: bool = True):
+def bold_problems(text: str, skip_frontmatter: bool = True) -> list[dict]:
     """Inspect visible leaf blocks; code, destinations and HTML atoms are protected."""
     if "**" not in text:
         return []
@@ -2744,7 +2756,7 @@ def bold_problems(text: str, skip_frontmatter: bool = True):
     return _bold_problems_with_analysis(text, analysis)
 
 
-def _bold_problems_with_analysis(text, analysis):
+def _bold_problems_with_analysis(text: str, analysis: dict) -> list[dict]:
     """Internal reuse for the combined lint; preserve the public two-arg API."""
     if "**" not in text:
         return []
@@ -2792,11 +2804,11 @@ def _bold_short(s: str) -> str:
     return s if len(s) <= 30 else s[:12] + "…" + s[-12:]
 
 
-def _extra_negation_line_numbers(analysis):
+def _extra_negation_line_numbers(analysis: dict) -> set[int]:
     """Find the construction across soft line breaks, never across blocks."""
     hit_lines = set()
 
-    def scan(parts):
+    def scan(parts: list[tuple[int, str]]) -> None:
         if not parts:
             return
         joined = "".join(visible for _, visible in parts)
@@ -2858,7 +2870,7 @@ _SCOPE_REFERENCE = re.compile(
 )
 
 
-def _rule9_context(analysis):
+def _rule9_context(analysis: dict) -> dict[int, list[tuple[str, str]]]:
     """New rules alone use unquoted prose and the immediately following sentence.
 
     Mask balanced quotes before splitting sentences, including paragraph breaks.
@@ -2893,7 +2905,7 @@ def _rule9_context(analysis):
     return contexts
 
 
-def _has_instruction_residue(sentence, following):
+def _has_instruction_residue(sentence: str, following: str) -> bool:
     writing = _WRITING_ACTION.search(sentence)
     if (writing and ("ます" in writing.group() or _RESIDUE_OPENER_RE.search(sentence))
             and _WRITING_STYLE.search(sentence)):
@@ -2905,7 +2917,7 @@ def _has_instruction_residue(sentence, following):
                 or _SCOPE_REFERENCE.search(sentence) or _SCOPE_REFERENCE.search(following))
 
 
-def _has_instruction_residue_core(sentence, following, closers=_END_CLOSERS):
+def _has_instruction_residue_core(sentence: str, following: str, closers: str = _END_CLOSERS) -> bool:
     """文末の後ろの飾り（「〜書いていきます 🚀」）を除いた文で、もう一度確かめる。飾りがなければ確かめない。
 
     句点の代わりに絵文字を置いて続けた文（「〜扱いません🙏 詳しくは〜」）は、分けた文ごとに次の文と合わせて確かめる。"""
@@ -3027,7 +3039,7 @@ _PAUSE_LIST_ITEM_MAX = 18
 _PAUSE_SHORT_CLAUSE = 10
 
 
-def _pause_comma_chunk(t, i):
+def _pause_comma_chunk(t: str, i: int) -> tuple[str, int]:
     for comp in _PAUSE_COMPOUND:
         st = i + 1 - len(comp)
         if st >= 0 and t[st:i + 1] == comp:
@@ -3041,7 +3053,7 @@ def _pause_comma_chunk(t, i):
             return comp, st
     return t[i], i
 
-def _pause_comma_next_subject(after):
+def _pause_comma_next_subject(after: str) -> bool:
     parts = re.split(r"(、|。)", after)
     text = ""
     for k in range(0, len(parts), 2):
@@ -3072,7 +3084,7 @@ def _pause_comma_next_subject(after):
         return True
     return False
 
-def _pause_comma_quote_blocks(phrase):
+def _pause_comma_quote_blocks(phrase: str) -> list[str]:
     """句の中のかっこの中身を返す。"""
     out, depth, cur = [], 0, []
     for ch in phrase:
@@ -3090,7 +3102,7 @@ def _pause_comma_quote_blocks(phrase):
             cur.append(ch)
     return out
 
-def _pause_comma_context(text):
+def _pause_comma_context(text: str) -> tuple[list[int], list[int], list[int], list[tuple[int, int]], list[int]]:
     """深さ、句の頭、文の範囲、文頭判定の累積表を行につき1回作る。"""
     depths, phrase_starts, sentence_ids, spans = [], [0], [], []
     nonlead = [0]
@@ -3120,7 +3132,7 @@ _PAUSE_LATER_MO = re.compile(r"(?<!最)[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9
 _PAUSE_LIST_AND = re.compile(r"[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9さみ](?:と|や)[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9]")
 
 
-def _pause_comma_phrase_end(t, k, depth):
+def _pause_comma_phrase_end(t: str, k: int, depth: list[int]) -> int:
     """位置 k から、深さ0の次の句の区切りの位置を返す。"""
     n = len(t)
     while k < n and not (depth[k] == 0 and t[k] in _PAUSE_BOUNDARY):
@@ -3128,7 +3140,7 @@ def _pause_comma_phrase_end(t, k, depth):
     return k
 
 
-def _pause_comma_prev_segment(t, j, starts):
+def _pause_comma_prev_segment(t: str, j: int, starts: list[int]) -> tuple[str | None, int]:
     """句の頭 j の直前が読点のとき、その前の句を返す（なければ None）。"""
     if j < 2 or t[j - 1] not in "、，,":
         return None, 0
@@ -3136,7 +3148,7 @@ def _pause_comma_prev_segment(t, j, starts):
     return t[k:j - 1].lstrip(_PAUSE_LEAD_SYMBOLS), k
 
 
-def _pause_comma_list_before(t, j, starts):
+def _pause_comma_list_before(t: str, j: int, starts: list[int]) -> bool:
     """句が、並んだ名詞の最後の項目か（「A、B、Cは、」「AやB、Cは、」）。"""
     prev, k = _pause_comma_prev_segment(t, j, starts)
     if not prev or not _PAUSE_NOUNISH_END.search(prev) or _PAUSE_ADVERBIAL_NOUN.search(prev):
@@ -3147,7 +3159,7 @@ def _pause_comma_list_before(t, j, starts):
     return bool(prev2 and _PAUSE_NOUNISH_END.search(prev2) and not _PAUSE_ADVERBIAL_NOUN.search(prev2))
 
 
-def _pause_comma_hits(plain_text):
+def _pause_comma_hits(plain_text: str) -> list[tuple[int, str, str]]:
     """見える1行から (助詞の位置, かたまり, 句) を出現順に返す。"""
     t = plain_text
     if not any(p in t for p in ("は、", "が、", "も、")):
@@ -3253,7 +3265,7 @@ def _pause_comma_hits(plain_text):
     return hits
 
 
-def _pause_comma_object_hits(plain_text):
+def _pause_comma_object_hits(plain_text: str) -> list[tuple[int, str, str]]:
     """2.5.0: 見える1行から、短い目的語の「を、」の (「を」の位置, "を", 目的語) を出現順に返す。"""
     t = plain_text
     if not any(p in t for p in ("を、", "を，", "を,")):
@@ -3285,13 +3297,13 @@ def _pause_comma_object_hits(plain_text):
     return hits
 
 
-def _pause_comma_line_hits(analysis, objects=False):
+def _pause_comma_line_hits(analysis: dict, objects: bool = False) -> dict[int, list[tuple[int, str, str]]]:
     """段落と箇条書きの1項目ごとに、見える行をつないで当てる（行をまたぐ文と引用を1つに読む）。
     行番号から、その行の見える文字での (助詞の位置, かたまり, 句) の並びへの表を返す。
     objects が真なら、短い目的語の「を、」（_pause_comma_object_hits）も位置の順に混ぜる（2.5.0）。"""
     out = {}
 
-    def flush(unit, kind):
+    def flush(unit: list[tuple[int, str]], kind: str) -> None:
         if not unit:
             return
         joined = "".join(plain for _, plain in unit)
@@ -3348,7 +3360,7 @@ _V220_RULES = ("calque", "metaphor_label", "say_hedge", "thin_evaluation", "kata
 _DASH_RULES = ("dash_decoration", "dash_insertion", "dash_list_ending")
 
 
-def _rule_penalty_score(findings, prose_chars, dash_hits):
+def _rule_penalty_score(findings: list[dict], prose_chars: int, dash_hits: int) -> int:
     """行の候補の密度と文書単位の候補から、整数だけで目安を計算する。"""
     if not findings:
         return 100
@@ -3380,11 +3392,19 @@ class _V220Lazy:
     """初めて使うときに組む正規表現（2.2.0 の規則の正規表現は、当たる手掛かりがある文書でだけ要るので、読み込みのときには
     組まない。lint を CLI で1文書ずつ動かすときの起動の時間を延ばさないため）。組んだあとは re.Pattern の関数をそのまま持つ。"""
 
-    def __init__(self, pattern, flags=0):
+    search: Callable[..., re.Match[str] | None]
+    match: Callable[..., re.Match[str] | None]
+    fullmatch: Callable[..., re.Match[str] | None]
+    finditer: Callable[..., Iterator[re.Match[str]]]
+    findall: Callable[..., list]
+    sub: Callable[..., str]
+    split: Callable[..., list[str]]
+
+    def __init__(self, pattern: str, flags: int = 0) -> None:
         self.pattern = pattern
         self._flags = flags
 
-    def __getattr__(self, name):
+    def __getattr__(self, name: str) -> object:
         if name.startswith("__"):
             raise AttributeError(name)
         compiled = re.compile(self.pattern, self._flags)
@@ -3747,28 +3767,28 @@ _LABEL_ABSTRACT_ENDINGS = (
 )
 
 
-def _v220_kanji(char):
+def _v220_kanji(char: str) -> bool:
     return "一" <= char <= "龥" or char in "々〆ヵヶ"
 
 
-def _v220_katakana(char):
+def _v220_katakana(char: str) -> bool:
     return "ァ" <= char <= "ヴ" or char == "ー"
 
 
-def _v220_hiragana(char):
+def _v220_hiragana(char: str) -> bool:
     return "ぁ" <= char <= "ん"
 
 
-def _v220_word_char(char):
+def _v220_word_char(char: str) -> bool:
     """漢字かカタカナ（長音を除く）。"""
     return _v220_kanji(char) or "ァ" <= char <= "ヴ"
 
 
-def _v220_alnum(char):
+def _v220_alnum(char: str) -> bool:
     return (char.isascii() and char.isalnum()) or "０" <= char <= "９" or "Ａ" <= char <= "Ｚ" or "ａ" <= char <= "ｚ"
 
 
-def _label_is_phrase(label):
+def _label_is_phrase(label: str) -> bool:
     """ラベルが一語でなく句か（助詞、名詞を修飾する形、から・まで・より、動詞で終わる形）。"""
     if any(char in _LABEL_ANYWHERE for char in label) or "から" in label or "まで" in label or "より" in label:
         return True
@@ -3800,7 +3820,7 @@ def _label_is_phrase(label):
     return False
 
 
-def _label_kanji_runs(text):
+def _label_kanji_runs(text: str) -> list[tuple[str, str]]:
     """漢字の続き（2字以上）とカタカナの続き（2字以上）。"""
     runs = []
     current = ""
@@ -3873,7 +3893,7 @@ _V220_LIST_PROBLEMS = {}
 _V220_LIST_ABSENT = (FileNotFoundError, NotADirectoryError)
 
 
-def _v220_parse_list(text, pattern=False):
+def _v220_parse_list(text: str, pattern: bool = False) -> tuple:
     """一覧のファイルの中身を読む（yomiyasu_diff.parse_list と同じ書き方）。空行と「#」で始まる行は読み飛ばす。
     正規表現の誤りはここでは確かめない（組むのに時間がかかるので、初めて使うときに _v220_thin_match が確かめる）。"""
     if text.startswith("\ufeff"):
@@ -3894,7 +3914,7 @@ def _v220_parse_list(text, pattern=False):
     return tuple(out)
 
 
-def _v220_load_list(name):
+def _v220_load_list(name: str) -> tuple[tuple, str]:
     """一覧を読む（yomiyasu_diff._load_list と同じ読み方）。(項目のタプル, 出どころ) を返す。出どころは
     "references/lists/<名前>.txt" か "builtin"。スクリプトの隣の ../references/lists/<名前>.txt を utf-8-sig で読む。
     ないときは何も言わずに内蔵の一覧で動き、読めないとき（UTF-8 でない、書き方の誤り、開けない）は、理由を
@@ -3903,9 +3923,9 @@ def _v220_load_list(name):
         return _V220_LIST_CACHE[name]
     pattern = name == "thin-evaluation"
     items, problem = None, None
-    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "references", "lists", name + ".txt")
+    path = Path(os.path.normpath(__file__)).absolute().parent / os.pardir / "references" / "lists" / (name + ".txt")
     try:
-        with open(path, "rb") as handle:
+        with Path(path).open("rb") as handle:
             data = handle.read()
     except _V220_LIST_ABSENT:
         data = None
@@ -3955,7 +3975,7 @@ _V220_TYPE3_END = _V220_TRIGGER_LITERALS.index("版")
 _V220_TYPE4_END = _V220_TRIGGER_LITERALS.index("背景")
 
 
-def _v220_literal_re(literals):
+def _v220_literal_re(literals: Iterable[str]) -> _V220Lazy:
     """文字列のどれかに当たる正規表現。先頭の字ごとにまとめる（re は分かれ道を1つずつ試すので、同じ字で始まる語を
     1つの分かれ道にまとめると、その字の位置で試す数が減る）。長い語を先に試す。"""
     groups = {}
@@ -3987,7 +4007,7 @@ _THIN_TAIL = r"(?:です|でした|だ|だった|である|でございます|�
 _V220_COMPILED = {}
 
 
-def _v220_patterns():
+def _v220_patterns() -> tuple[_V220Lazy | None, _V220Lazy | None, tuple[str, ...], tuple[_V220Lazy, ...]]:
     """一覧から組んだ正規表現（katakana_term、thin_evaluation、文書全体の手掛かり）。一覧ごとに1回だけ組む。"""
     katakana, katakana_source = _v220_load_list("katakana-terms")
     thin, thin_source = _v220_load_list("thin-evaluation")
@@ -4022,18 +4042,21 @@ def _v220_patterns():
     return value
 
 
-def _v220_thin_match(sentence):
+def _v220_thin_match(sentence: str) -> re.Match[str] | None:
     """thin_evaluation の正規表現を文に当てる。一覧のファイルの正規表現に誤りがあれば、理由を残して内蔵の一覧で当てる。"""
     thin_re = _v220_patterns()[1]
+    if thin_re is None:
+        return None
     try:
         return thin_re.match(sentence)
     except re.error as error:
         _V220_LIST_CACHE["thin-evaluation"] = (tuple(_V220_BUILTIN_LISTS["thin-evaluation"]), "builtin")
         _V220_LIST_PROBLEMS["thin-evaluation"] = "正規表現の誤り（{}）".format(error)
-        return _v220_patterns()[1].match(sentence)
+        fallback = _v220_patterns()[1]
+        return fallback.match(sentence) if fallback is not None else None
 
 
-def _v220_scan_text(analysis, line_no):
+def _v220_scan_text(analysis: dict, line_no: int) -> str:
     """新しい語の規則が見る行の文字。見える文字から、カギ括弧と引用符の中、英数字の識別子を空白にする。"""
     visible = _prose_visible_text(analysis, line_no).replace("__", "").replace("*", "")
     if "「" in visible or "『" in visible or "[" in visible:
@@ -4043,7 +4066,7 @@ def _v220_scan_text(analysis, line_no):
     return _V220_IDENTIFIER.sub(lambda m: " " * len(m.group()), visible)
 
 
-def _v220_noun_start(text, position):
+def _v220_noun_start(text: str, position: int) -> bool:
     """position の字が漢字かカタカナか英字か。"""
     if position >= len(text):
         return False
@@ -4051,12 +4074,12 @@ def _v220_noun_start(text, position):
     return _v220_kanji(char) or _v220_katakana(char) or (char.isascii() and char.isalpha())
 
 
-def _v220_has_verb_stem(text):
+def _v220_has_verb_stem(text: str) -> bool:
     """型1の動詞の語幹の字があるか。"""
     return not _CALQUE_VERB_STEMS.isdisjoint(text)
 
 
-def _calque_subject_end(sentence, limit):
+def _calque_subject_end(sentence: str, limit: int) -> int:
     """limit より前で最後の、機械やシステムの語が主語の「は」「が」「も」「こそ」の終わりの位置（なければ -1）。
     主語の語のあとに漢字やカタカナが続いて、人や組織の語で終わるとき（サーバー管理者は）は主語にしない。"""
     last = -1
@@ -4077,7 +4100,7 @@ def _calque_subject_end(sentence, limit):
     return last
 
 
-def _calque_type1(sentence, words):
+def _calque_type1(sentence: str, words: list[str]) -> bool:
     """型1に当たれば True（当たった動詞の辞書の形を words に足す）。"""
     if not _v220_has_verb_stem(sentence) or not _CALQUE_SUBJECT_WORD.search(sentence):
         return False
@@ -4103,7 +4126,9 @@ def _calque_type1(sentence, words):
             established = [m.span() for m in _CALQUE_ESTABLISHED_TYPE1_RE.finditer(sentence)]
         if any(left <= start < right for left, right in established):
             continue
-        kana = _CALQUE_KANA_RUN.match(sentence, match.end()).group()
+        kana_match = _CALQUE_KANA_RUN.match(sentence, match.end())
+        assert kana_match is not None
+        kana = kana_match.group()
         if (match.group() + kana).endswith(_CALQUE_ATTRIBUTIVE_END) \
                 and _v220_noun_start(sentence, match.end() + len(kana)):
             continue    # 名詞を修飾する形（拾った通知、話した内容）
@@ -4114,12 +4139,12 @@ def _calque_type1(sentence, words):
     return found
 
 
-def _v220_noun_or_alnum(text, position):
+def _v220_noun_or_alnum(text: str, position: int) -> bool:
     return 0 <= position < len(text) and (_v220_kanji(text[position]) or _v220_katakana(text[position])
                                           or _v220_alnum(text[position]))
 
 
-def _calque_saki_spans(sentence):
+def _calque_saki_spans(sentence: str) -> list[tuple[int, int]]:
     """「〜先」の当たり（_CALQUE_SAKI_KANJI の語か、漢字1字と連用形の送り仮名のあとの「先」）の (始め, 終わり)。"""
     spans = []
     position = sentence.find("先")
@@ -4143,7 +4168,7 @@ def _calque_saki_spans(sentence):
     return spans
 
 
-def _calque_has_org(sentence):
+def _calque_has_org(sentence: str) -> bool:
     """文に組織の名前（総務部、情報システム課、サポートセンター）があるか。"""
     if any(word in sentence for word in _CALQUE_ORG_WORDS):
         return True
@@ -4154,12 +4179,12 @@ def _calque_has_org(sentence):
     return False
 
 
-def _v220_doc_tech(text):
+def _v220_doc_tech(text: str) -> bool:
     """技術の文書か（_CALQUE_TECH の語のうち、_CALQUE_DOC_TECH_GENERAL を除いた語が _CALQUE_DOC_TECH_MIN 種類以上）。"""
     return len(set(_CALQUE_TECH.findall(text)) - _CALQUE_DOC_TECH_GENERAL) >= _CALQUE_DOC_TECH_MIN
 
 
-def _entry_subject_end(sentence, cache):
+def _entry_subject_end(sentence: str, cache: dict[str, int]) -> int:
     """要求や呼び出しの主題（_CALQUE_ENTRY_SUBJECT）のいちばん早い終わり（なければ -1）。入口の一致ごとに文頭から
     読み直さず、文1つにつき1回だけ探す。"""
     if "subject" not in cache:
@@ -4168,7 +4193,7 @@ def _entry_subject_end(sentence, cache):
     return cache["subject"]
 
 
-def _calque_type2(sentence, words, doc_tech=False):
+def _calque_type2(sentence: str, words: list[str], doc_tech: bool = False) -> bool:
     """型2に当たれば True（当たった名詞を words に足す）。doc_tech は技術の文書か（入口と出口の拾い方に使う）。"""
     if not _CALQUE_PLACE_HEAD.search(sentence):
         return False
@@ -4231,7 +4256,7 @@ def _calque_type2(sentence, words, doc_tech=False):
     return found
 
 
-def _calque_type3(sentence, words, doc_tech=False):
+def _calque_type3(sentence: str, words: list[str], doc_tech: bool = False) -> bool:
     """型3に当たれば True（当たった句の名前を words に足す）。doc_tech は技術の文書か（「全〇〇に響く」の拾い方に使う）。
     文ごとに決まる値（機械やシステムの語があるか など）は、句の一致ごとに文を読み直さず、文1つにつき1回だけ求める。"""
     if not _CALQUE_PHRASE_HEAD.search(sentence):
@@ -4327,7 +4352,7 @@ def _calque_type3(sentence, words, doc_tech=False):
     return found
 
 
-def _label_text(analysis, row, scan):
+def _label_text(analysis: dict, row: dict, scan: str) -> str:
     """見出しか1行目のラベル（記号と番号を除いた文字。英数字は残す）。"""
     text = scan.strip()
     if row["kind"] == "heading":
@@ -4337,7 +4362,7 @@ def _label_text(analysis, row, scan):
                    or _v220_alnum(char))
 
 
-def _label_shape(label):
+def _label_shape(label: str) -> bool:
     """ラベルの形の条件（8字以下で、よく使う節の名前でなく、「〜の横」「〜のそば」「〜係」「〜番」で終わるか一語）。"""
     if not label or len(label) < 2 or len(label) > _LABEL_MAX or label in _LABEL_COMMON:
         return False
@@ -4356,7 +4381,7 @@ def _label_shape(label):
     return not _label_is_phrase(label)
 
 
-def _label_may_fit(row):
+def _label_may_fit(row: dict) -> bool:
     """見出しか1行目が、伏せる前の文字でラベルになりうるか（長い見出しと、ふつうの見出しを先に飛ばす）。
     伏せる所（識別子、コード）は英数字か記号なので、漢字と仮名だけを残した文字で見る。"""
     raw = row["raw"]
@@ -4366,7 +4391,7 @@ def _label_may_fit(row):
     return _label_shape(quick)
 
 
-def _metaphor_label(analysis, row, scan):
+def _metaphor_label(analysis: dict, row: dict, scan: str) -> str | None:
     """metaphor_label のラベルを返す（当たらなければ None）。"""
     if row["kind"] not in ("heading", "paragraph"):
         return None     # 1行目が表や箇条書きのときは見ない
@@ -4446,7 +4471,7 @@ _CALQUE_STYLE_CONTEXT_PATTERN = r"(?<![A-Za-z])(?:CSS|border|px|HTML)(?![A-Za-z]
 _CALQUE_STYLE_CONTEXT = _V220Lazy(_CALQUE_STYLE_CONTEXT_PATTERN)
 
 
-def _calque_type4(sentence, words, skip_version=False):
+def _calque_type4(sentence: str, words: list[str], skip_version: bool = False) -> bool:
     """型4（英語の短い術語に当てた漢字1字の名詞）。当たった字（版、印、頭、枝、題、罫）を words に足す。"""
     found = False
     if not skip_version and "版" in sentence and not _CALQUE_VERSION_PUB.search(sentence) \
@@ -4518,7 +4543,7 @@ def _calque_type5(sentence, words):
     return found
 
 
-def _v220_word_findings(analysis):
+def _v220_word_findings(analysis: dict) -> list[dict]:
     """calque、metaphor_label、katakana_term、thin_evaluation の候補。
 
     既存の規則の候補は analysis["_findings"] から読む（同じ行に metaphor_verb があれば calque を出さない。
@@ -4595,7 +4620,7 @@ def _v220_word_findings(analysis):
                 finders.append((4, functools.partial(_calque_type4, skip_version=line_no in blocked_version)))
             if _CALQUE_TERM_HEAD.search(scan):
                 finders.append((5, _calque_type5))
-        thin_possible = thin_re is not None and thin_noun_re.search(scan) is not None
+        thin_possible = thin_re is not None and thin_noun_re is not None and thin_noun_re.search(scan) is not None
         sentences = ()
         if finders or thin_possible:
             sentences = [part for part in (piece.strip() for piece in _V220_SENTENCE.findall(scan)) if part]
@@ -4631,7 +4656,7 @@ def _v220_word_findings(analysis):
     return out
 
 
-def _calque_message(types, word_types):
+def _calque_message(types: Sequence[int], word_types: Sequence[tuple[str, int]]) -> str:
     """calque の message。1行に1件なので、当たった言い方を並べる（同じ行の2つ目を読み落とさないため。置き換え先の語は出さない）。"""
     hit = tuple(dict.fromkeys(word for word, _ in word_types))
     shown = "。当たった言い方: " + "、".join(hit) if hit else ""
@@ -4659,7 +4684,7 @@ _RENYO_AFTER = (r"(?=が(?!た[いかくけさそ])|を|は|に(?!く[いかく�
 _RENYO_COMPILED = {}
 
 
-def _renyo_pattern():
+def _renyo_pattern() -> tuple[re.Pattern[str] | None, re.Pattern[str] | None, dict[str, tuple[str, ...]]]:
     """一覧から組んだ正規表現（文書全体の絞り込み用と、行の見える文字用）と、語ごとに外す後ろの文字列のタプル。
     一覧ごとに1回だけ組む。一覧が空なら (None, None, {})。絞り込みは前後の先読みを持たず、「の」と語のあいだの「*」「_」
     を許す（太字の印 ** が「の」と語のそばにあっても、見える文字では消えるので、その行を見落とさないため）。"""
@@ -4731,7 +4756,7 @@ _SLIDE_MESSAGE = ("スライドの見出しや1行の箇条で、間を作るだ
                   "外すと読み違える読点は残し、ほかは外すか確かめてください。")
 
 
-def _v240_slide_single_lines(analysis):
+def _v240_slide_single_lines(analysis: dict) -> list[int]:
     """1行で終わる見出し、箇条、段落の行の番号。続きの行がある箇条と、複数行の段落の行は入れない。"""
     rows = analysis["lines"]
     out = []
@@ -4747,9 +4772,9 @@ def _v240_slide_single_lines(analysis):
         previous = rows[index - 1] if index else None
         following = rows[index + 1] if index + 1 < len(rows) else None
 
-        def continues(other):
-            return (other is not None and other["raw"].strip() and other["kind"] in ("list", "paragraph")
-                    and other["quote_depth"] == row["quote_depth"] and not _SLIDE_BULLET.match(other["raw"]))
+        def continues(other: dict | None) -> bool:
+            return bool(other is not None and other["raw"].strip() and other["kind"] in ("list", "paragraph")
+                        and other["quote_depth"] == row["quote_depth"] and not _SLIDE_BULLET.match(other["raw"]))
 
         if not bullet and previous is not None and previous["raw"].strip() and previous["kind"] in ("list", "paragraph"):
             continue
@@ -4759,12 +4784,14 @@ def _v240_slide_single_lines(analysis):
     return out
 
 
-def _v240_slide_texts(analysis, line_no):
+def _v240_slide_texts(analysis: dict, line_no: int) -> tuple[str, str, list[int]]:
     """(見える文字、伏せた所を「＿」にした文字、見える文字の各字の元の行での位置)。太字の記号は外す。"""
     raw = analysis["lines"][line_no - 1]["raw"]
     visible_raw = _prose_visible_text(analysis, line_no)
     if len(visible_raw) == len(raw):
-        zone = _SLIDE_MARKER_ZONE.match(raw).end()
+        marker = _SLIDE_MARKER_ZONE.match(raw)
+        assert marker is not None
+        zone = marker.end()
         visible_raw = "".join("＿" if (char == " " and index >= zone and raw[index] not in " \t　") else char
                               for index, char in enumerate(visible_raw))
     keep = [i for i, char in enumerate(visible_raw) if char != "*"]
@@ -4788,7 +4815,7 @@ def _v240_slide_texts(analysis, line_no):
     return visible, placeholder, positions
 
 
-def _v240_slide_hit_text(raw, positions, begin, end):
+def _v240_slide_hit_text(raw: str, positions: list[int], begin: int, end: int) -> str:
     """当たった言い方の字（元の行から切り出し、リンクは文字だけ、太字の記号は外す。20字より長ければ頭に「…」）。"""
     if not positions or begin >= end:
         return ""
@@ -4801,7 +4828,7 @@ def _v240_slide_hit_text(raw, positions, begin, end):
     return text
 
 
-def _v240_slide_comma_findings(analysis, findings, doc_type):
+def _v240_slide_comma_findings(analysis: dict, findings: list[dict], doc_type: str | None) -> list[dict]:
     """slide_comma の候補（slides のときだけ数える。ほかの種類では作らない）。同じ行に pause_comma があれば、主題と主語の読点は重ねない。
     2.5.0: pause_comma が拾った短い目的語の「を、」は、目的語の読点として重ねない（同じ行のほかの目的語の読点は出す）。
     pause_comma が「を、」だけを拾った行では、主題と主語の読点も出す（重ねる読点がないので）。"""
@@ -4817,7 +4844,9 @@ def _v240_slide_comma_findings(analysis, findings, doc_type):
         if "、" not in row["raw"]:
             continue
         visible, scan, positions = _v240_slide_texts(analysis, line_no)
-        lead = _SLIDE_LEAD.match(scan).end()
+        marker = _SLIDE_LEAD.match(scan)
+        assert marker is not None
+        lead = marker.end()
         body = scan[lead:].rstrip()
         if not body or len(body) > _SLIDE_LINE_MAX:
             continue
@@ -4847,12 +4876,13 @@ def _v240_slide_comma_findings(analysis, findings, doc_type):
     return out
 
 
-def _v230_renyo_findings(analysis):
+def _v230_renyo_findings(analysis: dict) -> list[dict]:
     """renyo_noun の候補。文書全体に一度だけ一覧の語を当て、当たった行を見える文字で調べる。"""
     pattern, prefilter, skip_after = _renyo_pattern()
     rows = analysis["lines"]
     if pattern is None or not rows:
         return []
+    assert prefilter is not None
     text = analysis["text"]
     starts = None
     candidate_lines = set()
@@ -4922,7 +4952,7 @@ _AI_PHRASE_FORMS = (
 )
 
 
-def _v250_ai_phrase_findings(analysis, doc_type):
+def _v250_ai_phrase_findings(analysis: dict, doc_type: str | None) -> list[dict]:
     """ai_phrase の候補。文書全体に一度だけ手掛かり（_AI_PHRASE_HEAD）を当て、当たった行を見える文字で調べる。"""
     rows = analysis["lines"]
     if not rows:
@@ -5014,7 +5044,7 @@ _BARE_VERB_NOT_VERB = re.compile(r"(?:^[一二三四五六七八九十百千0-9�
 _BARE_VERB_PARTICLE = re.compile(r"を|[はがに](?![ぁ-ゖ])")
 
 
-def _shape_visible_text(analysis, row):
+def _shape_visible_text(analysis: dict, row: dict) -> str:
     """形の規則で見る行の文字。見ない行は空の文字列。引用の中身は空白で伏せる。"""
     if row["kind"] not in ("paragraph", "list", "heading") or row["quote_depth"]:
         return ""
@@ -5029,7 +5059,7 @@ def _shape_visible_text(analysis, row):
     return text
 
 
-def _say_hedge_sentence(sentence):
+def _say_hedge_sentence(sentence: str) -> bool:
     match = _SAY_HEDGE.search(sentence)
     if not match:
         return False
@@ -5041,7 +5071,7 @@ def _say_hedge_sentence(sentence):
     return True
 
 
-def _copy_comma_noun_sentence(sentence):
+def _copy_comma_noun_sentence(sentence: str) -> bool:
     if len(sentence) > 20 or not sentence.endswith("。"):
         return False
     match = _COPY_COMMA_NOUN.search(sentence)
@@ -5059,7 +5089,7 @@ def _copy_comma_noun_sentence(sentence):
     return not _COPY_NOUN_NOT.search(noun)
 
 
-def _bare_verb_chain_sentence(sentence):
+def _bare_verb_chain_sentence(sentence: str) -> bool:
     if len(sentence) > 30 or not sentence.endswith("。"):
         return False
     parts = [part.strip() for part in sentence[:-1].split("、")]
@@ -5074,7 +5104,7 @@ def _bare_verb_chain_sentence(sentence):
             and not _BARE_VERB_NOT_VERB.search(last))
 
 
-def _v220_shape_findings(analysis, findings, doc_type):
+def _v220_shape_findings(analysis: dict, findings: list[dict], doc_type: str | None) -> list[dict]:
     """say_hedge、copy_comma_noun、bare_verb_chain の候補。findings は既存の規則の候補（読むだけ。いまは使わない）。
 
     1行に同じ規則の候補は1件まで。copy_comma_noun は promo では文書の中で2回目に当たったものから出す。
@@ -5154,7 +5184,7 @@ _NARRATIVE_NUMBER = re.compile(r"(?<![A-Za-z_0-9０-９.,．，])[0-9０-９]+(?
 _ASCII_IDENTIFIER = re.compile(r"(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*(?:[./][A-Za-z0-9_]+)+|(?<![A-Za-z])[A-Za-z]+_[A-Za-z0-9_]+")
 
 
-def _top_quote_contents(text):
+def _top_quote_contents(text: str) -> list[str]:
     """1行の中の、いちばん外の「」と『』の中身。閉じていない括弧は数えない。"""
     contents = []
     stack = []
@@ -5168,7 +5198,7 @@ def _top_quote_contents(text):
     return contents
 
 
-def _dialogue_lines(analysis):
+def _dialogue_lines(analysis: dict) -> list[tuple[int, str]]:
     """台詞の (行番号, 中身) の並び。「」と『』の中身、「名前「…」」の行、「名前：…」の行の中身を数える。
     見出し、コード、表、引用（> の行）は数えない。「」が1つもない行だけ「名前：…」の形を見る。"""
     dialogue = []
@@ -5191,7 +5221,7 @@ def _dialogue_lines(analysis):
     return dialogue
 
 
-def _narrative_counts(analysis):
+def _narrative_counts(analysis: dict) -> tuple[int, int, int, int, int | None]:
     """地の文の (字数, 一人称の数, 数字の数, 箇条書きの項目の数, 最初の行の番号)。
     見出し、コード、表、引用（> の行）、画像だけの行は数えない。字数は空白を除いた見える文字。一人称と数字は、
     カギ括弧の中と英数字の識別子を伏せてから数える。"""
@@ -5224,11 +5254,11 @@ def _narrative_counts(analysis):
     return chars, first_person, numbers, bullets, first_line
 
 
-def _per_thousand(count, chars):
+def _per_thousand(count: int, chars: int) -> float:
     return count * 1000 / chars if chars else 0.0
 
 
-def _v220_document_findings(analysis, doc_type):
+def _v220_document_findings(analysis: dict, doc_type: str | None) -> list[dict]:
     """dialogue_period と narrative_density の候補（文書に1件）。種類を限って当てる規則なので、その種類のときだけ数える。"""
     findings = []
     if doc_type == "script":
@@ -5249,6 +5279,7 @@ def _v220_document_findings(analysis, doc_type):
         person_rate = _per_thousand(first_person, chars)
         density = _per_thousand(numbers + bullets, chars)
         if chars >= NARRATIVE_MIN_CHARS and person_rate < FIRST_PERSON_MAX and density >= DENSITY_MIN:
+            assert first_line is not None
             findings.append({
                 "rule": "narrative_density",
                 "line": first_line,
@@ -5294,7 +5325,7 @@ _WORD_KANJI_BEFORE = r"(?<![一-龥々〆ヵヶ])"
 _WORD_KANJI_AFTER = r"(?![一-龥々〆ヵヶ])"
 
 
-def _hit_words(label, match):
+def _hit_words(label: str, match: re.Match[str] | None) -> tuple[str, ...]:
     """候補の内部の欄 _words の値。message に出る規則の表の語（label。「」があればその中身）、そこから「〜」と英語の
     注記を除いた語、当たった文字列（前後の空白を除く）を、重ねずにこの順で並べる。"""
     words = []
@@ -5307,7 +5338,7 @@ def _hit_words(label, match):
     return tuple(words)
 
 
-def _flag_pattern(flag):
+def _flag_pattern(flag: Iterable[str]) -> re.Pattern[str] | None:
     """flag.txt の語を1つの正規表現にする（長い語を先に。英数字の端には識別子の境目を付ける）。語がなければ None。"""
     words = sorted(set(flag), key=lambda word: (-len(word), word))
     if not words:
@@ -5330,7 +5361,7 @@ def _flag_pattern(flag):
     return re.compile("|".join(parts))
 
 
-def _project_term_findings(analysis, words):
+def _project_term_findings(analysis: dict, words: dict | None) -> list[dict]:
     """語の一覧の flag.txt の語の候補（project_term）。見える文字（コード、URL、リンク先、HTML、frontmatter を伏せた行）に
     flag の語が出る行に1件。引用（> の行）とカギ括弧・二重カギ括弧の中は数えない。_words にその行の flag の語。
     3.0.0: flag-patterns.txt のパターンも同じ所に当て、当たったパターンの名前を _words に足す（flag の語のあと）。
@@ -5368,7 +5399,7 @@ def _project_term_findings(analysis, words):
     return found
 
 
-def _apply_words(findings, words):
+def _apply_words(findings: list[dict], words: dict | None) -> tuple[list[dict], dict | None]:
     """語の一覧の allow.txt の語で候補を外す。(残った候補, context に入れる words の値か None) を返す。
 
     外すのは _ALLOW_RULES の規則の候補で、候補の _words のどれかが allow の語と同じもの。残った候補の順は変えない。
@@ -5406,7 +5437,7 @@ def _apply_words(findings, words):
 _ALLOW_PARTIAL_RULES = ("ai_phrase", "calque", "katakana_term", "project_term", "renyo_noun")
 
 
-def _finding_with_words(finding, rest):
+def _finding_with_words(finding: dict, rest: tuple[str, ...]) -> dict:
     """許していない語（rest）だけを残した候補の写し。calque、project_term、renyo_noun、ai_phrase は message も作り直す。"""
     out = dict(finding, _words=rest)
     if finding["rule"] == "calque":
@@ -5422,19 +5453,19 @@ def _finding_with_words(finding, rest):
     return out
 
 
-def _public_finding(finding):
+def _public_finding(finding: dict) -> dict:
     """候補の内部の欄（_ で始まるキー。_words など）を除いた写し。"""
     return {key: value for key, value in finding.items() if not key.startswith("_")}
 
 
-def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str, Any]:
+def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = None, words: dict | None = None) -> Dict[str, Any]:
     """文章全体を総合検査する。
 
     doc_type（文書の種類）を渡すと、DOC_TYPE_SKIP_RULES のその種類の規則の候補を除き、除いた件数を context に入れる。
     reader（読者）は context に入れるだけで、候補は変えない。値は中で正規化し、使えない値は ValueError。
     words は語の一覧（allow.txt と flag.txt）。None なら一覧なしとして動く。"""
     doc_type, reader = normalize_doc_type(doc_type), normalize_reader(reader)
-    findings = []
+    findings: list[dict] = []
     analysis = analyze_markdown(text)
     rule9_context = _rule9_context(analysis)
     extra_negation_lines = _extra_negation_line_numbers(analysis)
@@ -5501,10 +5532,11 @@ def lint_text(text: str, *, doc_type=None, reader=None, words=None) -> Dict[str,
             "snippet": f"{p['found']} → {p['suggest']}" if p["suggest"] else p["found"]
         })
 
-    def _vocabulary_findings(plain_text, line_no, snippet):
+    def _vocabulary_findings(plain_text: str, line_no: int, snippet: str) -> None:
         """AI頻出語彙と比喩動詞。見出しの行にも当てる（文頭と文末を前提にした型は当てない）。"""
         # スロップ語彙
         # 語の一覧の allow.txt で外すため、候補の内部の欄 _words に当たった語（型の語は、型の名前と当たった文字列）を入れる
+        slop_hits: list[tuple[str, tuple[str, ...]]]
         if narrowed is None:
             slop_hits = [(word, (word,)) for word in SLOP_WORDS if word in plain_text]
             slop_hits += [(word, _hit_words(word, match)) for word, match in
@@ -5934,7 +5966,7 @@ def render_findings(result: Dict[str, Any]) -> str:
     return "\n\n".join(blocks)
 
 
-def _context_line(result):
+def _context_line(result: dict) -> str | None:
     """種類か読者を指定したときの4行目。指定しないときは None。"""
     context = result.get("context") or {}
     doc_type, reader = context.get("doc_type"), context.get("reader")
@@ -5953,7 +5985,7 @@ def _context_line(result):
     return line
 
 
-def _words_line(result):
+def _words_line(result: dict) -> str | None:
     """語の一覧を使ったときの行（種類か読者の4行目のあと。なければ4行目）。使わないときは None。"""
     words = (result.get("context") or {}).get("words")
     if not isinstance(words, dict):
@@ -5991,7 +6023,7 @@ _EXIT_CODES = """終了コード:
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 
 
-def _doc_type_table():
+def _doc_type_table() -> str:
     """ヘルプの終了コードの表の前に置く、種類ごとの規則の一覧（SKIP と ONLY の表から作る）。"""
     lines = ["文書の種類ごとに外す規則（--doc-type）:"]
     for value, rules in DOC_TYPE_SKIP_RULES.items():
@@ -6009,14 +6041,14 @@ def _doc_type_table():
     return "\n".join(lines)
 
 
-def _choices(rows):
+def _choices(rows: Sequence[tuple]) -> str:
     return "、".join("{}（{}）".format(row[0], row[1]) for row in rows)
 
 
 class _ConditionAction(argparse.Action):
     """--strict と --fail-on を、指定した順に1つの並びに集める。"""
 
-    def __call__(self, parser, namespace, values, option_string=None):
+    def __call__(self, parser: argparse.ArgumentParser, namespace: argparse.Namespace, values: object, option_string: str | None = None) -> None:
         conditions = list(getattr(namespace, "conditions", None) or [])
         conditions.append(("strict", option_string) if self.nargs == 0 else ("fail-on", values))
         setattr(namespace, "conditions", conditions)
@@ -6027,7 +6059,7 @@ class _ArgumentParser(argparse.ArgumentParser):
     # ヘルプが標準エラーに出る）。3.10 までは標準エラーがないと使い方の誤りで AttributeError になる。
     # pythonw や 2>&- のときも、書く先がなければ何も書かずに同じ終了コードで終える。
 
-    def error(self, message):
+    def error(self, message: str) -> NoReturn:
         stream = sys.stderr
         if stream is None:
             self.exit(2)
@@ -6039,7 +6071,7 @@ class _ArgumentParser(argparse.ArgumentParser):
         stream.write("引数の誤りです。{} -h で使い方を確かめてください。\n".format(self.prog))
         self.exit(2)
 
-    def print_help(self, file=None):
+    def print_help(self, file: _TextWriter | None = None) -> None:
         if file is None:
             file = sys.stdout
         if file is not None:
@@ -6047,7 +6079,7 @@ class _ArgumentParser(argparse.ArgumentParser):
 
 
 class _HelpFormatter(argparse.RawDescriptionHelpFormatter):
-    def add_usage(self, usage, actions, groups, prefix=None):
+    def add_usage(self, usage: str | None, actions: Iterable[argparse.Action], groups: Iterable[argparse._MutuallyExclusiveGroup], prefix: str | None = None) -> None:
         if prefix is None:
             prefix = "使い方: "
         return super().add_usage(usage, actions, groups, prefix)
@@ -6080,7 +6112,7 @@ _WORDS_EPILOG = """語の一覧（--words、--no-words）:
 _NO_WORDS_HELP = "語の一覧を探さず、読みません（--words と一緒には使えません）。"
 
 
-def _build_parser():
+def _build_parser() -> argparse.ArgumentParser:
     parser = _ArgumentParser(
         prog="yomiyasu_lint.py",
         description=("日本語の表現とMarkdownの書式を、決まった規則で点検します。結果は見直し候補です。"
@@ -6121,17 +6153,18 @@ def _build_parser():
     return parser
 
 
-def _version_line():
+def _version_line() -> str:
     return "yomiyasu_lint.py {} (JSON format {})".format(__version__, LINT_FORMAT_VERSION)
 
 
-def _use_utf8(stream, **options):
+def _use_utf8(stream: object, **options: str) -> None:
     # 改行は OS によらず "\n" で書く（Windows の既定では "\r\n" になり、記録や CLI の出力が OS で変わる）
-    if stream is not None and hasattr(stream, "reconfigure"):
-        stream.reconfigure(encoding="utf-8", newline="\n", **options)
+    reconfigure = getattr(stream, "reconfigure", None)
+    if callable(reconfigure):
+        reconfigure(encoding="utf-8", newline="\n", **options)
 
 
-def _error(message):
+def _error(message: str) -> None:
     """標準エラーに1行書く。標準エラーがないとき（pythonw など）は何もしない。"""
     stream = sys.stderr
     if stream is None:
@@ -6144,7 +6177,7 @@ def _error(message):
         pass
 
 
-def _conditions(raw):
+def _conditions(raw: Sequence[tuple[str, str]]) -> tuple[list[str] | None, str | None]:
     """--strict と --fail-on の並びを、条件の名前の並びにする。使えない値があれば誤りの文を返す。
 
     meaning-risk は、ほかの値と混ぜても、ほかの誤りより先に断る。
@@ -6181,11 +6214,11 @@ def _path_problem(path):
         path, reason)
 
 
-def _read_input(path):
+def _read_input(path: str | None) -> tuple[str | None, str | None]:
     """ファイルか標準入力を読み、(文字列, None) か (None, 誤りの文) を返す。"""
     if path is not None and path != "-":
         try:
-            with open(path, "rb") as handle:
+            with Path(path).open("rb") as handle:
                 data = handle.read()
         except (OSError, ValueError) as error:
             reason = getattr(error, "strerror", None) or error
@@ -6211,7 +6244,7 @@ def _read_input(path):
         return None, "Error reading stdin: UTF-8 として読めません"
 
 
-def _run(argv):
+def _run(argv: list[str] | None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
     if args.version:
@@ -6244,6 +6277,7 @@ def _run(argv):
         _error(problem)
         return 2
 
+    assert content is not None and conditions is not None
     result = lint_text(content, doc_type=doc_type, reader=reader, words=words)
 
     hit = []
@@ -6266,14 +6300,14 @@ def _run(argv):
     return 1 if hit else 0
 
 
-def _closed_output_on_windows(error):
+def _closed_output_on_windows(error: Exception) -> bool:
     """Windows で、読む側が閉じたパイプに書いたときの例外か。Windows では BrokenPipeError ではなく、errno が EINVAL の
     OSError になる。ファイル名のある OSError（Windows で名前に使えない字を含むパスなど）と、POSIX では、ほかの誤りとして扱う。"""
     return (os.name == "nt" and type(error) is OSError and error.errno == errno.EINVAL
             and error.filename is None and error.filename2 is None)
 
 
-def _silence_stdout():
+def _silence_stdout() -> None:
     """標準出力を os.devnull に向け直す。インタプリタの終わりでもう一度書き出しに失敗しないようにする。"""
     try:
         devnull = os.open(os.devnull, os.O_WRONLY)
@@ -6282,7 +6316,7 @@ def _silence_stdout():
         pass
 
 
-def main(argv=None):
+def main(argv: list[str] | None = None) -> int:
     """CLI。終了コードを返す（0: 条件に当たらない、1: 条件に当たった、2: 使い方か入力の誤り、3: 内部の誤り）。"""
     try:
         if _IMPORT_ERROR is not None:

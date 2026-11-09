@@ -18,6 +18,8 @@ import io
 import json
 import os
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
+from typing import BinaryIO, ContextManager, Literal
 import subprocess
 import sys
 import tempfile
@@ -79,6 +81,11 @@ lint = load(LINT, "_v213_tools_lint")
 diff = load(DIFF, "_v213_tools_diff")
 check = load(CHECK, "_v213_tools_check")
 hook = load(HOOK, "_v213_tools_hook")
+
+
+def platform_os(module: ModuleType, name: str) -> ContextManager[object]:
+    """Change only the tested module's OS branch, keeping pathlib native."""
+    return mock.patch.object(module, "os", SimpleNamespace(**{**vars(os), "name": name}))
 
 
 class _RecordingStream(object):
@@ -275,7 +282,7 @@ class ClosedOutputTests(unittest.TestCase):
     def run_main(self, module, args, os_name, error=None):
         stdout, stderr = _ClosedOnWindows(error), io.StringIO()
         with mock.patch.object(sys, "stdout", stdout), mock.patch.object(sys, "stderr", stderr), \
-                mock.patch.object(os, "name", os_name):
+                platform_os(module, os_name):
             code = module.main(args)
         return code, stderr.getvalue()
 
@@ -320,7 +327,7 @@ class ClosedOutputTests(unittest.TestCase):
             with self.subTest(tool=name):
                 stdout, stderr = _ClosedOnWindows(), io.StringIO()
                 with mock.patch.object(sys, "stdout", stdout), mock.patch.object(sys, "stderr", stderr), \
-                        mock.patch.object(os, "name", "nt"), \
+                        platform_os(module, "nt"), \
                         mock.patch.object(module, "_silence_stdout") as silence:
                     code = module.main(args)
                 self.assertEqual(code, 3)
@@ -332,7 +339,7 @@ class ClosedOutputTests(unittest.TestCase):
             with self.subTest(os_name=os_name):
                 stdout, stderr = _ClosedOnWindows(), io.StringIO()
                 with mock.patch.object(sys, "stdout", stdout), mock.patch.object(sys, "stderr", stderr), \
-                        mock.patch.object(os, "name", os_name):
+                        platform_os(hook, os_name):
                     code = hook.main(["--version"])
                 self.assertEqual(code, 0)
                 self.assertEqual(stderr.getvalue(), "")
@@ -375,7 +382,7 @@ class ArmedLockTests(_StateCase):
 
     def test_windows_waits_for_a_lock_being_deleted(self):
         fake, calls = self.pending_open(3)
-        with mock.patch.object(os, "open", fake), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(os, "open", fake), platform_os(check, "nt"):
             with check._ArmedLock(str(self.state), self.run_id) as lock:
                 self.assertTrue(self.lock.exists())
                 self.assertIsNotNone(lock.identity)
@@ -384,7 +391,7 @@ class ArmedLockTests(_StateCase):
 
     def test_posix_raises_permission_error_at_once(self):
         fake, calls = self.pending_open(3)
-        with mock.patch.object(os, "open", fake), mock.patch.object(os, "name", "posix"):
+        with mock.patch.object(os, "open", fake), platform_os(check, "posix"):
             with self.assertRaises(PermissionError):
                 with check._ArmedLock(str(self.state), self.run_id):
                     pass
@@ -394,7 +401,7 @@ class ArmedLockTests(_StateCase):
         """ロックの名前がないのに拒まれ続けるときは、締切（12秒）まで待たずに PermissionError を出す。"""
         fake, calls = self.pending_open(1000, keep_name=False)
         begin = time.monotonic()
-        with mock.patch.object(os, "open", fake), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(os, "open", fake), platform_os(check, "nt"):
             with self.assertRaises(PermissionError):
                 with check._ArmedLock(str(self.state), self.run_id):
                     pass
@@ -413,7 +420,7 @@ class ArmedLockTests(_StateCase):
                 raise PermissionError(errno.EACCES, "Permission denied", str(path))
             return real_open(path, flags, *args)
         begin = time.monotonic()
-        with mock.patch.object(os, "open", fake), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(os, "open", fake), platform_os(check, "nt"):
             with self.assertRaises(PermissionError):
                 with check._ArmedLock(str(self.state), self.run_id):
                     pass
@@ -433,7 +440,7 @@ class ArmedLockTests(_StateCase):
                     raise PermissionError(errno.EACCES, "Permission denied", str(path))
                 raise FileExistsError(errno.EEXIST, "File exists", str(path))
             return real_open(path, flags, *args)
-        with mock.patch.object(os, "open", fake), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(os, "open", fake), platform_os(check, "nt"):
             with check._ArmedLock(str(self.state), self.run_id) as lock:
                 self.assertIsNotNone(lock.identity)
         self.assertEqual(len(calls), check._REPLACE_TRIES * 3)
@@ -443,7 +450,7 @@ class ArmedLockTests(_StateCase):
         self.lock.write_bytes(b"")
         old = time.time() - check._ARMED_STALE - 60
         os.utime(str(self.lock), (old, old))
-        real_unlink = os.unlink
+        real_unlink = Path.unlink
         denied = []
 
         def fake_unlink(path, *args, **kwargs):
@@ -452,7 +459,7 @@ class ArmedLockTests(_StateCase):
                 real_unlink(path)  # ほかのプロセスが消し終える
                 raise PermissionError(errno.EACCES, "Permission denied", str(path))
             return real_unlink(path, *args, **kwargs)
-        with mock.patch.object(os, "unlink", fake_unlink), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(Path, "unlink", fake_unlink), platform_os(check, "nt"):
             with check._ArmedLock(str(self.state), self.run_id) as lock:
                 self.assertIsNotNone(lock.identity)
         self.assertEqual(len(denied), 1)
@@ -463,7 +470,7 @@ class ArmedLockTests(_StateCase):
         self.lock.write_bytes(b"")
         old = time.time() - check._ARMED_STALE - 60
         os.utime(str(self.lock), (old, old))
-        real_unlink, real_stat = os.unlink, os.stat
+        real_unlink, real_stat = Path.unlink, Path.stat
         for name in ("unlink", "stat"):
             calls = []
 
@@ -474,7 +481,7 @@ class ArmedLockTests(_StateCase):
                 return (real_unlink if name == "unlink" else real_stat)(path, *args, **kwargs)
             with self.subTest(refused=name):
                 begin = time.monotonic()
-                with mock.patch.object(os, name, refuse), mock.patch.object(os, "name", "nt"):
+                with mock.patch.object(Path, name, refuse), platform_os(check, "nt"):
                     with self.assertRaises(PermissionError):
                         with check._ArmedLock(str(self.state), self.run_id):
                             pass
@@ -486,7 +493,7 @@ class ArmedLockTests(_StateCase):
         """古いロックの拒否と、まだ新しいロック（使用中）が交互に続いても、拒否の数は続けた分だけ数える。"""
         self.lock.write_bytes(b"")
         old = time.time() - check._ARMED_STALE - 60
-        real_stat = os.stat
+        real_stat = Path.stat
         calls = []
 
         def flapping(path, *args, **kwargs):
@@ -499,7 +506,7 @@ class ArmedLockTests(_StateCase):
             if str(path) == str(self.lock):
                 os.utime(str(self.lock), (old, old))  # 落ちたプロセスの残りになった
             return real_stat(path, *args, **kwargs)
-        with mock.patch.object(os, "stat", flapping), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(Path, "stat", flapping), platform_os(check, "nt"):
             with check._ArmedLock(str(self.state), self.run_id) as lock:
                 self.assertIsNotNone(lock.identity)
         self.assertEqual(len(calls), check._REPLACE_TRIES * 3)
@@ -515,7 +522,7 @@ class ArmedLockTests(_StateCase):
         stale.write_bytes(b"")
         old = time.time() - check._ARMED_STALE - 60
         os.utime(str(stale), (old, old))
-        real_unlink = os.unlink
+        real_unlink = Path.unlink
 
         def refuse(path, *args, **kwargs):
             if str(path) == str(stale):
@@ -523,7 +530,7 @@ class ArmedLockTests(_StateCase):
             return real_unlink(path, *args, **kwargs)
         out, err = io.StringIO(), io.StringIO()
         begin = time.monotonic()
-        with mock.patch.object(os, "unlink", refuse), mock.patch.object(check, "_busy_on_windows", lambda: True), \
+        with mock.patch.object(Path, "unlink", refuse), mock.patch.object(check, "_busy_on_windows", lambda: True), \
                 contextlib.redirect_stdout(out), contextlib.redirect_stderr(err), working_folder(source.parent):
             code = check.main(["start", "--source", str(source), "--state-dir", str(self.state)])
         self.assertLess(time.monotonic() - begin, 3)
@@ -538,7 +545,7 @@ class ArmedLockTests(_StateCase):
 
         def fake_unlink(path, *args, **kwargs):
             raise PermissionError(errno.EACCES, "Permission denied", str(path))
-        with mock.patch.object(os, "unlink", fake_unlink), mock.patch.object(os, "name", "posix"):
+        with mock.patch.object(Path, "unlink", fake_unlink), platform_os(check, "posix"):
             with self.assertRaises(PermissionError):
                 with check._ArmedLock(str(self.state), self.run_id):
                     pass
@@ -546,7 +553,7 @@ class ArmedLockTests(_StateCase):
     def test_existing_lock_still_waits_and_times_out(self):
         self.lock.write_bytes(b"")
         lock = check._ArmedLock(str(self.state), self.run_id, budget=time.monotonic() + 0.1)
-        with mock.patch.object(os, "name", "nt"):
+        with platform_os(check, "nt"):
             with self.assertRaises(TimeoutError):
                 lock.__enter__()
         self.assertTrue(self.lock.exists())
@@ -556,7 +563,7 @@ class RecordReadTests(_StateCase):
     """入れ替えの途中で記録を開けないとき（Windows の PermissionError）は読み直す。POSIX では読み直さない。"""
 
     def flaky_open(self, path, times):
-        real_open = open
+        real_open = Path.open
         calls = []
 
         def fake(file, *args, **kwargs):
@@ -574,21 +581,52 @@ class RecordReadTests(_StateCase):
     def test_windows_reads_again(self):
         path = self.write_record()
         fake, calls = self.flaky_open(path, 2)
-        with mock.patch.object(check, "open", fake, create=True), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(Path, "open", fake), platform_os(check, "nt"):
             self.assertEqual(check._read_record_status(str(path)), ("ok", {"format": "例", "値": 1}))
         self.assertEqual(len(calls), 2)
+
+    def test_windows_retries_when_open_and_attributes_are_temporarily_denied(self) -> None:
+        path = self.write_record()
+        real_open, real_stat, real_os_stat = Path.open, Path.stat, os.stat
+        opened, probed = [], []
+
+        def transient_open(file: Path, mode: Literal["rb"]) -> BinaryIO:
+            if str(file) == str(path):
+                opened.append(file)
+                if len(opened) <= 2:
+                    raise PermissionError(errno.EACCES, "Permission denied", str(file))
+            return real_open(file, mode)
+
+        def transient_stat(file: Path) -> os.stat_result:
+            if str(file) == str(path):
+                probed.append(file)
+                raise PermissionError(errno.EACCES, "Permission denied", str(file))
+            return real_stat(file)
+
+        def transient_os_stat(file: Path, *, follow_symlinks: bool = True) -> os.stat_result:
+            if str(file) == str(path):
+                probed.append(file)
+                raise PermissionError(errno.EACCES, "Permission denied", str(file))
+            return real_os_stat(file, follow_symlinks=follow_symlinks)
+
+        with mock.patch.object(Path, "open", transient_open), mock.patch.object(Path, "stat", transient_stat), \
+                mock.patch.object(os, "stat", transient_os_stat), platform_os(check, "nt"), \
+                mock.patch.object(check, "_SETTLE_BUDGET", [1.0]):
+            self.assertEqual(check._read_record_status(str(path)), ("ok", {"format": "例", "値": 1}))
+        self.assertEqual(len(opened), 3)
+        self.assertEqual(len(probed), 2)
 
     def test_windows_gives_up_after_the_retries(self):
         path = self.write_record()
         fake, calls = self.flaky_open(path, 1000)
-        with mock.patch.object(check, "open", fake, create=True), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(Path, "open", fake), platform_os(check, "nt"):
             self.assertEqual(check._read_record_status(str(path)), ("bad", None))
         self.assertEqual(len(calls), check._REPLACE_TRIES)
 
     def test_posix_does_not_read_again(self):
         path = self.write_record()
         fake, calls = self.flaky_open(path, 1)
-        with mock.patch.object(check, "open", fake, create=True), mock.patch.object(os, "name", "posix"):
+        with mock.patch.object(Path, "open", fake), platform_os(check, "posix"):
             self.assertEqual(check._read_record_status(str(path)), ("bad", None))
         self.assertEqual(len(calls), 1)
 
@@ -599,14 +637,14 @@ class RecordReadTests(_StateCase):
             path = self.state / "armed" / ("20261022T0000{:02d}Z-0123456789ab.json".format(index))
             path.write_bytes(b"{}")
             paths.append(str(path))
-        real_open = open
+        real_open = Path.open
 
         def fake(file, *args, **kwargs):
             if str(file) in paths:
                 raise PermissionError(errno.EACCES, "Permission denied", str(file))
             return real_open(file, *args, **kwargs)
         begin = time.monotonic()
-        with mock.patch.object(check, "open", fake, create=True), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(Path, "open", fake), platform_os(check, "nt"):
             for path in paths:
                 self.assertEqual(check._read_record_status(path), ("bad", None))
         self.assertLess(time.monotonic() - begin, 1.5)
@@ -615,7 +653,7 @@ class RecordReadTests(_StateCase):
     def test_folder_names_are_not_read_again(self):
         folder = self.state / "armed" / "20261022T000099Z-0123456789ab.json"
         folder.mkdir()
-        real_open = open
+        real_open = Path.open
         calls = []
 
         def fake(file, *args, **kwargs):
@@ -623,7 +661,7 @@ class RecordReadTests(_StateCase):
                 calls.append(file)
                 raise PermissionError(errno.EACCES, "Permission denied", str(file))
             return real_open(file, *args, **kwargs)
-        with mock.patch.object(check, "open", fake, create=True), mock.patch.object(os, "name", "nt"):
+        with mock.patch.object(Path, "open", fake), platform_os(check, "nt"):
             self.assertEqual(check._read_record_status(str(folder)), ("bad", None))
         self.assertEqual(len(calls), 1)
 
@@ -631,7 +669,7 @@ class RecordReadTests(_StateCase):
         """登録を読み飛ばすと、run は登録のない原稿として検査し、上限を超えて動く。Windows では読み直して数える。"""
         path = self.write_record()
         fake, calls = self.flaky_open(path, 1)
-        with mock.patch.object(check, "open", fake, create=True), mock.patch.object(os, "name", "nt"), \
+        with mock.patch.object(Path, "open", fake), platform_os(check, "nt"), \
                 mock.patch.object(check, "_armed_valid", lambda value, run_id: run_id == self.run_id):
             entries = check.armed_entries(str(self.state))
         self.assertEqual(len(entries), 1)
@@ -652,7 +690,7 @@ class ManagedRunCountTests(unittest.TestCase):
         self.record.write_bytes(b"{}\n")
 
     def stat_failing(self, times):
-        real_stat = os.stat
+        real_stat = Path.stat
         calls = []
 
         def fake(path, *args, **kwargs):
@@ -667,7 +705,7 @@ class ManagedRunCountTests(unittest.TestCase):
         for os_name, failures, expected, tries in cases:
             with self.subTest(os_name=os_name, failures=failures):
                 fake, calls = self.stat_failing(failures)
-                with mock.patch.object(os, "stat", fake), mock.patch.object(os, "name", os_name):
+                with mock.patch.object(Path, "stat", fake), platform_os(check, os_name):
                     count = check._managed_run_count(str(self.run_dir))
                 self.assertEqual(count, expected)
                 self.assertEqual(len(calls), min(failures, tries))

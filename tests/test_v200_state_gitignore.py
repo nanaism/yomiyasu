@@ -37,9 +37,12 @@ NOTE_BYTES = "利用者のメモです。\n".encode("utf-8")
 # mkdir_race: 状態フォルダ（名前が name）の os.mkdir の直前に、並列の run が同じフォルダを作る
 WORKER = r'''
 import errno, os, runpy, sys
+from pathlib import Path
+# Load the native accessor before replacing os.open on Python 3.9.
 mode, name, script = sys.argv[1], sys.argv[2], sys.argv[3]
 sys.path.insert(0, os.path.dirname(script))
 real_link, real_open, real_mkdir = os.link, os.open, os.mkdir
+real_path_mkdir = Path.mkdir
 def link(src, dst, *args, **kwargs):
     if mode == "nolink":
         raise OSError(errno.EPERM, "試験で起こしたリンクの失敗", os.fspath(dst))
@@ -58,8 +61,9 @@ def mkdir(path, *args, **kwargs):
     if mode == "mkdir_race" and os.path.basename(os.fspath(path)) == name:
         real_mkdir(path, 0o755)
         raise FileExistsError(errno.EEXIST, "試験で起こした並列の mkdir", os.fspath(path))
-    return real_mkdir(path, *args, **kwargs)
-os.link, os.open, os.mkdir = link, open_, mkdir
+    return real_path_mkdir(path, *args, **kwargs)
+os.link, os.open = link, open_
+Path.mkdir = mkdir
 sys.argv = [script] + sys.argv[4:]
 runpy.run_path(script, run_name="__main__")
 '''

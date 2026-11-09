@@ -3,7 +3,7 @@ run と start が、状態フォルダをユーザーごとに分ける案内を
 
 Windows では、`.yomiyasu/` の一覧を拒まれていても `.gitignore` は見え、`inputs` は属性を読めないことがある。そのとき
 os.mkdir は FileExistsError を出し、os.path.isdir は False になる。2.1.2 はこの FileExistsError をそのまま出したので、
-書き込みを拒まれたときの案内が出なかった。Windows の動きは os.mkdir、os.path.isdir、os.lstat を差し替えて再現する。
+書き込みを拒まれたときの案内が出なかった。Windows の動きは Path.mkdir、Path.is_dir、Path.lstat を差し替えて再現する。
 """
 from pathlib import Path
 from unittest import mock
@@ -58,7 +58,7 @@ class HiddenNameTest(unittest.TestCase):
     def hidden(self, name):
         """状態フォルダの中の name が、あるのにフォルダか確かめられない（属性の読み取りを拒まれた）状態をまねる。"""
         hidden = os.path.join(self.state, name)
-        real_mkdir, real_isdir, real_lstat = os.mkdir, os.path.isdir, os.lstat
+        real_mkdir, real_isdir, real_lstat = Path.mkdir, Path.is_dir, Path.lstat
 
         def fake_mkdir(path, *args, **kwargs):
             if str(path) == hidden:
@@ -72,9 +72,9 @@ class HiddenNameTest(unittest.TestCase):
             if str(path) == hidden:
                 raise PermissionError(13, "Permission denied", str(path))
             return real_lstat(path, *args, **kwargs)
-        return [mock.patch.object(check.os, "mkdir", fake_mkdir),
-                mock.patch.object(check.os.path, "isdir", fake_isdir),
-                mock.patch.object(check.os, "lstat", fake_lstat)]
+        return [mock.patch.object(Path, "mkdir", fake_mkdir),
+                mock.patch.object(Path, "is_dir", fake_isdir),
+                mock.patch.object(Path, "lstat", fake_lstat)]
 
     def run_with(self, patches, argv):
         with contextlib.ExitStack() as stack:
@@ -109,15 +109,15 @@ class HiddenNameTest(unittest.TestCase):
     def test_the_state_folder_itself_hidden(self):
         """状態フォルダそのものが、あるのにフォルダか確かめられないときも、拒否として案内する。"""
         hidden = os.path.join(self.folder, "other")
-        real_mkdir, real_isdir, real_lstat = os.mkdir, os.path.isdir, os.lstat
+        real_mkdir, real_isdir, real_lstat = Path.mkdir, Path.is_dir, Path.lstat
 
         def fake_mkdir(path, *args, **kwargs):
             if str(path) == hidden:
                 raise FileExistsError(17, "File exists", str(path))
             return real_mkdir(path, *args, **kwargs)
-        patches = [mock.patch.object(check.os, "mkdir", fake_mkdir),
-                   mock.patch.object(check.os.path, "isdir", lambda path: False if str(path) == hidden else real_isdir(path)),
-                   mock.patch.object(check.os, "lstat", lambda path, *a, **k: (_ for _ in ()).throw(
+        patches = [mock.patch.object(Path, "mkdir", fake_mkdir),
+                   mock.patch.object(Path, "is_dir", lambda path: False if str(path) == hidden else real_isdir(path)),
+                   mock.patch.object(Path, "lstat", lambda path, *a, **k: (_ for _ in ()).throw(
                        PermissionError(13, "Permission denied", str(path))) if str(path) == hidden else real_lstat(path, *a, **k))]
         code, out, err = self.run_with(patches, ["run", "--source", self.a, "--final", self.b, "--state-dir", hidden])
         self.assertEqual(code, 0, err)
