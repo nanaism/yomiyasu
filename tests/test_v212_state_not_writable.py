@@ -7,10 +7,12 @@ Windows の tempfile（Python 3.12 まで）は、ACL で書き込みを拒ま�
 os.open と「名前がフォルダか」の判定を差し替えて再現する。
 """
 from pathlib import Path
+from types import SimpleNamespace
 from unittest import mock
 import contextlib
 import importlib.util
 import io
+import json
 import os
 import re
 import stat
@@ -107,7 +109,7 @@ class MkstempTest(unittest.TestCase):
         self.assertEqual(len(calls), check._TEMPORARY_TRIES)
 
     def test_name_taken_only_for_folders_on_windows(self):
-        with mock.patch.object(check.os, "name", "nt"):
+        with mock.patch.object(check, "os", SimpleNamespace(**{**vars(os), "name": "nt"})):
             self.assertTrue(check._temporary_name_taken(self.folder))
             self.assertFalse(check._temporary_name_taken(os.path.join(self.folder, ".tmp-none")))
         if os.name != "nt":
@@ -129,7 +131,7 @@ class MkdtempTest(unittest.TestCase):
         def fake_mkdir(path, mode=0o777):
             calls.append(path)
             raise PermissionError(13, "Permission denied", path)
-        with mock.patch.object(check.os, "mkdir", fake_mkdir), \
+        with mock.patch.object(Path, "mkdir", fake_mkdir), \
                 mock.patch.object(check, "_temporary_name_taken", lambda path: True):
             with self.assertRaises(FileExistsError):
                 check._mkdtemp("yomiyasu-v212-")
@@ -269,6 +271,46 @@ class StartLockTimeoutTest(unittest.TestCase):
             self.assertEqual(code, 3)
             self.assertIn("内部エラー: TimeoutError: armed_lock", err)
             self.assertNotIn("原稿を登録できませんでした", err)
+
+
+class UnreadableStateTest(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "POSIX の権限で実際に読み取りを拒否する")
+    def test_unreadable_state_preserves_run_verify_and_hook_results(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="yomiyasu-denied-state-") as folder:
+            root = Path(folder)
+            source, final, state = root / "a.md", root / "b.md", root / "state"
+            source.write_bytes("設定を更新します。\n".encode("utf-8"))
+            final.write_bytes("設定を更新しました。\n".encode("utf-8"))
+            state.mkdir()
+            state.chmod(0)
+            try:
+                try:
+                    (state / "probe").write_bytes(b"permission check")
+                except PermissionError:
+                    pass
+                else:
+                    self.skipTest("この利用者には chmod(0) の拒否を適用できません")
+                for command, expected_code, expected_status in (
+                    (["run", "--source", str(source), "--final", str(final), "--state-dir", str(state),
+                      "--no-words", "--json"], 0, "unrecorded"),
+                    (["verify", "--final", str(final), "--state-dir", str(state), "--json"], 1, "no_record"),
+                ):
+                    with self.subTest(command=command[0]):
+                        code, out, err = call(command)
+                        self.assertEqual(code, expected_code, err)
+                        self.assertEqual(json.loads(out)["status"], expected_status)
+                        self.assertNotIn("Traceback", err)
+                with self.subTest(command="hook"):
+                    payload = {"hook_event_name": "Stop", "session_id": "denied-state", "cwd": str(root)}
+                    result = subprocess.run(
+                        [sys.executable, "-B", str(CHECK.with_name("yomiyasu_hook.py")), "--host", "claude-code",
+                         "--state-dir", str(state)], input=json.dumps(payload).encode("utf-8"),
+                        capture_output=True, timeout=10)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(result.stdout, b"")
+                    self.assertEqual(result.stderr, b"")
+            finally:
+                state.chmod(0o700)
 
 
 class RemoveTemporaryTest(unittest.TestCase):

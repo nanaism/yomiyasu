@@ -287,6 +287,14 @@ class _NoWorkingDirectory(Exception):
     """作業ディレクトリが消えている、または読めない（入力の誤りとして終了コード2。反証で見つけた例）。"""
 
 
+def _path_matches(probe: Callable[[], bool]) -> bool:
+    """Boolean path probes treat an unreadable name as no match, as os.path did."""
+    try:
+        return probe()
+    except OSError:
+        return False
+
+
 def _getcwd() -> str:
     try:
         return str(Path.cwd())
@@ -468,7 +476,7 @@ _SETTLE_BUDGET = [1.0]
 def _settle_wait(path: str, attempt: int, opening: bool = False) -> bool:
     """読み直す前に待つ。待たずに例外を出すべきとき（POSIX、最後の回、開こうとした名前がフォルダ、待つ時間の合計を
     使い切った）は False。Windows ではフォルダを開いても PermissionError になるので、opening のときは名前がフォルダかを見る。"""
-    if not _busy_on_windows() or attempt == _REPLACE_TRIES - 1 or (opening and Path(path).is_dir()):
+    if not _busy_on_windows() or attempt == _REPLACE_TRIES - 1 or (opening and _path_matches(Path(path).is_dir)):
         return False
     if _SETTLE_BUDGET[0] < _REPLACE_WAIT:
         return False
@@ -522,7 +530,7 @@ def _temporary_name_taken(path: str) -> bool:
     フォルダがあっても PermissionError になる。フォルダ自体に書き込めないときも同じ例外なので、名前が本当にフォルダの
     ときだけ次の名前を試す（tempfile は os.access で確かめるが、Windows の os.access は読み取り専用の属性しか見ず、
     ACL で書き込みを拒まれたフォルダでも真になる。そのため Python 3.12 までの tempfile は、約21億回まで名前を試し続ける）。"""
-    return os.name == "nt" and Path(path).is_dir()
+    return os.name == "nt" and _path_matches(Path(path).is_dir)
 
 
 def _mkstemp(folder: str) -> tuple[int, str]:
@@ -629,7 +637,7 @@ def _ensure_dir(base: str, *parts: str) -> str:
         try:
             Path(path).mkdir(448)
         except FileExistsError as error:
-            if not Path(path).is_dir():
+            if not _path_matches(Path(path).is_dir):
                 _raise_if_hidden(path, error)
                 raise
             continue
@@ -716,7 +724,7 @@ def _add_state_files(state: str, default_place: bool) -> None:
     おそれがあるため（反証で見つけた例）。ほかのファイルとフォルダの権限には触れず、書けなかったときもフォルダは消さない。
     state.json だけ、.gitignore だけがあるフォルダ（利用者が消したか書いたのかもしれない）、リンクの先のフォルダ（ほかの
     場所に書くことになる）、--state-dir や環境変数で決めたフォルダは今のまま。"""
-    if not default_place or Path(state).is_symlink():
+    if not default_place or _path_matches(Path(state).is_symlink):
         return
     if os.path.lexists(str(Path(state, '.gitignore'))) or os.path.lexists(str(Path(state, 'state.json'))):
         return
@@ -729,16 +737,16 @@ def _ensure_state(state: str, default_place: bool = False) -> None:
 
     作ったフォルダに .gitignore を書けなかったときは、作りかけのフォルダを消す。残すと次の run が「すでにある
     フォルダ」として .gitignore なしで書き続け、git status に出る（反証で見つけた例）。"""
-    if Path(state).is_dir():
+    if _path_matches(Path(state).is_dir):
         _add_state_files(state, default_place)
         return
     parent = str(Path(state).parent)
-    if parent and not Path(parent).is_dir():
+    if parent and not _path_matches(Path(parent).is_dir):
         Path(parent).mkdir(parents=True, exist_ok=True)
     try:
         Path(state).mkdir(448)
     except FileExistsError as error:
-        if Path(state).is_dir():
+        if _path_matches(Path(state).is_dir):
             # 並列の run が作ったばかりのフォルダ。その run が .gitignore を置く前に写しを書かないよう、
             # すでにあるフォルダと同じ決まりで、自分でも2つを置きにいく（先に置かれていれば何もしない）
             _add_state_files(state, default_place)
@@ -798,7 +806,7 @@ def state_dir_for(cwd: str, option: str | None = None) -> str:
     cwd = str(Path(os.path.normpath(cwd)).absolute())
     current = cwd
     while True:
-        if Path(current, '.git').exists():
+        if _path_matches(Path(current, '.git').exists):
             return str(Path(current, '.yomiyasu'))
         parent = str(Path(current).parent)
         if parent == current:
@@ -1278,7 +1286,7 @@ def _new_run_id(state: str, moment: datetime.datetime) -> str:
     """新しい実行ID（UTC の時刻と os.urandom(4) の16進）。"""
     while True:
         run_id = _stamp(moment) + "-" + os.urandom(4).hex()
-        if not Path(state, 'runs', run_id).exists():
+        if not _path_matches(Path(state, 'runs', run_id).exists):
             return run_id
 
 
@@ -2736,7 +2744,7 @@ def _put_snapshots(folder: str, inputs: list[_Input]) -> dict[int, str]:
     for item in inputs:
         path = str(Path(folder, item.sha256 + '.bin'))
         try:
-            current = _file_sha256(path) if Path(path).is_file() else None
+            current = _file_sha256(path) if _path_matches(Path(path).is_file) else None
         except OSError:
             current = None
         if current != item.sha256:
@@ -2955,7 +2963,7 @@ def _run_impl(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
             and _same_file(args.source[0], args.final[0])):
         state_for_start = _state_dir(args.state_dir)
         if (not args.new_run and not args.no_record
-                and Path(state_for_start, 'armed').is_dir()):
+                and _path_matches(Path(state_for_start, 'armed').is_dir)):
             current_source, source_problem = _read_named("source", 0, args.source[0], None)
             if source_problem:
                 _error(source_problem)
@@ -4161,7 +4169,7 @@ def _recorded_as_input(state: str, final: _Target) -> bool:
     """--final に渡した本文が、記録では原文か資料として使われているか。最終稿の記録が見つからなかった
     ときにだけ呼ぶ。inputs/ に写しがあり、読める記録の inputs.source か inputs.materials にこのハッシュがあるときだけ真。
     写しだけを見ると、記録を書けなかった run が置いた最終稿の写しで誤って案内する（反証で見つけた例）。"""
-    if not Path(state, 'inputs', final.sha256 + '.bin').is_file():
+    if not _path_matches(Path(state, 'inputs', final.sha256 + '.bin').is_file):
         return False
     runs = str(Path(state, 'runs'))
     try:
@@ -4381,7 +4389,7 @@ def _verify(args: argparse.Namespace, parser: argparse.ArgumentParser, _final: _
 
     # 2. 状態フォルダがなければ no_record（フォルダは作らない）
     state = _state_dir(args.state_dir)
-    if args.run_id is not None and Path(state).is_dir():
+    if args.run_id is not None and _path_matches(Path(state).is_dir):
         # 大文字と小文字だけが違う実行IDは、大文字と小文字を区別しないファイルシステムで同じフォルダになる
         problem = _run_id_case_problem(state, args.run_id)
         if problem:
@@ -4399,7 +4407,7 @@ def _verify(args: argparse.Namespace, parser: argparse.ArgumentParser, _final: _
         # 空の最終稿（空白と改行だけの本文も同じ）は、記録があっても executed にしない
         status = "no_record"
         problems.append(("empty_final", "最終稿が空です"))
-    elif not Path(state).is_dir():
+    elif not _path_matches(Path(state).is_dir):
         status = "no_record"
         problems.append(("no_state_dir", "状態フォルダがありません: " + state))
     else:
@@ -4669,7 +4677,7 @@ class _ArmedLock(object):
                 # フォルダのときも同じ）。POSIX ではそのまま出す
                 if not _busy_on_windows():
                     raise
-                if not os.path.lexists(self.path) or Path(self.path).is_dir():
+                if not os.path.lexists(self.path) or _path_matches(Path(self.path).is_dir):
                     denied += 1
                     if denied >= _REPLACE_TRIES:
                         raise
@@ -4712,7 +4720,7 @@ def armed_update(state: str, run_id: str, change: Callable[[dict], object], budg
 
 
 def _managed_input(path: str) -> _Input:
-    if path == "-" or not Path(path).is_file():
+    if path == "-" or not _path_matches(Path(path).is_file):
         raise ValueError("通常の原文ファイルを渡してください（標準入力は使えません）。")
     with Path(path).open('rb') as stream:
         data = stream.read(_MANAGED_BYTES + 1)
@@ -4786,7 +4794,7 @@ def start_run(state: str, source_path: str, final_path: str | None = None, run_i
 
 
 def _armed_for_source(state: str, source: _Input | None, run_id: str | None = None, new_run: bool = False) -> dict | None:
-    if new_run or source is None or not state or not Path(state, 'armed').is_dir():
+    if new_run or source is None or not state or not _path_matches(Path(state, 'armed').is_dir):
         return None
     candidates = []
     for entry in armed_entries(state):
@@ -5066,7 +5074,7 @@ def _management(command: str, args: argparse.Namespace, parser: argparse.Argumen
             extension = ".txt"
         folder = _ensure_dir(state, "exports", result["run_id"])
         path = str(Path(folder, 'attempt-{}-{}{}'.format(result['attempt'], final.sha256[:12], extension)))
-        if not Path(path).is_file() or _file_sha256(path) != final.sha256:
+        if not _path_matches(Path(path).is_file) or _file_sha256(path) != final.sha256:
             _write_atomic(path, final.data)
         _chmod(path, 0o444)
         if _file_sha256(path) != final.sha256:

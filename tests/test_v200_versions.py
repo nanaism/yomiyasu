@@ -208,7 +208,7 @@ class TestVersionStrings(unittest.TestCase):
                     self.assertEqual(script_version(path), version)
 
     def test_version_follows_docstring_without_alias(self):
-        """__version__ は docstring の直後に1行で置き、版の文字列を別名の定数に持たせない（4章の1つ目）。"""
+        """__version__ は docstring と必要な __future__ の import の直後に1行で置き、版の文字列を別名の定数に持たせない。"""
         for directory in SCRIPT_DIRS:
             for name in SCRIPT_NAMES:
                 path = directory / name
@@ -220,7 +220,12 @@ class TestVersionStrings(unittest.TestCase):
                     self.assertIsInstance(docstring, ast.Expr)
                     self.assertIsInstance(docstring.value, ast.Constant)
                     self.assertIsInstance(docstring.value.value, str)
-                    statement = tree.body[1]
+                    index = 1
+                    while (index < len(tree.body) and isinstance(tree.body[index], ast.ImportFrom)
+                           and tree.body[index].module == "__future__" and tree.body[index].level == 0):
+                        index += 1
+                    self.assertLess(index, len(tree.body), "__version__ の代入がない")
+                    statement = tree.body[index]
                     self.assertIsInstance(statement, ast.Assign)
                     self.assertEqual([getattr(t, "id", None) for t in statement.targets], ["__version__"])
                     self.assertEqual(statement.lineno, statement.end_lineno)

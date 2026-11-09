@@ -80,10 +80,18 @@ def _options(argv: list[str]) -> dict | None:
     return result
 
 
+def _path_matches(probe: Callable[[], bool]) -> bool:
+    """Keep Boolean probes false on I/O errors without importing the check module."""
+    try:
+        return probe()
+    except OSError:
+        return False
+
+
 def _project_state(cwd: str) -> str:
     current = Path(cwd)
     while True:
-        if (current / '.git').exists():
+        if _path_matches((current / '.git').exists):
             return str(current / '.yomiyasu')
         parent = current.parent
         if parent == current:
@@ -211,11 +219,11 @@ def _error_log(states: list[str], event: str, error: BaseException) -> None:
     import time
     import traceback
     for state in states:
-        if not Path(state).is_dir():
+        if not _path_matches(Path(state).is_dir):
             continue
         # A folder without .gitignore and state.json was not set up by check (for example a .yomiyasu/
         # made by an agent before run). Writing the log there would show it in git status.
-        if not any((Path(state) / name).exists() or (Path(state) / name).is_symlink() for name in ('.gitignore', 'state.json')):
+        if not any(_path_matches((Path(state) / name).exists) or _path_matches((Path(state) / name).is_symlink) for name in ('.gitignore', 'state.json')):
             return
         try:
             frames = traceback.extract_tb(error.__traceback__)
@@ -229,7 +237,7 @@ def _error_log(states: list[str], event: str, error: BaseException) -> None:
                 kind = "Exception"
             line = "{} {} {} {}\n".format(_iso(), event, kind, location).encode("ascii", "backslashreplace")
             path = Path(state) / 'hook-errors.log'
-            if Path(path).is_symlink():
+            if _path_matches(Path(path).is_symlink):
                 continue
             flags = os.O_RDWR | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0)
             fd = os.open(path, flags, 0o600)
@@ -251,7 +259,7 @@ def _error_log(states: list[str], event: str, error: BaseException) -> None:
 
 
 def _read_text(path: str) -> bytes:
-    if not Path(path).is_file():
+    if not _path_matches(Path(path).is_file):
         raise ValueError("text_file")
     with Path(path).open("rb") as stream:
         data = stream.read(_MAX_TEXT + 1)
@@ -313,7 +321,7 @@ def _place(path: str) -> str | None:
 def _project_root(path: str) -> str:
     current = Path(path)
     while True:
-        if (current / '.git').exists():
+        if _path_matches((current / '.git').exists):
             return str(current)
         parent = current.parent
         if parent == current:
@@ -438,7 +446,7 @@ def _stop(check: ModuleType, state: str, entry: dict, data: dict, host: str, ses
         final = current['targets']['final'] or check.latest_final_path(state, current['run_id'])
         source = current['targets']['source']
         if final is None:
-            if not Path(source['path']).is_file():
+            if not _path_matches(Path(source['path']).is_file):
                 _log(current, 'Stop', 'source_missing', started)
                 return
             with Path(source['path']).open('rb') as stream:
@@ -446,7 +454,7 @@ def _stop(check: ModuleType, state: str, entry: dict, data: dict, host: str, ses
             if unchanged:
                 return False
             final = source['path']
-        if not Path(final).is_file():
+        if not _path_matches(Path(final).is_file):
             _log(current, 'Stop', 'final_missing', started)
             return
         v = check.verify_quick(state, final_path=final, run_id=current['run_id'], since=current['created_at'])
@@ -768,7 +776,7 @@ def _process(check: ModuleType, states: list[str], invocation: str | None, data:
         entries = check.armed_entries(state)
         # Readers skip invalid records; the hook reports only the exception type.
         folder = Path(state) / 'armed'
-        if Path(folder).is_dir():
+        if _path_matches(Path(folder).is_dir):
             valid = {e['run_id'] + '.json' for e in entries}
             if any(path.name.endswith('.json') and path.name not in valid for path in Path(folder).iterdir()):
                 _error_log([state], event, ValueError('armed_record'))
@@ -867,11 +875,11 @@ def main(argv: list[str] | None = None) -> int:
             if event not in _EVENTS or (host == 'claude-code' and event == 'PostToolUse') or (host == 'codex' and event == 'UserPromptExpansion'):
                 return 0
             cwd = data.get('cwd')
-            if not isinstance(cwd, str) or not Path(cwd).is_absolute() or not Path(cwd).is_dir():
+            if not isinstance(cwd, str) or not Path(cwd).is_absolute() or not _path_matches(Path(cwd).is_dir):
                 return 0
             states = _states(cwd, host, options.get('--state-dir'))
             invocation = _invocation(data, host, event)
-            if invocation is None and not any((Path(state) / 'armed').is_dir() for state in states):
+            if invocation is None and not any(_path_matches((Path(state) / 'armed').is_dir) for state in states):
                 return 0
             # The unregistered path has not imported the check module.
             import time

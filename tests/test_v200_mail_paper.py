@@ -7,6 +7,7 @@ import json
 import sys
 import tempfile
 import unittest
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -136,15 +137,27 @@ class Hedges(unittest.TestCase):
             self.assertEqual(diff.diff(old,new)['hedges']['candidate_count'], 0, (old, new))
         self.assertEqual(diff.diff('関連を示唆する。', '')['hedges']['candidate_count'], 1)
 
-    def test_list_loader(self):
-        def load(data=None, error=None):
-            with mock.patch.object(diff, '_LIST_CACHE', {}), mock.patch.object(diff, '_LIST_PROBLEMS', {}):
-                opener = mock.mock_open(read_data=data) if error is None else mock.Mock(side_effect=error)
-                with mock.patch('builtins.open', opener):
-                    items, source = diff._load_list('hedges')
-                    info = diff._list_info('hedges')
-                    result = diff.diff('関係があるように思える。', '関係がある。')
-                return items, source, info, result
+    def test_list_loader(self) -> None:
+        def load(data: Optional[bytes] = None, error: Optional[OSError] = None) -> tuple[list[str], str, dict, dict]:
+            with tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                (root / 'scripts').mkdir()
+                if isinstance(error, NotADirectoryError):
+                    (root / 'references').write_bytes(b'not a directory')
+                elif error is None:
+                    lists = root / 'references' / 'lists'
+                    lists.mkdir(parents=True)
+                    assert data is not None
+                    (lists / 'hedges.txt').write_bytes(data)
+                with mock.patch.object(diff, '__file__', str(root / 'scripts' / 'yomiyasu_diff.py')), \
+                        mock.patch.object(diff, '_LIST_CACHE', {}), mock.patch.object(diff, '_LIST_PROBLEMS', {}):
+                    denied = (mock.patch.object(Path, 'open', side_effect=error)
+                              if isinstance(error, PermissionError) else contextlib.nullcontext())
+                    with denied:
+                        items, source = diff._load_list('hedges')
+                        info = diff._list_info('hedges')
+                        result = diff.diff('関係があるように思える。', '関係がある。')
+                    return items, source, info, result
         words, source, info, result = load('\ufeff# 一覧\r\n\n ように思える \r\n'.encode('utf-8'))
         self.assertEqual(words, ['ように思える'])
         self.assertEqual(result['hedges']['candidate_count'], 1)

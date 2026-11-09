@@ -9,7 +9,7 @@ __version__ = "2.5.0"
 
 import os
 from pathlib import Path
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Callable, Collection, Iterable, Sequence
 from typing import TypedDict
 import re
 import unicodedata
@@ -54,6 +54,14 @@ class MarkdownLine(TypedDict):
 class MarkdownBlock(TypedDict):
     kind: str
     lines: list[MarkdownLine]
+
+
+def _path_matches(probe: Callable[[], bool]) -> bool:
+    """Boolean path probes treat an unreadable name as no match, as os.path did."""
+    try:
+        return probe()
+    except OSError:
+        return False
 
 
 def unicode_whitespace(ch: str) -> bool:
@@ -883,8 +891,8 @@ def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
                 raise WordsError("Error opening folder {}: 作業ディレクトリを読めないため、相対パスを決められません".format(option))
             value = str(Path(cwd) / value)
         folder = str(Path(os.path.normpath(value)).absolute())
-        if not Path(folder).is_dir():
-            reason = "フォルダではありません" if Path(folder).exists() else "フォルダがありません"
+        if not _path_matches(Path(folder).is_dir):
+            reason = "フォルダではありません" if _path_matches(Path(folder).exists) else "フォルダがありません"
             raise WordsError("Error opening folder {}: --words の{}".format(option, reason))
         return folder
     if cwd is None:
@@ -892,7 +900,7 @@ def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
     origin = Path(os.path.normpath(cwd)).absolute()
     current = origin
     while True:
-        if (current / ".git").exists():
+        if _path_matches((current / ".git").exists):
             folder = current / WORDS_FOLDER
             break
         parent = current.parent
@@ -900,7 +908,7 @@ def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
             folder = origin / WORDS_FOLDER
             break
         current = parent
-    return str(folder) if folder.is_dir() else None
+    return str(folder) if _path_matches(folder.is_dir) else None
 
 
 def _words_lines(path: str, data: bytes) -> list[str]:
