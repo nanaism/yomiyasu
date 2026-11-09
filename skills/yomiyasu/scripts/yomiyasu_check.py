@@ -4960,12 +4960,10 @@ def latest_final_path(state: str, run_id: str) -> str | None:
     return None
 
 
-def _verification(state: str, final: _Target, run_id: str | None = None, since: str | None = None, source: str | None = None) -> dict:
+def _verification(state: str, final: _Target, run_id: str | None = None, since: str | None = None, source: str | None = None) -> int | dict:
     args = argparse.Namespace(state_dir=state, final=final.path or "-", source=source,
                               run_id=run_id, since=since, timeout=None, replay=False, json=True)
-    result = _verify(args, _ArgumentParser(allow_abbrev=False), _final=final, _return=True)
-    assert isinstance(result, dict)
-    return result
+    return _verify(args, _ArgumentParser(allow_abbrev=False), _final=final, _return=True)
 
 
 def verify_quick(state: str, final_path: str | None = None, final_bytes: bytes | None = None, run_id: str | None = None, since: str | None = None) -> dict:
@@ -4977,6 +4975,8 @@ def verify_quick(state: str, final_path: str | None = None, final_bytes: bytes |
             final_bytes = stream.read()
     target = _Target(_abspath(final_path) if final_path is not None else None, final_bytes)
     result = _verification(state, target, run_id, since)
+    if isinstance(result, int):
+        raise ValueError("verify の入力が不正です（終了コード{}）".format(result))
     return {"status": result["status"], "attempt": result["attempt"], "final_sha256": target.sha256,
             "text_sha256": target.text_sha256, "problems": result["problems"],
             "record_path": result["record_path"], "message": result["message"]}
