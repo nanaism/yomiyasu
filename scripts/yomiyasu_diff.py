@@ -11151,7 +11151,7 @@ def report(d: dict) -> str:
 
 
 def read_text(path: str | Path) -> str:
-    with Path(path).open(encoding='utf-8') as handle:
+    with open(path, encoding='utf-8') as handle:  # noqa: PTH123 -- open the given string as is, so 'x.md/' fails as in 3.0.0
         return handle.read()
 
 
@@ -11359,7 +11359,7 @@ def _read_input(path: str | Path) -> tuple:
     """ファイルか標準入力（-）を読み、(文字列, decode_source の情報, None) か (None, None, 誤りの文) を返す。"""
     if path != "-":
         try:
-            with Path(path).open('rb') as handle:
+            with open(path, 'rb') as handle:  # noqa: PTH123 -- open the given string as is, so 'x.md/' fails as in 3.0.0
                 data = handle.read()
         except (OSError, ValueError) as error:
             reason = getattr(error, "strerror", None) or error

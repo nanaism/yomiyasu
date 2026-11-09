@@ -251,6 +251,7 @@ class StartTests(ManagedCase):
             with self.subTest(source=source):
                 result = self.cli('export', '--final', str(self.final), '--source', str(source), code=2)
                 self.assertNotIn('Traceback', result.stderr)
+                self.assertIn('ファイルを開けません', result.stderr)
                 self.assertFalse(self.state.exists())
 
     def test_h12_end_id_source_and_limits_inactive(self):

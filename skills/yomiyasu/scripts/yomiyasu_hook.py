@@ -262,9 +262,9 @@ def _error_log(states: list[str], event: str, error: BaseException) -> None:
 
 
 def _read_text(path: str) -> bytes:
-    if not _path_matches(Path(path).is_file):
+    if not os.path.isfile(path):  # noqa: PTH113 -- probe the given string as is, so 'x.md/' is not a file as in 3.0.0
         raise ValueError("text_file")
-    with Path(path).open("rb") as stream:
+    with open(path, "rb") as stream:  # noqa: PTH123 -- open the given string as is, so 'x.md/' fails as in 3.0.0
         data = stream.read(_MAX_TEXT + 1)
     if len(data) > _MAX_TEXT:
         raise ValueError("text_size")
@@ -449,15 +449,15 @@ def _stop(check: ModuleType, state: str, entry: dict, data: dict, host: str, ses
         final = current['targets']['final'] or check.latest_final_path(state, current['run_id'])
         source = current['targets']['source']
         if final is None:
-            if not _path_matches(Path(source['path']).is_file):
+            if not os.path.isfile(source['path']):  # noqa: PTH113 -- probe the given string as is, so 'x.md/' is not a file as in 3.0.0
                 _log(current, 'Stop', 'source_missing', started)
                 return
-            with Path(source['path']).open('rb') as stream:
+            with open(source['path'], 'rb') as stream:  # noqa: PTH123 -- open the given string as is, so 'x.md/' fails as in 3.0.0
                 unchanged = hashlib.sha256(stream.read()).hexdigest() == source['sha256']
             if unchanged:
                 return False
             final = source['path']
-        if not _path_matches(Path(final).is_file):
+        if not os.path.isfile(final):  # noqa: PTH113 -- probe the given string as is, so 'x.md/' is not a file as in 3.0.0
             _log(current, 'Stop', 'final_missing', started)
             return
         v = check.verify_quick(state, final_path=final, run_id=current['run_id'], since=current['created_at'])
@@ -609,7 +609,7 @@ def _bodies(data: dict, cwd: str) -> list[tuple[bytes | None, str | None, str]]:
             words = context.split()
             unsafe = True
         # The first gh word, also by absolute path (/opt/homebrew/bin/gh) or gh.exe.
-        names = [Path(word.replace('\\', '/')).name for word in words]
+        names = [os.path.basename(word.replace('\\', '/')) for word in words]  # noqa: PTH119 -- 'gh/' is not the gh command, as in 3.0.0
         found = [n for n, word in enumerate(names) if word in ('gh', 'gh.exe')]
         if not found:
             continue

@@ -1109,7 +1109,7 @@ def _read_named(role: str, index: int, given: str, stdin_data: bytes | None) -> 
         assert stdin_data is not None
         return _make_input(role, index, None, stdin_data)
     try:
-        with Path(given).open('rb') as handle:
+        with open(given, 'rb') as handle:  # noqa: PTH123 -- open the given string as is, so 'x.md/' fails as in 3.0.0
             if role == "final" and not stat.S_ISREG(os.fstat(handle.fileno()).st_mode):
                 return None, ("Error opening file {}: 通常のファイルではありません（パイプなど。検査のあとで読み直せません）。"
                               "標準入力から渡すときは --final - を使ってください".format(given))
@@ -3382,7 +3382,7 @@ def _read_target(given: str, stdin_data: bytes | None) -> tuple[_Target | None, 
             return None, "Error reading stdin: UTF-8 として読めません"
         return target, None
     try:
-        with Path(given).open('rb') as handle:
+        with open(given, 'rb') as handle:  # noqa: PTH123 -- open the given string as is, so 'x.md/' fails as in 3.0.0
             data = handle.read()
     except (OSError, ValueError) as error:
         reason = getattr(error, "strerror", None) or error
@@ -3854,7 +3854,7 @@ def _words_shape(words: object) -> bool:
                 and isinstance(words["flag_patterns_sha256"], str) and digest(words["flag_patterns_sha256"])):
             return False
         words = OrderedDict((key, words[key]) for key in _WORDS_KEYS)
-        return (isinstance(words["path"], str) and os.path.isabs(words["path"])  # noqa: PTH117 -- keeps 3.0.0 isabs for rooted Windows paths
+        return (isinstance(words["path"], str) and Path(words["path"]).is_absolute()
                 and all(type(words[key]) is int and words[key] >= 0 for key in ("allow_lines", "flag_lines"))
                 and digest(words["allow_sha256"]) and digest(words["flag_sha256"]))
     return (isinstance(words, dict) and list(words) == list(_WORDS_KEYS)
@@ -4795,9 +4795,9 @@ def armed_update(state: str, run_id: str, change: Callable[[dict], object], budg
 
 
 def _managed_input(path: str) -> _Input:
-    if path == "-" or not _path_matches(Path(path).is_file):
+    if path == "-" or not os.path.isfile(path):  # noqa: PTH113 -- probe the given string as is, so 'x.md/' is not a file as in 3.0.0
         raise ValueError("通常の原文ファイルを渡してください（標準入力は使えません）。")
-    with Path(path).open('rb') as stream:
+    with open(path, 'rb') as stream:  # noqa: PTH123 -- open the given string as is, so 'x.md/' fails as in 3.0.0
         data = stream.read(_MANAGED_BYTES + 1)
     if len(data) > _MANAGED_BYTES:
         raise ValueError("原文は2 MiBまでです。")
@@ -5044,7 +5044,7 @@ def verify_quick(state: str, final_path: str | None = None, final_bytes: bytes |
     if final_bytes is None:
         if final_path is None:
             raise ValueError("final_path or final_bytes is required")
-        with Path(final_path).open('rb') as stream:
+        with open(final_path, 'rb') as stream:  # noqa: PTH123 -- open the given string as is, so 'x.md/' fails as in 3.0.0
             final_bytes = stream.read()
     target = _Target(_abspath(final_path) if final_path is not None else None, final_bytes)
     result = _verification(state, target, run_id, since)
