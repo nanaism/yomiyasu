@@ -872,6 +872,10 @@ def _words_home(value: str) -> str:
     """--words の値の頭の ~ を、ホームフォルダに置き換える（check と hook の _home_path と同じ決まり）。"""
     if isinstance(value, str) and (value == "~" or value[:2] in ("~/", "~" + os.sep)):
         try:
+            configured = (os.environ.get("USERPROFILE", os.environ.get("HOMEDRIVE", "") + os.environ.get("HOMEPATH", ""))
+                          if os.name == "nt" else os.environ.get("HOME"))
+            if configured is not None and not os.path.splitdrive(configured)[1].strip().strip("/" + os.sep):
+                return value
             home = str(Path("~").expanduser())
             expanded = str(Path(value).expanduser())
         except Exception:  # pwd を読めない環境など

@@ -33,7 +33,7 @@ def legacy_windows() -> Iterator[None]:
         return ntpath.normpath(ntpath.join(base, tail if drive else path))
 
     windows_path = SimpleNamespace(**{**vars(ntpath), "abspath": native_absolute})
-    windows_os = SimpleNamespace(**{**vars(os), "path": windows_path, "sep": "\\"})
+    windows_os = SimpleNamespace(**{**vars(os), "path": windows_path, "sep": "\\", "name": "nt"})
     with mock.patch.object(pathlib._windows_flavour, "is_supported", True), \
             mock.patch.object(pathlib.os, "getcwd", return_value=r"C:\project"), \
             mock.patch.object(pathlib.WindowsPath, "is_dir", return_value=True), \
@@ -48,6 +48,16 @@ def legacy_windows() -> Iterator[None]:
 
 @unittest.skipUnless(sys.version_info[:2] == (3, 9) and os.name != "nt", "Python 3.9 WindowsPath on a non-Windows test host")
 class LegacyWindowsPathTest(unittest.TestCase):
+    def test_empty_home_keeps_the_literal_tilde_folder(self) -> None:
+        for environment in ({"USERPROFILE": ""}, {"HOMEDRIVE": "", "HOMEPATH": ""}):
+            with legacy_windows(), mock.patch.dict(os.environ, environment, clear=True):
+                for operation in (visibility._words_home, check._home_path, hook._home_path):
+                    with self.subTest(environment=environment, operation=operation.__name__):
+                        self.assertEqual(operation("~/lists"), "~/lists")
+                with self.subTest(environment=environment, operation="find_words_folder"):
+                    self.assertEqual(visibility.find_words_folder(r"C:\project", "~/lists"),
+                                     r"C:\project\~\lists")
+
     def test_words_context_is_accepted_by_the_record_validator(self) -> None:
         with legacy_windows():
             folder = visibility.find_words_folder(r"C:\project", "D:lists")
@@ -66,6 +76,19 @@ class LegacyWindowsPathTest(unittest.TestCase):
 
 @unittest.skipUnless(os.name == "nt", "requires real Windows drive-relative resolution")
 class NativeWindowsDriveTest(unittest.TestCase):
+    def test_empty_home_chooses_the_literal_tilde_word_list(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="yomiyasu-home-") as folder:
+            root = Path(folder)
+            for words in (root / "lists", root / "~" / "lists"):
+                words.mkdir(parents=True)
+                (words / "allow.txt").write_bytes("入口\n".encode("utf-8"))
+            for environment in ({"USERPROFILE": ""}, {"HOMEDRIVE": "", "HOMEPATH": ""}):
+                with self.subTest(environment=environment), mock.patch.dict(os.environ, environment, clear=True):
+                    words = visibility.resolve_words(str(root), "~/lists")
+                    self.assertEqual(words["path"], str(root / "~" / "lists"))
+                    self.assertEqual(check._home_path("~/lists"), "~/lists")
+                    self.assertEqual(hook._home_path("~/lists"), "~/lists")
+
     def test_run_verify_and_export_with_words_on_another_drive(self) -> None:
         with tempfile.TemporaryDirectory(prefix="yomiyasu-drive-") as folder:
             root = Path(folder)

@@ -778,7 +778,8 @@ def _home_path(value: str) -> str:
     ファイルシステムのルートに置かないため（HOME が「/」のときも expanduser の結果は同じで、見分けられない）。"""
     if isinstance(value, str) and (value == "~" or value[:2] in ("~/", "~" + os.sep)):
         try:
-            configured = os.environ.get("USERPROFILE" if os.name == "nt" else "HOME")
+            configured = (os.environ.get("USERPROFILE", os.environ.get("HOMEDRIVE", "") + os.environ.get("HOMEPATH", ""))
+                          if os.name == "nt" else os.environ.get("HOME"))
             if configured is not None and not os.path.splitdrive(configured)[1].strip().strip("/" + os.sep):
                 return value
             home = str(Path.home())
