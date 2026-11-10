@@ -248,7 +248,8 @@ class CheckRecordTest(PatternCase):
         self.assertNotIn(yomiyasu_check._KEPT_MARK_PATTERNS_NOTE, process.stdout)
 
     def test_record_shape_accepts_five_and_seven_keys(self):
-        five = {"path": "/x", "allow_lines": 0, "flag_lines": 1, "allow_sha256": None, "flag_sha256": "0" * 64}
+        # パスはその環境の絶対パスにする（Windows では "/x" はドライブがなく、Path.is_absolute が偽になる。PR #54 の test_v220_c と同じ）
+        five = {"path": str(self.root / "words"), "allow_lines": 0, "flag_lines": 1, "allow_sha256": None, "flag_sha256": "0" * 64}
         seven = dict(five, flag_patterns_lines=2, flag_patterns_sha256="1" * 64)
         self.assertTrue(yomiyasu_check._words_shape(five))
         self.assertTrue(yomiyasu_check._words_shape(seven))
