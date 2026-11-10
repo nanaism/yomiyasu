@@ -15,13 +15,13 @@ This page is a short English entry point. yomiyasu works on Japanese text only, 
 
 yomiyasu (よみやす, "easy to read") is an agent skill that rewrites AI-generated Japanese prose to make it easier to read. It finds and rewrites unnatural metaphors, unclear subjects and predicates, tools and ideas written as if they had feelings or a will, filler phrases, and decoration such as heavy bold, bold labels with colons at the start of list items, emoji and trailing colons. It tries to leave parts that already read naturally as they are.
 
-It tries to keep the meaning: numbers, negations, conditions, who does what, and how strongly a claim is made. Its instructions tell it not to add facts that are not in the original, the request or the material you provide, and to keep the original wording and ask the writer where the meaning cannot be decided from the text. In the comparisons below, the AI judges still found a few changes in meaning in yomiyasu's output.
+It tries to keep the meaning: numbers, negations, conditions, who does what, and how strongly a claim is made. Its instructions tell it not to add facts that are not in the original, the request or the material you provide, and to keep the original wording and ask the writer where the meaning cannot be decided from the text.
 
 It is designed mainly for practical writing such as technical articles, design documents and specifications, pull request descriptions and internal reports. It also knows thirteen document types, including mail, minutes, slides, papers, essays or fiction and scripts, and is told not to change the usual style of each type.
 
 Since 2.0.0, the instructions tell yomiyasu to run the bundled checks on its final draft before returning it. The diff check lists changes that may alter the meaning, such as changed numbers or negations and swapped subjects and objects, as items to review. The checks look for fixed patterns only and do not decide whether the meaning was kept.
 
-The package is a set of instructions (SKILL.md) plus these checks. In the comparisons below, AI judges rated rewriting without the skill and a few lines of instructions as easier to read than yomiyasu; see [Comparisons](#comparisons).
+The package is a set of instructions (SKILL.md) plus these checks.
 
 If your environment cannot load the full skill, two versions built from it are published in separate repositories. Both are 2.0.0, built from 3.0.0. Use the full skill when your environment can load it.
 
@@ -108,7 +108,7 @@ Sending only `/yomiyasu` makes the skill rewrite the text that the AI wrote in i
 
 You can tell it, in the request, the document type, how much the readers know, and who writes to whom (for example "取引先に送るメールです", an email to a client). With the relationship given, yomiyasu adjusts the politeness level the way a person in that relationship would write. If you say nothing, it infers the type from the text when it can and does not change the politeness.
 
-When a number or condition is missing from the draft, the instructions tell yomiyasu to look for a sentence that states it in the original, the request, the material you gave, what you said in the conversation, files that were opened, or command output. It should fill the gap only when it finds such a sentence, without making it sound more certain, and otherwise leave the text as it is and ask the writer, but only where a reader could not act without the answer. The instructions say that its own earlier answers and general knowledge do not count as sources. The [comparisons](#comparisons) did not measure this, and this procedure has not yet been measured by running a model ([docs/limitations.md](./docs/limitations.md#確かめた範囲), in Japanese).
+When a number or condition is missing from the draft, the instructions tell yomiyasu to look for a sentence that states it in the original, the request, the material you gave, what you said in the conversation, files that were opened, or command output. It should fill the gap only when it finds such a sentence, without making it sound more certain, and otherwise leave the text as it is and ask the writer, but only where a reader could not act without the answer. The instructions say that its own earlier answers and general knowledge do not count as sources. This procedure has not yet been measured by running a model ([docs/limitations.md](./docs/limitations.md#確かめた範囲), in Japanese).
 
 After the rewritten text, yomiyasu reports what it changed and the record of the checks it ran, and, when there is something to say, the AI-like wording it chose to keep and questions for the writer. Ask for "本文だけ" (the text only) to get the rewritten text alone; the checks still run.
 
@@ -136,104 +136,6 @@ python3 scripts/yomiyasu_check.py verify --final final.md
 ```
 
 The scripts only report items to review and the places that changed. They do not judge whether the meaning was kept or whether the text is easy to read. `lint --json` names its score key `rule_penalty_score` (`score` up to 1.1.2) and its "no findings" key `no_rule_findings` (`is_clean` up to 1.1.2); see [docs/tools.md](./docs/tools.md#json-を前のキーの名前で読んでいたとき) for jq examples.
-
-## Comparisons
-
-These are the results of comparing yomiyasu with rewriting without a skill and with other methods. Every judge was an AI model, and no person has read these outputs yet. Results that are unfavorable to yomiyasu are included.
-
-### Comparison by the author of natural-japanese (2.4.0)
-
-The author of natural-japanese published a comparison, [推敲の比較](https://gr30zia9wv.artifactshare.link/) (in Japanese), of three conditions: natural-japanese v1.6.4, yomiyasu 2.4.0 and no skill. Claude Opus 5.5 (effort high) rewrote 12 AI-written drafts, and two AI judges, GPT-6.1 Sol and Claude Opus 5.5, rated the outputs. The method was fixed before the runs.
-
-- In one-to-one readability comparisons over the 24 judgments of both judges, no skill beat yomiyasu 23 to 1, and 23 of the 24 three-way rankings called the difference small (「小差」). natural-japanese beat yomiyasu 18 to 6.
-- The judges reported changes in meaning 2 times for yomiyasu (1 of them major), 7 times for no skill and 26 times for natural-japanese. Both yomiyasu cases came from moving a bold label into the sentence.
-- The weak points the judges named for yomiyasu included removing bold labels so that the text was harder to skim (6 drafts), removing commas so that it was harder to read (5 drafts), and joining sentences into longer ones (3 drafts).
-- Rewriting the 12 drafts cost $10.29 with yomiyasu and $3.39 without a skill.
-
-### A, B and C comparison (2.5.0 and 3.0.0)
-
-With the same 12 drafts, the same request text, and the same two judges and judging prompts as above, we compared three conditions. In every condition, Claude Code `claude -p` (Claude Opus 5.5, effort high) rewrote the 12 drafts, and the rewriting and the judging were each done twice.
-
-- A is no skill. The agent gets only the request text. This is the same setup as "no skill" above, but the rewriting and the judging were run again, so the numbers differ.
-- B is a few lines of instructions. The five lines below are placed before the request text. A new agent that had not read SKILL.md wrote them from the README and the skill description alone, and they were not edited afterwards.
-- C is yomiyasu. We measured 2.5.0 and 3.0.0 separately. The 3.0.0 measured here is the released SKILL.md (15,656 characters), described after the tables. The 3.0.0 section of [CHANGELOG.md](./CHANGELOG.md) has the numbers for the 15,000-character candidate compared when 3.0.0 was selected (before three 2.5.0 rules were restored to it), for the two runs of the 15,098-character SKILL.md released in the PR, and for the single runs of the intermediate SKILL.md versions after it.
-
-<details>
-<summary>The five lines given to B (in Japanese)</summary>
-
-```text
-AIが書いた日本語の下書きを、意味を変えずに読みやすく直してください。
-分かりにくい比喩や大げさな言い回しはふつうの言葉にし、誰が何をするのかがはっきり分かる文にしてください。
-太字や記号などの飾りは、必要な分だけにしてください。
-原文にない情報は足さないでください。意味がはっきりしない所は無理に直さず、最後に確認したい点として教えてください。
-自然に読める所は、そのままで構いません。
-```
-
-They ask the agent to make the draft easier to read without changing the meaning, to put unclear metaphors and overstated phrases in plain words, to make clear who does what, to keep bold and other decoration to what is needed, to add no information that is not in the original, to leave unclear parts alone and list them at the end as points to check, and to leave parts that read naturally as they are.
-</details>
-
-For readability, each judge saw the three outputs for a draft without the condition names and ranked them (1 is best, 3 is worst). The ranks are taken within a set of three, so the values for A and B also change between the set with 2.5.0 as C and the set with 3.0.0 as C.
-
-| Set | Judge | A | B | C |
-|---|---|---|---|---|
-| A, B, 2.5.0 (run 1) | GPT-6.1 Sol | 1.58 | 1.58 | 2.83 |
-| A, B, 2.5.0 (run 1) | Claude Opus 5.5 | 1.17 | 2.00 | 2.83 |
-| A, B, 2.5.0 (run 2) | GPT-6.1 Sol | 1.58 | 1.50 | 2.92 |
-| A, B, 2.5.0 (run 2) | Claude Opus 5.5 | 1.08 | 1.92 | 3.00 |
-| A, B, 3.0.0 (run 1) | GPT-6.1 Sol | 1.50 | 1.58 | 2.92 |
-| A, B, 3.0.0 (run 1) | Claude Opus 5.5 | 1.17 | 1.92 | 2.92 |
-| A, B, 3.0.0 (run 2) | GPT-6.1 Sol | 1.58 | 1.50 | 2.92 |
-| A, B, 3.0.0 (run 2) | Claude Opus 5.5 | 1.17 | 1.83 | 3.00 |
-
-Wins and losses were counted one-to-one over the 24 judgments of both judges in each run, 48 over the two runs. Each cell gives the wins and losses of the condition named first.
-
-| Pair | Run 1 | Run 2 | Both runs |
-|---|---|---|---|
-| A vs 2.5.0 | 22-2 | 23-1 | 45-3 |
-| B vs 2.5.0 | 22-2 | 24-0 | 46-2 |
-| A vs 3.0.0 | 23-1 | 23-1 | 46-2 |
-| B vs 3.0.0 | 23-1 | 24-0 | 47-1 |
-
-A beat B 17 to 7 in both runs of the sets with 2.5.0. All 96 rankings in the four sets called the difference small.
-
-Each cell below gives run 1, then run 2.
-
-| | A no skill | B few lines | C 2.5.0 | C 3.0.0 |
-|---|---|---|---|---|
-| Changes in meaning reported (both judges combined, major ones in parentheses) | 14 (1), 12 (0) | 44 (5), 42 (2) | 1 (1), 1 (0) | 3 (1), 0 (0) |
-| Possible meaning changes found by the bundled diff | 25, 22 | 59, 57 | 7, 7 | 10, 6 |
-| Edit rate (difference between original and output, mean of 12) | 5.4%, 4.9% | 8.8%, 8.3% | 1.6%, 1.9% | 1.9%, 2.1% |
-| Bold count (105 in the originals) | 110, 113 | 15, 25 | 38, 34 | 27, 28 |
-| Total cost for 12 drafts | $2.60, $2.66 | $2.80, $2.92 | $10.16, $10.48 | $7.77, $7.80 |
-| Mean time per draft | 43 s, 50 s | 51 s, 59 s | 91 s, 109 s | 104 s, 107 s |
-| Median number of turns | 3, 3 | 3, 3 | 12, 11.5 | 11.5, 15 |
-| Median input tokens | 61k, 62k | 60k, 64k | 504k, 534k | 307k, 363k |
-
-In run 1, 12 of B's 44 reported changes in meaning came from one draft, the essay. C runs the same diff while rewriting, so the diff row favors C.
-
-Single runs vary under the same conditions. Over the six yomiyasu runs (2.5.0, the 15,098-character SKILL.md and the selected 15,000-character candidate, twice each), reported changes in meaning ranged from 0 to 4 and diff findings from 5 to 11. The two runs of the released SKILL.md (3 and 0 reported changes, 10 and 6 diff findings) fall within that range. The one major finding for the released SKILL.md in run 1 was in a technical article, where 「ノード起動待ちの時間を削ぎ落としました」 (cut down the wait for nodes to start) became 「なくしました」 (eliminated it), which makes the claim stronger. The other judge rated the same change minor. Run 1 of the 15,098-character SKILL.md made the same change and got a major finding, and in run 2 of 2.5.0 (minor) and run 2 of the candidate (major), the same sentence was rewritten as 「省きました」 (omitted it) and flagged for the same strengthening. The wording differs, but yomiyasu has made this error on this sentence since 2.5.0.
-
-The 3.0.0 in the tables is the released SKILL.md (15,656 characters including the YAML front matter), and the 12 drafts were run twice with it. After the two runs of the 15,098-character SKILL.md, three changes went in: a paragraph that keeps the original's choice between Sino-Japanese words (kango) and native Japanese words (wago), added after a user reported that yomiyasu turned too many kango into wago; proposals 1 to 5 from [heguro's gist](https://gist.github.com/heguro/8fa8e1d2658f514ecb61015f2c53fce7) (in Japanese), which changed the bundled scripts and the references; and fixes for the inconsistencies found in a check before release.
-
-### Audit with the critique article's ABC prompt (2.5.0)
-
-[An article by Amane Katagiri](https://ama.ne.jp/post/slop-skill-audit/) (in Japanese) recommends checking a writing skill by comparing a bare agent (group A), a few lines of instructions (group B) and the skill (group C). The article does not name any skill, but it describes a skill like this one, which lists many rules and changes little. We gave the article's ABC prompt unchanged to a new agent (Claude Opus 5.5) and had it audit a copy of 2.5.0. The prompt asks an agent to audit a skill and, if needed, to run a comparison with groups A and B.
-
-The audit agent had 10 drafts rewritten once in each of the three conditions, and had Claude Opus 5.5 and Claude Sonnet 5.5 judge them without the condition names (20 judgments). The judges were told to weigh changes in meaning and added information more heavily than readability.
-
-- A was last in all 20 judgments. The audit's request for A did not ask the agent to keep the meaning.
-- The audit concluded that no difference between B and C was visible. Changes in meaning per draft were 0.40 for B and 0.30 for C, and B ranked first 15 times and C 5 times.
-- Readability scores (1 to 5) were 3.90 for A, 4.20 for B and 3.85 for C.
-- Per draft, C cost about 3.8 times as much as B and took about 2.2 times as long.
-- On drafts written by recent models, C changed very little (one comma in the incident report, nothing in the Slack announcement).
-
-The audit's B (six lines of instructions) was written by the audit agent after it had read SKILL.md, so it was made differently from B in the comparison above. The audit also found that the Japanese README could be read as saying that yomiyasu does better than a bare AI or earlier approaches, with no evidence for it, and that this English page stated "keeps the meaning" and "does not add facts" as if they were guarantees. 3.0.0 removes or softens that wording in both READMEs.
-
-### What these results show
-
-On readability alone, these AI judges rated no skill and the few lines of instructions above yomiyasu. Over both runs of the 12 drafts, 3.0.0 won 2 and lost 46 one-to-one against A, and won 1 and lost 47 against B. In the 12 drafts, the judges reported fewer changes in meaning for yomiyasu: over both runs, 26 for A and 86 for B, against 2 for 2.5.0 and 3 for 3.0.0, of which 1, 7, 1 and 1 were major. In the audit's 10 drafts, yomiyasu had about as many as B. yomiyasu also leaves a record of what was checked. On the other hand, it costs more and takes longer. Rewriting the 12 drafts with 3.0.0 cost less than with 2.5.0, but about 3 times as much as A. The median number of turns was 11.5 and 15 for 3.0.0, and 12 and 11.5 for 2.5.0.
-
-All judges were AI models. The 12-draft comparison was run twice, and the 10-draft audit once. Before release, the author compared 3.0.0 with rewriting without the skill on six new AI-written drafts that are not used in these comparisons, one run each, and preferred 3.0.0 on all six. In a blind reading comparison during 2.0.0 development, the author preferred 1.1.2 in 6 of the 7 Claude Code pairs whose text differed, the in-development version in 0, with 1 tie; on Codex output it was 4 to 4 over 8 pairs ([docs/limitations.md](./docs/limitations.md#確かめた範囲)). The other 3.0.0 measurements, and the conditions that were fixed before measuring and were not met, are in [docs/limitations.md](./docs/limitations.md) and in the 3.0.0 section of [CHANGELOG.md](./CHANGELOG.md). These pages are in Japanese.
 
 ## Limits
 
