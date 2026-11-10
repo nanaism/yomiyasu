@@ -903,7 +903,8 @@ def _shared_checkout(common_dir: Path) -> Path | None:
     """共有の git フォルダから元の checkout を決める。config と config.worktree（extensions.worktreeConfig のとき、git は
     core.worktree をこちらに移す）の [core] を読み、あとに書いた値を使う。worktree があればその先（submodule の git
     フォルダに書かれる。相対の値は git フォルダから数える）。なければ、bare でなく、フォルダの名前が .git のときだけその親。
-    どちらでもなければ None。config を読めないとき（ない、UTF-8 でない字がある）は、書いてないものとして扱う。
+    どちらでもなければ None。config がないときと開けないときは、書いてないものとして扱う。UTF-8 でない字は置き換えて読み、
+    ほかの行の値は使う。
     読むのは git が書く形（1行に「キー = 値」）だけ。"""
     worktree, bare = None, False
     for name in ("config", "config.worktree"):
@@ -943,6 +944,9 @@ def _worktree_words_folder(git_file: Path) -> str | None:
         if not target:
             return None
         git_dir = git_file.parent / target
+        # commondir も、ふつうのファイルのときだけ読む（.git と同じ理由。名前付きパイプなどは開かない）
+        if not _path_matches((git_dir / "commondir").is_file):
+            return None
         common = (git_dir / "commondir").read_text(encoding="utf-8").strip()
         if not common:
             return None
@@ -1010,7 +1014,9 @@ def _flag_entries(path: str, data: bytes) -> list[tuple[str, str]]:
     """flag.txt を (使わない語, 使う語) の並びにする。行の前後の空白（TAB も）を除いてから最初の TAB で分け、
     左と右の前後の空白を除く。TAB がなければ使う語は ""。空行とコメントは除く。行頭が TAB の行（字下げした語）は、
     2.5.0 までと同じく1語として読む。使う語の中に TAB が残る行（3列の行）と、使う語が FLAG_REPLACEMENT_MAX 字を
-    超える行は WordsError（ファイル名と行番号つき）。UTF-8 でないときと1万行を超えるときも WordsError。"""
+    超える行は WordsError（ファイル名と行番号つき）。UTF-8 でないときと1万行を超えるときも WordsError。
+    使う語が使わない語と同じ行は、使う語のない行として読む（どの当たりも使う語の中に収まり、その語の指摘が
+    1つも出なくなるのを避ける）。"""
     entries = []
     for number, row in enumerate(_words_text_rows(path, data), 1):
         row = row.strip()
@@ -1024,7 +1030,7 @@ def _flag_entries(path: str, data: bytes) -> list[tuple[str, str]]:
         if len(replacement) > FLAG_REPLACEMENT_MAX:
             raise WordsError("Error opening file {}: {}行目の使う語は {} 字までです".format(
                 path, number, FLAG_REPLACEMENT_MAX))
-        entries.append((word, replacement))
+        entries.append((word, "" if replacement == word else replacement))
     return entries
 
 
@@ -1331,7 +1337,8 @@ def current_directory() -> str | None:
 # 点で始まる部分（.env、.git/、sub/.secret/ など）がないものだけを読む。編集中の文書に紛れ込んだ指示で、事前に許された
 # コマンドが鍵や認証のファイルを読んで中身を出さないようにするため。標準入力（-）はいつでも読める。道具が自分で探すフォルダ
 # （状態フォルダ .yomiyasu/、語の一覧 .yomiyasu-words/、references/lists/）と --words のフォルダは、ここでは見ない。
-# 語の一覧を探すときは、linked worktree の .git ファイルと、git フォルダの commondir と config も読む（_worktree_words_folder）。
+# 語の一覧を探すときは、linked worktree の .git ファイルと、git フォルダの commondir、config、config.worktree も読む
+# （_worktree_words_folder）。
 
 INPUT_PATH_OUTSIDE = "作業フォルダの外にあるファイルは読みません"
 INPUT_PATH_HIDDEN = "名前が点で始まるファイルと、名前が点で始まるフォルダの中のファイルは読みません"

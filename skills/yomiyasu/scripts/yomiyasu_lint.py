@@ -5366,9 +5366,22 @@ def _flag_pattern(flag: Iterable[str]) -> re.Pattern[str] | None:
     return re.compile("|".join(parts))
 
 
+_REPLACEMENT_BEFORE = re.compile(_WORD_BEFORE)
+_REPLACEMENT_AFTER = re.compile(_WORD_AFTER)
+
+
+def _replacement_bounded(text: str, start: int, replacement: str) -> bool:
+    """text の start にある使う語が、英数字の端で識別子や別の英単語（backend user の中の end user）の一部になって
+    いないか。flag.txt の語の端（_flag_pattern）と同じ境目を、使う語の端にも当てる。日本語の字の端では見分けない。"""
+    if _WORD_ASCII.match(replacement[0]) and not _REPLACEMENT_BEFORE.match(text, start):
+        return False
+    return not _WORD_ASCII.match(replacement[-1]) or bool(_REPLACEMENT_AFTER.match(text, start + len(replacement)))
+
+
 def _in_replacement(text: str, match: re.Match[str], replacements: dict[str, str]) -> bool:
     """flag.txt の語の当たりが、その語の使う語の中に収まっているか。使う語が語を含む組（サーバ → サーバー、
-    問い合わせ → お問い合わせ）で、もう使う語で書いてある所を数えないために使う。"""
+    問い合わせ → お問い合わせ）で、もう使う語で書いてある所を数えないために使う。英数字で始まるか終わる使う語は、
+    その端が語の境目にある所だけを使う語とみなす（_replacement_bounded）。"""
     word = match.group(0)
     replacement = replacements.get(word)
     if not replacement or word not in replacement:
@@ -5376,7 +5389,7 @@ def _in_replacement(text: str, match: re.Match[str], replacements: dict[str, str
     offset = replacement.find(word)
     while offset >= 0:
         start = match.start() - offset
-        if start >= 0 and text.startswith(replacement, start):
+        if start >= 0 and text.startswith(replacement, start) and _replacement_bounded(text, start, replacement):
             return True
         offset = replacement.find(word, offset + 1)
     return False
@@ -6132,8 +6145,8 @@ _PENALTY_HELP = """rule_penalty_score（--json の目安）:
 
 _WORDS_HELP = ("語の一覧（allow.txt と flag.txt。名前と正規表現を書く flag-patterns.txt も置けます）のフォルダ。"
                "省くと、作業ディレクトリから上へたどった git の最上位"
-               "（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を探します。"
-               "linked worktree にこのフォルダがなければ、元の checkout の一覧を探します（下の「語の一覧」）。")
+               "（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を探します（下の「語の一覧」）。"
+               "linked worktree にこのフォルダがなければ、元の checkout の一覧を探します。")
 _WORDS_EPILOG = """語の一覧（--words、--no-words）:
   allow.txt の語は、次の規則の候補から外し、外した件数を出します: ai_phrase、calque、katakana_term、metaphor_label、
   metaphor_verb、project_term、renyo_noun、slop_vocabulary、translated_term。flag.txt の語には project_term（info）の

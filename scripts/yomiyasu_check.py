@@ -2212,6 +2212,9 @@ _KEPT_MARK_RULES = {"calque": ("直訳語", re.compile(r"当たった言い方: 
 # 3.0.0: lint は project_term の message の末尾に「使う語: 語 → 使う語、…。」を足すことがある。語はこれより前から取る
 # （使う語は一覧を書いた人の文字列なので、「）の候補です」を含んでいても語の切り出しがずれないようにする）
 _PROJECT_TERM_SUGGESTIONS = "。使う語: "
+# lint が使う語を添えないときの project_term の message の結び（「）」と lint の _V220_MESSAGE_TAIL）。この結びで終わる
+# message は分けずに読む（語やパターンの名前に「。使う語: 」があっても、使う語のない一覧の読み方を 3.0.0 の前と変えない）
+_PROJECT_TERM_PLAIN_TAIL = "）の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。"
 _KEPT_MARK_SHOWN_LINES = 5
 _KEPT_MARK_SHOWN_WORDS = 10
 _KEPT_MARK_HEAD = "残した指摘の語: {}。下の「■ 残した指摘の語」のとおり、書き直すか、尋ねるか、残す理由を書いてください。"
@@ -2248,7 +2251,7 @@ def _kept_marks(findings: list[dict]) -> list[dict]:
         if rule not in _KEPT_MARK_RULES:
             continue
         message = finding.get("message") or ""
-        if rule == "project_term":
+        if rule == "project_term" and not message.endswith(_PROJECT_TERM_PLAIN_TAIL):
             message = message.partition(_PROJECT_TERM_SUGGESTIONS)[0]
         found = _KEPT_MARK_RULES[rule][1].search(message)
         words = [word for word in found.group(1).split("、") if word] if found else []
@@ -2277,7 +2280,10 @@ def _kept_mark_replacements(findings: list[dict], replacements: dict[str, str]) 
     for finding in findings or ():
         if not isinstance(finding, dict) or finding.get("rule") != "project_term":
             continue
-        head, _, tail = (finding.get("message") or "").partition(_PROJECT_TERM_SUGGESTIONS)
+        message = finding.get("message") or ""
+        if message.endswith(_PROJECT_TERM_PLAIN_TAIL):
+            continue
+        head, _, tail = message.partition(_PROJECT_TERM_SUGGESTIONS)
         found = _KEPT_MARK_RULES["project_term"][1].search(head)
         if found is None or not tail:
             continue
