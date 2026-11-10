@@ -1719,7 +1719,8 @@ class _Context(object):
         self.state_dir_option = None     # --state-dir で決めた状態フォルダ（{仕上げ} に書く）
         self.doc_type = None             # 文書の種類と読者（正規化した値。lint と diff に渡し、記録と状態の行に残す）
         self.reader = None
-        self.words: dict | None = None                # 語の一覧の context.words の5つのキー（使わないときは None。子に --words で渡す）
+        self.words: dict | None = None                # 語の一覧の context.words の5つか7つのキー（使わないときは None。子に --words で渡す）
+        self.flag_replacements: dict[str, str] = {}    # 残した指摘の語に添える使う語（記録の words には入れない）
 
     @property
     def final(self) -> _Input:
@@ -1923,6 +1924,7 @@ def _run_checks(ctx: _Context, snapshots: dict[int, str], stance: str | None, ti
             ctx.lint_result = parsed
             ctx.lint_findings = findings
             ctx.kept_marks = _kept_marks(parsed["findings"])
+            ctx.flag_replacements = _kept_mark_replacements(parsed["findings"], ctx.flag_replacements)
             entry["summary"] = OrderedDict((("candidate_count", parsed["candidate_count"]), ("counts", parsed["counts"]),
                                             ("kept_marks", ctx.kept_marks)))
         else:
@@ -2254,8 +2256,29 @@ def _kept_marks(findings: list[dict]) -> list[dict]:
     return rows
 
 
-def _kept_marks_text(marks: list[dict]) -> str:
-    """「語（語の一覧か直訳語。L と行の番号の並び）」を「、」でつないだ形。行と語が多いときは初めのほうだけを出す。"""
+def _kept_mark_replacements(findings: list[dict], replacements: dict[str, str]) -> dict[str, str]:
+    """lint の指摘に添えた使う語だけを返す。パターンの名前だけが同じ字のときは添えない。"""
+    kept = {}
+    if not replacements:
+        return kept
+    for finding in findings:
+        if finding["rule"] != "project_term":
+            continue
+        message = finding["message"]
+        found = _KEPT_MARK_RULES["project_term"][1].search(message)
+        if found is None:
+            continue
+        suggestions = message.partition("使う語: ")[2]
+        for word in found.group(1).split("、"):
+            replacement = replacements.get(word)
+            if replacement and "{} → {}".format(word, replacement) in suggestions:
+                kept[word] = replacement
+    return kept
+
+
+def _kept_marks_text(marks: list[dict], flag_replacements: dict[str, str] | None = None) -> str:
+    """「語（語の一覧か直訳語。行番号。使う語）」を「、」でつなぐ。使う語がなければ省き、行と語が多ければ初めだけを出す。"""
+    replacements = flag_replacements or {}
     shown = []
     for mark in marks[:_KEPT_MARK_SHOWN_WORDS]:
         lines = mark["lines"]
@@ -2263,8 +2286,9 @@ def _kept_marks_text(marks: list[dict]) -> str:
         if len(lines) > _KEPT_MARK_SHOWN_LINES:
             where += "、ほか{}行".format(len(lines) - _KEPT_MARK_SHOWN_LINES)
         label = _KEPT_MARK_RULES[mark["rule"]][0]
-        shown.append("{}（{}{}）".format(mark["word"] if mark["word"] else "語の取れない指摘", label,
-                                       "。" + where if where else ""))
+        replacement = replacements.get(mark["word"]) if mark["rule"] == "project_term" else None
+        shown.append("{}（{}{}{}）".format(mark["word"] if mark["word"] else "語の取れない指摘", label,
+                                         "。" + where if where else "", "。使う語: " + replacement if replacement else ""))
     if len(marks) > _KEPT_MARK_SHOWN_WORDS:
         shown.append("ほか{}語".format(len(marks) - _KEPT_MARK_SHOWN_WORDS))
     return "、".join(shown)
@@ -2440,7 +2464,7 @@ def _head_lines(ctx: _Context, diff_module: ModuleType) -> list[str]:
     if not parts:
         return []
     kept = ctx.kept_marks if lint is not None else []
-    return ["。".join(parts)] + ([_KEPT_MARK_HEAD.format(_kept_marks_text(kept))] if kept else []) + [_HEAD_NOTE]
+    return ["。".join(parts)] + ([_KEPT_MARK_HEAD.format(_kept_marks_text(kept, ctx.flag_replacements))] if kept else []) + [_HEAD_NOTE]
 
 
 def _detector_value(ctx: _Context, diff_module: ModuleType, key: str) -> int | None:
@@ -2658,10 +2682,16 @@ def _sections(ctx: _Context, lint_module: ModuleType, diff_module: ModuleType) -
     kept = ctx.kept_marks if ctx.lint_result is not None and not ctx.final_changed else []
     if kept:
         section = _KEPT_MARK_SECTION.format(len(kept))
+        if ctx.flag_replacements:
+            section = section.replace("最終稿に残した次の語は、", "flag.txt の使う語は、替える名前の出典にできます（references/calques.md 4章）。\n"
+                                      "最終稿に残した次の語は、", 1)
+            section = section.replace("書き直しに使う名前や動作、その動作をする人が、原文、依頼、提供資料、文脈のどれにも書いていないか、",
+                                      "書き直しに使う名前が flag.txt の使う語、原文、依頼、提供資料、文脈のどれにもないか、動作やその動作をする人が"
+                                      "原文、依頼、提供資料、文脈のどれにも書いていないか、", 1)
         if ctx.words is not None and ctx.words.get("flag_patterns_sha256") is not None:
             section = section.replace("語の一覧（flag.txt）の語は、", "語の一覧（flag.txt）の語" + _KEPT_MARK_PATTERNS_NOTE + "は、", 1)
         sections.append(section + "\n"
-                        + "\n".join("- " + _kept_marks_text([mark]) for mark in kept))
+                        + "\n".join("- " + _kept_marks_text([mark], ctx.flag_replacements) for mark in kept))
     parts = ctx.diff_parts
     rules = None
     if parts is not None and parts["rules"]:
@@ -2942,7 +2972,7 @@ def _run(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
 
 
 def _resolve_words(args: argparse.Namespace, parser: argparse.ArgumentParser, cwd: str) -> tuple[dict | None, str | None]:
-    """--words と --no-words から語の一覧を決める（run と start）。(context.words の5つのキーか None, 誤りの文か None)。
+    """--words と --no-words から語の一覧を決める（run と start）。(読み込んだ一覧か None, 誤りの文か None)。
     両方の指定は使い方の誤り（parser.error で2）。"""
     if args.words is not None and args.no_words:
         parser.error("--words と --no-words は一緒に使えません")
@@ -2950,7 +2980,7 @@ def _resolve_words(args: argparse.Namespace, parser: argparse.ArgumentParser, cw
         words = resolve_words(cwd, args.words, args.no_words)
     except WordsError as error:
         return None, str(error)
-    return (OrderedDict(words_context(words).items()) if words is not None else None), None
+    return words, None
 
 
 def _run_impl(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
@@ -3043,7 +3073,9 @@ def _run_impl(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     if original_snapshot is not None:
         ctx.source = original_snapshot
     ctx.doc_type, ctx.reader = doc_type, reader
-    ctx.words = words
+    if words is not None:
+        ctx.words = words_context(words)
+        ctx.flag_replacements = words["flag_replacements"]
     if not ctx.final.text.strip():
         # 空の最終稿（空白と改行だけの本文も同じ）は検査しない
         _error(_EMPTY_FINAL_ERROR)
@@ -3080,10 +3112,10 @@ def _run_impl(args: argparse.Namespace, parser: argparse.ArgumentParser) -> int:
     # doc_type と reader は、文書の種類と読者のオプションを足したときに後ろに足した（キーを足すだけなので RECORD_FORMAT_VERSION は1のまま）
     options = OrderedDict((("stance", stance), ("fail_on", list(fail_on)), ("timeout", timeout),
                            ("doc_type", doc_type), ("reader", reader), ("fact_gaps", args.fact_gaps)))
-    if words is not None:
+    if ctx.words is not None:
         # 語の一覧（2.2.0 で足した）。使ったときだけ、context.words と同じ5つのキーを後ろに足す（RECORD_FORMAT_VERSION は1のまま）。
         # verify --replay は、この場所を --words で渡す（ないときは --no-words）
-        options["words"] = OrderedDict(words.items())
+        options["words"] = OrderedDict(ctx.words.items())
 
     # 2. 実行IDと回を決める（読むだけ。別の原文の実行IDなら、何も書かずに2）
     state = None if args.no_record else _state_dir(args.state_dir)
@@ -5114,8 +5146,8 @@ def _management(command: str, args: argparse.Namespace, parser: argparse.Argumen
         lines = [message, token, "登録: " + path]
         if words is not None:
             # 語の一覧を使ったときだけ（run に付ける場所を示す）
-            result["words"] = words
-            lines.append(words_label(words))
+            result["words"] = words_context(words)
+            lines.append(words_label(result["words"]))
         print(json.dumps(result, ensure_ascii=True, indent=1) if args.json else "\n".join(lines))
         return 0
     if command == "end":
@@ -5247,6 +5279,7 @@ class _HelpFormatter(argparse.RawDescriptionHelpFormatter):
 _WORDS_HELP = ("語の一覧（allow.txt と flag.txt。名前と正規表現を書く flag-patterns.txt も置けます）のフォルダ。"
                "省くと、作業ディレクトリから上へたどった git の最上位"
                "（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を探します（lint、diff と同じ）。"
+               "linked worktree にこのフォルダがなければ、元の checkout の一覧を探します。"
                "check が探して読み、lint と diff にこの場所を渡して、記録に場所と語の数と SHA-256 を残します。"
                "読めない一覧は終了コード2で、何も書きません。")
 _NO_WORDS_HELP = "語の一覧を探さず、読みません（--words と一緒には使えません）。"

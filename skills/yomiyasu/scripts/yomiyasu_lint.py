@@ -5304,20 +5304,23 @@ _PROJECT_TERM_PATTERN_MESSAGE = "語の一覧（flag-patterns.txt）の語（{}�
 _PROJECT_TERM_BOTH_MESSAGE = "語の一覧（flag.txt、flag-patterns.txt）の語（{}）" + _V220_MESSAGE_TAIL
 
 
-def _project_term_message(words: Sequence[str], pattern_names: Collection[str], flag_hits: Collection[str] | None = None) -> str:
+def _project_term_message(words: Sequence[str], pattern_names: Collection[str], flag_hits: Collection[str] | None = None,
+                          flag_replacements: dict[str, str] | None = None) -> str:
     """project_term の message。words は行の語（flag.txt の語とパターンの名前）、pattern_names はそのうちのパターンの名前、
     flag_hits はそのうちの flag.txt の語（None なら、パターンの名前でない語）。パターンの名前と flag.txt の語が同じ字でも、
-    両方が当たった行では両方のファイルを並べる。"""
+    両方が当たった行では両方のファイルを並べる。使う語は括弧の外の末尾に添え、check が読む括弧の中は変えない。"""
     from_patterns = any(word in pattern_names for word in words)
-    if flag_hits is None:
-        from_flag = any(word not in pattern_names for word in words)
-    else:
-        from_flag = any(word in flag_hits for word in words)
+    flag_words = [word for word in words if word not in pattern_names] if flag_hits is None else [word for word in words if word in flag_hits]
+    from_flag = bool(flag_words)
     if not from_patterns:
-        return _PROJECT_TERM_MESSAGE.format("、".join(words))
-    if not from_flag:
-        return _PROJECT_TERM_PATTERN_MESSAGE.format("、".join(words))
-    return _PROJECT_TERM_BOTH_MESSAGE.format("、".join(words))
+        message = _PROJECT_TERM_MESSAGE.format("、".join(words))
+    elif not from_flag:
+        message = _PROJECT_TERM_PATTERN_MESSAGE.format("、".join(words))
+    else:
+        message = _PROJECT_TERM_BOTH_MESSAGE.format("、".join(words))
+    replacements = flag_replacements or {}
+    suggestions = ["{} → {}".format(word, replacements[word]) for word in flag_words if word in replacements]
+    return message + ("使う語: " + "、".join(suggestions) + "。" if suggestions else "")
 # 英数字で始まるか終わる語は、識別子（snake_case、camelCase、ドットや / を含む語）の一部では数えない
 _WORD_ASCII = re.compile(r"[A-Za-z0-9_]")
 _WORD_BEFORE = r"(?<![A-Za-z0-9_./\\-])"
@@ -5391,7 +5394,8 @@ def _project_term_findings(analysis: dict, words: dict | None) -> list[dict]:
         if hits or matches:
             shown = tuple(dict.fromkeys(hits + tuple(matches)))
             finding = {"rule": "project_term", "line": row["line"], "severity": "info",
-                       "message": _project_term_message(shown, matches, hits), "snippet": row["raw"].strip(),
+                       "message": _project_term_message(shown, matches, hits, words.get("flag_replacements")),
+                       "snippet": row["raw"].strip(),
                        "_words": shown}
             if matches:
                 finding["_pattern_matches"] = matches
@@ -5424,7 +5428,7 @@ def _apply_words(findings: list[dict], words: dict | None) -> tuple[list[dict], 
             if finding["rule"] in removed and any(word in allowed for word in hit):
                 rest = tuple(word for word in hit if word not in allowed)
                 if finding["rule"] in _ALLOW_PARTIAL_RULES and rest:
-                    kept.append(_finding_with_words(finding, rest))
+                    kept.append(_finding_with_words(finding, rest, words.get("flag_replacements")))
                 else:
                     removed[finding["rule"]] += 1
             else:
@@ -5438,7 +5442,7 @@ def _apply_words(findings: list[dict], words: dict | None) -> tuple[list[dict], 
 _ALLOW_PARTIAL_RULES = ("ai_phrase", "calque", "katakana_term", "project_term", "renyo_noun")
 
 
-def _finding_with_words(finding: dict, rest: tuple[str, ...]) -> dict:
+def _finding_with_words(finding: dict, rest: tuple[str, ...], flag_replacements: dict[str, str] | None = None) -> dict:
     """許していない語（rest）だけを残した候補の写し。calque、project_term、renyo_noun、ai_phrase は message も作り直す。"""
     out = dict(finding, _words=rest)
     if finding["rule"] == "calque":
@@ -5446,7 +5450,7 @@ def _finding_with_words(finding: dict, rest: tuple[str, ...]) -> dict:
         out["_word_types"] = word_types
         out["message"] = _calque_message(list(dict.fromkeys(number for _, number in word_types)), word_types)
     elif finding["rule"] == "project_term":
-        out["message"] = _project_term_message(rest, finding.get("_pattern_matches") or {}, finding.get("_flag_hits"))
+        out["message"] = _project_term_message(rest, finding.get("_pattern_matches") or {}, finding.get("_flag_hits"), flag_replacements)
     elif finding["rule"] == "renyo_noun":
         out["message"] = _RENYO_MESSAGE.format("、".join("の" + word for word in rest))
     elif finding["rule"] == "ai_phrase":
@@ -6102,11 +6106,13 @@ _PENALTY_HELP = """rule_penalty_score（--json の目安）:
 
 _WORDS_HELP = ("語の一覧（allow.txt と flag.txt。名前と正規表現を書く flag-patterns.txt も置けます）のフォルダ。"
                "省くと、作業ディレクトリから上へたどった git の最上位"
-               "（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を探します（下の「語の一覧」）。")
+               "（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を探します。"
+               "linked worktree にこのフォルダがなければ、元の checkout の一覧を探します（下の「語の一覧」）。")
 _WORDS_EPILOG = """語の一覧（--words、--no-words）:
   allow.txt の語は、次の規則の候補から外し、外した件数を出します: ai_phrase、calque、katakana_term、metaphor_label、
   metaphor_verb、project_term、renyo_noun、slop_vocabulary、translated_term。flag.txt の語には project_term（info）の
   指摘を出します。どちらも1行に1語（UTF-8。# で始まる行と空の行は読み飛ばします）。
+  flag.txt は「使わない語<TAB>使う語」とも書けます（<TAB> は実際のタブ文字）。TAB の左だけを探し、使う語も指摘に出します。
   flag-patterns.txt（なくてもよい）には1行に「名前<TAB>正規表現」を書き、当たった行に、パターンの名前を入れた
   project_term（info）の指摘を出します。
 """

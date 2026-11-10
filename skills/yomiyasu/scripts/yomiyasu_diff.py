@@ -11281,7 +11281,8 @@ def _build_parser() -> _ArgumentParser:
                          help="語の一覧（allow.txt と flag.txt。名前と正規表現を書く flag-patterns.txt も置けます）のフォルダ"
                               "（値は yomiyasu_lint.py と同じ）。省くと、作業ディレクトリから"
                               "上へたどった git の最上位（.git のあるフォルダ。git の外では作業ディレクトリ）の .yomiyasu-words/ を"
-                              "探します。diff では一覧の場所と語の数を表示と JSON に書きます（差分と候補は変わりません）。")
+                              "探します。linked worktree にこのフォルダがなければ、元の checkout の一覧を探します。"
+                              "diff では一覧の場所と語の数を表示と JSON に書きます（差分と候補は変わりません）。")
     options.add_argument("--no-words", action="store_true",
                          help="語の一覧を探さず、読みません（--words と一緒には使えません）。")
     options.add_argument("--material", action="append", dest="materials", metavar="資料",

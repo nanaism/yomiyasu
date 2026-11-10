@@ -854,7 +854,7 @@ def context_label(doc_type: object, reader: object) -> str:
 
 # ---- 語の一覧（.yomiyasu-words/ の allow.txt と flag.txt）----
 # lint、diff、check、フックの4本が同じ探し方と読み方を使うので、ここに1つだけ置く。
-# 探し方は状態フォルダ（check の state_dir_for）と同じたどり方で、.yomiyasu/ の中は探さない。
+# .git まで上へたどり、linked worktree に一覧がなければ元の checkout を探す。.yomiyasu/ の中は探さない。
 
 WORDS_FOLDER = ".yomiyasu-words"
 # (キーの先頭に付ける語, ファイルの名前)。context.words のキーと出力の行の順もこの順
@@ -896,11 +896,32 @@ def _words_home(value: str) -> str:
     return value
 
 
+def _worktree_words_folder(git_file: Path) -> Path | None:
+    """linked worktree の管理ファイルを読み、元の checkout の語の一覧を探す。読めなければ None。"""
+    try:
+        marker = git_file.read_text(encoding="utf-8").strip()
+        if not marker.startswith("gitdir:"):
+            return None
+        target = marker.removeprefix("gitdir:").strip()
+        if not target:
+            return None
+        git_dir = git_file.parent / target
+        common = (git_dir / "commondir").read_text(encoding="utf-8").strip()
+        if not common:
+            return None
+        common_dir = Path(absolute_path(str(git_dir / common)))
+        folder = common_dir.parent / WORDS_FOLDER
+        return folder if _path_matches(folder.is_dir) else None
+    except (OSError, UnicodeError, ValueError):
+        return None
+
+
 def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
     """語の一覧のフォルダの絶対パスか None（フォルダがない）。
 
     1 option（--words）があれば、そのフォルダ（相対パスは cwd から。ないかフォルダでなければ WordsError）。
     2 cwd から上へたどり、.git（フォルダでもファイルでもよい）がある最初のフォルダの .yomiyasu-words/。
+    .git がファイルで一覧のフォルダがなければ、gitdir と commondir から元の checkout の一覧を探す。
     3 git の外では cwd の .yomiyasu-words/。2と3は、フォルダがなければ None。cwd が None（作業ディレクトリを
     読めない）ときは、2と3を探さずに None、相対パスの option は WordsError。"""
     if option is not None:
@@ -921,7 +942,8 @@ def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
     origin = Path(absolute_path(cwd))
     current = origin
     while True:
-        if _path_matches((current / ".git").exists):
+        git_path = current / ".git"
+        if _path_matches(git_path.exists):
             folder = current / WORDS_FOLDER
             break
         parent = current.parent
@@ -929,17 +951,16 @@ def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
             folder = origin / WORDS_FOLDER
             break
         current = parent
-    return str(folder) if _path_matches(folder.is_dir) else None
+    if _path_matches(folder.is_dir):
+        return str(folder)
+    fallback = _worktree_words_folder(git_path) if _path_matches(git_path.is_file) else None
+    return str(fallback) if fallback is not None else None
 
 
 def _words_lines(path: str, data: bytes) -> list[str]:
-    """1つのファイルのバイト列を語の並びにする。UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
-    words = []
-    for row in _words_text_rows(path, data):
-        word = row.strip()
-        if word and not word.startswith("#"):
-            words.append(word)
-    return words
+    """空行とコメントを除いた行を返す。前後の空白と TAB は残す。
+    UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
+    return [row for row in _words_text_rows(path, data) if row.strip() and not row.lstrip().startswith("#")]
 
 
 def _words_text_rows(path: str, data: bytes) -> list[str]:
@@ -1187,7 +1208,8 @@ def load_words(folder: str) -> dict | None:
     """フォルダの allow.txt と flag.txt を読む。どちらもないときは None（一覧なし）。
 
     戻り値は {"path": フォルダ, "allow": 語のタプル, "flag": 語のタプル, "allow_lines": 語の数, "flag_lines": 語の数,
-    "allow_sha256": 中身の SHA-256 か None, "flag_sha256": …}。ないほうのファイルは、語なし、数0、SHA-256 は None。
+    "allow_sha256": 中身の SHA-256 か None, "flag_sha256": …, "flag_replacements": {使わない語: 使う語}}。
+    flag は TAB の左だけ。ないほうのファイルは、語なし、数0、SHA-256 は None。
     3.0.0: flag-patterns.txt があれば、"flag_patterns"（(名前, 正規表現の文字列, 組んだ正規表現, 必ず当たる字の並び) の
     タプル）、"flag_patterns_lines"（パターンの数）、"flag_patterns_sha256" も足す（ないときは、この3つのキーを足さない）。
     flag-patterns.txt だけがあっても一覧ありとみなす。読めないファイルと使えないパターンは WordsError。"""
@@ -1213,6 +1235,13 @@ def load_words(folder: str) -> dict | None:
         result[key] = tuple(words)
         result[key + "_lines"] = len(words)
         result[key + "_sha256"] = digest
+    result["allow"] = tuple(row.strip() for row in result["allow"])
+    flag_parts = (row.partition("\t") for row in result["flag"])
+    flag_entries = [(word.strip(), replacement.strip()) for word, _, replacement in flag_parts if word.strip()]
+    result["flag"] = tuple(word for word, _ in flag_entries)
+    result["flag_replacements"] = {word: replacement for word, replacement in flag_entries if replacement}
+    for key, _ in WORDS_FILES:
+        result[key + "_lines"] = len(result[key])
     return result if found else None
 
 
