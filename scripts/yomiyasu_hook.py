@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """Optional local hooks. Installation only prints configuration; never edits it."""
 
 from __future__ import annotations

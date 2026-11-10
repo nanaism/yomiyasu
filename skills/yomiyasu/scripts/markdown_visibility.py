@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 """Shared, dependency-free Markdown visibility for lint candidates.
 
 Offsets are half-open Python string positions. This is a targeted scanner,

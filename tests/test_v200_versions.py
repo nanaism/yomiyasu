@@ -207,6 +207,19 @@ class TestVersionStrings(unittest.TestCase):
                     self.assertTrue(path.is_file(), "{} がない".format(path.relative_to(ROOT)))
                     self.assertEqual(script_version(path), version)
 
+    def test_scripts_declare_utf8_encoding(self):
+        """5本のスクリプトは1行目か2行目で UTF-8 を宣言する（PEP 263）。
+
+        宣言がないと、Python 3.9 は長い行を BUFSIZ（Windows では512バイト）ずつ読んで区切りごとに UTF-8 を確かめるので、
+        区切りで日本語の字が割れると SyntaxError で動かない（PR #54 で足した Windows の Python 3.9 の CI で見つけた）。"""
+        pattern = re.compile(rb"^[ \t\f]*#.*?coding[:=][ \t]*utf-8")
+        for directory in SCRIPT_DIRS:
+            for name in SCRIPT_NAMES + ("yomiyasu_hook.py",):
+                path = directory / name
+                with self.subTest(script=str(path.relative_to(ROOT))):
+                    head = path.read_bytes().split(b"\n", 2)[:2]
+                    self.assertTrue(any(pattern.match(line) for line in head), "1行目か2行目に coding: utf-8 の宣言がない")
+
     def test_version_follows_docstring_without_alias(self):
         """__version__ は docstring と必要な __future__ の import の直後に1行で置き、版の文字列を別名の定数に持たせない。"""
         for directory in SCRIPT_DIRS:

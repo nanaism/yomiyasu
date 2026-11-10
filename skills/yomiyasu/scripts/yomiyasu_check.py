@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 yomiyasu_check.py - 最終稿に lint、原文と最終稿に diff（新規作成では資料との照合）をまとめて実行し、記録を残す。
 

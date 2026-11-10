@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 yomiyasu_lint.py - 日本語の表現とMarkdownの書式を、設定されたルールで点検する。
 
