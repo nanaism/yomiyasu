@@ -123,6 +123,8 @@ The skill comes with four Python scripts. They need only the Python standard lib
 - `scripts/yomiyasu_check.py` runs lint on the final draft and diff on the original and the final draft, and keeps a record in `.yomiyasu/` at the top of the git repository (or in the working folder outside git). `verify` checks right before submitting that the final draft is the one that was checked.
 - `scripts/yomiyasu_hook.py` is an optional hook for Claude Code and Codex. It runs only if you add it to your own settings.
 
+A `flag.txt` line can also be `word<TAB>replacement`, with an actual tab character. Only the left side is matched; `project_term` findings and the kept-word list in `check run` show the replacement. Lines without a tab keep their existing behavior. A linked git worktree without `.yomiyasu-words/` reads the list from the original checkout. If the worktree has its own folder, only that folder is used.
+
 On Windows, run them with `py -3` instead of `python3`, as in `py -3 scripts/yomiyasu_lint.py article.md`.
 
 ```bash
