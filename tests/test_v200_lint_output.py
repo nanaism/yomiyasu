@@ -842,6 +842,19 @@ class TestDecodeSource(unittest.TestCase):
 class TestInput(LintCase):
     """1.6 と 0.4 の入力の読み方。"""
 
+    @unittest.skipUnless(os.name == "posix", "POSIX trailing path separators")
+    def test_file_with_trailing_separator_is_an_input_error(self) -> None:
+        path = self.write("draft.md", EXAMPLE1_INPUT)
+        for script in (LINT, ROOT / "skills" / "yomiyasu" / "scripts" / LINT.name):
+            for suffix in ("/", "/."):
+                raw_path = str(path) + suffix
+                with self.subTest(script=script, suffix=suffix):
+                    process = run_text([sys.executable, "-B", str(script), raw_path],
+                                       capture_output=True, timeout=10)
+                    self.assertEqual(process.returncode, 2, process.stdout + process.stderr)
+                    self.assertEqual(process.stdout, "")
+                    self.assertIn("Error opening file " + raw_path + ":", process.stderr)
+
     def test_dash_reads_stdin(self):
         """位置引数 - で標準入力を読む。ファイルで渡したときと同じ結果。"""
         path = self.write("sample.md", EXAMPLE2_INPUT)

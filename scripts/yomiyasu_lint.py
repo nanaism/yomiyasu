@@ -6062,7 +6062,7 @@ def _read_input(path: str | None) -> tuple[str | None, str | None]:
     """ファイルか標準入力を読み、(文字列, None) か (None, 誤りの文) を返す。"""
     if path is not None and path != "-":
         try:
-            with Path(path).open("rb") as handle:
+            with open(path, "rb") as handle:  # noqa: PTH123 - Keep trailing separators so filesystem errors are preserved.
                 data = handle.read()
         except (OSError, ValueError) as error:
             reason = getattr(error, "strerror", None) or error
