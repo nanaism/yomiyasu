@@ -532,9 +532,9 @@ python3 scripts/yomiyasu_lint.py article.md --json
 
 #### プロジェクトの語の一覧
 
-flag.txt は `使わない語<TAB>使う語` とも書けます（`<TAB>` は実際のタブ文字）。TAB の左だけを探し、`project_term` の指摘と check run の「残した指摘の語」に使う語を添えます。TAB のない行は今までどおりです。git の linked worktree に `.yomiyasu-words/` がなければ、元の checkout の一覧を読みます。worktree 自身にフォルダがあれば、そちらだけを使います。
-
 git の最上位（git の外では作業ディレクトリ）に `.yomiyasu-words/` を置き、`allow.txt`（直さない語）と `flag.txt`（指摘を出して見直す語）に1行に1語ずつ書くと、lint、diff、check、フックが同じ一覧を読みます。`#` で始まる行と空の行は読み飛ばします。allow.txt の語は、直訳語などの指摘と、比喩動詞、直訳の語、決まり文句の候補から外れ、外した件数が出力と JSON（`context.words`）に出ます。flag.txt の語には `project_term` の指摘が出ます。3.0.0 から、flag.txt の漢字と仮名を両方含む語は、漢字の熟語の中では当たらなくなりました（「根の」は「大根の」に当たりません）。語の一部にも当てたいときや、決まった形だけに当てたいときは、3.0.0 で足した `flag-patterns.txt` に1行に `名前<TAB>正規表現` を書くと、当たった行に `project_term` の指摘が出ます。リポジトリに入れてチームで共有する前提のファイルで、状態フォルダ `.yomiyasu/` とは別の場所に置きます。`--words フォルダ` で場所を指定でき、`--no-words` を付けると読みません。flag-patterns.txt の正規表現に使える書き方と上限を含めて、詳しくは [docs/tools.md](./docs/tools.md#プロジェクトの語の一覧) にあります。
+
+flag.txt は `使わない語<TAB>使う語` とも書けます（`<TAB>` は実際のタブ文字）。TAB の左だけを探し、`project_term` の指摘と check run の「残した指摘の語」に使う語を添えます。TAB のない行と、TAB で字下げした行は今までどおりです。使う語は80字までで、3列の行（使う語の中に TAB がある行）は終了コード2で止まります。git の linked worktree に `.yomiyasu-words/` がなければ、元の checkout の一覧を読みます。worktree 自身にフォルダがあれば、そちらだけを使います。細かい決まりは [docs/tools.md](./docs/tools.md#プロジェクトの語の一覧) にあります。
 
 #### 出力例
 

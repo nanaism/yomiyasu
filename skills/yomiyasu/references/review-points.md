@@ -41,7 +41,7 @@ SKILL.md の Step 2 の1で lint の指摘を見るときと、Step 4 で `yomiy
 
 ### ■ 残した指摘の語
 
-最終稿に直訳語（calque）と語の一覧（project_term）の指摘が残っているときに出る（冒頭の一覧のあとの「残した指摘の語:」の行と、verify の出力の5行目にも同じ語が出る）。語ごとに、その文を SKILL.md Step 2 の問いと `references/calques.md` で読み直す。書き直しに使う名前や動作、その動作をする人が原文、依頼、提供資料、文脈のどれにも書いていないか、前後の文と呼び名がそろわず同じものを指すか分からないときは、本文を残して「書き手に確かめたい点」で尋ねる。残す理由を「残したAIっぽいところ」に書くだけにはしない。問いは3点までの決まりと選び方に従い、入らない分は「ほかに N か所」に数える。直訳語の指摘で、その分野で定着した言い方か文字どおりの意味（音、実物の場所など）なら、残す理由を「残したAIっぽいところ」に書く。project_term の語は、定着していても残さない。同じ語に直訳語と語の一覧の両方の指摘があれば、語の一覧として1つにまとめて出る。本文だけを返す指定では、確かめたい点も説明も付けないので、書き直せない語は本文のまま残す。
+最終稿に直訳語（calque）と語の一覧（project_term）の指摘が残っているときに出る（冒頭の一覧のあとの「残した指摘の語:」の行と、verify の出力の5行目にも同じ語が出る）。語ごとに、その文を SKILL.md Step 2 の問いと `references/calques.md` で読み直す。語に「使う語: 〜」が付いていれば、その使う語も替える名前に使える（calques.md 4章）。書き直しに使う名前や動作、その動作をする人が原文、依頼、提供資料、文脈のどれにも書いていないか、前後の文と呼び名がそろわず同じものを指すか分からないときは、本文を残して「書き手に確かめたい点」で尋ねる。残す理由を「残したAIっぽいところ」に書くだけにはしない。問いは3点までの決まりと選び方に従い、入らない分は「ほかに N か所」に数える。直訳語の指摘で、その分野で定着した言い方か文字どおりの意味（音、実物の場所など）なら、残す理由を「残したAIっぽいところ」に書く。project_term の語は、定着していても残さない。同じ語に直訳語と語の一覧の両方の指摘があれば、語の一覧として1つにまとめて出る。本文だけを返す指定では、確かめたい点も説明も付けないので、書き直せない語は本文のまま残す。
 
 ### ■ 差分の見直し候補
 
@@ -99,7 +99,7 @@ SKILL.md の Step 2 の1で lint の指摘を見るときと、Step 4 で `yomiy
 - 過剰な箇条書きの候補（excess_list）は、行頭から書いた `<details>` と `</details>` の間の箇条書きを、比率の分子にも分母にも数えない（中に多く畳んでも、外の箇条書きの比率は薄まらない。中に箇条書きがあれば、候補に「（<details> の中の箇条書きN行は数えていません）」と添える）。畳んだ中の箇条書きも、論理を分断していないかは SKILL.md「文書の立場と文末」の箇条書きの文のとおりに読む。
 - 同じ文末が続くという候補は、読みにくさを見直すきっかけにとどめる。AIの文の目印として扱わず、語尾を散らすために文の働きや時制を変えない（gemini-syntax.md 原則8）。
 - 2.2.0 で足した info の指摘（calque、metaphor_label、say_hedge、thin_evaluation、katakana_term、dialogue_period、narrative_density、copy_comma_noun、bare_verb_chain、project_term）は、直す合図ではなく、文脈を読み直すための候補。指摘が出ただけでは直さず、語を残すこともある。直すときは、誰が何をどうするかを文として書き直す（SKILL.md Step 2）。点数（rule_penalty_score）には入らない。
-  - calque（直訳語。message に型の番号と当たった言い方）と project_term（語の一覧の flag.txt の語と flag-patterns.txt のパターンの名前。message にその語と名前）: `references/calques.md` の問いで確かめる。1行に1件なので、message に並んだ言い方を一つずつ確かめる。flag.txt に使う語があれば message の末尾に出るので、その語を替える名前の出典にする（calques.md 4章）。project_term の語は、定着していても1つ目の問いで残さない（SKILL.md Step 1）。
+  - calque（直訳語。message に型の番号と当たった言い方）と project_term（語の一覧の flag.txt の語と flag-patterns.txt のパターンの名前。message にその語と名前）: `references/calques.md` の問いで確かめる。1行に1件なので、message に並んだ言い方を一つずつ確かめる。flag.txt に使う語があれば、message の末尾に「使う語: 語 → 使う語」と出る。その行の語が使う語と同じものを指すときは、替える名前に使える（calques.md 4章）。使う語に替えた所は、diff の「元の文にない語」や資料との照合の候補に出ても戻さない。project_term の語は、定着していても1つ目の問いで残さない（SKILL.md Step 1）。
   - metaphor_label: SKILL.md「案内用の見出し」。say_hedge: slop-catalog.md 6章「文末の付け足し」。thin_evaluation、katakana_term: slop-catalog.md 5章。copy_comma_noun: SKILL.md「コピー調の抑制」。bare_verb_chain: SKILL.md「主語と目的語の明確化」。
   - renyo_noun（2.3.0。他動詞を1語だけ名詞にした語を「の」で受ける形。message に当たった言い方）: SKILL.md「直訳語、漢語の詰まり、連用形名詞」。目的語と動詞の文に戻すか、定着した漢語の名詞にする。ほかの和語の連用形名詞に替えるだけで済ませない。指示語で受ける形（「その確かめは」）にも指摘が出る。一覧は `references/lists/renyo-nouns.txt`。点数（rule_penalty_score）には入らない。
   - dialogue_period（`--doc-type script` のときだけ、文書に1件）: `references/doc-types/script.md`。narrative_density（`--doc-type essay` のときだけ、文書に1件）: `references/doc-types/essay.md`。
