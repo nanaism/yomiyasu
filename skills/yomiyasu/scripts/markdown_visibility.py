@@ -899,25 +899,42 @@ def _words_home(value: str) -> str:
     return value
 
 
-def _core_worktree(git_dir: Path) -> Path | None:
-    """git_dir の config の [core] にある worktree（submodule の git フォルダに書かれる）。なければ None。"""
-    section = None
-    for row in (git_dir / "config").read_text(encoding="utf-8").splitlines():
-        row = row.strip()
-        if row.startswith("["):
-            section = row[1:].partition("]")[0].strip().lower()
-        elif section == "core":
-            key, sep, value = row.partition("=")
-            value = value.strip().strip('"')
-            if sep and key.strip().lower() == "worktree" and value:
-                return Path(absolute_path(str(git_dir / value)))
-    return None
+def _shared_checkout(common_dir: Path) -> Path | None:
+    """共有の git フォルダから元の checkout を決める。config と config.worktree（extensions.worktreeConfig のとき、git は
+    core.worktree をこちらに移す）の [core] を読み、あとに書いた値を使う。worktree があればその先（submodule の git
+    フォルダに書かれる。相対の値は git フォルダから数える）。なければ、bare でなく、フォルダの名前が .git のときだけその親。
+    どちらでもなければ None。config を読めないとき（ない、UTF-8 でない字がある）は、書いてないものとして扱う。
+    読むのは git が書く形（1行に「キー = 値」）だけ。"""
+    worktree, bare = None, False
+    for name in ("config", "config.worktree"):
+        path = common_dir / name
+        if not _path_matches(path.is_file):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        section = None
+        for row in text.lstrip("\ufeff").splitlines():
+            row = row.strip()
+            if row.startswith("["):
+                section = row[1:].partition("]")[0].strip().lower()
+            elif section == "core":
+                key, sep, value = row.partition("=")
+                key, value = key.strip().lower(), value.strip().strip('"')
+                if sep and key == "worktree" and value:
+                    worktree = Path(absolute_path(str(common_dir / value)))
+                elif sep and key == "bare":
+                    bare = value.lower() in ("true", "yes", "on", "1")
+    if worktree is not None:
+        return worktree
+    return common_dir.parent if common_dir.name == ".git" and not bare else None
 
 
 def _worktree_words_folder(git_file: Path) -> str | None:
     """linked worktree の .git ファイルの gitdir と commondir から、元の checkout の語の一覧を探す。
-    checkout は共有の git フォルダの core.worktree（submodule）か、.git という名前のときはその親。
-    .git がファイルでないときや読めないとき、bare リポジトリのときは None。"""
+    checkout は _shared_checkout で決める（共有の git フォルダの core.worktree か、bare でない .git の親）。
+    .git ファイルや commondir を読めないとき、checkout が決まらないとき（bare リポジトリなど）は None。"""
     try:
         marker = git_file.read_text(encoding="utf-8").strip()
         if not marker.startswith("gitdir:"):
@@ -929,12 +946,9 @@ def _worktree_words_folder(git_file: Path) -> str | None:
         common = (git_dir / "commondir").read_text(encoding="utf-8").strip()
         if not common:
             return None
-        common_dir = Path(absolute_path(str(git_dir / common)))
-        checkout = _core_worktree(common_dir)
+        checkout = _shared_checkout(Path(absolute_path(str(git_dir / common))))
         if checkout is None:
-            if common_dir.name != ".git":
-                return None
-            checkout = common_dir.parent
+            return None
         folder = checkout / WORDS_FOLDER
         return str(folder) if _path_matches(folder.is_dir) else None
     except (OSError, UnicodeError, ValueError):
@@ -978,7 +992,8 @@ def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
         current = parent
     if _path_matches(folder.is_dir):
         return str(folder)
-    return _worktree_words_folder(git_path)
+    # .git がふつうのファイルのときだけ中を読む（フォルダなら linked worktree でない。名前付きパイプなどは開かない）
+    return _worktree_words_folder(git_path) if _path_matches(git_path.is_file) else None
 
 
 def _words_lines(path: str, data: bytes) -> list[str]:

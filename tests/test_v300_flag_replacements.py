@@ -4,6 +4,7 @@
 """
 from pathlib import Path
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -20,7 +21,9 @@ class FlagReplacementTest(FolderCase):
         """利用者の git の設定とフックを使わずに git を動かす。git がなければ、この試験を飛ばす。"""
         if shutil.which("git") is None:
             self.skipTest("git がない")
-        if "GIT_CONFIG_GLOBAL" not in self.env:
+        # 用意が済んだかは試験の実体の属性で見る（環境に初めから GIT_CONFIG_GLOBAL があっても、GIT_DIR などを外す）
+        if not getattr(self, "git_env_ready", False):
+            self.git_env_ready = True
             local_names = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True,
                                          text=True, encoding="utf-8", check=True).stdout.splitlines()
             for name in local_names:
@@ -141,6 +144,19 @@ class FlagRowsTest(FolderCase):
             (3, "語の一覧（flag.txt）の語（承認）" + tail),
         ])
 
+    def test_rows_with_bom_crlf_and_spaces_around_the_tab(self) -> None:
+        # BOM と CRLF つきの flag.txt。左と右の前後の空白を除き、右が空なら使う語なし。# で始まる行は TAB があってもコメント。
+        data = "\ufeff# コメント\tx\r\n 指紋 \t fingerprint \r\n承認\t\r\n依存先\t\tdependency\r\n　全角の空白　\r\n#鍵\tkey\r\n"
+        folder = self.words(flag=data.encode("utf-8"), allow="")
+        words = markdown_visibility.load_words(str(folder))
+        self.assertEqual(words["flag"], ("指紋", "承認", "依存先", "全角の空白"))
+        self.assertEqual(words["flag_lines"], 4)
+        self.assertEqual(words["flag_replacements"], {"指紋": "fingerprint", "依存先": "dependency"})
+        # lint の JSON の候補に、内部の欄（_replacements など）は出ない。
+        doc = write(self.root / "doc.md", "指紋を照合します。\n")
+        found = self.project_terms(doc)
+        self.assertEqual([sorted(f) for f in found], [["line", "message", "rule", "severity", "snippet"]])
+
     def test_rows_without_inner_tab_are_one_word(self) -> None:
         # 行の前後にしか TAB のない行は、前後の空白と TAB を除いた字が1語になる（2.5.0 までの読み方。使う語は付かない）。
         rows = ["指紋", "\t指紋", "指紋\t", " \t 指紋 \t ", "　指紋　", "二つの 語", "# 指紋", "\t# 指紋", "", " \t "]
@@ -238,10 +254,11 @@ class FlagRowsTest(FolderCase):
         process = run([CHECK, "run", "--source", source, "--final", doc], self.root, self.env)
         self.assertEqual(process.returncode, 0, process.stderr + process.stdout)
         self.assertIn("残した指摘の語: 指紋（語の一覧。L1。使う語: fingerprint）、承認（語の一覧。L2）。", process.stdout)
-        self.assertIn("（最終稿の直訳語と語の一覧の指摘。2語）\n" + yomiyasu_check_text("_KEPT_MARK_REPLACEMENT_NOTE")
-                      + "最終稿に残した次の語は、", process.stdout)
-        self.assertIn("\n- " + yomiyasu_check_text("_KEPT_MARK_UNSOURCED_WITH_REPLACEMENTS"), process.stdout)
-        self.assertNotIn(yomiyasu_check_text("_KEPT_MARK_UNSOURCED"), process.stdout)
+        self.assertIn("（最終稿の直訳語と語の一覧の指摘。2語）\nflag.txt の使う語は、替える名前の出典にできます"
+                      "（references/calques.md 4章）。\n最終稿に残した次の語は、", process.stdout)
+        self.assertIn("\n- 書き直しに使う名前が flag.txt の使う語、原文、依頼、提供資料、文脈のどれにもないか、"
+                      "動作やその動作をする人が、原文、依頼、提供資料、文脈のどれにも書いていないか、", process.stdout)
+        self.assertNotIn("書き直しに使う名前や動作、", process.stdout)
         # verify の「残した指摘の語」には使う語を添えない。
         process = run([CHECK, "verify", "--final", doc], self.root, self.env)
         self.assertEqual(process.returncode, 0, process.stderr + process.stdout)
@@ -251,7 +268,8 @@ class FlagRowsTest(FolderCase):
         process = run([CHECK, "run", "--source", source, "--final", doc, "--no-record"], self.root, self.env)
         self.assertEqual(process.returncode, 0, process.stderr + process.stdout)
         self.assertIn("（最終稿の直訳語と語の一覧の指摘。1語）\n最終稿に残した次の語は、", process.stdout)
-        self.assertIn("\n- " + yomiyasu_check_text("_KEPT_MARK_UNSOURCED"), process.stdout)
+        self.assertIn("\n- 書き直しに使う名前や動作、その動作をする人が、原文、依頼、提供資料、文脈のどれにも書いていないか、",
+                      process.stdout)
         self.assertNotIn("使う語", process.stdout)
 
 
@@ -297,14 +315,34 @@ class WorktreeFallbackShapeTest(FolderCase):
                 write(work / ".git", marker)
                 self.assertNotIn("words", self.lint_json(str(doc), cwd=work)["context"])
         write(work / ".git", "gitdir: {}\n".format(admin))
-        for name, data in (("commondir", "\n"), ("commondir", b"\xff\xfe"), ("config", b"\xff\xfe")):
-            with self.subTest(broken=name, data=data):
-                saved = (admin / name if name == "commondir" else main / ".git" / name)
-                before = saved.read_bytes()
-                write(saved, data)
+        for data in ("\n", b"\xff\xfe"):
+            with self.subTest(commondir=data):
+                write(admin / "commondir", data)
                 self.assertNotIn("words", self.lint_json(str(doc), cwd=work)["context"])
-                write(saved, before)
+        write(admin / "commondir", "../..\n")
         self.assertIn("words", self.lint_json(str(doc), cwd=work)["context"])
+
+    @unittest.skipUnless(hasattr(os, "mkfifo"), "名前付きパイプを作れない")
+    def test_git_entry_that_is_not_a_regular_file_is_not_opened(self) -> None:
+        # .git が名前付きパイプのときは、開かずに一覧なしで終わる（開くと、書き手が現れるまで読み終わらない）。
+        work = self.root / "w"
+        doc = write(work / "doc.md", "指紋を照合します。\n")
+        os.mkfifo(work / ".git")
+        self.assertNotIn("words", self.lint_json(str(doc), cwd=work)["context"])
+
+    def test_unreadable_config_counts_as_a_plain_checkout(self) -> None:
+        # 共有の git フォルダの config を読めなくても（UTF-8 でない字、BOM、ファイルなし）、名前が .git ならその親の一覧を読む。
+        main, work, _ = self.worktree()
+        folder = self.words(main / ".yomiyasu-words", flag="指紋\tfingerprint\n")
+        doc = write(work / "doc.md", "指紋を照合します。\n")
+        config = main / ".git" / "config"
+        for data in (b"[user]\n\tname = " + "大賀".encode("cp932") + b"\n", b"\xef\xbb\xbf[core]\n\tbare = false\n", None):
+            with self.subTest(config=data):
+                if data is None:
+                    config.unlink()
+                else:
+                    write(config, data)
+                self.assertEqual(self.lint_json(str(doc), cwd=work)["context"]["words"]["path"], str(folder))
 
     def test_bare_shape_and_core_worktree(self) -> None:
         # 共有の git フォルダの名前が .git でなく、core.worktree もないとき（bare リポジトリから作った worktree）は探さない。
@@ -320,12 +358,19 @@ class WorktreeFallbackShapeTest(FolderCase):
             with self.subTest(config=config):
                 write(main / "repo.git" / "config", config)
                 self.assertEqual(self.lint_json(str(doc), cwd=work)["context"]["words"]["path"], str(folder))
+        # git が core.worktree を config.worktree に移したとき（submodule で sparse-checkout を使うとき）も読む。あとの値を使う。
+        write(main / "repo.git" / "config", "[core]\n\tworktree = ../../nowhere\n[extensions]\n\tworktreeConfig = true\n")
+        write(main / "repo.git" / "config.worktree", "[core]\n\tworktree = ../../elsewhere\n")
+        self.assertEqual(self.lint_json(str(doc), cwd=work)["context"]["words"]["path"], str(folder))
 
-
-def yomiyasu_check_text(name: str) -> str:
-    """check の節に差し込む文（scripts/yomiyasu_check.py の定数）。試験と実装で同じ文を見る。"""
-    import yomiyasu_check
-    return getattr(yomiyasu_check, name)
+    def test_bare_repository_named_dot_git_is_not_searched(self) -> None:
+        # bare リポジトリを project/.git に置いて worktree を並べる置き方でも、bare なら親の一覧を探さない。
+        main, work, _ = self.worktree(config="[core]\n\tbare = true\n")
+        self.words(main / ".yomiyasu-words", flag="指紋\tfingerprint\n")
+        doc = write(work / "doc.md", "指紋を照合します。\n")
+        self.assertNotIn("words", self.lint_json(str(doc), cwd=work)["context"])
+        write(main / ".git" / "config", "[core]\n\tbare = false\n")
+        self.assertIn("words", self.lint_json(str(doc), cwd=work)["context"])
 
 
 if __name__ == "__main__":
