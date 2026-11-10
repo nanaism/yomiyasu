@@ -5366,13 +5366,30 @@ def _flag_pattern(flag: Iterable[str]) -> re.Pattern[str] | None:
     return re.compile("|".join(parts))
 
 
+def _in_replacement(text: str, match: re.Match[str], replacements: dict[str, str]) -> bool:
+    """flag.txt の語の当たりが、その語の使う語の中に収まっているか。使う語が語を含む組（サーバ → サーバー、
+    問い合わせ → お問い合わせ）で、もう使う語で書いてある所を数えないために使う。"""
+    word = match.group(0)
+    replacement = replacements.get(word)
+    if not replacement or word not in replacement:
+        return False
+    offset = replacement.find(word)
+    while offset >= 0:
+        start = match.start() - offset
+        if start >= 0 and text.startswith(replacement, start):
+            return True
+        offset = replacement.find(word, offset + 1)
+    return False
+
+
 def _project_term_findings(analysis: dict, words: dict | None) -> list[dict]:
     """語の一覧の flag.txt の語の候補（project_term）。見える文字（コード、URL、リンク先、HTML、frontmatter を伏せた行）に
     flag の語が出る行に1件。引用（> の行）とカギ括弧・二重カギ括弧の中は数えない。_words にその行の flag の語。
     3.0.0: flag-patterns.txt のパターンも同じ所に当て、当たったパターンの名前を _words に足す（flag の語のあと）。
     パターンごとの当たった文字列は内部の欄 _pattern_matches に入れる（allow.txt で外すため）。パターンは、一番上の選択肢の
     どれかの必ず当たる字が全部ある行にだけ当てる。当たった flag.txt の語の使う語は内部の欄 _replacements に入れる
-    （allow.txt で一部の語を外したときに message を作り直すため）。"""
+    （allow.txt で一部の語を外したときに message を作り直すため）。使う語が語を含む組では、使う語の中に収まる当たりは
+    数えない（もう使う語で書いてある所に、同じ指摘を出さない）。"""
     if not words or not (words.get("flag") or words.get("flag_patterns")):
         return []
     pattern = _flag_pattern(words["flag"]) if words.get("flag") else None
@@ -5386,7 +5403,9 @@ def _project_term_findings(analysis: dict, words: dict | None) -> list[dict]:
         if not visible.strip():
             continue
         masked = _mask_quoted_segments(visible)
-        hits = tuple(dict.fromkeys(match.group(0) for match in pattern.finditer(masked))) if pattern is not None else ()
+        hits = () if pattern is None else tuple(dict.fromkeys(
+            match.group(0) for match in pattern.finditer(masked)
+            if not (flag_replacements and _in_replacement(masked, match, flag_replacements))))
         matches = {}
         for name, _, compiled, required in patterns:
             if not any(all(literal in masked for literal in runs) for runs in required):
@@ -6031,7 +6050,7 @@ _MEANING_RISK_MESSAGE = (
 _EXIT_CODES = """終了コード:
   0  検査を最後まで実行し、--strict と --fail-on の条件に当たらなかった（候補の有無によらない）。-h と --version も0
   1  --strict か --fail-on の条件に当たった
-  2  使い方か入力の誤り（ファイルを開けない、読まないファイル（作業フォルダの外、名前が点で始まる部分を含むパス）を渡した、UTF-8 として読めない、標準入力を読めない、使えない --fail-on、--doc-type、--reader の値、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）
+  2  使い方か入力の誤り（ファイルを開けない、読まないファイル（作業フォルダの外、名前が点で始まる部分を含むパス）を渡した、UTF-8 として読めない、標準入力を読めない、使えない --fail-on、--doc-type、--reader の値、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag.txt か flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）
   3  予期しない内部の誤り（標準エラーにトレースバックを出す）か、出力先が閉じられて結果を最後まで書けなかった"""
 
 
@@ -6120,6 +6139,7 @@ _WORDS_EPILOG = """語の一覧（--words、--no-words）:
   metaphor_verb、project_term、renyo_noun、slop_vocabulary、translated_term。flag.txt の語には project_term（info）の
   指摘を出します。どちらも1行に1語（UTF-8。# で始まる行と空の行は読み飛ばします）。
   flag.txt は「使わない語<TAB>使う語」とも書けます（<TAB> は実際のタブ文字）。TAB の左だけを探し、使う語も指摘に出します。
+  使う語は80字までで、使う語の中に TAB がある行（3列の行）は使えません。
   flag-patterns.txt（なくてもよい）には1行に「名前<TAB>正規表現」を書き、当たった行に、パターンの名前を入れた
   project_term（info）の指摘を出します。
 """

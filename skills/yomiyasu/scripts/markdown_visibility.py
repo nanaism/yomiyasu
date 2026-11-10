@@ -860,6 +860,9 @@ WORDS_FOLDER = ".yomiyasu-words"
 # (キーの先頭に付ける語, ファイルの名前)。context.words のキーと出力の行の順もこの順
 WORDS_FILES = (("allow", "allow.txt"), ("flag", "flag.txt"))
 WORDS_MAX_LINES = 10000
+# 3.0.0: flag.txt の「使わない語<TAB>使う語」の使う語の字数。使う語は文書にない字のまま出力に出るので、
+# flag-patterns.txt の名前（PATTERN_NAME_MAX）と同じように上限を置く
+FLAG_REPLACEMENT_MAX = 80
 # 3.0.0: 語の正規表現の一覧（1行に「名前<TAB>正規表現」）。WORDS_FILES とは別に読み、ファイルがあるときだけ context.words に
 # flag_patterns_lines と flag_patterns_sha256 を足す（ないときの出力は前と一字も同じ）
 PATTERNS_FILE = "flag-patterns.txt"
@@ -989,14 +992,24 @@ def _words_lines(path: str, data: bytes) -> list[str]:
 
 
 def _flag_entries(path: str, data: bytes) -> list[tuple[str, str]]:
-    """flag.txt を (使わない語, 使う語) の並びにする。最初の TAB で分け、前後の空白を除く。TAB がないか右が空なら
-    使う語は ""。左が空の行とコメントは除く。UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
+    """flag.txt を (使わない語, 使う語) の並びにする。行の前後の空白（TAB も）を除いてから最初の TAB で分け、
+    左と右の前後の空白を除く。TAB がなければ使う語は ""。空行とコメントは除く。行頭が TAB の行（字下げした語）は、
+    2.5.0 までと同じく1語として読む。使う語の中に TAB が残る行（3列の行）と、使う語が FLAG_REPLACEMENT_MAX 字を
+    超える行は WordsError（ファイル名と行番号つき）。UTF-8 でないときと1万行を超えるときも WordsError。"""
     entries = []
-    for row in _words_text_rows(path, data):
+    for number, row in enumerate(_words_text_rows(path, data), 1):
+        row = row.strip()
+        if not row or row.startswith("#"):
+            continue
         word, _, replacement = row.partition("\t")
-        word = word.strip()
-        if word and not word.startswith("#"):
-            entries.append((word, replacement.strip()))
+        word, replacement = word.strip(), replacement.strip()
+        if "\t" in replacement:
+            raise WordsError("Error opening file {}: {}行目の使う語の中にタブがあります（1行に書けるのは"
+                             "「使わない語<TAB>使う語」の2つまでです）".format(path, number))
+        if len(replacement) > FLAG_REPLACEMENT_MAX:
+            raise WordsError("Error opening file {}: {}行目の使う語は {} 字までです".format(
+                path, number, FLAG_REPLACEMENT_MAX))
+        entries.append((word, replacement))
     return entries
 
 
@@ -1303,6 +1316,7 @@ def current_directory() -> str | None:
 # 点で始まる部分（.env、.git/、sub/.secret/ など）がないものだけを読む。編集中の文書に紛れ込んだ指示で、事前に許された
 # コマンドが鍵や認証のファイルを読んで中身を出さないようにするため。標準入力（-）はいつでも読める。道具が自分で探すフォルダ
 # （状態フォルダ .yomiyasu/、語の一覧 .yomiyasu-words/、references/lists/）と --words のフォルダは、ここでは見ない。
+# 語の一覧を探すときは、linked worktree の .git ファイルと、git フォルダの commondir と config も読む（_worktree_words_folder）。
 
 INPUT_PATH_OUTSIDE = "作業フォルダの外にあるファイルは読みません"
 INPUT_PATH_HIDDEN = "名前が点で始まるファイルと、名前が点で始まるフォルダの中のファイルは読みません"

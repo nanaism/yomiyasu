@@ -2209,6 +2209,9 @@ _HEAD_NOTE = "候補の中身は下の節にあります。出力を切らずに
 _KEPT_MARK_RULES = {"calque": ("直訳語", re.compile(r"当たった言い方: (.*)）の候補です")),
                     "project_term": ("語の一覧", re.compile(
                         r"語の一覧（flag(?:\.txt|-patterns\.txt|\.txt、flag-patterns\.txt)）の語（(.*)）の候補です"))}
+# 3.0.0: lint は project_term の message の末尾に「使う語: 語 → 使う語、…。」を足すことがある。語はこれより前から取る
+# （使う語は一覧を書いた人の文字列なので、「）の候補です」を含んでいても語の切り出しがずれないようにする）
+_PROJECT_TERM_SUGGESTIONS = "。使う語: "
 _KEPT_MARK_SHOWN_LINES = 5
 _KEPT_MARK_SHOWN_WORDS = 10
 _KEPT_MARK_HEAD = "残した指摘の語: {}。下の「■ 残した指摘の語」のとおり、書き直すか、尋ねるか、残す理由を書いてください。"
@@ -2225,7 +2228,7 @@ _KEPT_MARK_UNSOURCED = "書き直しに使う名前や動作、その動作を�
 # 3.0.0: lint の指摘に flag.txt の使う語を添えた run だけ、使う語を替える名前の出典に数える
 _KEPT_MARK_REPLACEMENT_NOTE = "flag.txt の使う語は、替える名前の出典にできます（references/calques.md 4章）。\n"
 _KEPT_MARK_UNSOURCED_WITH_REPLACEMENTS = ("書き直しに使う名前が flag.txt の使う語、原文、依頼、提供資料、文脈のどれにもないか、"
-                                          "動作やその動作をする人が原文、依頼、提供資料、文脈のどれにも書いていないか、")
+                                          "動作やその動作をする人が、原文、依頼、提供資料、文脈のどれにも書いていないか、")
 # 3.0.0: 語の一覧に flag-patterns.txt があった run だけ、2つ目の項目の「語の一覧（flag.txt）の語」のあとに足す
 _KEPT_MARK_PATTERNS_NOTE = "（flag-patterns.txt の語も同じ）"
 _KEPT_MARK_VERIFY = ("残した指摘の語: {}。完了報告を付けるときは、「書き手に確かめたい点」で尋ねたか（3点を超える分は「ほかに N か所」"
@@ -2244,7 +2247,10 @@ def _kept_marks(findings: list[dict]) -> list[dict]:
         rule = finding.get("rule")
         if rule not in _KEPT_MARK_RULES:
             continue
-        found = _KEPT_MARK_RULES[rule][1].search(finding.get("message") or "")
+        message = finding.get("message") or ""
+        if rule == "project_term":
+            message = message.partition(_PROJECT_TERM_SUGGESTIONS)[0]
+        found = _KEPT_MARK_RULES[rule][1].search(message)
         words = [word for word in found.group(1).split("、") if word] if found else []
         line = finding.get("line") if type(finding.get("line")) is int else None
         for word in words or [None]:
@@ -2268,14 +2274,14 @@ def _kept_mark_replacements(findings: list[dict], replacements: dict[str, str]) 
     kept = {}
     if not replacements:
         return kept
-    for finding in findings:
-        if finding["rule"] != "project_term":
+    for finding in findings or ():
+        if not isinstance(finding, dict) or finding.get("rule") != "project_term":
             continue
-        message = finding["message"]
-        found = _KEPT_MARK_RULES["project_term"][1].search(message)
-        if found is None:
+        head, _, tail = (finding.get("message") or "").partition(_PROJECT_TERM_SUGGESTIONS)
+        found = _KEPT_MARK_RULES["project_term"][1].search(head)
+        if found is None or not tail:
             continue
-        suggestions = "、" + message.partition("使う語: ")[2].removesuffix("。") + "、"
+        suggestions = "、" + tail.removesuffix("。") + "、"
         for word in found.group(1).split("、"):
             replacement = replacements.get(word)
             if replacement and "、{} → {}、".format(word, replacement) in suggestions:
@@ -5217,7 +5223,7 @@ _RECORD_NOTE = ("記録はこのコマンドだけが作ります。同じ権限
 _EXIT_CODES = """終了コード:
   0  run: 検査を最後まで実行し、--fail-on の条件に当たらなかった（状態 executed か unrecorded。候補の有無によらない）。verify: 記録と照合が合った（executed）。-h と --version も0。start: 登録した（started）。export: 写しを書いた（exported）。end: 登録を終えた（ended）
   1  run: --fail-on の条件に当たった（記録は残す）。verify: 記録がない、または記録と合わない（理由は2行目の状態の行と --json の problems）。run: 登録の上限で実行しなかった（unverified）。export: 照合が合わない。end: 登録がない
-  2  使い方か入力の誤り（ファイルを開けない、読まないファイル（作業フォルダの外、名前が点で始まる部分を含むパス）を渡した、UTF-8 として読めない、区切りの誤り、使えない値、原文と最終稿が同じファイル、資料と最終稿が同じ中身、空の最終稿、別の原文の実行ID、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）。何も書かない（状態 not_run）
+  2  使い方か入力の誤り（ファイルを開けない、読まないファイル（作業フォルダの外、名前が点で始まる部分を含むパス）を渡した、UTF-8 として読めない、区切りの誤り、使えない値、原文と最終稿が同じファイル、資料と最終稿が同じ中身、空の最終稿、別の原文の実行ID、語の一覧を読めない（--words のフォルダがない、UTF-8 でない、1万行を超える、flag.txt か flag-patterns.txt に使えない行がある。ファイルの中身の誤りは、ファイルの名前と行番号を出す）、--words と --no-words を一緒に指定した）。何も書かない（状態 not_run）
   3  検査の一部を実行できなかった（lint か diff が内部の誤りか時間切れで終わらなかった、途中で最終稿が変わった。状態 partial）か、check の予期しない内部の誤り、出力先が閉じられて結果を最後まで書けなかった"""
 _USAGE = ("yomiyasu_check.py run --final 最終稿 (--source 原文 | --material 資料) [オプション]\n"
           "       yomiyasu_check.py run --stdin [オプション]\n"
