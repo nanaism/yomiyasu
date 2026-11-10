@@ -896,8 +896,25 @@ def _words_home(value: str) -> str:
     return value
 
 
-def _worktree_words_folder(git_file: Path) -> Path | None:
-    """linked worktree の管理ファイルを読み、元の checkout の語の一覧を探す。読めなければ None。"""
+def _core_worktree(git_dir: Path) -> Path | None:
+    """git_dir の config の [core] にある worktree（submodule の git フォルダに書かれる）。なければ None。"""
+    section = None
+    for row in (git_dir / "config").read_text(encoding="utf-8").splitlines():
+        row = row.strip()
+        if row.startswith("["):
+            section = row[1:].partition("]")[0].strip().lower()
+        elif section == "core":
+            key, sep, value = row.partition("=")
+            value = value.strip().strip('"')
+            if sep and key.strip().lower() == "worktree" and value:
+                return Path(absolute_path(str(git_dir / value)))
+    return None
+
+
+def _worktree_words_folder(git_file: Path) -> str | None:
+    """linked worktree の .git ファイルの gitdir と commondir から、元の checkout の語の一覧を探す。
+    checkout は共有の git フォルダの core.worktree（submodule）か、.git という名前のときはその親。
+    .git がファイルでないときや読めないとき、bare リポジトリのときは None。"""
     try:
         marker = git_file.read_text(encoding="utf-8").strip()
         if not marker.startswith("gitdir:"):
@@ -910,8 +927,13 @@ def _worktree_words_folder(git_file: Path) -> Path | None:
         if not common:
             return None
         common_dir = Path(absolute_path(str(git_dir / common)))
-        folder = common_dir.parent / WORDS_FOLDER
-        return folder if _path_matches(folder.is_dir) else None
+        checkout = _core_worktree(common_dir)
+        if checkout is None:
+            if common_dir.name != ".git":
+                return None
+            checkout = common_dir.parent
+        folder = checkout / WORDS_FOLDER
+        return str(folder) if _path_matches(folder.is_dir) else None
     except (OSError, UnicodeError, ValueError):
         return None
 
@@ -953,14 +975,29 @@ def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
         current = parent
     if _path_matches(folder.is_dir):
         return str(folder)
-    fallback = _worktree_words_folder(git_path) if _path_matches(git_path.is_file) else None
-    return str(fallback) if fallback is not None else None
+    return _worktree_words_folder(git_path)
 
 
 def _words_lines(path: str, data: bytes) -> list[str]:
-    """空行とコメントを除いた行を返す。前後の空白と TAB は残す。
-    UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
-    return [row for row in _words_text_rows(path, data) if row.strip() and not row.lstrip().startswith("#")]
+    """1つのファイルのバイト列を語の並びにする。UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
+    words = []
+    for row in _words_text_rows(path, data):
+        word = row.strip()
+        if word and not word.startswith("#"):
+            words.append(word)
+    return words
+
+
+def _flag_entries(path: str, data: bytes) -> list[tuple[str, str]]:
+    """flag.txt を (使わない語, 使う語) の並びにする。最初の TAB で分け、前後の空白を除く。TAB がないか右が空なら
+    使う語は ""。左が空の行とコメントは除く。UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
+    entries = []
+    for row in _words_text_rows(path, data):
+        word, _, replacement = row.partition("\t")
+        word = word.strip()
+        if word and not word.startswith("#"):
+            entries.append((word, replacement.strip()))
+    return entries
 
 
 def _words_text_rows(path: str, data: bytes) -> list[str]:
@@ -1214,7 +1251,7 @@ def load_words(folder: str) -> dict | None:
     タプル）、"flag_patterns_lines"（パターンの数）、"flag_patterns_sha256" も足す（ないときは、この3つのキーを足さない）。
     flag-patterns.txt だけがあっても一覧ありとみなす。読めないファイルと使えないパターンは WordsError。"""
     import hashlib
-    result = {"path": folder}
+    result = {"path": folder, "flag_replacements": {}}
     found = False
     for key, name in WORDS_FILES + (("flag_patterns", PATTERNS_FILE),):
         path = str(Path(folder) / name)
@@ -1230,18 +1267,17 @@ def load_words(folder: str) -> dict | None:
             raise WordsError("Error opening file {}: ファイルを開けません（{}）".format(path, reason))
         else:
             found = True
-            reader = _patterns_lines if key == "flag_patterns" else _words_lines
-            words, digest = reader(path, data), hashlib.sha256(data).hexdigest()
+            if key == "flag":
+                entries = _flag_entries(path, data)
+                result["flag_replacements"] = {word: replacement for word, replacement in entries if replacement}
+                words = [word for word, _ in entries]
+            else:
+                reader = _patterns_lines if key == "flag_patterns" else _words_lines
+                words = reader(path, data)
+            digest = hashlib.sha256(data).hexdigest()
         result[key] = tuple(words)
         result[key + "_lines"] = len(words)
         result[key + "_sha256"] = digest
-    result["allow"] = tuple(row.strip() for row in result["allow"])
-    flag_parts = (row.partition("\t") for row in result["flag"])
-    flag_entries = [(word.strip(), replacement.strip()) for word, _, replacement in flag_parts if word.strip()]
-    result["flag"] = tuple(word for word, _ in flag_entries)
-    result["flag_replacements"] = {word: replacement for word, replacement in flag_entries if replacement}
-    for key, _ in WORDS_FILES:
-        result[key + "_lines"] = len(result[key])
     return result if found else None
 
 

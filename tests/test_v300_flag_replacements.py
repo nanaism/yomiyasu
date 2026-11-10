@@ -4,6 +4,7 @@
 """
 from pathlib import Path
 import json
+import shutil
 import subprocess
 import sys
 import unittest
@@ -14,6 +15,22 @@ import yomiyasu_lint  # noqa: E402
 
 
 class FlagReplacementTest(FolderCase):
+    def git(self, cwd: Path, *args: str) -> None:
+        """利用者の git の設定とフックを使わずに git を動かす。git がなければ、この試験を飛ばす。"""
+        if shutil.which("git") is None:
+            self.skipTest("git がない")
+        if "GIT_CONFIG_GLOBAL" not in self.env:
+            local_names = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True,
+                                         text=True, encoding="utf-8", check=True).stdout.splitlines()
+            for name in local_names:
+                self.env.pop(name, None)
+            self.env.update(GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL=str(self.root / "no-global-config"),
+                            GIT_AUTHOR_NAME="Fixture", GIT_AUTHOR_EMAIL="fixture@example.invalid",
+                            GIT_COMMITTER_NAME="Fixture", GIT_COMMITTER_EMAIL="fixture@example.invalid")
+        cwd.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "-c", "core.hooksPath=" + str(self.root / "no-hooks"), "-c", "protocol.file.allow=always",
+                        *args], cwd=cwd, env=self.env, capture_output=True, text=True, encoding="utf-8", check=True)
+
     def test_replacements_preserve_plain_and_pattern_findings(self) -> None:
         folder = self.words(flag="指紋\tfingerprint\n承認\n", allow="")
         write(folder / "flag-patterns.txt", "指紋\t照合\n")
@@ -59,25 +76,20 @@ class FlagReplacementTest(FolderCase):
         self.assertEqual(process.returncode, 0, process.stderr + process.stdout)
         self.assertIn("- 指紋（語の一覧。L1）", process.stdout)
         self.assertNotIn("使う語:", process.stdout)
+        # パターンだけが当たった語の使う語が、ほかの語の使う語の一部に見えても添えない。
+        write(folder / "flag.txt", "公開鍵\tkey\n鍵\tkey\n")
+        write(folder / "flag-patterns.txt", "鍵\t照合\n")
+        write(doc, "公開鍵を照合します。\n")
+        process = run([CHECK, "run", "--source", source, "--final", doc, "--no-record"], self.root, self.env)
+        self.assertEqual(process.returncode, 0, process.stderr + process.stdout)
+        self.assertIn("- 公開鍵（語の一覧。L1。使う語: key）", process.stdout)
+        self.assertIn("- 鍵（語の一覧。L1）", process.stdout)
 
     def test_linked_worktree_uses_original_checkout_words(self) -> None:
-        local_names = subprocess.run(["git", "rev-parse", "--local-env-vars"], capture_output=True,
-                                     text=True, encoding="utf-8", check=True).stdout.splitlines()
-        for name in local_names:
-            self.env.pop(name, None)
-        self.env["GIT_CONFIG_NOSYSTEM"] = "1"
-        self.env["GIT_CONFIG_GLOBAL"] = str(self.root / "no-global-config")
         repo = self.root / "checkout"
-        repo.mkdir()
-        commands = (
-            ["init", "--quiet"],
-            ["-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "commit", "--quiet",
-             "--allow-empty", "--no-gpg-sign", "-m", "Initial fixture"],
-            ["worktree", "add", "--quiet", "--detach", str(self.root / "linked-worktree")],
-        )
-        for command in commands:
-            subprocess.run(["git", "-c", "core.hooksPath=" + str(self.root / "no-hooks")] + command,
-                           cwd=repo, env=self.env, capture_output=True, text=True, encoding="utf-8", check=True)
+        self.git(repo, "init", "--quiet")
+        self.git(repo, "commit", "--quiet", "--allow-empty", "--no-gpg-sign", "-m", "Initial fixture")
+        self.git(repo, "worktree", "add", "--quiet", "--detach", str(self.root / "linked-worktree"))
         self.words(repo / ".yomiyasu-words", flag="指紋\tfingerprint\n")
         nested = self.root / "linked-worktree" / "docs"
         doc = write(nested / "doc.md", "指紋を照合します。\n")
@@ -91,6 +103,19 @@ class FlagReplacementTest(FolderCase):
         result = self.lint_json(str(doc), cwd=nested)
         self.assertEqual([f for f in result["findings"] if f["rule"] == "project_term"], [])
         self.assertEqual(result["context"]["words"]["path"], str(nested.parent / ".yomiyasu-words"))
+
+    def test_submodule_linked_worktree_uses_submodule_words(self) -> None:
+        # submodule の共有の git フォルダは親の .git/modules/ にあるので、core.worktree の checkout の一覧を読む。
+        library, parent = self.root / "library", self.root / "parent"
+        self.git(library, "init", "--quiet")
+        self.git(library, "commit", "--quiet", "--allow-empty", "--no-gpg-sign", "-m", "Initial fixture")
+        self.git(parent, "init", "--quiet")
+        self.git(parent, "submodule", "add", "--quiet", str(library), "sub")
+        self.git(parent / "sub", "worktree", "add", "--quiet", "--detach", str(self.root / "sub-worktree"))
+        self.words(parent / "sub" / ".yomiyasu-words", flag="指紋\tfingerprint\n")
+        doc = write(self.root / "sub-worktree" / "doc.md", "指紋を照合します。\n")
+        result = self.lint_json(str(doc), cwd=doc.parent)
+        self.assertEqual(result["context"]["words"]["path"], str(parent / "sub" / ".yomiyasu-words"))
 
 
 if __name__ == "__main__":

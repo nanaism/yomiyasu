@@ -5305,10 +5305,11 @@ _PROJECT_TERM_BOTH_MESSAGE = "語の一覧（flag.txt、flag-patterns.txt）の�
 
 
 def _project_term_message(words: Sequence[str], pattern_names: Collection[str], flag_hits: Collection[str] | None = None,
-                          flag_replacements: dict[str, str] | None = None) -> str:
+                          replacements: dict[str, str] | None = None) -> str:
     """project_term の message。words は行の語（flag.txt の語とパターンの名前）、pattern_names はそのうちのパターンの名前、
     flag_hits はそのうちの flag.txt の語（None なら、パターンの名前でない語）。パターンの名前と flag.txt の語が同じ字でも、
-    両方が当たった行では両方のファイルを並べる。使う語は括弧の外の末尾に添え、check が読む括弧の中は変えない。"""
+    両方が当たった行では両方のファイルを並べる。replacements は flag.txt の語の使う語で、括弧の外の末尾に添え、
+    check が読む括弧の中は変えない。"""
     from_patterns = any(word in pattern_names for word in words)
     flag_words = [word for word in words if word not in pattern_names] if flag_hits is None else [word for word in words if word in flag_hits]
     from_flag = bool(flag_words)
@@ -5318,7 +5319,7 @@ def _project_term_message(words: Sequence[str], pattern_names: Collection[str], 
         message = _PROJECT_TERM_PATTERN_MESSAGE.format("、".join(words))
     else:
         message = _PROJECT_TERM_BOTH_MESSAGE.format("、".join(words))
-    replacements = flag_replacements or {}
+    replacements = replacements or {}
     suggestions = ["{} → {}".format(word, replacements[word]) for word in flag_words if word in replacements]
     return message + ("使う語: " + "、".join(suggestions) + "。" if suggestions else "")
 # 英数字で始まるか終わる語は、識別子（snake_case、camelCase、ドットや / を含む語）の一部では数えない
@@ -5370,11 +5371,13 @@ def _project_term_findings(analysis: dict, words: dict | None) -> list[dict]:
     flag の語が出る行に1件。引用（> の行）とカギ括弧・二重カギ括弧の中は数えない。_words にその行の flag の語。
     3.0.0: flag-patterns.txt のパターンも同じ所に当て、当たったパターンの名前を _words に足す（flag の語のあと）。
     パターンごとの当たった文字列は内部の欄 _pattern_matches に入れる（allow.txt で外すため）。パターンは、一番上の選択肢の
-    どれかの必ず当たる字が全部ある行にだけ当てる。"""
+    どれかの必ず当たる字が全部ある行にだけ当てる。当たった flag.txt の語の使う語は内部の欄 _replacements に入れる
+    （allow.txt で一部の語を外したときに message を作り直すため）。"""
     if not words or not (words.get("flag") or words.get("flag_patterns")):
         return []
     pattern = _flag_pattern(words["flag"]) if words.get("flag") else None
     patterns = words.get("flag_patterns") or ()
+    flag_replacements = words.get("flag_replacements") or {}
     found = []
     for row in analysis["lines"]:
         if row["kind"] in ("code", "frontmatter", "html_block", "reference_definition", "quote") or row["quote_depth"]:
@@ -5393,10 +5396,13 @@ def _project_term_findings(analysis: dict, words: dict | None) -> list[dict]:
                 matches[name] = tuple(dict.fromkeys(matches.get(name, ()) + strings))
         if hits or matches:
             shown = tuple(dict.fromkeys(hits + tuple(matches)))
+            replacements = {word: flag_replacements[word] for word in hits if word in flag_replacements}
             finding = {"rule": "project_term", "line": row["line"], "severity": "info",
-                       "message": _project_term_message(shown, matches, hits, words.get("flag_replacements")),
+                       "message": _project_term_message(shown, matches, hits, replacements),
                        "snippet": row["raw"].strip(),
                        "_words": shown}
+            if replacements:
+                finding["_replacements"] = replacements
             if matches:
                 finding["_pattern_matches"] = matches
                 finding["_flag_hits"] = hits
@@ -5428,7 +5434,7 @@ def _apply_words(findings: list[dict], words: dict | None) -> tuple[list[dict], 
             if finding["rule"] in removed and any(word in allowed for word in hit):
                 rest = tuple(word for word in hit if word not in allowed)
                 if finding["rule"] in _ALLOW_PARTIAL_RULES and rest:
-                    kept.append(_finding_with_words(finding, rest, words.get("flag_replacements")))
+                    kept.append(_finding_with_words(finding, rest))
                 else:
                     removed[finding["rule"]] += 1
             else:
@@ -5442,7 +5448,7 @@ def _apply_words(findings: list[dict], words: dict | None) -> tuple[list[dict], 
 _ALLOW_PARTIAL_RULES = ("ai_phrase", "calque", "katakana_term", "project_term", "renyo_noun")
 
 
-def _finding_with_words(finding: dict, rest: tuple[str, ...], flag_replacements: dict[str, str] | None = None) -> dict:
+def _finding_with_words(finding: dict, rest: tuple[str, ...]) -> dict:
     """許していない語（rest）だけを残した候補の写し。calque、project_term、renyo_noun、ai_phrase は message も作り直す。"""
     out = dict(finding, _words=rest)
     if finding["rule"] == "calque":
@@ -5450,7 +5456,8 @@ def _finding_with_words(finding: dict, rest: tuple[str, ...], flag_replacements:
         out["_word_types"] = word_types
         out["message"] = _calque_message(list(dict.fromkeys(number for _, number in word_types)), word_types)
     elif finding["rule"] == "project_term":
-        out["message"] = _project_term_message(rest, finding.get("_pattern_matches") or {}, finding.get("_flag_hits"), flag_replacements)
+        out["message"] = _project_term_message(rest, finding.get("_pattern_matches") or {}, finding.get("_flag_hits"),
+                                               finding.get("_replacements"))
     elif finding["rule"] == "renyo_noun":
         out["message"] = _RENYO_MESSAGE.format("、".join("の" + word for word in rest))
     elif finding["rule"] == "ai_phrase":
