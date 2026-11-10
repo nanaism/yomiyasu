@@ -24,7 +24,7 @@ SKILL.md は、測りながら段階を追って直しました。前の段階�
   - 語の一覧（`.yomiyasu-words/`）に、新しい任意のファイル flag-patterns.txt（1行に「名前<TAB>正規表現」）を置けるようにしました。このファイルがあるときだけ、lint、diff、check の JSON の `context.words` に `flag_patterns_lines` と `flag_patterns_sha256` が加わり、check の記録の `options.words` もこの2つを足した7つのキーになります。ないときのキーは 2.5.0 と同じです。パターンは500個まで、1つのパターンの重さ（繰り返しの幅と選択肢の数の積）と全パターンの重さの合計は、それぞれ512までです。
   - `project_term` の message に、当たった flag-patterns.txt のパターンの名前が入ります（「語の一覧（flag-patterns.txt）の語（名前）」。flag.txt の語と同じ行なら「語の一覧（flag.txt、flag-patterns.txt）の語（…）」）。flag.txt の語だけのときの message は 2.5.0 と同じです。
   - flag.txt の語のうち漢字と仮名を両方含む語（根の、の木）は、漢字の端の前後に漢字が続く所（大根の、の木構造）では当たらなくなりました。漢字だけの語と仮名だけの語の当たり方は変えていません。
-  - flag.txt の1行に `使わない語<TAB>使う語` と書けるようにしました。TAB の左だけを探し、`project_term` の指摘の末尾と check run の「残した指摘の語」に使う語を添えます。TAB のない行は今までどおりです。また、git の linked worktree に `.yomiyasu-words/` がなければ、元の checkout の一覧を読みます（#55）。flag-patterns.txt の書き方と、JSON と記録のキーは変えていません。
+  - flag.txt の1行に `使わない語<TAB>使う語` と書けるようにしました。TAB の左だけを探し、`project_term` の指摘の末尾と check run の「残した指摘の語」に使う語を添えます。TAB のない行は今までどおりです。また、git の linked worktree に `.yomiyasu-words/` がなければ、元の checkout の一覧を読みます（#55）。flag-patterns.txt の書き方、JSON のキー、記録のキーは変えていません。
   - lint の判定が一部変わります。`calque`（info）に型4の字（枝、題、罫）と型5の候補が加わり、`metaphor_verb`（warn）の前提の比喩が当たる形が広がって、その指摘の文が変わります（下の「更新するときの注意」）。
   - lint、diff、check は、コマンドラインで渡されたファイルが作業フォルダの外にあるときと、作業フォルダからの道筋に名前が点で始まる部分（`.env`、`.git/config` など）があるときは、読まずに終了コード2で止まるようになりました。check は何も書きません。標準入力からは今までどおり読めます（[docs/tools.md](./docs/tools.md) の「読まないファイル」）。
   - Windows では、フックと検査の記録を確かめるときに、ドライブのない `\x` の形のパスを絶対パスとみなさなくなりました（Eotel さんの PR #54。Python 3.13 からの os.path.isabs と同じ扱いです）。
