@@ -8,7 +8,6 @@ diff は「見出しの数が変わった」の文に消えた見出しの文字
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +15,8 @@ SCRIPTS = ROOT / "scripts"
 REQUESTS = ROOT / "tests" / "corpus" / "requests"
 sys.path.insert(0, str(SCRIPTS))
 import yomiyasu_diff  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import run_text  # noqa: E402
 
 CASES = {
     # (元, 後, 依頼, 見出しの数の文, 形が変わった見出しの (元, 後), v2.4.0 の meaning_risk_count)
@@ -36,9 +37,10 @@ def read(name):
     return (REQUESTS / name).read_text(encoding="utf-8")
 
 
-def run(script, *args):
-    return subprocess.run([sys.executable, "-B", str(SCRIPTS / script)] + list(args), capture_output=True, text=True, encoding="utf-8",
-                          cwd=str(REQUESTS))
+def run(script, *args, input=None):
+    # 標準入力の文字列は、改行を変えずに UTF-8 のバイト列で渡す（portable.run_text）
+    return run_text([sys.executable, "-B", str(SCRIPTS / script)] + list(args), capture_output=True, encoding="utf-8",
+                    cwd=str(REQUESTS), input=input, stdin=None if input is not None else subprocess.DEVNULL)
 
 
 class HeadingShapeTest(unittest.TestCase):
@@ -103,8 +105,8 @@ class HeadingShapeTest(unittest.TestCase):
 
 
 class CheckOrderTest(unittest.TestCase):
-    def sections(self, *args):
-        process = run("yomiyasu_check.py", "run", "--no-record", *args)
+    def sections(self, *args, input=None):
+        process = run("yomiyasu_check.py", "run", "--no-record", *args, input=input)
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         return [line for line in process.stdout.split("\n") if line.startswith("■ ")], process.stdout.split("\n")
 
@@ -119,17 +121,14 @@ class CheckOrderTest(unittest.TestCase):
 
     def test_length_requests_in_other_forms(self):
         old, new = CASES["slides"][0], CASES["slides"][1]
-        with tempfile.TemporaryDirectory() as folder:
-            for request in ("見出しは30文字程度に収めてください。", "各ページの題は二十字以内にしてください。"):
-                with self.subTest(request=request):
-                    path = Path(folder) / "request.txt"
-                    path.write_bytes((request + "\n").encode("utf-8"))
-                    heads, _ = self.sections("--source", old, "--final", new, "--material", str(path))
-                    self.assertTrue(heads[1].startswith("■ 見出しの形が変わった"), heads)
-            path = Path(folder) / "request.txt"
-            path.write_bytes("数字と漢字の書き方は今のままにしてください。\n".encode("utf-8"))
-            heads, _ = self.sections("--source", old, "--final", new, "--material", str(path))
-            self.assertTrue(heads[1].startswith("■ 意味が変わる恐れ"), heads)
+        # 3.0.0: check は作業フォルダ（fixtures の頼みのフォルダ）の外のファイルを読まないので、頼みの文は標準入力で渡す
+        for request in ("見出しは30文字程度に収めてください。", "各ページの題は二十字以内にしてください。"):
+            with self.subTest(request=request):
+                heads, _ = self.sections("--source", old, "--final", new, "--material", "-", input=request + "\n")
+                self.assertTrue(heads[1].startswith("■ 見出しの形が変わった"), heads)
+        heads, _ = self.sections("--source", old, "--final", new, "--material", "-",
+                                 input="数字と漢字の書き方は今のままにしてください。\n")
+        self.assertTrue(heads[1].startswith("■ 意味が変わる恐れ"), heads)
 
     def test_without_the_request_the_order_is_the_usual_one(self):
         old, new = CASES["slides"][0], CASES["slides"][1]

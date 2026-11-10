@@ -179,18 +179,13 @@ class RenyoNounTest(unittest.TestCase):
     def test_builtin_list_is_used_without_the_file(self):
         saved = dict(yomiyasu_lint._V220_LIST_CACHE)
         yomiyasu_lint._V220_LIST_CACHE.pop("renyo-nouns", None)
-        real_open = open
-
-        def fake_open(path, *args, **kwargs):
-            if str(path).endswith(os.path.join("lists", "renyo-nouns.txt")):
-                raise FileNotFoundError(path)
-            return real_open(path, *args, **kwargs)
-        import builtins
-        builtins.open = fake_open
+        script_path = yomiyasu_lint.__file__
         try:
-            items, source = yomiyasu_lint._v220_load_list("renyo-nouns")
+            with tempfile.TemporaryDirectory() as folder:
+                yomiyasu_lint.__file__ = str(Path(folder) / "scripts" / "yomiyasu_lint.py")
+                items, source = yomiyasu_lint._v220_load_list("renyo-nouns")
         finally:
-            builtins.open = real_open
+            yomiyasu_lint.__file__ = script_path
             yomiyasu_lint._V220_LIST_CACHE.clear()
             yomiyasu_lint._V220_LIST_CACHE.update(saved)
         self.assertEqual(source, "builtin")
@@ -210,7 +205,7 @@ class RenyoNounTest(unittest.TestCase):
             path = Path(folder) / "a.md"
             path.write_bytes("誤字の直しは明日です。\n".encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(SCRIPTS / "yomiyasu_lint.py"), "--json", "--no-words", str(path)],
-                                     capture_output=True)
+                                     capture_output=True, cwd=folder)
         self.assertEqual(process.returncode, 0, process.stderr)
         data = json.loads(process.stdout.decode("utf-8"))
         self.assertEqual([finding["rule"] for finding in data["findings"]], ["renyo_noun"])

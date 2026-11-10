@@ -198,7 +198,9 @@ class UnsupportedCountTest(CheckCase):
                  ("raw_ai/09_listicle_patterns.md", "raw_ai/10_essay_fragments.md"))
         for material, final in pairs:
             with self.subTest(material=material):
-                process = self.check("run", "--material", CORPUS / material, "--final", CORPUS / final, "--no-record")
+                # 3.0.0: check は作業フォルダの外のファイルを読まないので、コーパスのフォルダで動かす
+                process = self.check("run", "--material", CORPUS / material, "--final", CORPUS / final, "--no-record",
+                                     cwd=CORPUS)
                 self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
                 lines = split_lines(process.stdout)
                 # 1組目は資料を原文とみなした diff にも確度の見直し候補が出る。

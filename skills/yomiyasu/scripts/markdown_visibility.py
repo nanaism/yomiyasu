@@ -1,11 +1,17 @@
+# -*- coding: utf-8 -*-
 """Shared, dependency-free Markdown visibility for lint candidates.
 
 Offsets are half-open Python string positions. This is a targeted scanner,
 not a claim to implement every CommonMark or GFM construct.
 """
-__version__ = "2.5.0"
+
+from __future__ import annotations
+__version__ = "3.0.0"
 
 import os
+from pathlib import Path
+from collections.abc import Callable, Collection, Iterable, Sequence
+from typing import TypedDict
 import re
 import unicodedata
 from bisect import bisect_left, bisect_right
@@ -34,21 +40,53 @@ _FENCE_OPEN = re.compile(r'^ {0,3}(`{3,}|~{3,})(.*)$')
 _ATX_HEADING = re.compile(r'^ {0,3}#{1,6}(?:[ \t]+|$)')
 
 
-def unicode_whitespace(ch):
+class MarkdownLine(TypedDict):
+    line: int
+    raw: str
+    start: int
+    ending: str
+    content_start: int
+    content: str
+    quote_depth: int
+    list_item: bool
+    kind: str
+
+
+class MarkdownBlock(TypedDict):
+    kind: str
+    lines: list[MarkdownLine]
+
+
+def _path_matches(probe: Callable[[], bool]) -> bool:
+    """Boolean path probes treat an unreadable name as no match, as os.path did."""
+    try:
+        return probe()
+    except OSError:
+        return False
+
+
+def absolute_path(path: str) -> str:
+    """Normalize lexical components and Windows drive-relative paths without following links."""
+    # Path.absolute() leaves other-drive paths relative before Python 3.12;
+    # Path.resolve() would change the symlink semantics.
+    return os.path.abspath(path)  # noqa: PTH100 -- native drive-relative resolution is required
+
+
+def unicode_whitespace(ch: str) -> bool:
     if not ch: return True
     if len(ch) > 1:
         return all(unicode_whitespace(c) for c in ch)
     return ch in '\t\n\r\f' or unicodedata.category(ch) == 'Zs'
 
 
-def _escaped(text, position):
+def _escaped(text: str, position: int) -> bool:
     start = position
     while start > 0 and text[start - 1] == '\\':
         start -= 1
     return (position - start) % 2 == 1
 
 
-def _tag_space_end(text, start):
+def _tag_space_end(text: str, start: int) -> int:
     """Spaces/tabs and at most one Markdown line ending, not Python isspace."""
     pos = start
     while pos < len(text) and text[pos] in ' \t': pos += 1
@@ -58,13 +96,13 @@ def _tag_space_end(text, start):
     return pos
 
 
-def _terminator_positions(text):
+def _terminator_positions(text: str) -> dict[str, list[int]]:
     return {token: [match.start() for match in re.finditer(re.escape(token), text)]
             for token in ('-->', '?>', ']]>', '>')}
 
 
-def _tag_end(text, start, terminators=None):
-    def closed(token, begin):
+def _tag_end(text: str, start: int, terminators: dict[str, list[int]] | None = None) -> int | None:
+    def closed(token: str, begin: int) -> int | None:
         if terminators is None:
             end = text.find(token, begin)
         else:
@@ -112,7 +150,7 @@ def _tag_end(text, start, terminators=None):
     return None
 
 
-def _link_end(text, opening):
+def _link_end(text: str, opening: int) -> int | None:
     """Return a validated inline destination/title end, or no opaque range."""
     pos = opening + 1
     while pos < len(text) and text[pos] in ' \t\n\r': pos += 1
@@ -160,7 +198,7 @@ def _link_end(text, opening):
     return pos + 1 if pos < len(text) and text[pos] == ')' else None
 
 
-def inline_protected_spans(text):
+def inline_protected_spans(text: str) -> list[tuple[int, int, str]]:
     """Code, escaped punctuation and opaque inline tokens, preserving labels."""
     runs = [(m.start(), m.end()) for m in re.finditer(r'`+', text)]
     by_width = {}
@@ -254,7 +292,7 @@ def inline_protected_spans(text):
     return sorted(spans)
 
 
-def _columns(text):
+def _columns(text: str) -> int:
     columns = 0
     for ch in text:
         if ch == ' ': columns += 1
@@ -263,7 +301,7 @@ def _columns(text):
     return columns
 
 
-def _containers(raw, allow_list=True):
+def _containers(raw: str, allow_list: bool = True) -> tuple[int, int, bool]:
     # Default containers can start only with an ASCII space, a quote marker,
     # a list marker, or a Unicode digit. isdigit() is a conservative superset
     # of regex \d; unusual custom marker patterns keep the original path.
@@ -292,7 +330,7 @@ def _containers(raw, allow_list=True):
     return pos, quotes, list_item
 
 
-def _physical_lines(text):
+def _physical_lines(text: str) -> list[tuple[int, str, str]]:
     rows = []
     start = 0
     for ending in re.finditer(r'\r\n|\r|\n', text):
@@ -302,12 +340,12 @@ def _physical_lines(text):
     return rows
 
 
-def _reference_definition(content):
+def _reference_definition(content: str) -> bool:
     """Only a complete one-line definition is hidden; never hide trailing prose."""
     return reference_definition_end([content], 0) == 0
 
 
-def _table_cells(content):
+def _table_cells(content: str) -> list[str]:
     """GFM cell boundaries; an escaped pipe is data even inside code spans."""
     stripped = content.strip(' \t')
     starts = [0]
@@ -324,29 +362,29 @@ def _table_cells(content):
 
 
 class _RowCursor:
-    def __init__(self, lines, row, column=0):
+    def __init__(self, lines: list[str], row: int, column: int = 0) -> None:
         self.lines = lines
         self.row = row
         self.column = column
 
-    def char(self):
+    def char(self) -> str | None:
         line = self.lines[self.row]
         if self.column < len(line):
             return line[self.column]
         return '\n' if self.row + 1 < len(self.lines) else None
 
-    def following(self):
+    def following(self) -> str | None:
         line = self.lines[self.row]
         return line[self.column + 1] if self.column + 1 < len(line) else None
 
-    def advance(self):
+    def advance(self) -> None:
         if self.column < len(self.lines[self.row]):
             self.column += 1
         elif self.row + 1 < len(self.lines):
             self.row += 1
             self.column = 0
 
-    def escape(self):
+    def escape(self) -> bool:
         if self.char() == '\\' and self.following() in _ASCII_PUNCT:
             self.advance()
             self.advance()
@@ -354,7 +392,7 @@ class _RowCursor:
         return False
 
 
-def _reference_gap(cursor):
+def _reference_gap(cursor: _RowCursor) -> bool:
     """Consume spaces/tabs and at most one row break; return whether present."""
     seen = False
     while cursor.char() in (' ', '\t'):
@@ -368,7 +406,7 @@ def _reference_gap(cursor):
     return seen
 
 
-def _reference_destination(cursor):
+def _reference_destination(cursor: _RowCursor) -> bool:
     if cursor.char() == '<':
         cursor.advance()
         while cursor.char() is not None:
@@ -383,8 +421,7 @@ def _reference_destination(cursor):
         return False
     count = 0
     depth = 0
-    while cursor.char() is not None and cursor.char() not in (' ', '\t', '\n'):
-        ch = cursor.char()
+    while (ch := cursor.char()) is not None and ch not in (' ', '\t', '\n'):
         if cursor.escape():
             count += 2
             continue
@@ -403,7 +440,7 @@ def _reference_destination(cursor):
     return count > 0 and depth == 0
 
 
-def _reference_title_end(cursor):
+def _reference_title_end(cursor: _RowCursor) -> int | None:
     opener = cursor.char()
     closer = ')' if opener == '(' else opener
     cursor.advance()
@@ -424,7 +461,7 @@ def _reference_title_end(cursor):
     return None
 
 
-def reference_definition_end(lines, start, paragraph_context=False):
+def reference_definition_end(lines: list[str], start: int, paragraph_context: bool = False) -> int | None:
     """Return the last definition row (inclusive), or no opaque boundary.
 
     Rows contain no line terminator and preserve row identity. The caller has
@@ -444,8 +481,7 @@ def reference_definition_end(lines, start, paragraph_context=False):
     cursor.advance()
     label_length = 0
     meaningful = False
-    while cursor.char() is not None and cursor.char() != ']':
-        ch = cursor.char()
+    while (ch := cursor.char()) is not None and ch != ']':
         if cursor.escape():
             label_length += 2
             meaningful = True
@@ -479,11 +515,11 @@ def reference_definition_end(lines, start, paragraph_context=False):
     return destination_row if title_row is None and title_on_later_row else title_row
 
 
-def analyze_markdown(text, skip_frontmatter=True):
-    lines = []
-    blocks = []
+def analyze_markdown(text: str, skip_frontmatter: bool = True) -> dict:
+    lines: list[MarkdownLine] = []
+    blocks: list[MarkdownBlock] = []
     protected = []
-    current = None
+    current: MarkdownBlock | None = None
     fence = None
     html_until = None
     active_list_indent = 0
@@ -516,7 +552,7 @@ def analyze_markdown(text, skip_frontmatter=True):
                 active_list_indent = 0
         content = raw[prefix:]
         stripped = content.strip(' \t')
-        info = {'line': index + 1, 'raw': raw, 'start': start, 'ending': ending,
+        info: MarkdownLine = {'line': index + 1, 'raw': raw, 'start': start, 'ending': ending,
                 'content_start': start + prefix, 'content': content,
                 'quote_depth': depth, 'list_item': list_item, 'kind': 'paragraph'}
         if prefix:
@@ -576,10 +612,14 @@ def analyze_markdown(text, skip_frontmatter=True):
                 elif html_start.startswith('<![CDATA['): html_until = r'\]\]>'
                 elif re.match(r'<![A-Z]', html_start): html_until = '>'
                 elif re.match(r'<(?:script|pre|style|textarea)(?:[ \t>]|$)', html_start, re.I):
-                    tag = re.match(r'<([A-Za-z]+)', html_start).group(1)
+                    opening = re.match(r'<([A-Za-z]+)', html_start)
+                    assert opening is not None
+                    tag = opening.group(1)
                     html_until = '</' + tag + r'\s*>'
                 elif re.match(r'</?([A-Za-z][A-Za-z0-9-]*)(?:[ \t/>]|$)', html_start):
-                    tag = re.match(r'</?([A-Za-z][A-Za-z0-9-]*)', html_start).group(1).lower()
+                    opening = re.match(r'</?([A-Za-z][A-Za-z0-9-]*)', html_start)
+                    assert opening is not None
+                    tag = opening.group(1).lower()
                     if tag in _HTML_BLOCK_TAGS: html_until = 'blank'
                     elif (current is None or current['kind'] not in ('paragraph', 'list', 'quote')):
                         end = _tag_end(html_start, 0)
@@ -599,7 +639,7 @@ def analyze_markdown(text, skip_frontmatter=True):
             protected.append((start, start + len(raw) + len(ending), kind))
         continue_block = (current is not None and current['kind'] == kind
                           and kind not in ('heading', 'table', 'list'))
-        if continue_block and kind == 'quote' and current['lines'][0]['quote_depth'] != depth:
+        if continue_block and kind == 'quote' and current is not None and current['lines'][0]['quote_depth'] != depth:
             continue_block = False
         if kind == 'list' and current is not None and current['kind'] == 'list' and not _containers(raw)[2]:
             continue_block = True
@@ -609,11 +649,12 @@ def analyze_markdown(text, skip_frontmatter=True):
         if not continue_block:
             current = {'kind': info['kind'], 'lines': []}
             blocks.append(current)
+        assert current is not None
         current['lines'].append(info)
     # Definitions are recognized only at the beginning of a completed leaf
     # paragraph. This both admits multiline labels/destinations/titles and
     # prevents a definition-shaped later row from interrupting existing prose.
-    reference_blocks = []
+    reference_blocks: list[MarkdownBlock] = []
     for block in blocks:
         rows = block['lines']
         offset = 0
@@ -657,7 +698,7 @@ def analyze_markdown(text, skip_frontmatter=True):
             'mask_ends': [right for _, right in merged]}
 
 
-def _merged_masks(spans):
+def _merged_masks(spans: Iterable[tuple[int, int, str]]) -> tuple[list[tuple[int, int]], list[int]]:
     merged = []
     for left, right, _ in sorted(spans):
         if merged and left <= merged[-1][1]:
@@ -667,7 +708,7 @@ def _merged_masks(spans):
     return merged, [right for _, right in merged]
 
 
-def line_visible_text(analysis, line_no, protected_kinds=None):
+def line_visible_text(analysis: dict, line_no: int, protected_kinds: Collection[str] | None = None) -> str:
     """Mask chosen opaque kinds; default masks every protected source interval."""
     key = None if protected_kinds is None else frozenset(protected_kinds)
     cached = analysis.setdefault('_line_visible_cache', {})
@@ -683,6 +724,7 @@ def line_visible_text(analysis, line_no, protected_kinds=None):
     if protected_kinds is None:
         masks, ends = analysis['mask_spans'], analysis['mask_ends']
     else:
+        assert key is not None
         cache = analysis.setdefault('_kind_mask_cache', {})
         if key not in cache:
             cache[key] = _merged_masks(span for span in analysis['protected_spans'] if span[2] in key)
@@ -702,7 +744,7 @@ def line_visible_text(analysis, line_no, protected_kinds=None):
     return result
 
 
-def range_overlaps_protected(analysis, start, end, protected_kinds=None):
+def range_overlaps_protected(analysis: dict, start: int, end: int, protected_kinds: Collection[str] | None = None) -> bool:
     """Whether a nonempty raw-source range intersects any protected atom."""
     if end <= start: return False
     if protected_kinds is None:
@@ -717,7 +759,7 @@ def range_overlaps_protected(analysis, start, end, protected_kinds=None):
     return index < len(masks) and masks[index][0] < end
 
 
-def decode_source(data):
+def decode_source(data: str | bytes | bytearray) -> tuple[str, dict]:
     """入力のバイト列を、検査に使う文字列にする。lint、diff、check で同じ読み方にするための関数。
 
     UTF-8 として厳密に解き（読めなければ UnicodeDecodeError）、先頭の BOM を1つ外し、
@@ -775,7 +817,7 @@ READER_LEVELS = (
 )
 
 
-def _normalize_choice(option, value, rows):
+def _normalize_choice(option: str, value: object, rows: Sequence[tuple]) -> str | None:
     """NFKC にし、前後の空白を外し、英字を小文字にして、使える値なら返す。None はそのまま返す。
     使えない値（空の文字列を含む）は、標準エラーにそのまま書ける1行の文の ValueError にする。"""
     if value is None:
@@ -791,17 +833,17 @@ def _normalize_choice(option, value, rows):
         option, shown, "、".join("{}（{}）".format(row[0], row[1]) for row in rows)))
 
 
-def normalize_doc_type(value):
+def normalize_doc_type(value: object) -> str | None:
     """--doc-type の値を正規化する（SLIDES、前後の空白、全角も slides）。None はそのまま。使えない値は ValueError。"""
     return _normalize_choice("--doc-type", value, DOC_TYPES)
 
 
-def normalize_reader(value):
+def normalize_reader(value: object) -> str | None:
     """--reader の値を正規化する。None はそのまま。使えない値は ValueError。"""
     return _normalize_choice("--reader", value, READER_LEVELS)
 
 
-def context_label(doc_type, reader):
+def context_label(doc_type: object, reader: object) -> str:
     """lint と diff の人が読む出力で、種類と読者を書く行の初めの部分（「文書の種類: スライド（slides）、読者: 指定なし。」）。"""
     doc_type, reader = normalize_doc_type(doc_type), normalize_reader(reader)
     kinds, readers = dict(row[:2] for row in DOC_TYPES), dict(READER_LEVELS)
@@ -812,12 +854,24 @@ def context_label(doc_type, reader):
 
 # ---- 語の一覧（.yomiyasu-words/ の allow.txt と flag.txt）----
 # lint、diff、check、フックの4本が同じ探し方と読み方を使うので、ここに1つだけ置く。
-# 探し方は状態フォルダ（check の state_dir_for）と同じたどり方で、.yomiyasu/ の中は探さない。
+# .git まで上へたどり、linked worktree に一覧がなければ元の checkout を探す。.yomiyasu/ の中は探さない。
 
 WORDS_FOLDER = ".yomiyasu-words"
 # (キーの先頭に付ける語, ファイルの名前)。context.words のキーと出力の行の順もこの順
 WORDS_FILES = (("allow", "allow.txt"), ("flag", "flag.txt"))
 WORDS_MAX_LINES = 10000
+# 3.0.0: flag.txt の「使わない語<TAB>使う語」の使う語の字数。使う語は文書にない字のまま出力に出るので、
+# flag-patterns.txt の名前（PATTERN_NAME_MAX）と同じように上限を置く
+FLAG_REPLACEMENT_MAX = 80
+# 3.0.0: 語の正規表現の一覧（1行に「名前<TAB>正規表現」）。WORDS_FILES とは別に読み、ファイルがあるときだけ context.words に
+# flag_patterns_lines と flag_patterns_sha256 を足す（ないときの出力は前と一字も同じ）
+PATTERNS_FILE = "flag-patterns.txt"
+PATTERNS_MAX = 500              # パターンの数
+PATTERN_NAME_MAX = 40           # 名前の字数
+PATTERN_MAX_LENGTH = 200        # 正規表現の字数
+PATTERN_MAX_REPEAT = 30         # {m,n} の n
+PATTERN_MAX_COST = 512          # 1つのパターンが1か所で試す数（繰り返しの幅と選択肢の数の積）
+PATTERNS_MAX_COST = 512         # 全パターンの試す数の合計（時間はこの合計にほぼ比例する。10万字の行で、最短一致の繰り返しを重ねた最悪の組が手元の macOS で約0.7秒、CI の Linux でも2秒より十分短く終わる数。1,024 では CI で2秒を超えた）
 # ないファイル（とフォルダ）は一覧なし。ほかの読めない理由は終了コード2
 _WORDS_ABSENT = (FileNotFoundError, NotADirectoryError)
 
@@ -827,12 +881,16 @@ class WordsError(Exception):
     str() は標準エラーにそのまま書ける1行の文（入力の誤りの「Error opening file …」と同じ形）。"""
 
 
-def _words_home(value):
+def _words_home(value: str) -> str:
     """--words の値の頭の ~ を、ホームフォルダに置き換える（check と hook の _home_path と同じ決まり）。"""
     if isinstance(value, str) and (value == "~" or value[:2] in ("~/", "~" + os.sep)):
         try:
-            home = os.path.expanduser("~")
-            expanded = os.path.expanduser(value)
+            configured = (os.environ.get("USERPROFILE", os.environ.get("HOMEDRIVE", "") + os.environ.get("HOMEPATH", ""))
+                          if os.name == "nt" else os.environ.get("HOME"))
+            if configured is not None and not os.path.splitdrive(configured)[1].strip().strip("/" + os.sep):
+                return value
+            home = str(Path("~").expanduser())
+            expanded = str(Path(value).expanduser())
         except Exception:  # pwd を読めない環境など
             return value
         if (not home.startswith("~") and os.path.splitdrive(home)[1].strip().strip("/" + os.sep)
@@ -841,44 +899,144 @@ def _words_home(value):
     return value
 
 
-def find_words_folder(cwd, option=None):
+def _shared_checkout(common_dir: Path) -> Path | None:
+    """共有の git フォルダから元の checkout を決める。config と config.worktree（extensions.worktreeConfig のとき、git は
+    core.worktree をこちらに移す）の [core] を読み、あとに書いた値を使う。worktree があればその先（submodule の git
+    フォルダに書かれる。相対の値は git フォルダから数える）。なければ、bare でなく、フォルダの名前が .git のときだけその親。
+    どちらでもなければ None。config がないときと開けないときは、書いてないものとして扱う。UTF-8 でない字は置き換えて読み、
+    ほかの行の値は使う。
+    読むのは git が書く形（1行に「キー = 値」）だけ。"""
+    worktree, bare = None, False
+    for name in ("config", "config.worktree"):
+        path = common_dir / name
+        if not _path_matches(path.is_file):
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        section = None
+        for row in text.lstrip("\ufeff").splitlines():
+            row = row.strip()
+            if row.startswith("["):
+                section = row[1:].partition("]")[0].strip().lower()
+            elif section == "core":
+                key, sep, value = row.partition("=")
+                key, value = key.strip().lower(), value.strip().strip('"')
+                if sep and key == "worktree" and value:
+                    worktree = Path(absolute_path(str(common_dir / value)))
+                elif sep and key == "bare":
+                    bare = value.lower() in ("true", "yes", "on", "1")
+    if worktree is not None:
+        return worktree
+    return common_dir.parent if common_dir.name == ".git" and not bare else None
+
+
+def _worktree_words_folder(git_file: Path) -> str | None:
+    """linked worktree の .git ファイルの gitdir と commondir から、元の checkout の語の一覧を探す。
+    checkout は _shared_checkout で決める（共有の git フォルダの core.worktree か、bare でない .git の親）。
+    .git ファイルや commondir を読めないとき、checkout が決まらないとき（bare リポジトリなど）は None。"""
+    try:
+        marker = git_file.read_text(encoding="utf-8").strip()
+        if not marker.startswith("gitdir:"):
+            return None
+        target = marker.removeprefix("gitdir:").strip()
+        if not target:
+            return None
+        git_dir = git_file.parent / target
+        # commondir も、ふつうのファイルのときだけ読む（.git と同じ理由。名前付きパイプなどは開かない）
+        if not _path_matches((git_dir / "commondir").is_file):
+            return None
+        common = (git_dir / "commondir").read_text(encoding="utf-8").strip()
+        if not common:
+            return None
+        checkout = _shared_checkout(Path(absolute_path(str(git_dir / common))))
+        if checkout is None:
+            return None
+        folder = checkout / WORDS_FOLDER
+        return str(folder) if _path_matches(folder.is_dir) else None
+    except (OSError, UnicodeError, ValueError):
+        return None
+
+
+def find_words_folder(cwd: str | None, option: str | None = None) -> str | None:
     """語の一覧のフォルダの絶対パスか None（フォルダがない）。
 
     1 option（--words）があれば、そのフォルダ（相対パスは cwd から。ないかフォルダでなければ WordsError）。
     2 cwd から上へたどり、.git（フォルダでもファイルでもよい）がある最初のフォルダの .yomiyasu-words/。
+    .git がファイルで一覧のフォルダがなければ、gitdir と commondir から元の checkout の一覧を探す。
     3 git の外では cwd の .yomiyasu-words/。2と3は、フォルダがなければ None。cwd が None（作業ディレクトリを
     読めない）ときは、2と3を探さずに None、相対パスの option は WordsError。"""
     if option is not None:
         value = _words_home(option)
         if not str(value).strip():
             raise WordsError("--words に空の値は使えません")
-        if not os.path.isabs(value):
+        if not Path(value).is_absolute():
             if cwd is None:
                 raise WordsError("Error opening folder {}: 作業ディレクトリを読めないため、相対パスを決められません".format(option))
-            value = os.path.join(cwd, value)
-        folder = os.path.abspath(value)
-        if not os.path.isdir(folder):
-            reason = "フォルダではありません" if os.path.exists(folder) else "フォルダがありません"
+            value = str(Path(cwd) / value)
+        folder = absolute_path(value)
+        if not _path_matches(Path(folder).is_dir):
+            reason = "フォルダではありません" if _path_matches(Path(folder).exists) else "フォルダがありません"
             raise WordsError("Error opening folder {}: --words の{}".format(option, reason))
         return folder
     if cwd is None:
         return None
-    cwd = os.path.abspath(cwd)
-    current = cwd
+    origin = Path(absolute_path(cwd))
+    current = origin
     while True:
-        if os.path.exists(os.path.join(current, ".git")):
-            folder = os.path.join(current, WORDS_FOLDER)
+        git_path = current / ".git"
+        if _path_matches(git_path.exists):
+            folder = current / WORDS_FOLDER
             break
-        parent = os.path.dirname(current)
+        parent = current.parent
         if parent == current:
-            folder = os.path.join(cwd, WORDS_FOLDER)
+            folder = origin / WORDS_FOLDER
             break
         current = parent
-    return folder if os.path.isdir(folder) else None
+    if _path_matches(folder.is_dir):
+        return str(folder)
+    # .git がふつうのファイルのときだけ中を読む（フォルダなら linked worktree でない。名前付きパイプなどは開かない）
+    return _worktree_words_folder(git_path) if _path_matches(git_path.is_file) else None
 
 
-def _words_lines(path, data):
+def _words_lines(path: str, data: bytes) -> list[str]:
     """1つのファイルのバイト列を語の並びにする。UTF-8 でないときと1万行を超えるときは WordsError（行番号つき）。"""
+    words = []
+    for row in _words_text_rows(path, data):
+        word = row.strip()
+        if word and not word.startswith("#"):
+            words.append(word)
+    return words
+
+
+def _flag_entries(path: str, data: bytes) -> list[tuple[str, str]]:
+    """flag.txt を (使わない語, 使う語) の並びにする。行の前後の空白（TAB も）を除いてから最初の TAB で分け、
+    左と右の前後の空白を除く。TAB がなければ使う語は ""。空行とコメントは除く。行頭が TAB の行（字下げした語）は、
+    2.5.0 までと同じく1語として読む。使う語の中に TAB が残る行（3列の行）と、使う語が FLAG_REPLACEMENT_MAX 字を
+    超える行は WordsError（ファイル名と行番号つき）。UTF-8 でないときと1万行を超えるときも WordsError。
+    使う語が使わない語と同じ行は、使う語のない行として読む（どの当たりも使う語の中に収まり、その語の指摘が
+    1つも出なくなるのを避ける）。"""
+    entries = []
+    for number, row in enumerate(_words_text_rows(path, data), 1):
+        row = row.strip()
+        if not row or row.startswith("#"):
+            continue
+        word, _, replacement = row.partition("\t")
+        word, replacement = word.strip(), replacement.strip()
+        if "\t" in replacement:
+            raise WordsError("Error opening file {}: {}行目の使う語の中にタブがあります（1行に書けるのは"
+                             "「使わない語<TAB>使う語」の2つまでです）".format(path, number))
+        if len(replacement) > FLAG_REPLACEMENT_MAX:
+            raise WordsError("Error opening file {}: {}行目の使う語は {} 字までです".format(
+                path, number, FLAG_REPLACEMENT_MAX))
+        entries.append((word, "" if replacement == word else replacement))
+    return entries
+
+
+def _words_text_rows(path: str, data: bytes) -> list[str]:
+    """1つのファイルのバイト列を行の並びにする（BOM を外し、改行をそろえる）。UTF-8 でないときと1万行を超えるときは
+    WordsError（行番号つき）。"""
     try:
         data.decode("utf-8")
     except UnicodeDecodeError as error:
@@ -892,43 +1050,272 @@ def _words_lines(path, data):
     if len(rows) > WORDS_MAX_LINES:
         raise WordsError("Error opening file {}: 行が多すぎます（{}行目。{:,}行までです）".format(
             path, WORDS_MAX_LINES + 1, WORDS_MAX_LINES))
-    words = []
-    for row in rows:
-        word = row.strip()
-        if word and not word.startswith("#"):
-            words.append(word)
-    return words
+    return rows
 
 
-def load_words(folder):
+class _PatternError(ValueError):
+    """flag-patterns.txt の1行の正規表現を使えない理由。"""
+
+
+_PATTERN_META = frozenset(".^$*+?{}[]\\|()")
+# \ のあとに書ける英字（字の種類と、幅のない位置）。\z（3.14 から）、\x、\u、\N、後方参照などは使えない
+_PATTERN_ESCAPE_CLASS = frozenset("dDwWsS")
+_PATTERN_ESCAPE_ZERO = frozenset("bBAZ")
+_PATTERN_ESCAPE_CHAR = {"t": "\t", "n": "\n"}
+
+
+def _pattern_escape(pattern: str, index: int, in_class: bool) -> tuple[int, str, str | None]:
+    """index の \\ のあと。(次の位置, 種類（"lit"、"cls"、"zero"）, 字か None)。"""
+    if index + 1 >= len(pattern):
+        raise _PatternError("行の終わりに \\ だけがあります")
+    char = pattern[index + 1]
+    if char in _PATTERN_ESCAPE_CLASS:
+        return index + 2, "cls", None
+    if char in _PATTERN_ESCAPE_CHAR:
+        return index + 2, "lit", _PATTERN_ESCAPE_CHAR[char]
+    if char in _PATTERN_ESCAPE_ZERO and not in_class:
+        return index + 2, "zero", None
+    if char.isascii() and char.isalnum():
+        raise _PatternError("\\{} は使えません（使えるのは \\d \\D \\w \\W \\s \\S \\b \\B \\A \\Z \\t \\n と、記号の前の \\）"
+                            .format(char))
+    return index + 2, "lit", char
+
+
+def _pattern_class(pattern: str, index: int) -> int:
+    """index の [ から ] までの字の組。次の位置。入れ子の [ と、--、&&、~~、|| は断る（Python が FutureWarning を出す）。"""
+    position = index + 1
+    if position < len(pattern) and pattern[position] == "^":
+        position += 1
+    first = True
+    previous = None
+    while True:
+        if position >= len(pattern):
+            raise _PatternError("[ が閉じていません")
+        char = pattern[position]
+        if char == "]" and not first:
+            return position + 1
+        if char == "\\":
+            position = _pattern_escape(pattern, position, True)[0]
+            previous = None
+        else:
+            if char == "[":
+                raise _PatternError("[ ] の中の [ は \\[ と書いてください")
+            if char in "-&~|" and previous == char:
+                raise _PatternError("[ ] の中の {0}{0} は使えません（\\{0} と書いてください）".format(char))
+            previous = char
+            position += 1
+        first = False
+
+
+def _pattern_sequence(pattern: str, index: int, depth: int) -> tuple[int, list[list[str]], int]:
+    """選択肢の並びを読む。(次の位置, 選択肢ごとの必ず当たる字の並びのリスト, 試す数)。試す数は、選択肢の試す数の和。"""
+    branches = []
+    runs = []
+    run = ""
+    cost = 1
+    total = 0
+    while index < len(pattern) and pattern[index] != ")":
+        char = pattern[index]
+        if char == "|":
+            if run:
+                runs.append(run)
+            branches.append(runs)
+            total += cost
+            runs, run, cost = [], "", 1
+            index += 1
+            continue
+        inner_runs = None
+        if char == "(":
+            if pattern.startswith("(?:", index):
+                kind, start = "group", index + 3
+            elif pattern.startswith("(?=", index) or pattern.startswith("(?!", index):
+                kind, start = "look", index + 3
+            elif pattern.startswith("(?<=", index) or pattern.startswith("(?<!", index):
+                kind, start = "look", index + 4
+            elif pattern.startswith("(?", index):
+                raise _PatternError("(? の組は (?: (?= (?! (?<= (?<! だけです（印、名前、原子団、注釈、条件は使えません）")
+            else:
+                raise _PatternError("取り込む組 ( ) は使えません。(?: ) と書いてください")
+            end, inner, inner_cost = _pattern_sequence(pattern, start, depth + 1)
+            if end >= len(pattern):
+                raise _PatternError("( が閉じていません")
+            end += 1
+            single = False
+            if kind == "group" and len(inner) == 1:
+                inner_runs = inner[0]
+            atom_kind = kind
+        elif char == "[":
+            end, atom_kind, literal, inner_cost, single = _pattern_class(pattern, index), "cls", None, 1, True
+        elif char == "\\":
+            end, atom_kind, literal = _pattern_escape(pattern, index, False)
+            inner_cost, single = 1, atom_kind != "zero"
+        elif char == ".":
+            end, atom_kind, literal, inner_cost, single = index + 1, "cls", None, 1, True
+        elif char in "^$":
+            end, atom_kind, literal, inner_cost, single = index + 1, "zero", None, 1, False
+        elif char in _PATTERN_META:
+            raise _PatternError("{0} は、字として使うなら \\{0} と書いてください（繰り返しなら、前に字か組が要ります）".format(char))
+        else:
+            end, atom_kind, literal, inner_cost, single = index + 1, "lit", char, 1, True
+        # 繰り返し
+        quantifier = pattern[end] if end < len(pattern) else ""
+        width, optional, repeated = 1, False, False
+        if quantifier in ("*", "+"):
+            raise _PatternError("上限のない繰り返し（* と +）は使えません。{0,30} のように上限を書いてください")
+        if quantifier == "{":
+            close = pattern.find("}", end)
+            body = pattern[end + 1:close] if close >= 0 else ""
+            pieces = body.split(",")
+            if close < 0 or len(pieces) > 2 or not all(piece.isdigit() and piece.isascii() for piece in pieces):
+                raise _PatternError("{ の書き方は {m} か {m,n} です（上限のない {m,} と、{,n} は使えません）")
+            low, high = int(pieces[0]), int(pieces[-1])
+            if high > PATTERN_MAX_REPEAT or low > high:
+                raise _PatternError("繰り返しの上限は {} までです".format(PATTERN_MAX_REPEAT))
+            if not single:
+                raise _PatternError("{m,n} を付けられるのは1字の要素だけです（組に付けられるのは ? だけです）")
+            width, optional, repeated, end = high - low + 1, low == 0, high > 1, close + 1
+        elif quantifier == "?":
+            if atom_kind in ("zero", "look"):
+                raise _PatternError("幅のない位置（^ $ \\b や先読み・後読み）には ? を付けられません")
+            width, optional, end = 2, True, end + 1
+        if quantifier in ("{", "?") and end < len(pattern):
+            if pattern[end] == "+":
+                raise _PatternError("所有の繰り返し（?+ など）は Python 3.9 で使えません")
+            if pattern[end] == "?":
+                end += 1        # 最短一致
+            if end < len(pattern) and pattern[end] in "*+?{":
+                raise _PatternError("繰り返しが重なっています")
+        # 必ず当たる字（? と {0,n} の外で、先読み・後読みの外の字）
+        if atom_kind == "lit" and not optional:
+            assert literal is not None      # "lit" の要素はいつも字を持つ
+            run += literal
+            if repeated:
+                # x{m,n} の x は2回以上続くことがあるので、x の前と後で字の並びを分ける（ba{2}c は ba と ac）
+                runs.append(run)
+                run = literal
+        else:
+            if run:
+                runs.append(run)
+                run = ""
+            if inner_runs is not None and not optional:
+                runs.extend(inner_runs)
+        cost *= width * inner_cost
+        if cost > PATTERN_MAX_COST:
+            raise _PatternError("試す組み合わせが多すぎます（繰り返しの幅と選択肢の数の積は {:,} までです）".format(PATTERN_MAX_COST))
+        index = end
+    if run:
+        runs.append(run)
+    branches.append(runs)
+    total += cost
+    if total > PATTERN_MAX_COST:
+        raise _PatternError("試す組み合わせが多すぎます（繰り返しの幅と選択肢の数の積は {:,} までです）".format(PATTERN_MAX_COST))
+    return index, branches, total
+
+
+def check_pattern(pattern: str) -> tuple[re.Pattern[str], tuple[tuple[str, ...], ...], int]:
+    """flag-patterns.txt の正規表現を確かめる。(組んだ正規表現, 一番上の選択肢ごとの必ず当たる字の並び, 試す数)。
+    使えない書き方は _PatternError（理由の文）。Python の版で意味の変わる書き方と、手間が行の長さに比例しない書き方を断る。"""
+    import warnings
+    if not pattern:
+        raise _PatternError("正規表現が空です")
+    if len(pattern) > PATTERN_MAX_LENGTH:
+        raise _PatternError("正規表現は {} 字までです".format(PATTERN_MAX_LENGTH))
+    end, branches, cost = _pattern_sequence(pattern, 0, 0)
+    if end != len(pattern):
+        raise _PatternError(") が多すぎます")
+    required = []
+    for runs in branches:
+        runs = tuple(run for run in runs if run.strip())
+        if not runs:
+            raise _PatternError("どの選択肢にも、? や繰り返し、先読み・後読みの外に、必ず当たる字を1字以上書いてください")
+        required.append(runs)
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        try:
+            compiled = re.compile(pattern)
+        except re.error as error:
+            raise _PatternError("正規表現の誤り（{}）".format(error))
+    if caught:
+        raise _PatternError("Python が警告を出す書き方です（{}）".format(caught[0].message))
+    if compiled.groups:
+        raise _PatternError("取り込む組 ( ) は使えません。(?: ) と書いてください")
+    return compiled, tuple(required), cost
+
+
+def _patterns_lines(path: str, data: bytes) -> list[tuple[str, str, re.Pattern[str], tuple[tuple[str, ...], ...]]]:
+    """flag-patterns.txt のバイト列を [(名前, 正規表現の文字列, 組んだ正規表現, 必ず当たる字の並び)] にする。
+    使えない行は WordsError（ファイル名と行番号つき）。"""
+    rows = _words_text_rows(path, data)
+    patterns = []
+    total = 0
+    for number, row in enumerate(rows, 1):
+        if not row.strip() or row.lstrip().startswith("#"):
+            continue
+        if "\t" not in row:
+            raise WordsError("Error opening file {}: {}行目に、名前と正規表現を分けるタブがありません".format(path, number))
+        name, pattern = row.split("\t", 1)
+        # 正規表現の前後は半角の空白とタブだけを除く（全角の空白は正規表現の字として残す。空白で終わる形は [ ] と書く）
+        name, pattern = name.strip(), pattern.strip(" \t")
+        if not name:
+            raise WordsError("Error opening file {}: {}行目の名前が空です".format(path, number))
+        if len(name) > PATTERN_NAME_MAX:
+            raise WordsError("Error opening file {}: {}行目の名前は {} 字までです".format(path, number, PATTERN_NAME_MAX))
+        if len(patterns) >= PATTERNS_MAX:
+            raise WordsError("Error opening file {}: パターンが多すぎます（{}行目。{:,}個までです）".format(
+                path, number, PATTERNS_MAX))
+        try:
+            compiled, required, cost = check_pattern(pattern)
+        except _PatternError as error:
+            raise WordsError("Error opening file {}: {}行目の正規表現を使えません（{}）".format(path, number, error))
+        total += cost
+        if total > PATTERNS_MAX_COST:
+            raise WordsError("Error opening file {}: {}行目までで、試す組み合わせの合計が多すぎます（{:,} までです）".format(
+                path, number, PATTERNS_MAX_COST))
+        patterns.append((name, pattern, compiled, required))
+    return patterns
+
+
+def load_words(folder: str) -> dict | None:
     """フォルダの allow.txt と flag.txt を読む。どちらもないときは None（一覧なし）。
 
     戻り値は {"path": フォルダ, "allow": 語のタプル, "flag": 語のタプル, "allow_lines": 語の数, "flag_lines": 語の数,
-    "allow_sha256": 中身の SHA-256 か None, "flag_sha256": …}。ないほうのファイルは、語なし、数0、SHA-256 は None。
-    読めないファイルは WordsError。"""
+    "allow_sha256": 中身の SHA-256 か None, "flag_sha256": …, "flag_replacements": {使わない語: 使う語}}。
+    flag は TAB の左だけ。ないほうのファイルは、語なし、数0、SHA-256 は None。
+    3.0.0: flag-patterns.txt があれば、"flag_patterns"（(名前, 正規表現の文字列, 組んだ正規表現, 必ず当たる字の並び) の
+    タプル）、"flag_patterns_lines"（パターンの数）、"flag_patterns_sha256" も足す（ないときは、この3つのキーを足さない）。
+    flag-patterns.txt だけがあっても一覧ありとみなす。読めないファイルと使えないパターンは WordsError。"""
     import hashlib
-    result = {"path": folder}
+    result = {"path": folder, "flag_replacements": {}}
     found = False
-    for key, name in WORDS_FILES:
-        path = os.path.join(folder, name)
+    for key, name in WORDS_FILES + (("flag_patterns", PATTERNS_FILE),):
+        path = str(Path(folder) / name)
         try:
-            with open(path, "rb") as handle:
+            with Path(path).open("rb") as handle:
                 data = handle.read()
         except _WORDS_ABSENT:
+            if key == "flag_patterns":
+                continue
             words, digest = [], None
         except (OSError, ValueError) as error:
             reason = getattr(error, "strerror", None) or error
             raise WordsError("Error opening file {}: ファイルを開けません（{}）".format(path, reason))
         else:
             found = True
-            words, digest = _words_lines(path, data), hashlib.sha256(data).hexdigest()
+            if key == "flag":
+                entries = _flag_entries(path, data)
+                result["flag_replacements"] = {word: replacement for word, replacement in entries if replacement}
+                words = [word for word, _ in entries]
+            else:
+                reader = _patterns_lines if key == "flag_patterns" else _words_lines
+                words = reader(path, data)
+            digest = hashlib.sha256(data).hexdigest()
         result[key] = tuple(words)
         result[key + "_lines"] = len(words)
         result[key + "_sha256"] = digest
     return result if found else None
 
 
-def resolve_words(cwd, option=None, disabled=False):
+def resolve_words(cwd: str | None, option: str | None = None, disabled: bool = False) -> dict | None:
     """--words と --no-words から語の一覧を決める。一覧を使うときは load_words の値、使わないときは None。
     disabled（--no-words）なら探さない。cwd は作業ディレクトリ（読めなければ None）。読めない一覧は WordsError。"""
     if disabled:
@@ -937,20 +1324,106 @@ def resolve_words(cwd, option=None, disabled=False):
     return load_words(folder) if folder is not None else None
 
 
-def current_directory():
+def current_directory() -> str | None:
     """作業ディレクトリか、読めない（消えた）ときは None。"""
     try:
-        return os.getcwd()
+        return str(Path.cwd())
     except OSError:
         return None
 
 
-def words_context(words):
-    """JSON の context.words と check の記録の options.words に入れる5つのキー（この順）。"""
-    return {"path": words["path"], "allow_lines": words["allow_lines"], "flag_lines": words["flag_lines"],
-            "allow_sha256": words["allow_sha256"], "flag_sha256": words["flag_sha256"]}
+# ---- コマンドラインで渡されたファイルを読む範囲（3.0.0）----
+# lint、diff、check の3本は、コマンドラインで名前を渡されたファイルのうち、作業フォルダの中で、作業フォルダからの道筋に
+# 点で始まる部分（.env、.git/、sub/.secret/ など）がないものだけを読む。編集中の文書に紛れ込んだ指示で、事前に許された
+# コマンドが鍵や認証のファイルを読んで中身を出さないようにするため。標準入力（-）はいつでも読める。道具が自分で探すフォルダ
+# （状態フォルダ .yomiyasu/、語の一覧 .yomiyasu-words/、references/lists/）と --words のフォルダは、ここでは見ない。
+# 語の一覧を探すときは、linked worktree の .git ファイルと、git フォルダの commondir、config、config.worktree も読む
+# （_worktree_words_folder）。
+
+INPUT_PATH_OUTSIDE = "作業フォルダの外にあるファイルは読みません"
+INPUT_PATH_HIDDEN = "名前が点で始まるファイルと、名前が点で始まるフォルダの中のファイルは読みません"
+INPUT_PATH_NO_CWD = "作業フォルダを読めないため、読んでよいファイルか決められません"
 
 
-def words_label(context):
-    """人が読む出力の「語の一覧: <パス>（allow N語、flag N語）。」。context は words_context の値（読むだけ）。"""
-    return "語の一覧: {}（allow {}語、flag {}語）。".format(context["path"], context["allow_lines"], context["flag_lines"])
+def input_path_problem(path: str) -> str | None:
+    """コマンドラインで渡されたファイルのパスを読んでよいか。読んでよければ None、読まないなら理由の文
+    （INPUT_PATH_OUTSIDE、INPUT_PATH_HIDDEN、INPUT_PATH_NO_CWD のどれか）を返す。ファイルは開かない。
+
+    - は標準入力なので読んでよい。ほかは、シンボリックリンクをたどった本当の場所（os.path.realpath）で比べる。
+    作業フォルダの外（Windows でドライブが違うときも）か、作業フォルダからの道筋に点で始まる部分があれば読まない。
+    パスに NUL を含むときは None を返し、開くときの誤りに任せる（どこも開けない）。ほかの理由で場所を決められないときは
+    外とみなす。"""
+    if path == "-":
+        return None
+    try:
+        base = os.path.normcase(os.path.realpath(os.getcwd()))  # noqa: PTH109 -- same os module as the os.path calls (tests swap it for ntpath)
+    except OSError:
+        return INPUT_PATH_NO_CWD
+    if "\0" in path:
+        return None
+    try:
+        target = os.path.normcase(os.path.realpath(path))
+    except (OSError, ValueError, TypeError):
+        return INPUT_PATH_OUTSIDE
+    parts = _parts_inside(base, target)
+    if parts is None:
+        return INPUT_PATH_OUTSIDE
+    if any(part.startswith(".") for part in parts):
+        return INPUT_PATH_HIDDEN
+    return None
+
+
+def _parts_inside(base: str, target: str) -> list[str] | None:
+    """target が作業フォルダ base の中なら、base からの道筋の部分のリスト（base そのものなら空）、外なら None。
+
+    まず文字列で比べる。合わないときは、target から上のフォルダをたどり、base と同じフォルダ（os.path.samestat）が
+    あるかを見る。macOS で大文字と小文字だけが違うパスや、日本語の名前の NFC と NFD だけが違うパスは、realpath と
+    normcase では同じ文字列にならないが、同じフォルダなので中とみなす（3.0.0）。"""
+    try:
+        if os.path.commonpath([base, target]) == base:
+            relative = os.path.relpath(target, base)
+            return [] if relative == os.curdir else relative.split(os.sep)  # noqa: PTH206 -- split relpath by the os.path flavor
+    except ValueError:
+        # Windows でドライブが違う（C: と D:）など。下で同じフォルダかを見る
+        pass
+    try:
+        base_stat = os.stat(base)  # noqa: PTH116 -- paired with os.path.samestat on the same os module
+    except (OSError, ValueError):
+        return None
+    if not getattr(base_stat, "st_ino", 0):
+        # ファイルの番号を持たないファイルシステムでは、同じフォルダかを決められない
+        return None
+    parts = []
+    current = target
+    while True:
+        try:
+            if os.path.samestat(os.stat(current), base_stat):  # noqa: PTH116 -- paired with os.path.samestat
+                parts.reverse()
+                return parts
+        except (OSError, ValueError):
+            pass
+        parent, name = os.path.split(current)
+        if not name or parent == current:
+            return None
+        parts.append(name)
+        current = parent
+
+
+def words_context(words: dict) -> dict:
+    """JSON の context.words と check の記録の options.words に入れる5つのキー（この順）。flag-patterns.txt があるときだけ、
+    そのあとに flag_patterns_lines と flag_patterns_sha256 を足して7つにする。"""
+    context = {"path": words["path"], "allow_lines": words["allow_lines"], "flag_lines": words["flag_lines"],
+               "allow_sha256": words["allow_sha256"], "flag_sha256": words["flag_sha256"]}
+    if words.get("flag_patterns_sha256") is not None:
+        context["flag_patterns_lines"] = words["flag_patterns_lines"]
+        context["flag_patterns_sha256"] = words["flag_patterns_sha256"]
+    return context
+
+
+def words_label(context: dict) -> str:
+    """人が読む出力の「語の一覧: <パス>（allow N語、flag N語）。」。flag-patterns.txt があれば「、flag-patterns N行」を足す。
+    context は words_context の値（読むだけ）。"""
+    patterns = ("、flag-patterns {}行".format(context["flag_patterns_lines"])
+                if context.get("flag_patterns_sha256") is not None else "")
+    return "語の一覧: {}（allow {}語、flag {}語{}）。".format(context["path"], context["allow_lines"], context["flag_lines"],
+                                                           patterns)

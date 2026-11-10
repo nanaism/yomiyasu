@@ -309,7 +309,8 @@ class Contracts(unittest.TestCase):
                 old.write_bytes(a.encode('utf-8')); new.write_bytes(b.encode('utf-8'))
                 for flags, code in (([], 0), (['--fail-on=meaning-risk'], failed)):
                     result = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/yomiyasu_diff.py'),
-                                             str(old), str(new)] + flags, capture_output=True, text=True, encoding='utf-8')
+                                             str(old), str(new)] + flags, capture_output=True, text=True, encoding='utf-8',
+                                            cwd=folder)
                     self.assertEqual(result.returncode, code, result.stdout + result.stderr)
 
     def test_addition_time_for_full_rewrite(self):

@@ -113,8 +113,9 @@ def run_diff(scripts, before, after, *extra):
     a, b = folder / "pair-a.md", folder / "pair-b.md"
     a.write_bytes(before.encode("utf-8"))
     b.write_bytes(after.encode("utf-8"))
+    # 3.0.0: diff は作業フォルダの外のファイルを読まないので、組を置いたフォルダで動かす
     return subprocess.run([sys.executable, "-B", str(Path(scripts) / "yomiyasu_diff.py")] + list(extra) + [str(a), str(b)],
-                          capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"), timeout=60)
+                          capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"), timeout=60, cwd=str(folder))
 
 
 # ---- spec の F1: 状態の行と1行目 ----

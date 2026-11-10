@@ -7,6 +7,7 @@ import json
 import sys
 import tempfile
 import unittest
+from typing import Optional
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'scripts'))
@@ -14,6 +15,8 @@ import yomiyasu_diff as diff
 import yomiyasu_lint as lint
 import yomiyasu_check as check
 import markdown_visibility as visibility
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import working_folder  # noqa: E402
 
 
 def call(main, args):
@@ -94,7 +97,7 @@ class DocTypes(unittest.TestCase):
         self.assertFalse(lint.lint_text('ありがとう！😀', doc_type='mail')['findings'])
 
     def test_cli_types_and_japanese_help(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             old, new = Path(folder)/'old.md', Path(folder)/'new.md'
             old.write_bytes('確認します。'.encode('utf-8'))
             new.write_bytes('確認します。'.encode('utf-8'))
@@ -136,15 +139,27 @@ class Hedges(unittest.TestCase):
             self.assertEqual(diff.diff(old,new)['hedges']['candidate_count'], 0, (old, new))
         self.assertEqual(diff.diff('関連を示唆する。', '')['hedges']['candidate_count'], 1)
 
-    def test_list_loader(self):
-        def load(data=None, error=None):
-            with mock.patch.object(diff, '_LIST_CACHE', {}), mock.patch.object(diff, '_LIST_PROBLEMS', {}):
-                opener = mock.mock_open(read_data=data) if error is None else mock.Mock(side_effect=error)
-                with mock.patch('builtins.open', opener):
-                    items, source = diff._load_list('hedges')
-                    info = diff._list_info('hedges')
-                    result = diff.diff('関係があるように思える。', '関係がある。')
-                return items, source, info, result
+    def test_list_loader(self) -> None:
+        def load(data: Optional[bytes] = None, error: Optional[OSError] = None) -> tuple[list[str], str, dict, dict]:
+            with tempfile.TemporaryDirectory() as folder:
+                root = Path(folder)
+                (root / 'scripts').mkdir()
+                if isinstance(error, NotADirectoryError):
+                    (root / 'references').write_bytes(b'not a directory')
+                elif error is None:
+                    lists = root / 'references' / 'lists'
+                    lists.mkdir(parents=True)
+                    assert data is not None
+                    (lists / 'hedges.txt').write_bytes(data)
+                with mock.patch.object(diff, '__file__', str(root / 'scripts' / 'yomiyasu_diff.py')), \
+                        mock.patch.object(diff, '_LIST_CACHE', {}), mock.patch.object(diff, '_LIST_PROBLEMS', {}):
+                    denied = (mock.patch.object(Path, 'open', side_effect=error)
+                              if isinstance(error, PermissionError) else contextlib.nullcontext())
+                    with denied:
+                        items, source = diff._load_list('hedges')
+                        info = diff._list_info('hedges')
+                        result = diff.diff('関係があるように思える。', '関係がある。')
+                    return items, source, info, result
         words, source, info, result = load('\ufeff# 一覧\r\n\n ように思える \r\n'.encode('utf-8'))
         self.assertEqual(words, ['ように思える'])
         self.assertEqual(result['hedges']['candidate_count'], 1)
@@ -286,7 +301,7 @@ class Politeness(unittest.TestCase):
 
 class CheckIntegration(unittest.TestCase):
     def test_record_summary_and_replay(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             root=Path(folder); old,new=root/'old.md',root/'new.md'; state=root/'state'
             old.write_bytes('田中様\n結果は関連を示唆する。確認いただきます。'.encode('utf-8'))
             new.write_bytes('佐藤様\n結果は関連を示す。確認する。'.encode('utf-8'))
@@ -308,7 +323,7 @@ class CheckIntegration(unittest.TestCase):
             self.assertEqual((code,err),(0,''),out)
 
     def test_fail_on_citation_and_certainty(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             old,new=Path(folder)/'old.md',Path(folder)/'new.md'
             for a,b,expected in [('既報 (山田 2020)。','既報 (佐藤 2020)。',1),
                                  ('関連を示唆する。','関連を示す。',1),('田中様','佐藤さん',0)]:

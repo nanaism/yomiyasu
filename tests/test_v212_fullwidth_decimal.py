@@ -37,11 +37,11 @@ class FullwidthDecimalTest(unittest.TestCase):
             a, b = os.path.join(folder, "a.md"), os.path.join(folder, "b.md")
             Path(a).write_bytes("値は３．５％だった。\n".encode("utf-8"))
             Path(b).write_bytes("値は４．５％だった。\n".encode("utf-8"))
-            plain = subprocess.run([sys.executable, "-B", str(DIFF), a, b], capture_output=True, timeout=60)
+            plain = subprocess.run([sys.executable, "-B", str(DIFF), a, b], capture_output=True, timeout=60, cwd=folder)
             self.assertEqual(plain.returncode, 0, plain.stderr.decode("utf-8"))
             self.assertEqual(plain.stderr, b"")
             failing = subprocess.run([sys.executable, "-B", str(DIFF), a, b, "--fail-on=meaning-risk"],
-                                     capture_output=True, timeout=60)
+                                     capture_output=True, timeout=60, cwd=folder)
             self.assertEqual(failing.returncode, 1)  # 数値が変わった（3.5 → 4.5）
             self.assertIn("数値が変わった", failing.stdout.decode("utf-8"))
 

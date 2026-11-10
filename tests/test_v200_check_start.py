@@ -246,6 +246,14 @@ class StartTests(ManagedCase):
         self.assertEqual(len(list((self.state / 'exports').glob('*/*'))), 1)
         self.cli('export', '--final', '-', code=2)
 
+    def test_export_keeps_source_input_errors_as_exit_two(self) -> None:
+        for source in (self.root / 'missing.md', self.root):
+            with self.subTest(source=source):
+                result = self.cli('export', '--final', str(self.final), '--source', str(source), code=2)
+                self.assertNotIn('Traceback', result.stderr)
+                self.assertIn('ファイルを開けません', result.stderr)
+                self.assertFalse(self.state.exists())
+
     def test_h12_end_id_source_and_limits_inactive(self):
         for option in ('--run-id', '--source'):
             result = self.start('--max-runs', '1')
@@ -271,6 +279,14 @@ print(json.dumps(r))'''
             quick = json.loads(r.stdout)
             self.assertEqual(quick['status'], cli['status'])
             self.assertEqual(quick['problems'], cli['problems'])
+
+    def test_verify_quick_reports_invalid_arguments(self) -> None:
+        spec = importlib.util.spec_from_file_location('check_invalid_arguments', CHECK)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        for options in ({'run_id': '../invalid'}, {'since': 'not-a-time'}):
+            with self.subTest(options=options), self.assertRaises(ValueError):
+                module.verify_quick(str(self.state), final_path=str(self.final), **options)
 
 
 if __name__ == '__main__':

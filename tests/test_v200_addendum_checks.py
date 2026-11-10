@@ -29,7 +29,7 @@ sys.path.insert(0, str(SCRIPTS))
 
 import yomiyasu_diff  # noqa: E402
 sys.path.insert(0, str(ROOT / "tests"))
-from portable import paced_limit, timing_clock  # noqa: E402
+from portable import paced_limit, timing_clock, files_folder  # noqa: E402
 
 RISK_KEYS = {"kind", "subkind", "old_line", "new_line", "old", "new", "detail", "basis"}
 STIFF_KEYS = {"kind", "subkind", "old_line", "new_line", "old", "new", "detail", "level"}
@@ -166,7 +166,8 @@ class ContrastReversalTest(unittest.TestCase):
             a.write_bytes((DETECT[0] + "\n").encode("utf-8"))
             b.write_bytes((DETECT[1] + "\n").encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(SCRIPTS / "yomiyasu_diff.py"), "--fail-on=meaning-risk",
-                                      str(a), str(b)], capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+                                      str(a), str(b)], capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"),
+                                     cwd=files_folder(a, b))
         result = yomiyasu_diff.diff(DETECT[0] + "\n", DETECT[1] + "\n")
         expected = 1 if result["fail_on_meaning_risk_count"] else 0
         self.assertEqual(process.returncode, expected, process.stdout.decode("utf-8") + process.stderr.decode("utf-8"))
@@ -334,7 +335,8 @@ class ListFileTest(unittest.TestCase):
             a.write_bytes((STIFF_DETECT_1[0] + "\n").encode("utf-8"))
             b.write_bytes((STIFF_DETECT_1[1] + "\n").encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(target / "yomiyasu_diff.py"), "--json", str(a), str(b)],
-                                     capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+                                     capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"),
+                                     cwd=files_folder(a, b))
             self.assertEqual(process.returncode, 0, process.stderr.decode("utf-8"))
             outside = json.loads(process.stdout.decode("utf-8"))
         inside = diff(*STIFF_DETECT_1)
@@ -355,7 +357,8 @@ class ListFileTest(unittest.TestCase):
             a.write_bytes((STIFF_DETECT_1[0] + "\n").encode("utf-8"))
             b.write_bytes((STIFF_DETECT_1[1] + "\n").encode("utf-8"))
             process = subprocess.run([sys.executable, "-B", str(target / "yomiyasu_diff.py"), "--json", str(a), str(b)],
-                                     capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"))
+                                     capture_output=True, env=dict(os.environ, PYTHONIOENCODING="utf-8"),
+                                     cwd=files_folder(a, b))
             self.assertEqual(process.returncode, 0, process.stderr.decode("utf-8"))
             self.assertEqual(json.loads(process.stdout.decode("utf-8"))["stiffness"]["list"], "builtin")
 

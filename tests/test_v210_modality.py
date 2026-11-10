@@ -271,7 +271,7 @@ class RequestTableTest(unittest.TestCase):
                     with self.subTest(row=name, flags=flags):
                         process = subprocess.run([sys.executable, "-B", str(ROOT / "scripts/yomiyasu_diff.py"), "--fail-on",
                                                   "meaning-risk"] + flags + [str(old), str(new)], capture_output=True, text=True,
-                                                 encoding="utf-8")
+                                                 encoding="utf-8", cwd=folder)
                         self.assertEqual(process.returncode, 1 if count else 0, process.stdout + process.stderr)
 
 

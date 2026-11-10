@@ -13,6 +13,8 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import yomiyasu_diff  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import files_folder  # noqa: E402
 
 
 def changes(orig, rewrite):
@@ -404,7 +406,7 @@ class TestOutputShape(unittest.TestCase):
             before.write_bytes("この方式は遅いと思う。\n".encode("utf-8"))
             after.write_bytes("この方式は遅い。\n".encode("utf-8"))
             process = subprocess.run([sys.executable, str(ROOT / "scripts" / "yomiyasu_diff.py"), str(before), str(after), "--json"],
-                                     capture_output=True, text=True, encoding="utf-8")
+                                     capture_output=True, text=True, encoding="utf-8", cwd=files_folder(before, after))
         self.assertEqual(process.returncode, 0)
         self.assertEqual(json.loads(process.stdout)["type_changes"][0]["lost"][0]["kind"], "意見")
 

@@ -207,8 +207,21 @@ class TestVersionStrings(unittest.TestCase):
                     self.assertTrue(path.is_file(), "{} がない".format(path.relative_to(ROOT)))
                     self.assertEqual(script_version(path), version)
 
+    def test_scripts_declare_utf8_encoding(self):
+        """5本のスクリプトは1行目か2行目で UTF-8 を宣言する（PEP 263）。
+
+        宣言がないと、Python 3.9 は長い行を BUFSIZ（Windows では512バイト）ずつ読んで区切りごとに UTF-8 を確かめるので、
+        区切りで日本語の字が割れると SyntaxError で動かない（PR #54 で足した Windows の Python 3.9 の CI で見つけた）。"""
+        pattern = re.compile(rb"^[ \t\f]*#.*?coding[:=][ \t]*utf-8")
+        for directory in SCRIPT_DIRS:
+            for name in SCRIPT_NAMES + ("yomiyasu_hook.py",):
+                path = directory / name
+                with self.subTest(script=str(path.relative_to(ROOT))):
+                    head = path.read_bytes().split(b"\n", 2)[:2]
+                    self.assertTrue(any(pattern.match(line) for line in head), "1行目か2行目に coding: utf-8 の宣言がない")
+
     def test_version_follows_docstring_without_alias(self):
-        """__version__ は docstring の直後に1行で置き、版の文字列を別名の定数に持たせない（4章の1つ目）。"""
+        """__version__ は docstring と必要な __future__ の import の直後に1行で置き、版の文字列を別名の定数に持たせない。"""
         for directory in SCRIPT_DIRS:
             for name in SCRIPT_NAMES:
                 path = directory / name
@@ -220,7 +233,12 @@ class TestVersionStrings(unittest.TestCase):
                     self.assertIsInstance(docstring, ast.Expr)
                     self.assertIsInstance(docstring.value, ast.Constant)
                     self.assertIsInstance(docstring.value.value, str)
-                    statement = tree.body[1]
+                    index = 1
+                    while (index < len(tree.body) and isinstance(tree.body[index], ast.ImportFrom)
+                           and tree.body[index].module == "__future__" and tree.body[index].level == 0):
+                        index += 1
+                    self.assertLess(index, len(tree.body), "__version__ の代入がない")
+                    statement = tree.body[index]
                     self.assertIsInstance(statement, ast.Assign)
                     self.assertEqual([getattr(t, "id", None) for t in statement.targets], ["__version__"])
                     self.assertEqual(statement.lineno, statement.end_lineno)
@@ -350,13 +368,13 @@ class TestCliVersions(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         self.assertEqual(process.stdout, "yomiyasu_lint.py {} (JSON format {})\n".format(version, format_version))
         # 10.1 L1: 完全一致
-        self.assertEqual(process.stdout, "yomiyasu_lint.py 2.5.0 (JSON format 2)\n")
+        self.assertEqual(process.stdout, "yomiyasu_lint.py 3.0.0 (JSON format 2)\n")
         self.assertEqual(process.stderr, "")
 
     def test_diff_and_check_version_lines(self):
         """diff と check の --version は 10.1 L1 の1行（完全一致）で0。"""
-        # diff `yomiyasu_diff.py 2.5.0 (JSON format 2)`、
-        # check `yomiyasu_check.py 2.5.0 (record format 1, result format 1, materials format 1)`。
+        # diff `yomiyasu_diff.py 3.0.0 (JSON format 2)`、
+        # check `yomiyasu_check.py 3.0.0 (record format 1, result format 1, materials format 1)`。
         expected = {
             DIFF: lambda version: "yomiyasu_diff.py {} (JSON format {})".format(
                 version, self.format_constant("DIFF_FORMAT_VERSION")),
@@ -365,8 +383,8 @@ class TestCliVersions(unittest.TestCase):
                 self.format_constant("MATERIALS_FORMAT_VERSION")),
         }
         literal = {
-            DIFF: "yomiyasu_diff.py 2.5.0 (JSON format 2)",
-            CHECK: "yomiyasu_check.py 2.5.0 (record format 1, result format 1, materials format 1)",
+            DIFF: "yomiyasu_diff.py 3.0.0 (JSON format 2)",
+            CHECK: "yomiyasu_check.py 3.0.0 (record format 1, result format 1, materials format 1)",
         }
         for script in (DIFF, CHECK):
             with self.subTest(script=script.name):
@@ -385,7 +403,7 @@ class TestCliVersions(unittest.TestCase):
                                        (DIFF, [before, after, "--json"], "DIFF_FORMAT_VERSION")):
             with self.subTest(script=script.name):
                 version = self.version_of(script)
-                process = run_cli(script, args)
+                process = run_cli(script, args, cwd=str(self.root))
                 self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
                 result = json.loads(process.stdout)
                 self.assert_first_keys(result)

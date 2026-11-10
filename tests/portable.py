@@ -81,3 +81,30 @@ def paced_limit(limit, elapsed):
     scale = 1.0 if sys.platform != "win32" or elapsed < limit else pace_scale()
     detail = "%.3f秒。上限 %.3f秒（%s秒 × この機械の遅さ %.2f）" % (elapsed, limit * scale, limit, scale)
     return limit * scale, detail
+
+
+def files_folder(*paths):
+    """3.0.0: lint、diff、check は、作業フォルダの外のファイルを読まない。試験で一時フォルダのファイルをコマンドに渡すときは、
+    そのファイルのあるフォルダで子を動かす。渡したパスのフォルダに共通する、いちばん深いフォルダの本当の場所を返す。"""
+    import os
+    return os.path.commonpath([os.path.dirname(os.path.realpath(str(path))) for path in paths])
+
+
+class working_folder(object):
+    """3.0.0: lint、diff、check をプロセスの中で動かす試験で、渡すファイルのあるフォルダを作業フォルダにする（with の間だけ。
+    終わると元の作業フォルダに戻す。一時フォルダを消す前に戻るよう、with では一時フォルダのあとに書く）。"""
+
+    def __init__(self, path):
+        self.path = str(path)
+        self.previous = None
+
+    def __enter__(self):
+        import os
+        self.previous = os.getcwd()
+        os.chdir(self.path)
+        return self.path
+
+    def __exit__(self, *exc):
+        import os
+        os.chdir(self.previous)
+        return False

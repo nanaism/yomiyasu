@@ -292,7 +292,8 @@ class Contracts(unittest.TestCase):
                 for flag in ([], ['--fail-on=meaning-risk']):
                     with self.subTest(tag=tag, flag=flag):
                         run = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/yomiyasu_diff.py'),
-                                              *flag, str(old), str(new)], capture_output=True, text=True, encoding='utf-8')
+                                              *flag, str(old), str(new)], capture_output=True, text=True, encoding='utf-8',
+                                             cwd=folder)
                         self.assertEqual(run.returncode, int(tag == 'C1' and bool(flag)), run.stderr)
 
     def test_fail_on_line_only_mentions_certainty_when_counted(self):

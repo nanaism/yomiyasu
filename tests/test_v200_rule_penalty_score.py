@@ -82,7 +82,7 @@ class RulePenaltyScoreTest(unittest.TestCase):
 
     def test_01_repeated_corpus_above_floor(self):
         paths = _corpus()
-        self.assertEqual(len(paths), 169)
+        self.assertEqual(len(paths), 181)
         for path in paths:
             text = path.read_text(encoding="utf-8-sig").rstrip("\n")
             for mode in (None, "article"):

@@ -19,6 +19,8 @@ CORPUS = ROOT / "tests" / "corpus"
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import yomiyasu_lint  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import working_folder  # noqa: E402
 
 
 RULE = "cleft_list_ending"
@@ -245,7 +247,7 @@ class CleftListEndingTest(unittest.TestCase):
                     self.assertEqual(rules(SAMPLE, doc_type=value), [RULE])
 
     def test_info_does_not_change_the_exit_code(self):
-        with tempfile.TemporaryDirectory() as folder:
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             path = Path(folder) / "cleft.md"
             path.write_bytes(SAMPLE.encode("utf-8"))
             for options in ([], ["--strict"], ["--fail-on=warn"], ["--fail-on=error"]):

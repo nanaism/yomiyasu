@@ -244,7 +244,7 @@ def corpus_files():
 
 
 def corpus_pairs():
-    """diff の組（tools/existing_keys_check.py と同じ136組に、2.5.0 で edge_cases に足した6本の組を加えた142組）。推敲の48組が先。"""
+    """diff の組（tools/existing_keys_check.py と同じ136組に、2.5.0 で edge_cases に足した6本の組と、3.0.0 で足した12本の組を加えた154組）。推敲の48組が先。"""
     pairs = []
     for name in sorted(os.listdir(str(CORPUS / "yomiyasu_rewritten"))):
         source = ("blacklist_ai", name[:-6] + ".md") if name.endswith("_bl.md") else ("raw_ai", name)
@@ -391,6 +391,9 @@ class DocTypeCase(unittest.TestCase):
         self.addCleanup(folder.cleanup)
         self.root = Path(os.path.realpath(folder.name))
         self.state = self.root / ".yomiyasu"
+        # 3.0.0: lint、diff、check は作業フォルダの外のファイルを読まないので、ファイルを置く一時フォルダで動かす
+        self.addCleanup(os.chdir, os.getcwd())
+        os.chdir(str(self.root))
 
     def write(self, name, text):
         path = self.root / name
@@ -443,8 +446,8 @@ class UnchangedOutputTest(unittest.TestCase):
         self.assertEqual(changed, [], "{} の出力が fixture と違う（行の出どころは fixture の source_commit）".format(name))
 
     def test_fixture_covers_the_whole_corpus(self):
-        self.assertEqual(len(corpus_files()), 169)
-        self.assertEqual(len(corpus_pairs()), 142)
+        self.assertEqual(len(corpus_files()), 181)
+        self.assertEqual(len(corpus_pairs()), 154)
         self.assertEqual(sorted(self.fixture["lint"]), corpus_files())
         self.assertEqual(sorted(self.fixture["diff"]), sorted(a + "|" + b for a, b in corpus_pairs()))
 
@@ -1119,10 +1122,10 @@ class OptionTest(DocTypeCase):
 
     def test_d8_versions_do_not_change(self):
         """D8: --version と形式の版は変えない（9.7）。"""
-        self.assertEqual(call(yomiyasu_lint.main, ["--version"])[1], "yomiyasu_lint.py 2.5.0 (JSON format 2)\n")
-        self.assertEqual(call(yomiyasu_diff.main, ["--version"])[1], "yomiyasu_diff.py 2.5.0 (JSON format 2)\n")
+        self.assertEqual(call(yomiyasu_lint.main, ["--version"])[1], "yomiyasu_lint.py 3.0.0 (JSON format 2)\n")
+        self.assertEqual(call(yomiyasu_diff.main, ["--version"])[1], "yomiyasu_diff.py 3.0.0 (JSON format 2)\n")
         self.assertEqual(call(yomiyasu_check.main, ["--version"])[1],
-                         "yomiyasu_check.py 2.5.0 (record format 1, result format 1, materials format 1)\n")
+                         "yomiyasu_check.py 3.0.0 (record format 1, result format 1, materials format 1)\n")
 
 
 # ---- E. 速さ ----
@@ -1202,10 +1205,14 @@ class SkillFilesTest(unittest.TestCase):
             self.assertEqual(rows, expected, str(path))
 
     def test_c5_skill_md(self):
-        """C5: SKILL.md の種類の表に13の値がちょうど1回ずつあり、3つの読者の値、「ここに説明が必要です」、--doc-type、
-        --reader がある（--doc-type と --reader が check run の --help にあることは TableTest.test_help_texts）。"""
+        """C5: SKILL.md の種類の一覧（Step 1 の「種類は 〜 の13種類で」の文）に13の値がちょうど1回ずつあり、3つの読者の値、
+        「ここに説明が必要です」、--doc-type、--reader がある（--doc-type と --reader が check run の --help にあることは
+        TableTest.test_help_texts）。
+        3.0.0 で種類の表を文の一覧にした（種類ごとの当てない規則は references/doc-types/<値>.md の「普通な書き方」にある）。"""
         text = (PACKAGE / "SKILL.md").read_text(encoding="utf-8")
-        found = re.findall(r"^[ \t]*\|\s*([a-z]+)（", text, re.M)
+        lists = re.findall(r"種類は (.+?)の13種類で", text)
+        self.assertEqual(len(lists), 1, lists)
+        found = re.findall(r"[a-z]+", lists[0])
         self.assertEqual(sorted(found), sorted(DOC_TYPE_VALUES + tuple(row[0] for row in NEW_DOC_TYPES)))
         for word in READER_VALUES + ("ここに説明が必要です", "--doc-type", "--reader"):
             self.assertIn(word, text)
