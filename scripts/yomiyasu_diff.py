@@ -27,7 +27,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
 """
 
 from __future__ import annotations
-__version__ = "3.0.1"
+__version__ = "3.1.0"
 
 import os
 import errno
@@ -6155,7 +6155,7 @@ def parse_list(text: str, pattern: bool = False) -> list:
     pattern が真で3つ目の欄（タブのあと）がある行は (名前, 正規表現, 3つ目の欄) にする（気持ちの語の「原文の言い方」）。
     先頭の BOM（U+FEFF）は外す（Windows のメモ帳の「UTF-8（BOM 付き）」。反証で見つけた例）。
     正規表現の誤りはここでは確かめない（_load_list が確かめ、誤りがあれば内蔵の一覧にする）。"""
-    if text.startswith("﻿"):
+    if text.startswith("\ufeff"):
         text = text[1:]
     out = []
     for line in text.split("\n"):

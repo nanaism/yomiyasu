@@ -259,7 +259,7 @@ mv .agents/yomiyasu.bak-20261024-153000 .agents/skills/yomiyasu
 
 移したフォルダは git に入れず、要らなくなったら消してください。
 
-この置き方では Codex がスキルを `yomiyasu:yomiyasu` という名前で一覧に載せます。呼ぶときは「/yomiyasu」とだけ送るか、依頼の文に「yomiyasu で」と書いてください。一覧の名前どおり `$yomiyasu:yomiyasu` と書いても呼べます。コピーしたフォルダは自動では新しくなりません。最新にするには、同じコマンドをもう一度実行してください。
+この置き方では Codex がスキルを `yomiyasu` という名前で一覧に載せます。呼ぶときは「/yomiyasu」とだけ送るか、依頼の文に「yomiyasu で」と書いてください。一覧の名前どおり `$yomiyasu` と書いても呼べます。3.0.1 までに入れたフォルダをそのまま使っている場合は、名前は `yomiyasu:yomiyasu` のままで、`$yomiyasu:yomiyasu` と書きます。3.1.0 以降に入れ直したときに書き換える所と、名前が `yomiyasu` にならない置き方は、[docs/usage.md](./docs/usage.md#codex-で使うリポジトリに置いたとき) にまとめています。コピーしたフォルダは自動では新しくなりません。最新にするには、同じコマンドをもう一度実行してください。
 
 ### スキルのフォルダの中を書き換えたとき
 
@@ -309,15 +309,17 @@ AI が書いたり直したりする日本語をいつも yomiyasu に通した�
 
 #### Codex
 
-`npx skills add` や `gh skill install` で入れた場合も、作業するリポジトリの `.agents/skills/` に置いた場合も、スキルの名前は `yomiyasu:yomiyasu` です。スキルのフォルダに Codex 用のプラグインの設定 `.codex-plugin/plugin.json` が入っているためです。次の1行を書きます。
+`npx skills add` や `gh skill install` で入れた場合も、作業するリポジトリの `.agents/skills/` に置いた場合も、スキルの名前は `yomiyasu` です。次の1行を書きます。
 
 ```text
-記事、ドキュメント、PR の説明文、コミットメッセージなどの日本語の文章を書いたり直したりするときは、常に yomiyasu:yomiyasu スキルで推敲してください。コードを直したあとの作業の報告には使わなくてかまいません。
+記事、ドキュメント、PR の説明文、コミットメッセージなどの日本語の文章を書いたり直したりするときは、常に yomiyasu スキルで推敲してください。コードを直したあとの作業の報告には使わなくてかまいません。
 ```
+
+3.0.1 までに入れたスキルは、名前が `yomiyasu:yomiyasu` です。3.1.0 以降に入れ直したら、この1行の `yomiyasu:yomiyasu` を `yomiyasu` に書き換えてください。
 
 1つのリポジトリだけで使うならそのリポジトリの直下の `AGENTS.md` に、すべてのリポジトリで使うなら `~/.codex/AGENTS.md`（`CODEX_HOME` を設定しているときはその場所の `AGENTS.md`）に書きます。書いたあとに始めた会話から有効になります。
 
-コードや設定を直したあとの報告まで推敲させたいときは、「日本語の文章を書いたり直したりするときは、常に yomiyasu:yomiyasu スキルで推敲してください。」とだけ書きます。この書き方にすると、Codex は変数の名前を変えるだけの作業でも、最後の報告を書く前に yomiyasu を読みます。
+コードや設定を直したあとの報告まで推敲させたいときは、「日本語の文章を書いたり直したりするときは、常に yomiyasu スキルで推敲してください。」とだけ書きます。この書き方にすると、Codex は変数の名前を変えるだけの作業でも、最後の報告を書く前に yomiyasu を読みます。
 
 #### `npx openskills install` で入れたとき
 
@@ -519,7 +521,7 @@ Claude Code か Codex の設定に貼ったときだけ動く補助のスクリ�
 
 ```text
 .
-├── .claude-plugin/                   # Claude Code用プラグイン設定
+├── .claude-plugin/                   # プラグイン設定（Claude Code 用。Codex もプラグインとして入れるときに読む）
 │   ├── plugin.json
 │   └── marketplace.json
 ├── .github/workflows/ci.yml          # 自動の試験（テスト一式と、2か所のファイルが同じかの確認）
@@ -548,7 +550,6 @@ Claude Code か Codex の設定に貼ったときだけ動く補助のスクリ�
 │   └── lists/                        # 検査に使う語の一覧（名詞化、強める語、気持ちの語、慎重な言い方、事実の穴の候補、意味の薄いカタカナ語、評価を言い直す語の組）
 ├── skills/                           # 配布用スキル（唯一のSKILL.mdと参照文書・検査ツール）
 │   └── yomiyasu/
-│       ├── .codex-plugin/plugin.json  # Codex でスキルを yomiyasu:yomiyasu の名前で載せるための設定
 │       ├── SKILL.md
 │       ├── references/
 │       └── scripts/

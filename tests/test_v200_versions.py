@@ -281,10 +281,13 @@ class TestVersionStrings(unittest.TestCase):
                 widened = lines[:index] + [lines[index] + " " + broad] + lines[index + 1:]
                 self.assertNotEqual(allowed_tools_problems(widened), [])
 
-    def test_codex_manifest_has_only_the_name(self):
-        """6. skills/yomiyasu/.codex-plugin/plugin.json は名前だけを持つ（Codex の .agents/skills で yomiyasu:yomiyasu の名前にするため。版を持たないので、版を上げるときに変えない）。skills/yomiyasu には .claude-plugin を置かない（Claude のプラグインの設定は、ルートの .claude-plugin の1組だけにする）。"""
-        self.assertEqual(read_json(PACKAGE / ".codex-plugin" / "plugin.json"), {"name": read_json(ROOT / ".claude-plugin" / "plugin.json")["name"]})
-        self.assertFalse((PACKAGE / ".claude-plugin").exists())
+    def test_skill_folder_has_no_manifest(self):
+        """6. skills/yomiyasu にプラグインの設定を置かない。版を書く設定は、直下の .claude-plugin の2つだけ。
+        2.0.2 から 3.0.1 までは、名前だけの .codex-plugin/plugin.json をここに置いていた（Codex の .agents/skills で
+        yomiyasu:yomiyasu の名前にするため）。3.1.0 で外した（issue #61。理由は tests/test_skill_package.py）。"""
+        for name in (".codex-plugin", ".claude-plugin"):
+            with self.subTest(name=name):
+                self.assertFalse((PACKAGE / name).exists())
 
 
 class TestCliVersions(unittest.TestCase):
@@ -368,13 +371,13 @@ class TestCliVersions(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stdout + process.stderr)
         self.assertEqual(process.stdout, "yomiyasu_lint.py {} (JSON format {})\n".format(version, format_version))
         # 10.1 L1: 完全一致
-        self.assertEqual(process.stdout, "yomiyasu_lint.py 3.0.1 (JSON format 2)\n")
+        self.assertEqual(process.stdout, "yomiyasu_lint.py 3.1.0 (JSON format 2)\n")
         self.assertEqual(process.stderr, "")
 
     def test_diff_and_check_version_lines(self):
         """diff と check の --version は 10.1 L1 の1行（完全一致）で0。"""
-        # diff `yomiyasu_diff.py 3.0.1 (JSON format 2)`、
-        # check `yomiyasu_check.py 3.0.1 (record format 1, result format 1, materials format 1)`。
+        # diff `yomiyasu_diff.py 3.1.0 (JSON format 2)`、
+        # check `yomiyasu_check.py 3.1.0 (record format 1, result format 1, materials format 1)`。
         expected = {
             DIFF: lambda version: "yomiyasu_diff.py {} (JSON format {})".format(
                 version, self.format_constant("DIFF_FORMAT_VERSION")),
@@ -383,8 +386,8 @@ class TestCliVersions(unittest.TestCase):
                 self.format_constant("MATERIALS_FORMAT_VERSION")),
         }
         literal = {
-            DIFF: "yomiyasu_diff.py 3.0.1 (JSON format 2)",
-            CHECK: "yomiyasu_check.py 3.0.1 (record format 1, result format 1, materials format 1)",
+            DIFF: "yomiyasu_diff.py 3.1.0 (JSON format 2)",
+            CHECK: "yomiyasu_check.py 3.1.0 (record format 1, result format 1, materials format 1)",
         }
         for script in (DIFF, CHECK):
             with self.subTest(script=script.name):
