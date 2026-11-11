@@ -15,7 +15,7 @@ mail（メール・チャット）と paper（論文・研究レポート）も�
 """
 
 from __future__ import annotations
-__version__ = "3.0.0"
+__version__ = "3.0.1"
 
 import sys
 
