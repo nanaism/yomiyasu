@@ -346,12 +346,13 @@ def _check_row(argv, state=None, stdin=None):
     return _digest(code, _masked(out, state), _masked(err, state))
 
 
-def unchanged_check():
-    """check の出力の要約。キーは「元|後」。全組で run と verify、推敲の48組ではほかの使い方も。"""
+def unchanged_check(only=None):
+    """check の出力の要約。キーは「元|後」。全組で run と verify、推敲の48組ではほかの使い方も。
+    only に組の並びを渡すと、その組だけを動かす。"""
     rows = {}
     pairs = corpus_pairs()
     rewritten = set(pair for pair in pairs if pair[1].startswith("yomiyasu_rewritten/"))
-    for a, b in pairs:
+    for a, b in (pairs if only is None else only):
         old, new = str(CORPUS / a), str(CORPUS / b)
         row = {}
         with tempfile.TemporaryDirectory(prefix="yomiyasu-g7-") as state:
@@ -438,8 +439,9 @@ class UnchangedOutputTest(unittest.TestCase):
     def setUpClass(cls):
         cls.fixture = json.loads(UNCHANGED.read_text(encoding="utf-8"))
 
-    def compare(self, name, current):
-        expected = self.fixture[name]
+    def compare(self, name, current, expected=None):
+        """current を fixture の name の行と照らす。expected を渡すと、fixture のその行だけと照らす。"""
+        expected = self.fixture[name] if expected is None else expected
         self.assertEqual(sorted(current), sorted(expected), "{} の対象が fixture と違う".format(name))
         changed = ["{} {}".format(key, variant) for key in sorted(expected) for variant in sorted(expected[key])
                    if current[key].get(variant) != expected[key][variant]]
@@ -450,6 +452,14 @@ class UnchangedOutputTest(unittest.TestCase):
         self.assertEqual(len(corpus_pairs()), 154)
         self.assertEqual(sorted(self.fixture["lint"]), corpus_files())
         self.assertEqual(sorted(self.fixture["diff"]), sorted(a + "|" + b for a, b in corpus_pairs()))
+        self.assertEqual(sorted(self.fixture["check"]), sorted(a + "|" + b for a, b in corpus_pairs()))
+        # check の試験は組を CHECK_PARTS 個に分けて流す。分けた組を合わせると、全部の組がちょうど1回ずつ入り、
+        # 分けた試験は part1 から part{CHECK_PARTS} まで1つずつある
+        parts = [pair for index in range(self.CHECK_PARTS) for pair in self.check_part(index)]
+        self.assertEqual(sorted(parts), sorted(corpus_pairs()))
+        names = sorted(name for name in dir(type(self)) if name.startswith("test_check_outputs_match_before_g7"))
+        self.assertEqual(names, sorted("test_check_outputs_match_before_g7_part{}".format(index + 1)
+                                       for index in range(self.CHECK_PARTS)))
 
     def test_lint_outputs_match_before_g7(self):
         """lint の行は G7 の前（45a5885 の作業ツリー）の出力のまま。"""
@@ -459,9 +469,36 @@ class UnchangedOutputTest(unittest.TestCase):
         """名前は G7 の前と照らしていたときのまま。diff の行は diff の詰めとその直しのあとの出力（fixture の source_commit）。"""
         self.compare("diff", unchanged_diff())
 
-    def test_check_outputs_match_before_g7(self):
+    # check の行は、組を CHECK_PARTS 個に分け、1つずつ別の試験で照らす（試験はクラスのあとの _add_check_part_tests が作る）。
+    # 1本の試験にまとめると check を644回動かし、試験一式の時間の約2割を1本で使う。並列に流すときに、1つの worker を
+    # 長くふさがないよう分けている。
+    CHECK_PARTS = 8
+
+    @staticmethod
+    def check_part(index):
+        """index 番目（0 から）の組の並び。corpus_pairs() の順に1つずつ配る（使い方の多い推敲の48組が先に並ぶので、
+        どの組にも6つずつ入る）。"""
+        return corpus_pairs()[index::UnchangedOutputTest.CHECK_PARTS]
+
+    def compare_check_part(self, index):
         """名前は G7 の前と照らしていたときのまま。check の行は diff の詰めとその直しのあとの出力（fixture の source_commit）。"""
-        self.compare("check", unchanged_check())
+        pairs = self.check_part(index)
+        expected = {a + "|" + b: self.fixture["check"][a + "|" + b] for a, b in pairs}
+        self.compare("check", unchanged_check(pairs), expected)
+
+
+def _add_check_part_tests():
+    """test_check_outputs_match_before_g7_part1〜part{CHECK_PARTS} を UnchangedOutputTest に足す。
+    試験の数を CHECK_PARTS だけで決めて、どの試験も照らさない組ができないようにする。"""
+    for index in range(UnchangedOutputTest.CHECK_PARTS):
+        def test(self, index=index):
+            self.compare_check_part(index)
+        test.__name__ = "test_check_outputs_match_before_g7_part{}".format(index + 1)
+        test.__qualname__ = "UnchangedOutputTest." + test.__name__
+        setattr(UnchangedOutputTest, test.__name__, test)
+
+
+_add_check_part_tests()
 
 
 class DefaultsTest(DocTypeCase):
