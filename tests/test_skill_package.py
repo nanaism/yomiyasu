@@ -109,9 +109,10 @@ class SkillPackageTests(unittest.TestCase):
                 self.assertEqual((root_references / relative).read_bytes(), (package_references / relative).read_bytes())
 
     def test_distributed_text_has_no_hidden_characters(self):
-        # 3.1.0: tools that scan a skill for hidden characters (apm does, before it installs one) count these
-        # as warnings, and tools that strip hidden characters from a file (apm audit --file <path> --strip)
-        # remove them. Stripping one out of code changes what the code does:
+        # 3.1.0: tools that scan a skill for hidden characters report these (apm does so before it installs a
+        # skill: a byte order mark inside a file is a warning, and bidirectional controls or tag characters
+        # stop the install), and tools that strip hidden characters from a file (apm audit --file <path>
+        # --strip) remove them. Stripping one out of code changes what the code does:
         # text.startswith("<byte order mark>") turns into text.startswith(""), which is always true, and the
         # word lists then lose their first character. In code, write such a character as an escape
         # ("\ufeff"), which no scanner touches.
@@ -122,10 +123,13 @@ class SkillPackageTests(unittest.TestCase):
                 continue
             if path.suffix == ".png":
                 continue
-            text = path.read_text(encoding="utf-8")  # every other distributed file is UTF-8 text
             checked += 1
             with self.subTest(path=str(relative)):
-                self.assertEqual(hidden_characters(text), [])
+                try:
+                    text = path.read_text(encoding="utf-8")  # every other distributed file is UTF-8 text
+                except UnicodeDecodeError as error:
+                    self.fail("{} is not UTF-8 text: {}".format(relative, error))
+                self.assertEqual(hidden_characters(text), [], str(relative))
         self.assertGreater(checked, 30)
 
     def test_hidden_character_check_finds_what_it_looks_for(self):
@@ -134,6 +138,14 @@ class SkillPackageTests(unittest.TestCase):
         self.assertEqual(hidden_characters("a\u200bb\u200d\n\u202e\n\U000e0041"), [(1, "U+200B"), (1, "U+200D"), (2, "U+202E"), (3, "U+E0041")])
         # Visible or ordinary characters stay: ideographic space, emoji with its selector, no-break space.
         self.assertEqual(hidden_characters("\u3000全角の空白 \u2728\ufe0f \u00a0"), [])
+        # Both ends of every range, written out here so that a range dropped from the table is noticed.
+        for code in (0x00AD, 0x061C, 0x200B, 0x200F, 0x202A, 0x202E, 0x2060, 0x2064, 0x2066, 0x206F,
+                     0xFE00, 0xFE0E, 0xFFF9, 0xFFFB, 0xE0001, 0xE007F, 0xE0100, 0xE01EF):
+            with self.subTest(code="U+{:04X}".format(code)):
+                self.assertEqual(hidden_characters("a" + chr(code) + "b"), [(1, "U+{:04X}".format(code))])
+        # A byte order mark is left alone only as the very first character of the text.
+        self.assertEqual(hidden_characters("first\n\ufeffsecond"), [(2, "U+FEFF")])
+        self.assertEqual(hidden_characters("a\ufeff"), [(1, "U+FEFF")])
         # An escape in source code is plain ASCII text.
         self.assertEqual(hidden_characters('text.startswith("\\ufeff")'), [])
 

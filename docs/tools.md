@@ -504,7 +504,7 @@ yomiyasu-check: executed via=run run=20261015T194529Z-0cf033b8 attempt=1 final=s
 
 - 端末で `python3 -B /path/to/yomiyasu/scripts/yomiyasu_check.py start --source docs/draft.md` を実行します。最終稿を別のファイルに書くときは `--final docs/final.md` を足します。
 - Claude Code では、プロジェクトに置いたスキルを `/yomiyasu docs/draft.md を読みやすくして` のように呼び、原稿のファイルを書くと、フックが登録します。登録するのは、依頼の文で最初に出てくるファイル1つだけです。2つ以上の原稿は、端末で1つずつ `start` してください。
-- Codex では、`$yomiyasu docs/draft.md を読みやすくして` のように依頼の文にスキルの名前を書くと、フックが原稿を登録します。`$yomiyasu:yomiyasu` と書いても登録します。登録するのは、Claude Code と同じく最初に出てくるファイル1つだけです。フックが原稿を登録することと、Codex がスキルの指示を読み込むことは別です。Codex は、`$` に続く名前が一覧の名前と同じときだけ指示を読み込みます。一覧の名前は、3.1.0 以降を `.agents/skills/` に写した形では `yomiyasu`、3.0.1 までは `yomiyasu:yomiyasu` です。2.0.0 でフックを試したときは一覧の名前が `yomiyasu:yomiyasu` だったので、`$yomiyasu` と書いた回ではスキルの指示が読み込まれませんでした。
+- Codex では、`$yomiyasu docs/draft.md を読みやすくして` のように依頼の文にスキルの名前を書くと、フックが原稿を登録します。`$yomiyasu:yomiyasu` と書いても登録します。フックが見るのはこの2つの書き方だけで、別のプラグインの設定の名前が頭に付いた形（`$その名前:yomiyasu`）は登録しません。登録するのは、Claude Code と同じく最初に出てくるファイル1つだけです。フックが原稿を登録することと、Codex がスキルの指示を読み込むことは別です。Codex がスキルの指示を自動で差し込むのは、`$` に続く名前が一覧の名前と同じときだけです。一覧の名前は、3.1.0 以降を `.agents/skills/` に写した形では `yomiyasu`、3.0.1 までは `yomiyasu:yomiyasu` です。2.0.0 でフックを試したときは一覧の名前が `yomiyasu:yomiyasu` だったので、`$yomiyasu` と書いた回ではスキルの指示が読み込まれませんでした。
 
 ### 入れ方
 
