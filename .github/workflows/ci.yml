@@ -51,14 +51,17 @@ jobs:
         run: ty check --python-version 3.9 skills/yomiyasu/scripts
 
   test:
-    name: pytest (Python ${{ matrix.python-version }})
+    name: pytest (Python ${{ matrix.python-version }}, ${{ matrix.part }})
     # Pinned rather than ubuntu-latest: Python 3.9 is past its end of life and may not be built for newer images.
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.9", "3.14"]
+        # The tests that do not measure time are dealt into numbered parts (tests/conftest.py, --part), one job each.
+        # The last entry runs the timing tests. tests/test_ci_parts.py checks that this list and the commands agree.
+        part: ["1/3", "2/3", "3/3", "timing"]
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
@@ -66,17 +69,22 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install pytest
         run: python -m pip install --disable-pip-version-check pytest pytest-xdist
-      - name: Run the test suite
-        run: python -m pytest -q -ra --durations=25 -n auto --dist worksteal -m "not timing"
-      # Timing tests compare elapsed time with a limit; run them one at a time so that other tests do not load the CPU.
+      - name: Run one part of the test suite
+        if: matrix.part != 'timing'
+        run: python -m pytest -q -ra --durations=25 -n auto --dist worksteal -m "not timing" --part ${{ matrix.part }}
+      # Timing tests compare elapsed time with a limit; run them one at a time in their own job so that other tests do not load the CPU.
       - name: Run the timing tests
-        if: success() || failure()
+        if: matrix.part == 'timing'
         run: python -m pytest -q -ra --durations=10 -m timing
 
   test-windows:
-    name: pytest (Windows, Python 3.12)
+    name: pytest (Windows, Python 3.12, ${{ matrix.part }})
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ["1/3", "2/3", "3/3", "timing"]
     steps:
       # Keep the committed line endings: the tests and fixtures compare bytes, and Windows runners convert to CRLF by default.
       - name: Keep line endings as committed
@@ -87,12 +95,13 @@ jobs:
           python-version: "3.12"
       - name: Install pytest
         run: python -m pip install --disable-pip-version-check pytest pytest-xdist
-      - name: Run the test suite
+      - name: Run one part of the test suite
+        if: matrix.part != 'timing'
         env:
           PYTHONUTF8: "1"
-        run: python -m pytest -q -ra --durations=25 -n auto --dist worksteal -m "not timing"
+        run: python -m pytest -q -ra --durations=25 -n auto --dist worksteal -m "not timing" --part ${{ matrix.part }}
       - name: Run the timing tests
-        if: success() || failure()
+        if: matrix.part == 'timing'
         env:
           PYTHONUTF8: "1"
         run: python -m pytest -q -ra --durations=10 -m timing
