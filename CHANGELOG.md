@@ -15,7 +15,7 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
   - `AGENTS.md` に足した1行の `yomiyasu:yomiyasu` を `yomiyasu` にします（README の「毎回 yomiyasu を使いたいとき」）。
   - Codex の設定でスキルを名前で指定している場合は、その名前を `yomiyasu` にします（`config.toml` の `[[skills.config]]` の `name`、`environments.toml` の `skills` の `required`）。
 - {OLD_FORMS_RESULT}
-- 前のフォルダを消さずに新しいファイルを重ねる入れ方（`gh skill install --force` など）では、3.1.0 に更新しても前のバージョンの `.codex-plugin/` が残り、名前は `yomiyasu:yomiyasu` のままです。`.codex-plugin/` を消すか、フォルダを消してから入れ直してください。
+- 前のフォルダを消さずに新しいファイルを重ねる入れ方（`gh skill install --force` など）では、3.1.0 に更新しても前のバージョンのプラグインの設定（`.codex-plugin/`。2.0.1 までの写しでは `.claude-plugin/`）が残り、名前は `yomiyasu:yomiyasu` のままです。残った設定のフォルダを消すか、スキルのフォルダを消してから入れ直してください。
 - 次の形では、名前は変わりません。
   - Claude Code（プラグインで入れた形は `yomiyasu:yomiyasu`、`npx skills add` や `gh skill install` で入れた形は `yomiyasu`）、Claude.ai の ZIP、`npx openskills install`。
   - このリポジトリを clone して `.agents/skills/yomiyasu` を clone の中の `skills/yomiyasu` への symlink にした形と、このリポジトリを Codex のプラグインとして入れた形。どちらも `yomiyasu:yomiyasu` のままです。Codex は、スキルのフォルダから上のフォルダへ順にプラグインの設定を探し、最初に見つけた設定の名前をスキルの名前の頭に付けます。この2つの形では、リポジトリの直下の `.claude-plugin/plugin.json` が見つかります。
@@ -38,7 +38,7 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
 - 3.0.1 と 3.1.0 の lint、diff、check の CLI を同じ5,131件の入力で動かし、バージョンの文字列をそろえて比べました（Python 3.14.5 と 3.9.6）。標準出力、標準エラー、終了コードは5,131件すべて同じでした。語の一覧（`.yomiyasu-words/`）を置いた形でも、2,715件の出力が同じでした。
 - Codex（codex-cli 0.164.0）で、モデルを呼ぶ前に決まる一覧の名前と `$` の扱いを確かめました。`.codex-plugin/plugin.json` のあるフォルダを `.agents/skills/yomiyasu` に写すと名前は `yomiyasu:yomiyasu`、ないフォルダを写すと `yomiyasu` です。名前が `yomiyasu` のとき、`$yomiyasu` と書いた依頼にはスキルの指示が差し込まれ、`$yomiyasu:yomiyasu` と書いた依頼には差し込まれませんでした。
 - {CODEX_MODEL_RESULT}
-- Codex のプラグインとして入れる形は、GitHub から `codex plugin marketplace add nanaism/yomiyasu` と `codex plugin add yomiyasu@yomiyasu` で入れて確かめました（codex-cli 0.164.0。入ったのは公開している 3.0.1 で、一覧の名前は `yomiyasu:yomiyasu` でした）。
+- Codex のプラグインとして入れる形は、GitHub から `codex plugin marketplace add nanaism/yomiyasu` と `codex plugin add yomiyasu@yomiyasu` で入れて確かめました（codex-cli 0.164.0。入ったのは公開している 3.0.1 で、一覧の名前は `yomiyasu:yomiyasu` でした）。スキルのフォルダの設定を外した 3.1.0 の木を、手元のフォルダから同じ2つのコマンドで入れた形でも、名前は `yomiyasu:yomiyasu` でした。
 - apm は動かしていません。0.35.0 のソースを読み、種類を決める順番（format_detection.py）と、見えない文字の検査の表（content_scanner.py）を確かめました。検査の表を写して、配るフォルダを走査すると、警告に当たる文字は 3.0.1 が2か所（上の BOM）、3.1.0 が0か所です。3.0.1 のスクリプトからこの文字を消した写しでは、語の一覧を読む試験が落ち、一覧の1行目の注記が語として読まれました。3.1.0 の写しに同じ処理をかけても、ファイルは変わりません。
 - `gh skill install --force`（gh 2.103.3。手元のフォルダから `--from-local` で入れました）で 3.0.1 のフォルダの上から 3.1.0 を入れると、`.codex-plugin/plugin.json` が消えずに残りました。
 - tests/test_skill_package.py に、スキルのフォルダにプラグインの設定がないことと、配るファイルに見えない文字（途中の BOM、幅のない文字、文字の向きを変える制御の文字など）をそのまま書いていないことの試験を足しました。
@@ -48,7 +48,7 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
 ### 試験と CI
 
 - CI は、時間を測らない試験を3組に分けて別々のジョブで流し、時間を測る試験（72件）は別のジョブで1件ずつ流すようにしました（[PR #60](https://github.com/nanaism/yomiyasu/pull/60)。3.0.1 のあとに main へ入れた変更で、配布するファイルは変えていません）。pytest のジョブのうちいちばん遅いジョブの時間は、分ける前の2回が9〜12分、分けたあとの3回が3分55秒〜4分16秒でした。
-- このとき、組の分け方を確かめる試験などを12件足しました。試験一式は 3.0.1 の 2,586件から 2,598件になり、今回足した3件を合わせて {TOTAL}件です。
+- このとき、試験の数は12件増えました（check の出力を照らす試験1本を8本に分け、組の分け方などを確かめる試験を5件足しました）。試験一式は 3.0.1 の 2,586件から 2,598件になり、今回足した3件を合わせて {TOTAL}件です。
 
 ### 限界
 
