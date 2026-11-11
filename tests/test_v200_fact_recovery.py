@@ -22,7 +22,7 @@ from portable import paced_limit, timing_clock  # noqa: E402
 
 class G15CLI(unittest.TestCase):
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(dir=str(ROOT), prefix='.g15-test-')
+        self.tmp = tempfile.TemporaryDirectory(prefix='.g15-test-')
         self.addCleanup(self.tmp.cleanup)
         self.folder = Path(self.tmp.name)
         self.env = dict(os.environ, TMPDIR=str(self.folder), PYTHONDONTWRITEBYTECODE='1')

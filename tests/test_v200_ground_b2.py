@@ -112,7 +112,7 @@ class GroundB2Test(unittest.TestCase):
                     self.assertEqual(yomiyasu_check._unsupported_count(result, linked, yomiyasu_diff), count)
 
     def test_check_cli_exit_codes_and_replay(self):
-        with tempfile.TemporaryDirectory(dir=str(ROOT), prefix=".b2-test-") as folder:
+        with tempfile.TemporaryDirectory(prefix=".b2-test-") as folder:
             root = Path(folder)
             material, final = root / "material.txt", root / "final.txt"
             material.write_bytes("elapsed=14.2s\ninterval: 200ms\n".encode("utf-8"))
