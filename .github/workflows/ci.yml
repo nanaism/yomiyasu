@@ -67,7 +67,11 @@ jobs:
       - name: Install pytest
         run: python -m pip install --disable-pip-version-check pytest pytest-xdist
       - name: Run the test suite
-        run: python -m pytest -q -ra --durations=25 -n auto --dist worksteal
+        run: python -m pytest -q -ra --durations=25 -n auto --dist worksteal -m "not timing"
+      # Timing tests compare elapsed time with a limit; run them one at a time so that other tests do not load the CPU.
+      - name: Run the timing tests
+        if: success() || failure()
+        run: python -m pytest -q -ra --durations=10 -m timing
 
   test-windows:
     name: pytest (Windows, Python 3.12)
@@ -86,7 +90,12 @@ jobs:
       - name: Run the test suite
         env:
           PYTHONUTF8: "1"
-        run: python -m pytest -q -ra --durations=25 -n auto --dist worksteal
+        run: python -m pytest -q -ra --durations=25 -n auto --dist worksteal -m "not timing"
+      - name: Run the timing tests
+        if: success() || failure()
+        env:
+          PYTHONUTF8: "1"
+        run: python -m pytest -q -ra --durations=10 -m timing
 
   test-windows-drive-relative:
     name: Drive-relative paths (Windows, Python 3.9)
