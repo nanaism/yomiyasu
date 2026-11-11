@@ -399,6 +399,14 @@ class PerformanceTest(unittest.TestCase):
         after = "\n\n".join("{}。{}".format(index, paragraph_new) for index in range(count)) + "\n"
         self.assertGreater(len(before), 60000)
         sides = yomiyasu_diff._Sides(before, after)
+        # 3.0.1: 組み込みの正規表現は初めて使うときに組む。測る前に同じ形の3段落の文書で同じ4つを動かし、組む時間を
+        # 測る範囲に入れない（ここで確かめるのは、6万字を処理する時間）
+        warm_before = "\n\n".join("{}。{}".format(index, paragraph_old) for index in range(3)) + "\n"
+        warm_after = "\n\n".join("{}。{}".format(index, paragraph_new) for index in range(3)) + "\n"
+        warm_full = yomiyasu_diff.full_diff(warm_before, warm_after)
+        yomiyasu_diff.meaning_risks(warm_before, warm_after, full=warm_full)
+        yomiyasu_diff.stiffness(warm_before, warm_after)
+        yomiyasu_diff.tone(warm_before, warm_after)
         # 上限の秒数は、Windows の遅い機械では基準の処理の遅さの比で延ばす（portable.paced_limit）。時間は CPU 時間で測る
         clock = timing_clock()
         started = clock()
