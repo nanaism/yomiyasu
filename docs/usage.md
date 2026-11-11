@@ -101,7 +101,7 @@ draft.md を yomiyasu で読みやすくしてください。取引先の購買�
 
 この置き方では、Codex がスキルを `yomiyasu` という名前で一覧に載せます。呼ぶときは「/yomiyasu」とだけ送るか、依頼の文に「yomiyasu で」と書いてください。一覧の名前どおり `$yomiyasu` と書いても呼べます。`npx skills add` や `gh skill install` で Codex に入れた場合も、名前と呼び方は同じです。
 
-3.0.1 までに入れたフォルダをそのまま使っている場合は、名前は `yomiyasu:yomiyasu` のままです。その間は `$yomiyasu:yomiyasu` と書いてください。Codex がスキルの指示を自動で差し込むのは、`$` に続く名前が一覧の名前と1字ずつ同じときだけです。どちらの名前になっているかは、スキルのフォルダに `.codex-plugin/` があるかで分かります（`ls -a .agents/skills/yomiyasu` で見ます。2.0.1 までの写しでは `.claude-plugin/` です）。あれば `yomiyasu:yomiyasu`、なければ `yomiyasu` です。
+3.0.1 までに入れたフォルダをそのまま使っている場合は、名前は `yomiyasu:yomiyasu` のままです。その間は `$yomiyasu:yomiyasu` と書いてください。Codex がスキルの指示を自動で差し込むのは、`$` に続く名前が一覧の名前と1字ずつ同じときだけです。どちらの名前になっているかは、スキルのフォルダに `.codex-plugin/`（2.0.1 までの写しでは `.claude-plugin/`）があるかで分かります。`ls -a .agents/skills/yomiyasu` で見て、あれば `yomiyasu:yomiyasu`、なければ `yomiyasu` です。
 
 3.0.1 まではスキルのフォルダにプラグインの設定（2.0.2 からは Codex 用の `.codex-plugin/plugin.json`、2.0.1 までは `.claude-plugin/`）を入れていたので、名前が `yomiyasu:yomiyasu` でした。3.1.0 でこの設定を外しました（理由は [CHANGELOG](../CHANGELOG.md) の 3.1.0）。3.1.0 以降に更新するか入れ直して、スキルのフォルダからこの設定がなくなると、名前が `yomiyasu` に変わります。変わったあとは、次の3つを書き換えてください。
 
@@ -111,12 +111,12 @@ draft.md を yomiyasu で読みやすくしてください。取引先の購買�
 
 書き換える前の書き方のままでも、測った範囲ではスキルは読まれました。名前が `yomiyasu` の形に、`$yomiyasu:yomiyasu` と書いた依頼を3回、「yomiyasu:yomiyasu で」と書いた依頼を2回、`AGENTS.md` の1行を `yomiyasu:yomiyasu` のままにして名前を出さない依頼を3回送ると、8回ともモデルが自分で SKILL.md を読みました（codex-cli 0.164.0、gpt-6-astra、effort high、`codex exec`）。この8回に、Codex がスキルの指示を自動で差し込んだ回はありません。読むかどうかはモデルしだいなので、上の3つは書き換えてください。逆に、名前が `yomiyasu:yomiyasu` のままの形に、`$yomiyasu` と書いた依頼と、`AGENTS.md` の1行を先に `yomiyasu` に書き換えて名前を出さない依頼を2回ずつ送っても、4回ともスキルを読みました。
 
-Codex はスキルのフォルダから上のフォルダへ順にプラグインの設定（`.codex-plugin`、`.claude-plugin`、`.cursor-plugin` の `plugin.json`）を探し、最初に見つけた設定の名前をスキルの名前の頭に付けます。そのため、次の形では名前が `yomiyasu` になりません（codex-cli 0.164.0 で、一覧の名前を確かめました）。
+Codex はスキルのフォルダから上のフォルダへ順にプラグインの設定（`.codex-plugin`、`.claude-plugin`、`.cursor-plugin` の `plugin.json`）を探し、最初に見つけた設定の名前をスキルの名前の先頭に付けます。そのため、次の形では名前が `yomiyasu` になりません（codex-cli 0.164.0 で、一覧の名前を確かめました）。
 
-- このリポジトリを clone して、`.agents/skills/yomiyasu` を clone の中の `skills/yomiyasu` への symlink にした形と、このリポジトリを Codex のプラグインとして入れた形（`codex plugin marketplace add nanaism/yomiyasu` と `codex plugin add yomiyasu@yomiyasu`）では、3.1.0 以降も名前は `yomiyasu:yomiyasu` です。このリポジトリの直下にある `.claude-plugin/plugin.json` の名前が頭に付きます。
-- スキルを置いたリポジトリか、その上のフォルダに別のプラグインの設定があると、その設定の名前が頭に付きます（Claude Code のプラグインを開発しているリポジトリに置いたときなど）。`$` で呼ぶときは、一覧に載っている名前をそのまま書いてください。この形の書き方では、フックは原稿を登録しません（フックが見るのは `$yomiyasu` と `$yomiyasu:yomiyasu` です）。
+- このリポジトリを clone して、`.agents/skills/yomiyasu` を clone の中の `skills/yomiyasu` への symlink にした形と、このリポジトリを Codex のプラグインとして入れた形（`codex plugin marketplace add nanaism/yomiyasu` と `codex plugin add yomiyasu@yomiyasu`）では、3.1.0 以降も名前は `yomiyasu:yomiyasu` です。このリポジトリの直下にある `.claude-plugin/plugin.json` の名前が先頭に付きます。
+- スキルを置いたリポジトリか、その上のフォルダに別のプラグインの設定があると、その設定の名前が先頭に付きます（Claude Code のプラグインを開発しているリポジトリに置いたときなど）。`$` で呼ぶときは、一覧に載っている名前をそのまま書いてください。この形で一覧の名前どおりに書いたときは、フックは原稿を登録しません（フックが見るのは `$yomiyasu` と `$yomiyasu:yomiyasu` です）。
 
-更新したあともスキルのフォルダにプラグインの設定（`.codex-plugin/`。2.0.1 までの写しでは `.claude-plugin/`）が残っているときは、名前は `yomiyasu:yomiyasu` のままです。`gh skill install --force` のように、前のフォルダを消さずに新しいファイルを重ねる入れ方で残ります。残った設定のフォルダを消すか、スキルのフォルダを消してから入れ直してください。README の「6. Codex で使うリポジトリに置く」のコマンドは、前のフォルダを別の場所へ移してから入れるので、残りません。
+更新したあともスキルのフォルダにプラグインの設定（`.codex-plugin/`。2.0.1 までの写しでは `.claude-plugin/`）が残っているときは、名前は `yomiyasu:yomiyasu` のままです。この設定は `gh skill install --force` のように、前のフォルダを消さずに新しいファイルを重ねる入れ方で残ります。残った設定のフォルダを消すか、スキルのフォルダを消してから入れ直してください。README の「6. Codex で使うリポジトリに置く」のコマンドは、前のフォルダを別の場所へ移してから入れるので、残りません。
 
 写しは1か所だけに置いてください。利用者のスキルの置き場所（`~/.agents/skills/`）とリポジトリの `.agents/skills/` の両方に置くと、一覧に2つ載ります（codex-cli 0.164.0 で、一覧だけを確かめました）。
 
