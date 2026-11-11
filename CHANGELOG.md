@@ -8,7 +8,7 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
 
 ### Codex でのスキルの名前が変わります
 
-- スキルのフォルダを写して入れる形（README の「6. Codex で使うリポジトリに置く」、`npx skills add`、`gh skill install`）では、3.0.1 までは `yomiyasu:yomiyasu`、3.1.0 からは `yomiyasu` です。3.1.0 以降に入れ直したら、次の3つを書き換えてください。
+- スキルのフォルダを写して入れる形（README の「6. Codex で使うリポジトリに置く」、`npx skills add`、`gh skill install`）では、3.0.1 までは `yomiyasu:yomiyasu`、3.1.0 からは `yomiyasu` です。3.1.0 以降に更新するか入れ直して、スキルのフォルダから `.codex-plugin/` がなくなると、名前が変わります。変わったあとは、次の3つを書き換えてください。
   - 依頼の文の `$yomiyasu:yomiyasu` を `$yomiyasu` にします。Codex は、`$` に続く名前が一覧の名前と1字ずつ同じときだけ、スキルの指示を読み込みます。
   - `AGENTS.md` に足した1行の `yomiyasu:yomiyasu` を `yomiyasu` にします（README の「毎回 yomiyasu を使いたいとき」）。
   - Codex の設定でスキルを名前で指定している場合は、その名前を `yomiyasu` にします（`config.toml` の `[[skills.config]]` の `name`、`environments.toml` の `skills` の `required`）。
@@ -25,8 +25,8 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
 
 ### 変えたこと
 
-- `skills/yomiyasu/.codex-plugin/plugin.json` を消しました。報告では、リポジトリの直下へ移す案をいただきましたが、移さずに消しています。apm はフォルダの中身だけで種類を決めるので、消すだけでスキルと判定されます。Codex のプラグインとして入れる形は、直下の `.claude-plugin/` の2つのファイルだけで動きます。名前だけの設定を直下に置くと、Codex はそちらを先に読むので、プラグインのバージョンが `local` になります。
-- スクリプトの中にそのまま書いていた BOM（U+FEFF）の文字を、`\ufeff` のエスケープに替えました（yomiyasu_diff.py と yomiyasu_check.py の1か所ずつ）。動きは同じです。apm は、入れる前にファイルの見えない文字を検査し、ファイルの途中の U+FEFF を警告に数えます。この文字は、見えない文字を消す道具をスクリプトにかけると消えます（apm では、`apm audit --file` でスクリプトを名指しして `--strip` を付けたとき）。消えると `text.startswith("")` という常に真の条件になり、語の一覧の1文字目が読まれなくなります。
+- `skills/yomiyasu/.codex-plugin/plugin.json` を消しました。報告では、リポジトリの直下へ移す案をいただきましたが、移さずに消しています。apm のソースを読むかぎり、apm はフォルダの中身だけで種類を決めるので、消すだけでスキルと判定されます。Codex のプラグインとして入れる形は、直下の `.claude-plugin/` の2つのファイルだけで動きます。名前だけの設定を直下に置くと、Codex はそちらを先に読むので、プラグインのバージョンが `local` になります。
+- スクリプトの中にそのまま書いていた BOM（U+FEFF）の文字を、`\ufeff` のエスケープに替えました（yomiyasu_diff.py と yomiyasu_check.py の1か所ずつ）。動きは同じです。apm は、入れる前にファイルの見えない文字を検査し、ファイルの途中の U+FEFF を警告に数えます。この文字は、見えない文字を消す道具をスクリプトにかけると消えます（apm のソースを読むかぎり、0.32.0 までは `apm audit --strip` を実行したとき、0.33.0 からは `apm audit --file` でスクリプトを名指しして `--strip` を付けたとき）。消えると `text.startswith("")` という常に真の条件になり、語の一覧の1文字目が読まれなくなります。
 - README、README.en.md、docs/usage.md、docs/tools.md、docs/limitations.md の、Codex での名前と呼び方の説明を書き直しました。名前が `yomiyasu` にならない形（上の symlink とプラグインの形、置いたリポジトリの上のフォルダに別のプラグインの設定がある形）は docs/usage.md の「Codex で使うリポジトリに置いたとき」に書いています。
 
 ### 確かめたこと
@@ -45,7 +45,7 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
 - 既存の JSON のキーと値の意味、`*_FORMAT_VERSION`、記録の形、コマンドの引数と既定値、状態の行の形は変えていません。
 - 3.0.1 で残した検査の記録を 3.1.0 の `verify` で照らすと、検査スクリプトが変わったので `tool_changed` になります。もう一度 `run` を実行してください。
 - apm で `nanaism/yomiyasu/skills/yomiyasu` をバージョンで留めるときは、v3.1.0 以降のタグを指定してください。v2.0.2 から v3.0.1 までのタグのフォルダには `.codex-plugin/plugin.json` が入っています。
-- 3.0.1 までを Codex に写して入れたまま使う場合は、何も変える必要はありません（名前は `yomiyasu:yomiyasu` のままです）。
+- 3.0.1 までを Codex に写して入れたまま使う場合は、何も変える必要はありません（名前は `yomiyasu:yomiyasu` のままです）。どちらの名前になっているかは、スキルのフォルダに `.codex-plugin/` があるかで分かります（あれば `yomiyasu:yomiyasu`）。
 
 ## 3.0.1 - 2026-11-11
 
