@@ -132,7 +132,7 @@ gist の案を入れたあと、3.0.0 として出してよいかを見るため
 
 ## 確かめた範囲
 
-{LIMITATIONS_NOTE}
+3.1.0 では推敲の手順（SKILL.md の本文と references）を 3.0.1 から変えず、スキルのフォルダから Codex 用のプラグインの設定を外しました。3.1.0 で確かめたのは、Codex でのスキルの名前と呼び方です。macOS の codex-cli 0.164.0 で、`codex exec` にスキルの名前を出した依頼と出さない依頼を送って測りました（数は [CHANGELOG](../CHANGELOG.md) の 3.1.0）。apm は動かしていません。プロジェクト単位の `apm install` がスキルとして通ることは、apm のソースを読んだ結果です。Codex の対話の画面、IDE の拡張、Codex Cloud、Windows では確かめていません。
 
 2.1.1 では推敲の手順（SKILL.md の本文と references）を変えず、lint、diff、check、フックの不具合だけを直しました（直したことと確かめたことは [CHANGELOG](../CHANGELOG.md) の 2.1.1）。この節で推敲を確かめた結果は 2.1.1 にもそのまま当てはまります。
 

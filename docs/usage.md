@@ -109,7 +109,7 @@ draft.md を yomiyasu で読みやすくしてください。取引先の購買�
 - `AGENTS.md` に足した1行の `yomiyasu:yomiyasu` を `yomiyasu` にします（[毎回 yomiyasu を使いたいとき](../README.md#毎回-yomiyasu-を使いたいとき)）。
 - Codex の設定でスキルを名前で指定している場合は、その名前を `yomiyasu` にします（`config.toml` の `[[skills.config]]` の `name`、`environments.toml` の `skills` の `required`）。
 
-{MEASURED_OLD_FORMS}
+書き換える前の書き方のままでも、測った範囲ではスキルは読まれました。名前が `yomiyasu` の形に、`$yomiyasu:yomiyasu` と書いた依頼を3回、「yomiyasu:yomiyasu で」と書いた依頼を2回、`AGENTS.md` の1行を `yomiyasu:yomiyasu` のままにして名前を出さない依頼を3回送ると、8回ともモデルが自分で SKILL.md を読みました（codex-cli 0.164.0、gpt-6-astra、effort high、`codex exec`）。この8回に、Codex がスキルの指示を自動で差し込んだ回はありません。読むかどうかはモデルしだいなので、上の3つは書き換えてください。逆に、名前が `yomiyasu:yomiyasu` のままの形に、`$yomiyasu` と書いた依頼と、`AGENTS.md` の1行を先に `yomiyasu` に書き換えて名前を出さない依頼を2回ずつ送っても、4回ともスキルを読みました。
 
 Codex はスキルのフォルダから上のフォルダへ順にプラグインの設定（`.codex-plugin`、`.claude-plugin`、`.cursor-plugin` の `plugin.json`）を探し、最初に見つけた設定の名前をスキルの名前の頭に付けます。そのため、次の形では名前が `yomiyasu` になりません（codex-cli 0.164.0 で、一覧の名前を確かめました）。
 
