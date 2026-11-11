@@ -42,7 +42,7 @@ from array import array
 from bisect import bisect_left, bisect_right
 from collections.abc import Callable, Collection, Iterable, Iterator, Mapping, Sequence
 from pathlib import Path
-from typing import AbstractSet, Literal, NoReturn, Protocol
+from typing import AbstractSet, Literal, NoReturn, Protocol, cast
 
 
 class _TextWriter(Protocol):
@@ -128,6 +128,35 @@ except ImportError as _import_error:
     _IMPORT_ERROR = _import_error
 else:
     _IMPORT_ERROR = None
+
+
+# 読み込みのときに組む正規表現は、初めて使うときに組む（_lazy_compile）。1回の実行で使うのは一部だけなので、lint と
+# diff を CLI で動かすときや、check が子プロセスとして動かすときの起動の時間を延ばさないため。関数の中で組む正規表現
+# （利用者が書く語の一覧の正規表現を含む）は、今までどおりその場で組み、書き誤りをすぐに知らせる。
+_PATTERN_ATTRIBUTES = ("search", "match", "fullmatch", "finditer", "findall", "sub", "subn", "split", "scanner",
+                       "flags", "groups", "groupindex")
+
+
+class _LazyPattern:
+    """初めて属性を読まれたときに組む正規表現。組んだあとは re.Pattern の関数と属性をそのまま持つ。
+    pattern は組まずに読める（ほかの正規表現を組み立てるときに使う）。"""
+
+    def __init__(self, pattern: str, flags: int) -> None:
+        self.pattern = pattern
+        self._flags = flags
+
+    def __getattr__(self, name: str) -> object:
+        if name.startswith("__"):
+            raise AttributeError(name)
+        compiled = re.compile(self.pattern, self._flags)
+        for attribute in _PATTERN_ATTRIBUTES:
+            setattr(self, attribute, getattr(compiled, attribute))
+        return getattr(compiled, name)
+
+
+def _lazy_compile(pattern: str, flags: int = 0) -> re.Pattern[str]:
+    """re.compile(pattern, flags) と同じ正規表現を、初めて使うときに組む形で返す（_LazyPattern）。"""
+    return cast("re.Pattern[str]", _LazyPattern(pattern, flags))
 from collections import Counter, OrderedDict
 from fractions import Fraction
 
@@ -154,7 +183,7 @@ MARKERS = {
 }
 
 # MARKERS をコンパイルしたもの（_rule_candidates で使う。並びは MARKERS と同じ。diff を詰めたときに、速くするために足した）
-_MARKER_REGEXES = tuple((name, re.compile(pattern)) for name, pattern in MARKERS.items())
+_MARKER_REGEXES = tuple((name, _lazy_compile(pattern)) for name, pattern in MARKERS.items())
 
 # 文の種類を表す語。推敲の前後で対応する範囲を比べ、その語が消えた・増えたものを候補にする。
 # 種類と関係のない用法（様子の「降りそうだ」、目的の「使えるように」、「という名前」、「素晴らしい」、
@@ -198,7 +227,7 @@ _TYPE_PATTERNS = (
                  r"|必要(?<!不必要)(?:があ(?:る|ります|り(?=、))|(?:です|だ)(?=[。！!]|$)"
                  r"|[にと]な(?:る(?!まで)|ります|り(?=、)|った(?!ら(?!し))|りました))"),
 )
-TYPE_MARKERS = OrderedDict((kind, re.compile(pattern, re.M)) for kind, pattern in _TYPE_PATTERNS)
+TYPE_MARKERS = OrderedDict((kind, _lazy_compile(pattern, re.M)) for kind, pattern in _TYPE_PATTERNS)
 # 種類ごとに、印の正規表現が当たるために必ず含まれる文字列。どれも含まない文章では、その種類の正規表現を当てない。
 _TYPE_LITERALS = {
     "伝聞": ("そう", "とされ", "という", "といいます", "とのこと", "によると", "によれば", "われ", "と聞"),
@@ -211,12 +240,12 @@ _TYPE_LITERALS = {
 # 「まるで〜のようだ」の「よう」「みたい」は、推量ではなく例えを表す語として数える。
 # 対にするのは、同じ文の中で「まるで」「あたかも」「さながら」のあとに最初に出てくる1つだけ。
 _SIMILE_HEADS = ("まるで", "あたかも", "さながら")
-_SIMILE_LIKE = re.compile(r"(?:よう|みたい)(?:であった|である|だった|でした|です|だ|な|に|で)?")
+_SIMILE_LIKE = _lazy_compile(r"(?:よう|みたい)(?:であった|である|だった|でした|です|だ|な|に|で)?")
 _STOPS = "。！？!?\n"
-_STOP = re.compile("[" + _STOPS + "]")
+_STOP = _lazy_compile("[" + _STOPS + "]")
 # 文の中身の文字数を数えるときに除く文字（句読点・かっこ・空白）
 _NOT_BODY = set("。、，！？!?「」『』（）() \n\u3000")
-_SENTENCE_PIECE = re.compile(r"[^。！？!?\n]+[。！？!?]*[」』）)]*")
+_SENTENCE_PIECE = _lazy_compile(r"[^。！？!?\n]+[。！？!?]*[」』）)]*")
 
 
 def _mark_positions(text: str) -> list:
@@ -681,7 +710,7 @@ _MODALITY_PATTERNS = (
            r"|担保(?:する|します|される|されます)(?=[。、]|$)|必ず(?!しも)|確実に"
            r"|ことは(?:ない|ありません|ございません)(?=[。]|$)"),
 )
-MODALITY_MARKERS = OrderedDict((kind, re.compile(pattern, re.M)) for kind, pattern in _MODALITY_PATTERNS)
+MODALITY_MARKERS = OrderedDict((kind, _lazy_compile(pattern, re.M)) for kind, pattern in _MODALITY_PATTERNS)
 # 種類ごとに、印の正規表現が当たるために必ず含まれる文字列（_TYPE_LITERALS と同じ使い方）。能力の弱い印は語の頭が多いので、
 # 前もって絞らずに当てる。
 _MODALITY_LITERALS = {
@@ -695,7 +724,7 @@ _MODALITY_LITERALS = {
 }
 # 能力の強い印のうち、打ち消しの形（できない、できません、できず、できていない、できておりません、不可能だ）。打ち消しの印だけが消えた範囲
 # （判別できません → 分かりません、接続できない場合は → 接続に失敗したときは）は、能力の消えにしない。
-_ABILITY_NEGATIVE = re.compile(r"(?:でき|出来)(?:な|ませ|ず|て(?:い|おり|お)?(?:な|ませ|らず))|不可能")
+_ABILITY_NEGATIVE = _lazy_compile(r"(?:でき|出来)(?:な|ませ|ず|て(?:い|おり|お)?(?:な|ませ|らず))|不可能")
 # 変化の相手の名前に使う種類と、その並び。能力の弱い印は「能力」と書く。
 _MODALITY_NAMES = (("能力", ("能力", "能力（弱い印）")), ("不要", ("不要",)), ("義務", ("義務",)), ("禁止", ("禁止",)),
                    ("保証", ("保証",)))
@@ -861,7 +890,7 @@ _LOGIC_PATTERNS = (
                   r"|につなが|招|由来|きっかけ|引き金|(?<!も)ので(?![はす])|だから|ゆえ|故に"
                   r"|で[^。、]{0,8}?(?:増え|減っ|減り|増加|減少|伸び|落ち|下が|上が)"),
 )
-LOGIC_MARKERS = OrderedDict((kind, re.compile(pattern, re.M)) for kind, pattern in _LOGIC_PATTERNS)
+LOGIC_MARKERS = OrderedDict((kind, _lazy_compile(pattern, re.M)) for kind, pattern in _LOGIC_PATTERNS)
 # 種類ごとに、印の正規表現が当たるために必ず含まれる文字列（_TYPE_LITERALS と同じ使い方）
 _LOGIC_LITERALS = {
     "どれか一つ": ("または", "もしくは", "あるいは", "どちらか", "いずれか", "どれか", "片方", "択一", "か"),
@@ -881,13 +910,13 @@ _LOGIC_CHANGES = (("one_to_all", "choice", "どれか一つ", "全部"), ("all_t
                   ("relation_to_cause", "causality", "関連", "因果"))
 # 問いの「か」: 「設定が有効か管理者に確認する」「各端末が最新版か担当者に聞く」。「か」の左が「が＋語」か状態を表す語で、
 # 右の語のあとに確かめる・聞く言い方が続くもの。「木曜か金曜に確認する」「上長か人事部に確認する」は選ぶ「か」として残す。
-_QUESTION_KA_LEFT = re.compile(r"(?:が" + _CHOICE_NOUN + r"{1,15}|有効|無効|正常|異常|最新版?|必要|不要|可能|不可|適切|妥当|正確"
-                               r"|完了|対象|該当|安全|十分|問題|適用|OK|NG)$")
-_QUESTION_KA_RIGHT = re.compile(_CHOICE_PHRASE + r"(?:に|へ|で|が|から|まで)?(?:確認|問い合わせ|問合せ|聞|尋|相談|確か|照会|伺|質問"
-                                r"|判断|判定|調べ|調査|検証|点検|チェック|見極|報告|連絡|回答)")
+_QUESTION_KA_LEFT = _lazy_compile(r"(?:が" + _CHOICE_NOUN + r"{1,15}|有効|無効|正常|異常|最新版?|必要|不要|可能|不可|適切|妥当|正確"
+                                  r"|完了|対象|該当|安全|十分|問題|適用|OK|NG)$")
+_QUESTION_KA_RIGHT = _lazy_compile(_CHOICE_PHRASE + r"(?:に|へ|で|が|から|まで)?(?:確認|問い合わせ|問合せ|聞|尋|相談|確か|照会|伺|質問"
+                                   r"|判断|判定|調べ|調査|検証|点検|チェック|見極|報告|連絡|回答)")
 # 「AもBも」の印を、人が読む行で「AもBも」と出すため、最初の項を左に広げる字（名詞の字と、名詞をつなぐ「の」、送りがな）
-_CHOICE_NOUN_CHAR = re.compile(_CHOICE_NOUN)
-_CHOICE_HEAD = re.compile(r"(?:に|と|へ|で|から)?も")
+_CHOICE_NOUN_CHAR = _lazy_compile(_CHOICE_NOUN)
+_CHOICE_HEAD = _lazy_compile(r"(?:に|と|へ|で|から)?も")
 
 
 def _choice_item_start(text: str, start: int) -> int:
@@ -1034,18 +1063,18 @@ def _logic_changes(o: str, r: str) -> list:
     return out
 
 
-CONTENT = re.compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_.+#/-]+")
+CONTENT = _lazy_compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_.+#/-]+")
 
 
 # v1.1.2 から引き継いだ点検（9つのキー）で使う正規表現。v1.1.2 は関数の中で re.sub(文字列, …) と書いていたが、呼ぶたびに
 # re のキャッシュを引く手間がかかるので、モジュールで1回だけコンパイルする（中身は同じ。diff を詰めたときに、速くするために直した）
-_NORMALIZE_BOLD = re.compile(r"\*\*(.+?)\*\*")
-_NORMALIZE_LIST = re.compile(r"(?m)^\s*(?:[*\-・]|\d+[.)])\s+")
-_NORMALIZE_HEADING = re.compile(r"(?m)^#+\s*")
-_NORMALIZE_SPACES = re.compile(r"[ \t]+")
-_HAS_LIST = re.compile(r"(?m)^\s*(?:[*\-・]|\d+[.)])\s+\S")
-_SENTENCES_SPLIT = re.compile(r"(?<=[。！？!?])|\n+")
-_LIST_ITEM_HEAD = re.compile(r"\s*(?:[*\-・]|\d+[.)])\s+")
+_NORMALIZE_BOLD = _lazy_compile(r"\*\*(.+?)\*\*")
+_NORMALIZE_LIST = _lazy_compile(r"(?m)^\s*(?:[*\-・]|\d+[.)])\s+")
+_NORMALIZE_HEADING = _lazy_compile(r"(?m)^#+\s*")
+_NORMALIZE_SPACES = _lazy_compile(r"[ \t]+")
+_HAS_LIST = _lazy_compile(r"(?m)^\s*(?:[*\-・]|\d+[.)])\s+\S")
+_SENTENCES_SPLIT = _lazy_compile(r"(?<=[。！？!?])|\n+")
+_LIST_ITEM_HEAD = _lazy_compile(r"\s*(?:[*\-・]|\d+[.)])\s+")
 
 
 def normalize(t: str) -> str:
@@ -1080,10 +1109,10 @@ def paragraphs(t: str) -> list:
 
 
 LOGIC = [
-    ("文頭のつなぎ", re.compile(r"^(?:ただし|しかし|一方|また|さらに|つまり|そのため|したがって|だから|それでも|なお|そこで|ところが)")),
-    ("主題の「も」", re.compile(r"^(?!それで)[^、。]{0,17}[^、。てでり]も、")),
-    ("予告だけの文", re.compile(r"^.{0,28}(?:が|も)あります。$|次の(?:点|こと|とおり|通り)です|以下の(?:点|こと|とおり|通り)")),
-    ("文頭の指示語", re.compile(r"^(?:これ|それ(?!でも|から)|こう(?:した|して|する|いう)|そう(?:した|して|する|いう)|この|その)(?!して)")),
+    ("文頭のつなぎ", _lazy_compile(r"^(?:ただし|しかし|一方|また|さらに|つまり|そのため|したがって|だから|それでも|なお|そこで|ところが)")),
+    ("主題の「も」", _lazy_compile(r"^(?!それで)[^、。]{0,17}[^、。てでり]も、")),
+    ("予告だけの文", _lazy_compile(r"^.{0,28}(?:が|も)あります。$|次の(?:点|こと|とおり|通り)です|以下の(?:点|こと|とおり|通り)")),
+    ("文頭の指示語", _lazy_compile(r"^(?:これ|それ(?!でも|から)|こう(?:した|して|する|いう)|そう(?:した|して|する|いう)|この|その)(?!して)")),
 ]
 
 
@@ -1114,21 +1143,21 @@ EVAL_END = r"(?:重要|最重要|大切|大事|不可欠|肝心|肝要|欠かせ
 
 
 # 文末の種類と敬体・常体の正規表現（v1.1.2 の ending_kind と register の中の文字列と同じ。モジュールで1回だけコンパイルする）
-_BARE_MARKS = re.compile(r"\*\*|`")
-_KEITAI_END = re.compile(r"(?:です|ます|ません|ました|でした|ましょう|ください|でしょう)$")
-_JOTAI_END = re.compile(r"(?:だ|である|ではない|でない)$")
-_PLAIN_VERB_END = re.compile(r"[るうくすつぬぶむぐたい]$")
-_NOUNISH_END = re.compile(r"[ァ-ヴー一-龥A-Za-z0-9]$")
-_REQUEST_END = re.compile(r"ください(?:ね)?$|(?:て|で)はいけません$|(?:て|で)はなりません$|ていただきます$|ていただけます$")
-_SUGGEST_END = re.compile(r"ましょう$|とよいです$|といいです$|をおすすめします$|をお勧めします$")
-_GUESS_END = re.compile(r"(?:でしょう|だろう|かもしれません|かもしれない|と思います|と考えます|と感じます|はずです|ようです|気がします)$")
-_DUTY_END = re.compile(r"(?:なければなりません|なくてはなりません|必要があります|べきです)$")
-_EVAL_END = re.compile(EVAL_END)
-_PAST_END = re.compile(r"(?:ました|でした|ませんでした)$")
-_MASU_END = re.compile(r"(?:ます|ません)$")
-_TEIRU_STEM = re.compile(r"(?:て|で)い$")
-_PASSIVE_STEM = re.compile(r"(?:られ|[^しさ]れ)$")
-_DESU_END = re.compile(r"です$")
+_BARE_MARKS = _lazy_compile(r"\*\*|`")
+_KEITAI_END = _lazy_compile(r"(?:です|ます|ません|ました|でした|ましょう|ください|でしょう)$")
+_JOTAI_END = _lazy_compile(r"(?:だ|である|ではない|でない)$")
+_PLAIN_VERB_END = _lazy_compile(r"[るうくすつぬぶむぐたい]$")
+_NOUNISH_END = _lazy_compile(r"[ァ-ヴー一-龥A-Za-z0-9]$")
+_REQUEST_END = _lazy_compile(r"ください(?:ね)?$|(?:て|で)はいけません$|(?:て|で)はなりません$|ていただきます$|ていただけます$")
+_SUGGEST_END = _lazy_compile(r"ましょう$|とよいです$|といいです$|をおすすめします$|をお勧めします$")
+_GUESS_END = _lazy_compile(r"(?:でしょう|だろう|かもしれません|かもしれない|と思います|と考えます|と感じます|はずです|ようです|気がします)$")
+_DUTY_END = _lazy_compile(r"(?:なければなりません|なくてはなりません|必要があります|べきです)$")
+_EVAL_END = _lazy_compile(EVAL_END)
+_PAST_END = _lazy_compile(r"(?:ました|でした|ませんでした)$")
+_MASU_END = _lazy_compile(r"(?:ます|ません)$")
+_TEIRU_STEM = _lazy_compile(r"(?:て|で)い$")
+_PASSIVE_STEM = _lazy_compile(r"(?:られ|[^しさ]れ)$")
+_DESU_END = _lazy_compile(r"です$")
 
 
 def bare_end(s: str) -> str:
@@ -1190,10 +1219,10 @@ def ending_kind(s: str) -> str:
 
 
 # ending_units の正規表現（v1.1.2 と同じ文字列。ダッシュは U+2014 と U+2015）
-_UNIT_LIST_HEAD = re.compile(r"^(?:[*\-・]|\d+[.)])\s+")
-_UNIT_SPLIT = re.compile(r"(?<=[。！？!?])")
-_UNIT_FULL_END = re.compile(r"[。！？!?]$")
-_UNIT_DASH = re.compile("[\u2014\u2015]{1,2}")
+_UNIT_LIST_HEAD = _lazy_compile(r"^(?:[*\-・]|\d+[.)])\s+")
+_UNIT_SPLIT = _lazy_compile(r"(?<=[。！？!?])")
+_UNIT_FULL_END = _lazy_compile(r"[。！？!?]$")
+_UNIT_DASH = _lazy_compile("[\u2014\u2015]{1,2}")
 
 
 def ending_units(t: str, markdown: bool = False) -> list:
@@ -1939,7 +1968,7 @@ def _star_runs(text: str) -> list:
     return _runs_from_masks(text, analysis["mask_spans"])
 
 
-_ASTERISKS = re.compile(r"\*+")
+_ASTERISKS = _lazy_compile(r"\*+")
 
 
 def _runs_from_masks(text: str, masked: Sequence) -> list:
@@ -2223,10 +2252,10 @@ def _preserves_other_emphasis(original: Collection[tuple], repaired: Collection[
 # 後ろの組み合わせは変わらない。閉じる相手が見つからなかった位置の記録（bottoms）が食い違う場合だけ、
 # 手前の印の位置と比べて、後ろの組み合わせが変わりえないかを確かめる。
 _LINE_START_MARKS = frozenset(" \t>-+*.)#`~[")
-_REFERENCE_START = re.compile(r" {0,3}\[")
-_URL_START = re.compile(r"(?=https?://|www\.)")
-_WHITESPACE_CHAR = re.compile(r"\s")
-_LINK_DESTINATION_START = re.compile(r"\]\(")
+_REFERENCE_START = _lazy_compile(r" {0,3}\[")
+_URL_START = _lazy_compile(r"(?=https?://|www\.)")
+_WHITESPACE_CHAR = _lazy_compile(r"\s")
+_LINK_DESTINATION_START = _lazy_compile(r"\]\(")
 
 
 def _line_start_stopper(ch: str) -> bool:
@@ -2569,8 +2598,8 @@ def _bold_fix_with_context(text: str, i: int, j: int, k: int, known_pair: bool, 
     return None, "手で直す"
 
 
-_CONTAINER_LIST = re.compile(r"^\s{0,3}(?:[*+-]|\d+[.)])\s+")
-_CONTAINER_INDENT = re.compile(r"^\s{0,3}")
+_CONTAINER_LIST = _lazy_compile(r"^\s{0,3}(?:[*+-]|\d+[.)])\s+")
+_CONTAINER_INDENT = _lazy_compile(r"^\s{0,3}")
 
 
 def _line_containers(line: str) -> tuple:
@@ -2749,10 +2778,10 @@ _PAIR_RATIO = 0.45              # 組にする似かたの下限（difflib の r
 _LONG_LINE = 160                # これを超える行の「差:」は、変わった文のまわりだけを出す
 # 文の断片。句点（。！？!?）のほか、「．」と、空白か行末が続く「.」（英語の文）でも切る
 # （「．」の文と英語の文は、前は1行が1つの断片になり、長い文字列の対応が重かった）。3.14 のような数の中の「.」では切らない
-_FRAGMENT = re.compile(r"(?:[^。！？!?．.\n]|\.(?![ \t\n]|$))*(?:[。！？!?．]+|\.+(?=[ \t\n]|$))?[」』）)]*[ \t]*\n?")
-_SENTENCE_END = re.compile(r"[。！？!?]+[」』）)]*")
-_SPACES = re.compile("[\\s\ufeff]+")
-_ATX = re.compile(r"^( {0,3})(#{1,6})((?:[ \t].*)?)$")
+_FRAGMENT = _lazy_compile(r"(?:[^。！？!?．.\n]|\.(?![ \t\n]|$))*(?:[。！？!?．]+|\.+(?=[ \t\n]|$))?[」』）)]*[ \t]*\n?")
+_SENTENCE_END = _lazy_compile(r"[。！？!?]+[」』）)]*")
+_SPACES = _lazy_compile("[\\s\ufeff]+")
+_ATX = _lazy_compile(r"^( {0,3})(#{1,6})((?:[ \t].*)?)$")
 _BLOCK_NAMES = {
     "paragraph": "本文", "list": "箇条書き", "quote": "引用", "heading": "見出し", "heading_underline": "見出し",
     "table": "表", "code": "コード", "frontmatter": "先頭の設定", "html_block": "HTML",
@@ -2808,7 +2837,7 @@ def _analyze(text: str) -> dict:
 
 
 # URL に使える ASCII の字（RFC 3986 の unreserved、reserved と %）
-_URL_CHARS = re.compile(r"[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]*")
+_URL_CHARS = _lazy_compile(r"[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=%]*")
 
 
 def _align(old: Sequence[str], new: Sequence[str], similar: bool = False) -> list:
@@ -3626,12 +3655,12 @@ def _heading_structure(sides: _Sides, hunks: list[dict], shapes: list | None = N
 # どれも確かめる場所で、意味が変わったという判定ではない。ここに出なかった変化も全文差分には必ず出る。
 
 # 行頭の記号（引用の >、箇条書きの記号、見出しの #）。match(行, 位置) で位置から当てるので ^ は付けない
-_LINE_PREFIX = re.compile(r"(?:[ \t]{0,3}>[ \t]?|[ \t]*(?:[-*+・]|\d+[.)])[ \t]+|[ \t]{0,3}#{1,6}(?:[ \t]+|$)"
-                          # 「(1)」「（１）」「1）」の番号（diff の詰め）。後ろの空白はなくてもよい
-                          r"|[ \t]*(?:[(（]\d{1,9}[)）]|\d{1,9}）)[ \t　]*)")
+_LINE_PREFIX = _lazy_compile(r"(?:[ \t]{0,3}>[ \t]?|[ \t]*(?:[-*+・]|\d+[.)])[ \t]+|[ \t]{0,3}#{1,6}(?:[ \t]+|$)"
+                             # 「(1)」「（１）」「1）」の番号（diff の詰め）。後ろの空白はなくてもよい
+                             r"|[ \t]*(?:[(（]\d{1,9}[)）]|\d{1,9}）)[ \t　]*)")
 # 意味が変わる恐れの文の区切り。9キーの _SENTENCE_PIECE は変えず、句点（。！？!?）のほか「．」と、空白か行末が続く「.」でも切る
 # （「．」の文と英語の文で、1行が1つの文になって判定が長い文字列にかかるのを防ぐ）
-_RISK_SENTENCE_PIECE = re.compile(r"(?:[^。！？!?．.\n]|\.(?![ \t]|$))+(?:[。！？!?．]+|\.+(?=[ \t]|$))?[」』）)]*")
+_RISK_SENTENCE_PIECE = _lazy_compile(r"(?:[^。！？!?．.\n]|\.(?![ \t]|$))+(?:[。！？!?．]+|\.+(?=[ \t]|$))?[」』）)]*")
 # 文に分けない行の種類（中の変化は「変えない箇所」で見る）
 _NO_SENTENCE_KINDS = ("code", "frontmatter", "html_block")
 # protected_spans の種類 → subkind。引用はブロック（行の quote_depth と、遅延継続の行の kind）で見る。
@@ -3814,10 +3843,10 @@ _HALF_WIDTH = dict((code, code - 0xFEE0) for code in range(0xFF01, 0xFF5F))
 _HALF_WIDTH[0x3000] = 0x20
 # 算用数字。英字や数字、「_」の直後と、「数字と . か ,」の直後からは始めない（v2、IPv6、x_3、1.2.3 の途中を数にしない）。
 # 「，」「．」（半角にしたもの）の直後の数は取る（「3日，5日」「参加者は，30人」。反証で見つけた例）
-_ARABIC = re.compile(r"(?<![A-Za-z0-9_])(?<![0-9][.,])[0-9]+(?:[.,][0-9]+)*")
+_ARABIC = _lazy_compile(r"(?<![A-Za-z0-9_])(?<![0-9][.,])[0-9]+(?:[.,][0-9]+)*")
 # 数と単位の間の強調の記号（「**3**日」）。読み飛ばして単位を付ける（太字の有無は書式だけの違い。反証で見つけた例）
-_EMPHASIS = re.compile(r"\*+")
-_THOUSANDS = re.compile(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?")
+_EMPHASIS = _lazy_compile(r"\*+")
+_THOUSANDS = _lazy_compile(r"[0-9]{1,3}(?:,[0-9]{3})+(?:\.[0-9]+)?")
 _UNITS = ("週間", "時間", "か月", "ヶ月", "カ月", "ヵ月", "TB", "GB", "MB", "KB", "ms", "px", "%",
           "年", "月", "日", "時", "分", "秒", "件", "個", "人", "名", "回", "円", "倍", "割", "度", "点",
           "本", "枚", "台", "社", "週", "歳", "字", "行",
@@ -3834,13 +3863,13 @@ def _unit_pattern(units: Sequence[str]) -> str:
                     for unit in sorted(units, key=len, reverse=True))
 
 
-_UNIT = re.compile(_unit_pattern(_UNITS))
+_UNIT = _lazy_compile(_unit_pattern(_UNITS))
 # 英字の単位と % は、前に半角か全角の空白が1つあってもよい（「16 GB」「95 %」）
-_SPACED_UNIT = re.compile(r"[ \u3000](TB|GB|MB|KB|ms|px|%)(?![A-Za-z])")
+_SPACED_UNIT = _lazy_compile(r"[ \u3000](TB|GB|MB|KB|ms|px|%)(?![A-Za-z])")
 # 一覧にない英字の並び（5字まで）は単位として取る（「30s」「100Mbps」「8GiB」）
-_LETTER_UNIT = re.compile(r"[A-Za-z]{1,5}(?![A-Za-z])")
+_LETTER_UNIT = _lazy_compile(r"[A-Za-z]{1,5}(?![A-Za-z])")
 # 「2千件」の「千」（千倍した1つの値にする。万と億は限界のまま）
-_THOUSAND = re.compile(r"千")
+_THOUSAND = _lazy_compile(r"千")
 # 月の数え方の表記の違い（か月、ヶ月、カ月、ヵ月）は値を比べるときにそろえる（表記だけの違い）
 _SAME_UNIT = {"ヶ月": "か月", "カ月": "か月", "ヵ月": "か月", "カ所": "か所", "ヶ所": "か所", "箇所": "か所"}
 # 漢数字は、意味が1つに決まる助数詞が続くときだけ取る
@@ -3852,8 +3881,8 @@ _KANJI_COUNTERS = ("週間", "時間", "か月", "ヶ月", "カ月", "ヵ月",
                    "条", "号", "階", "分",
                    # 十時、十二時（「一時」は _KANJI_EXCLUDED で除く。「十一時」は除かない）
                    "時")
-_KANJI_NUMBER = re.compile("(?<![〇一二三四五六七八九十百千])([〇一二三四五六七八九十百千]+)("
-                           + _unit_pattern(_KANJI_COUNTERS) + ")")
+_KANJI_NUMBER = _lazy_compile("(?<![〇一二三四五六七八九十百千])([〇一二三四五六七八九十百千]+)("
+                              + _unit_pattern(_KANJI_COUNTERS) + ")")
 _KANJI_DIGITS = {"〇": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
 _KANJI_UNITS = {"十": 10, "百": 100, "千": 1000}
 # 漢数字の直前が漢字なら取らない（「統一」「一般」のような語の中の漢数字）。ただし直前がこの字なら取る（「最大三回」「後二週間」
@@ -3870,7 +3899,7 @@ _TIME_OF_DAY_WORDS = frozenset(("午前", "午後", "深夜", "未明", "早朝"
 _TIME_OF_DAY_CHARS = frozenset("朝夜晩昼")
 # 時刻の「一時」のすぐあとに続いてよい字（一時十分、一時半、一時頃、一時過ぎ。「一時的」「一時金」の「一時」は時刻にしない）
 _ICHIJI_HOUR_NEXT = frozenset("〇一二三四五六七八九十百半頃過前")
-_KANJI = re.compile(r"[一-龥々〆ヵヶ]")
+_KANJI = _lazy_compile(r"[一-龥々〆ヵヶ]")
 # 期間の語のあとの、同じ期間の漢数字の「一日」「一年」「一か月」「一週間」（今日一日、本日一日、去年一年、今週一週間）は、その
 # 期間の全体を言い、数量を主張しない。前に漢字のない「日一日と」「年一年と」（日ごとに、年ごとに）も同じ。どちらも数量を主張しない
 # 「一つ」と同じ weak の値として取る（_drop_weak が、相手の側に同じ単位の値がないときだけ比べから外す。反証で見つけた例:
@@ -3891,10 +3920,10 @@ _SAME_PERIOD = {"日": ("日",), "年": ("年",), "月": ("月", "か月", "ヶ�
 # 「人」「名」「回」「件」「個」「枚」は、反証で見つけた例（「一人一回 → 1人1回」「一回三十分 → 1回30分」を元にない数値にし、
 # 「一人一回 → 一人三回」「一件三百円 → 一件五百円」を見逃していた）で足した。「一枚一枚」の2つ目も値として取るが、同じ値が推敲後の
 # 文書にあれば消えた数値にはならない（コーパス、誤検出の組、must・keep で、正しい推敲への新しい候補が増えないことを測って入れた）
-_KANJI_CHAIN = re.compile("[〇一二三四五六七八九十百千]+(?:時間|週間|時|分|人|名|回|件|個|枚)$")
+_KANJI_CHAIN = _lazy_compile("[〇一二三四五六七八九十百千]+(?:時間|週間|時|分|人|名|回|件|個|枚)$")
 # 「十分」の直前の、漢数字に続いた「時」（十時十分）と、「時間」「人」「名」「回」「件」「個」「枚」「日」（一時間十分、一人十分、
 # 一日十分）と「毎日」（毎日十分）。反証で見つけた例
-_KANJI_HOUR_BEFORE = re.compile("[〇一二三四五六七八九十百千]+(?:時|(時間|人|名|回|件|個|枚|日))$|(毎日)$")
+_KANJI_HOUR_BEFORE = _lazy_compile("[〇一二三四五六七八九十百千]+(?:時|(時間|人|名|回|件|個|枚|日))$|(毎日)$")
 # 「時間」「人」などのあとの「十分」は、時間の量に続く字が続くときだけ取る（「一時間十分かかった」「一人十分とする」「一時間十分の
 # 遅れ」）。「七時間十分眠れば」「八時間十分とる」「二時間十分に眠った」「一回十分です」の「十分」（じゅうぶん）は取らない
 # （反証で見つけた例。1回目に直したときは に・な・だ・で が続くときだけ除いたので、「七時間十分眠れば」を時間にした）
@@ -3911,8 +3940,8 @@ _ICHIJI_JIPPUN_AFTER = ("まで", "から", "前", "後", "過ぎ", "すぎ", "�
 _KANJI_CHAIN_REACH = 12         # 直前を見る字数（「千九百九十九時間」のような長い漢数字と助数詞が収まる）
 # 漢数字を含むが数ではない語。「十分」は、直前が漢数字でなく「十分間」でもないときだけ除く（「三十分」「十分間」は時間。
 # 「十分に確かめた」「数十分」は数にしない。反証で見つけた例。正規表現の中で後読みにすると遅くなるので _kanji_excluded で見る）
-_KANJI_EXCLUDED = re.compile(r"一時(?!間)|一度|一部|一方|一般|一緒|一切|一応|一番|一定|一致|一意|一括|一本化|一日中|一年中|一日も|"
-                             r"一人ひとり|一人一人|一回り|一枚岩|十分|十人十色|万一|四六時中")
+_KANJI_EXCLUDED = _lazy_compile(r"一時(?!間)|一度|一部|一方|一般|一緒|一切|一応|一番|一定|一致|一意|一括|一本化|一日中|一年中|一日も|"
+                                r"一人ひとり|一人一人|一回り|一枚岩|十分|十人十色|万一|四六時中")
 _KANJI_NUMERALS = frozenset("〇一二三四五六七八九十百千")
 # 漢数字の「分」「条」で、数量を言わないことのある慣用句（反証で見つけた例）。正規表現の後読みや先読みにすると、まとめた
 # 漢数字の正規表現が遅くなる（48組で約2%）ので、取った語のあとの字を _find_numbers の繰り返しの中で見る。
@@ -3932,21 +3961,21 @@ _JOU_NOT_BEFORE = ("の光", "の煙")
 # 範囲や並べの前の漢数字（三〜五日、三から五日、三、四日、三・四日 の「三」）。助数詞が続かないので _KANJI_NUMBER では取らないが、
 # 算用数字の「3〜5日」の「3」と同じく、単位なしの数として取る（漢数字の範囲を算用数字にしただけの書き換えを、元にない数値に
 # しない。反証で見つけた例。表記だけの違いは候補にしない）。助数詞の付いた漢数字の直前だけを見る
-_KANJI_RANGE_HEAD = re.compile(r"(?<![〇一二三四五六七八九十百千])([〇一二三四五六七八九十百千]+)"
-                               r"(?:[ \t]*(?:[~\u301c]|から)[ \t]*|[、・])$")
+_KANJI_RANGE_HEAD = _lazy_compile(r"(?<![〇一二三四五六七八九十百千])([〇一二三四五六七八九十百千]+)"
+                                  r"(?:[ \t]*(?:[~\u301c]|から)[ \t]*|[、・])$")
 _KANJI_RANGE_REACH = 16
 # 範囲・日付・時刻のまとまりをつなぐ字（数と数の間がこれだけなら、同じまとまり。3〜5日、3から5日、3-5日、2026-10-13、
 # 2026/10/13、10:30。反証で見つけた例）。全角の「～」「－」「／」「：」は半角にしてから見る
-_NOTATION_JOIN = re.compile(r"[ \t]*(?:[~\u301c]|から)[ \t]*|[-/:\u2010-\u2013\u2212]")
+_NOTATION_JOIN = _lazy_compile(r"[ \t]*(?:[~\u301c]|から)[ \t]*|[-/:\u2010-\u2013\u2212]")
 # つなぎの字の種類（_join_kind）。範囲（〜、から）、日付（/、-）、時刻（:）。字がなければ（10時30、2026年10月13日）adjacent
-_JOIN_RANGE = re.compile(r"[~\u301c]|から")
+_JOIN_RANGE = _lazy_compile(r"[~\u301c]|から")
 # 日付と時刻の単位の並び（範囲・日付・時刻のまとまりの表記の違いを、単位の並びで確かめる。反証で見つけた例）
 _DATE_UNITS = ("年", "月", "日")
 _TIME_UNITS = ("時", "分", "秒")
 # まとまりの中で、単位のある数のすぐあとの単位なしの数が持つ単位（10時30 の 30 は分、10月13 の 13 は日）
 _NEXT_UNIT = {"年": "月", "月": "日", "時": "分", "分": "秒"}
 # 単位なしの数のあとの空白（3 日、3 s。単位の前の空白だけの違いを表記の違いとみなす。反証で見つけた例）
-_NOTATION_SPACE = re.compile(r"[ \t]+")
+_NOTATION_SPACE = _lazy_compile(r"[ \t]+")
 # 数量を主張しない「一つ」（一つの、一つずつ、もう一つ）。強めた否定の「一つも」と、「どれも順に」の「一つひとつ」「一つ一つ」も
 # 数量を主張しない（「一つもらう」の「も」は除く）。「一つも」は、同じ文のあとに打ち消し（ない、なく、なし、ません、ず、ぬ、無）が
 # あるときだけ（強めた否定）。「一つもしくは二つ」「一つもって」の「も」は別の語なので、数量を主張する値のまま。
@@ -3958,7 +3987,7 @@ _NOTATION_SPACE = re.compile(r"[ \t]+")
 _WEAK_ONE_AFTER = ("ひとつ", "一つ", "1つ")
 _WEAK_ONE_BEFORE = "もう"
 _WEAK_ONE_REPEATED = ("一つ", "1つ")
-_WEAK_ONE_MO = re.compile(r"も(?!ら|しく|って)(?=[^。！？!?\n]*?(?:な[いくかしけ]|ません|ず|ぬ|無))")
+_WEAK_ONE_MO = _lazy_compile(r"も(?!ら|しく|って)(?=[^。！？!?\n]*?(?:な[いくかしけ]|ません|ず|ぬ|無))")
 # 「一つの」「一つずつ」は、組の相手の文に数を言う語（_QUANTITY_WORDS）が新しく出れば比べに残す（_drop_weak。「一つずつ →
 # まとめて」「一つの → 複数の」を見逃さない）。その印（weak の値）
 _WEAK_ONE_PAIRED = ("の", "ずつ")
@@ -3979,15 +4008,15 @@ _WEAK_EACH = "each"           # 一つずつ
 _KANA_NUMBERS = {"ひとつ": ("1", "つ"), "ふたつ": ("2", "つ"), "みっつ": ("3", "つ"), "よっつ": ("4", "つ"),
                  "いつつ": ("5", "つ"), "むっつ": ("6", "つ"), "ななつ": ("7", "つ"), "やっつ": ("8", "つ"),
                  "ここのつ": ("9", "つ"), "ひとり": ("1", "人"), "ふたり": ("2", "人")}
-_KANA_NUMBER = re.compile("ここのつ|ひとつ|ふたつ|みっつ|よっつ|いつつ|むっつ|ななつ|やっつ|ひとり|ふたり")
-_KANA_NUMBER_NOT_NEXT = re.compile("まみ|かみ|ぶ(?!ん)|ながり|づき|き(?!り)|でに|ごと|よがり|け|り")
+_KANA_NUMBER = _lazy_compile("ここのつ|ひとつ|ふたつ|みっつ|よっつ|いつつ|むっつ|ななつ|やっつ|ひとり|ふたり")
+_KANA_NUMBER_NOT_NEXT = _lazy_compile("まみ|かみ|ぶ(?!ん)|ながり|づき|き(?!り)|でに|ごと|よがり|け|り")
 _KANA_NUMBER_NEXT_STRICT = ("の", "を", "が", "は", "も", "に", "で", "と", "だ", "め", "ずつ", "しか", "ほど", "まで", "くらい",
                             "ぐらい", "さえ", "こそ", "じゃ", "あ")
 _KANA_NUMBER_STRICT = frozenset(("いつつ", "ここのつ"))
 _KANA_NUMBER_NOT_KANJI_NEXT = {"ひとり": "言"}
 _KANA_NUMBER_BEFORE = frozenset("をがはもにでとのやへ")
-_KANA_NUMBER_KATAKANA = re.compile(r"[ァ-ヴー]")
-_HIRAGANA_CHAR = re.compile(r"[ぁ-ゖ]")
+_KANA_NUMBER_KATAKANA = _lazy_compile(r"[ァ-ヴー]")
+_HIRAGANA_CHAR = _lazy_compile(r"[ぁ-ゖ]")
 _KANA_ONLY = "のみ"
 # 数を言う語（「一つの」「一つずつ」の相手の文で見る。反証で見つけた例と、それを言い換えた合成の組で決めた）。書き方の違いは
 # そろえてから比べる（_QUANTITY_SAME。「複数 → いくつも」「一括 → まとめて」を新しく出た語にしない。反証で見つけた例）。
@@ -3997,7 +4026,7 @@ _KANA_ONLY = "のみ"
 # 「すべて」と語の頭の「各」は、相手の文のどこに出ても数える語にはせず、「一つの」の名詞のすぐ前（すべての窓口、各窓口）だけで
 # 見る（_QUANTITY_CHANGE_BEFORE。「一つの表にまとめ、行ごとに… → 表にまとめ、各行に…」「関係者各位」「表にすべての項目を」は、
 # 「一つの」の名詞を複数にしていない。反証で見つけた例）
-_QUANTITY_WORDS = re.compile(r"一斉|一気に|いっぺんに|別々|まとめて|一括|一度に|並列|並行|同時|複数|上限|無制限|いくつ(?=[かもで])")
+_QUANTITY_WORDS = _lazy_compile(r"一斉|一気に|いっぺんに|別々|まとめて|一括|一度に|並列|並行|同時|複数|上限|無制限|いくつ(?=[かもで])")
 _QUANTITY_SAME = {"一括": "まとめて", "一度に": "まとめて", "並行": "まとめて", "並列": "まとめて", "同時": "まとめて",
                   "一斉": "まとめて", "一気に": "まとめて", "いっぺんに": "まとめて", "いくつ": "複数"}
 # 形ごとに、数の主張が変わったとみなす語（そろえたあとの語）。「一つずつ」は一つずつ処理するのと逆の語、「一つの」は一つで
@@ -4021,17 +4050,17 @@ _QUANTITY_FOR = {_WEAK_EACH: frozenset(("まとめて",)),
 # 「複数の〜」「いくつかの〜」は、〜が元の文にない名詞なら数えない（ファイルを一つずつ確認する → ファイルを見て、複数の誤りを
 # 探す。_QUANTITY_OTHER_NOUN）。前から数えていた語（_QUANTITY_FOR）は今までどおり数える。「順に」は、すぐ前が漢字の「手順に」
 # 「語順に」を除く
-_QUANTITY_KEEP_ANY = {_WEAK_SINGLE: re.compile("同じ|同一|単一"),
-                      _WEAK_EACH: re.compile("(?<![㐀-䶿一-鿿豈-﫿々〆])順(?:番)?に|個別に|一件ずつ|一つずつ|ひとつずつ")}
-_QUANTITY_OTHER_NOUN = re.compile("(?:複数|いくつか|いくつも)の([㐀-䶿一-鿿豈-﫿々〆ァ-ヴーA-Za-z0-9]{1,12})")
+_QUANTITY_KEEP_ANY = {_WEAK_SINGLE: _lazy_compile("同じ|同一|単一"),
+                      _WEAK_EACH: _lazy_compile("(?<![㐀-䶿一-鿿豈-﫿々〆])順(?:番)?に|個別に|一件ずつ|一つずつ|ひとつずつ")}
+_QUANTITY_OTHER_NOUN = _lazy_compile("(?:複数|いくつか|いくつも)の([㐀-䶿一-鿿豈-﫿々〆ァ-ヴーA-Za-z0-9]{1,12})")
 # (4) (3) で数える 複数・いくつ・別々 は、元の文の主題（文頭の「〜は」「〜が」。_QUANTITY_TOPIC）と違う主語（名詞＋が・は。
 # _QUANTITY_SUBJECT）を持つ節にあれば数えない（申請は一つずつ審査し、何人かの担当者が確かめます → 申請は逐一見て、複数の担当者が
 # 確かめます。「複数」は担当者の数で、申請の数の主張は変わっていない。反証で見つけた例）。その節に主題の語が出れば数える（申請は
 # 一つずつ審査します → 担当者は複数の申請を見ます）。主語は漢字・片仮名の並びと、そのあとの送り仮名1字まで（誤りが、揺れが）。
 # 主題と同じ語の主語（似た質問が）、主語のない節（版ごとに別々の名前を付けます）、送り仮名の途中で切れる主語（問い合わせが）は
 # 見分けない（限界）
-_QUANTITY_TOPIC = re.compile(r"\s*([^、。はがを]{1,20}?)(?:は|が)")
-_QUANTITY_SUBJECT = re.compile("([㐀-䶿一-鿿豈-﫿々〆ァ-ヴーA-Za-z0-9]{1,12}[りれえけげせめみいきしち]?)(?:が|は)")
+_QUANTITY_TOPIC = _lazy_compile(r"\s*([^、。はがを]{1,20}?)(?:は|が)")
+_QUANTITY_SUBJECT = _lazy_compile("([㐀-䶿一-鿿豈-﫿々〆ァ-ヴーA-Za-z0-9]{1,12}[りれえけげせめみいきしち]?)(?:が|は)")
 # 数を言う語の打ち消し（並列にせず、複数に分けない、まとめて受け付けず、並列ではなく、分けることなく）。打ち消した語は数えない
 # （「一つずつ → 並列にせず、順に」は数の主張が同じ。反証で見つけた例）。見るのは、数を言う語のあとから、その語がかかる述語の
 # 終わりまで（_QUANTITY_SCOPE_END。「複数の窓口で受け付けるので待ちません」「まとめて送って取りこぼしがない」の打ち消しは別の
@@ -4042,29 +4071,29 @@ _QUANTITY_SUBJECT = re.compile("([㐀-䶿一-鿿豈-﫿々〆ァ-ヴーA-Za-z0-9
 # 「上限」は逆で、上限そのものを打ち消したとき（上限はない、上限なし、上限を設けない、上限をなくす、上限を撤廃する）だけ数える
 # （_QUANTITY_LIMIT_OFF。「部屋ごとの上限の十人を超えない」の打ち消しは「超える」のもの。反証で見つけた例）。
 # 打ち消しの「ず」は _negative_zu で見る（「一つずつ」「必ず」「まず」を打ち消しにしない）
-_QUANTITY_CLAUSE_END = re.compile(r"[、。，．,.！？!?\n]")
-_QUANTITY_NEG = re.compile(r"(?<!かまわ)(?<!構わ)(?<!問題)(?<!差し支え)(?<!少)ない|なかっ|なし|(?:では|でも|じゃ|で|ことは?)なく"
-                           r"|(?<!かまい)(?<!構い)(?<!問題あり)(?<!差し支えあり)ません")
-_QUANTITY_LEAD = re.compile(r"(?:に|で)?して(?![もは])")
-_QUANTITY_SCOPE_END = re.compile(r"ので(?!き)|のに|(?<!あら)ため|けど|けれど|(?<=[ぁ-ゖ])ても|(?<=[んい])でも"
-                                 r"|(?<=[うくぐすつぬぶむるたい])から"
-                                 r"|(?<=[いきぎしちびみりっえけげせねべめれ])て(?=[㐀-䶿一-鿿豈-﫿々〆ァ-ヴ])"
-                                 r"|(?<=ん)で(?=[㐀-䶿一-鿿豈-﫿々〆ァ-ヴ])")
-_QUANTITY_NOT_NEG = re.compile(
+_QUANTITY_CLAUSE_END = _lazy_compile(r"[、。，．,.！？!?\n]")
+_QUANTITY_NEG = _lazy_compile(r"(?<!かまわ)(?<!構わ)(?<!問題)(?<!差し支え)(?<!少)ない|なかっ|なし|(?:では|でも|じゃ|で|ことは?)なく"
+                              r"|(?<!かまい)(?<!構い)(?<!問題あり)(?<!差し支えあり)ません")
+_QUANTITY_LEAD = _lazy_compile(r"(?:に|で)?して(?![もは])")
+_QUANTITY_SCOPE_END = _lazy_compile(r"ので(?!き)|のに|(?<!あら)ため|けど|けれど|(?<=[ぁ-ゖ])ても|(?<=[んい])でも"
+                                    r"|(?<=[うくぐすつぬぶむるたい])から"
+                                    r"|(?<=[いきぎしちびみりっえけげせねべめれ])て(?=[㐀-䶿一-鿿豈-﫿々〆ァ-ヴ])"
+                                    r"|(?<=ん)で(?=[㐀-䶿一-鿿豈-﫿々〆ァ-ヴ])")
+_QUANTITY_NOT_NEG = _lazy_compile(
     r"なければ(?:なら|なりませ|いけ|だめ)[ぁ-ゖ]{0,4}|なくては(?:なら|なりませ|いけ|だめ)[ぁ-ゖ]{0,4}|ねば(?:なら|なりませ)[ぁ-ゖ]{0,4}"
     r"|ないと(?!し[たてま]|する).*|ざるを(?:得|え)[ぁ-ゖ]{0,4}|かもしれ[ぁ-ゖ]{0,4}|に違い(?:ない|ありません)"
     r"|(?:しか|ほか|ほかは)(?:ない|なかっ|ありません)"
     r"|(?:おこ|まか|とも)な(?=[いうえわっ])|(?<=お)はな(?=[しすさせ])|(?:み|こ)な(?=[しすさせ])")
-_QUANTITY_LIMIT_OFF = re.compile(
+_QUANTITY_LIMIT_OFF = _lazy_compile(
     r"上限(?:[はがもをの]|について(?:は)?)?(?:特に)?(?:な[いくしかけ]|無[いくし]|ありません"
     r"|(?:設け|定め|決め|置か|置い)[ぁ-ゖ]{0,4}?(?:ない|なかっ|ず|ません)"
     r"|なく[さしすせなっ]|撤廃|廃止|外[さしすせ]|はず[さしすせ]|取り払|取り除|取り外|解除)")
 # 1つの文の中で、読点で区切った節。助詞で終わる節（窓口は、部屋で、）は、述語のある次の節と1つにして見る
-_QUANTITY_SENTENCE_END = re.compile(r"[。！？!?\n]")
-_QUANTITY_CLAUSE_SPLIT = re.compile(r"[、，,]")
-_QUANTITY_PARTICLE_END = re.compile(r"(?:[はもがをにでとへや]|には|では|とは|からは|までは)$")
+_QUANTITY_SENTENCE_END = _lazy_compile(r"[。！？!?\n]")
+_QUANTITY_CLAUSE_SPLIT = _lazy_compile(r"[、，,]")
+_QUANTITY_PARTICLE_END = _lazy_compile(r"(?:[はもがをにでとへや]|には|では|とは|からは|までは)$")
 # 「一つの」の名詞、「一つずつ」の動詞（「の」「ずつ」のすぐあとの、漢字・片仮名・英数字の並び）
-_QUANTITY_HEAD = re.compile("[" + "㐀-䶿一-鿿豈-﫿々〆" + "ァ-ヴーA-Za-z0-9]{1,12}")
+_QUANTITY_HEAD = _lazy_compile("[" + "㐀-䶿一-鿿豈-﫿々〆" + "ァ-ヴーA-Za-z0-9]{1,12}")
 # その名詞・動詞のすぐ前の、数の主張が同じ語（同じ窓口、順に確認）と、変わった語（複数のファイル、まとめて実行）。相手の文で
 # 「一つの」の名詞や「一つずつ」の動詞にかかる語だけを見る（別の述語にかかる語（結果はまとめて共有）は、同じ語でも数の主張を
 # 変えない。2つの文をまとめた推敲で、元の隣の文の語が「一つの」の名詞に移った「複数のファイル」は、数の主張が変わった形。
@@ -4084,7 +4113,7 @@ _QUANTITY_CHANGE_BEFORE = {_WEAK_SINGLE: "(?:(?:複数|すべて|全て|全部|�
                                        "(?:[^、。]{1,8}?を)?"}
 # 番号つき箇条書きの番号（行頭の「1.」「2)」、diff の詰めで足した「(1)」「（１）」。引用の中も）。並びを示す番号なので、数値として取らない。
 # 隣り合う2つの [ \t]* が同じ空白を取り合う形にすると、伏せて空白だけになった長い行で2乗の時間になる（反証で見つけた例）
-_LIST_NUMBER = re.compile(r"^[ \t]*(?:>[ \t]*)*(?:[0-9]{1,9}[.)](?=[ \t]|$)|\([0-9]{1,9}\))", re.M)
+_LIST_NUMBER = _lazy_compile(r"^[ \t]*(?:>[ \t]*)*(?:[0-9]{1,9}[.)](?=[ \t]|$)|\([0-9]{1,9}\))", re.M)
 # 数値を取り出す前に同じ長さの空白で伏せる protected_spans の種類（コードと URL の数は変えない箇所の検査に任せる）。
 # はじめの一覧（code、inline_code、autolink、bare_url、link_destination、frontmatter、html_block）に、
 # HTML のタグ（html_token）とリンクの定義（reference_definition）を足した。画像は ( ) の中のパスだけを伏せる
@@ -4406,8 +4435,8 @@ def _sentence_numbers(sides: _Sides, side: int, sentence: _Sentence) -> list:
 
 
 # 数値の結び付きの手がかり（数値のあとから読点・句点までの語）
-_CLAUSE_END = re.compile(r"[、，,。．！？!?]")
-_CONTEXT_WORD = re.compile(r"[一-龥々〆ヵヶ]+|[ァ-ヴー]+|[A-Za-z]+")
+_CLAUSE_END = _lazy_compile(r"[、，,。．！？!?]")
+_CONTEXT_WORD = _lazy_compile(r"[一-龥々〆ヵヶ]+|[ァ-ヴー]+|[A-Za-z]+")
 
 
 def _number_contexts(sides: _Sides, side: int, sentence: _Sentence, numbers: Sequence[_Number]) -> Counter:
@@ -5131,7 +5160,7 @@ def _hunk_finder(full: dict, side: int) -> Callable[[int], int | None]:
 # ---- 否定 ----
 
 # 否定の印。「ず」は直後が「に」「、」「。」か文末のときだけ（必ず、はず、まず は除く。読まず のように漢字に続く まず は取る）
-_NEGATION = re.compile(
+_NEGATION = _lazy_compile(
     r"しないで|ません|なかっ|なけれ|ない|なく|禁止"
     r"|(?<!必)(?<!は)ず(?=[に、。]|$)"
     r"|ぬ(?=[。、]|$)"
@@ -5141,17 +5170,17 @@ _NEGATION = re.compile(
     r"|無(?=効|料|視|関係|制限|断)")
 # 数える前に伏せるもの（同じ長さの「＃」にする）。
 # 義務の二重否定、否定の形をした別の働き、否定対比（「AではなくB」を外すのは yomiyasu のよくある正しい直し）
-_NEGATION_MASKED = re.compile(
+_NEGATION_MASKED = _lazy_compile(
     r"なければ(?:ならない|なりません|ならず|いけない|いけません)|なくては(?:ならない|なりません|いけない|いけません)"
     r"|ないと(?:いけない|いけません)|ざるを得(?:ない|ません)|ねば(?:ならない|なりません)"
     r"|かもしれ(?:ない|ません)|に違い(?:ない|ありません)|とは限(?:らない|りません)|わけでは(?:ない|ありません)"
     r"|に(?:すぎ|過ぎ)(?:ない|ません)|しか(?:ない|ありません)|ほか(?:ない|ありません)|問題(?:は|が|も)?(?:ない|なく|ありません)|有無"
     r"|(?:では|じゃ|でも)な(?=[いくかけ])|(?:では|じゃ)ありません")
 # 否定の形をした語の一部（少ない、危ない など）。「な」を伏せれば、ない・なく・なかっ・なけれ のどれにも当たらない
-_NEGATION_WORDS = re.compile(r"(?:少|危|切|仕方|間違い|もったい|つまら|くだら|たまら|情け|頼り|あっけ|はか|ぎこち|さりげ|味気|素っ気)"
-                             r"(な)(?=[いくかけ])")
+_NEGATION_WORDS = _lazy_compile(r"(?:少|危|切|仕方|間違い|もったい|つまら|くだら|たまら|情け|頼り|あっけ|はか|ぎこち|さりげ|味気|素っ気)"
+                                r"(な)(?=[いくかけ])")
 # 「まず」の「ず」は、直前が漢字でなければ副詞（「まず、」）として除く
-_ADVERB_MAZU = re.compile(r"(?<![一-龥々])まず")
+_ADVERB_MAZU = _lazy_compile(r"(?<![一-龥々])まず")
 _NEGATION_LIMIT = 2         # 変わった文字のうち、否定の印でない文字の数の上限（両側の合計。試作の LIMIT）
 # 句点の前の規則（コーパス48組で測って入れると決めた）。変わった箇所が元と後の両方で
 # 文末（句点と閉じかっこの前。句点のない箇条書きの項目などは文の終わり）の直前5字の中に収まり、印の数が違えば数える
@@ -5159,9 +5188,9 @@ _NEGATION_LIMIT = 2         # 変わった文字のうち、否定の印でな�
 _NEGATION_END_RULE = True
 _END_WINDOW = 5             # 句点の前の規則の範囲（文末の直前の字数）
 _PLACE_GAP = 1              # 変わった箇所をまとめる、間の同じ文字の数の上限
-_SENTENCE_TAIL = re.compile(r"[。！？!?]*[」』）)]*$")
-_HIRAGANA = re.compile(r"[ぁ-ゖ]")
-_WORD_CHAR = re.compile(r"[一-龥々〆ヵヶァ-ヴー]")
+_SENTENCE_TAIL = _lazy_compile(r"[。！？!?]*[」』）)]*$")
+_HIRAGANA = _lazy_compile(r"[ぁ-ゖ]")
+_WORD_CHAR = _lazy_compile(r"[一-龥々〆ヵヶァ-ヴー]")
 
 
 def _negation_marks(text: str) -> list:
@@ -5321,11 +5350,11 @@ def _negation_risks(sides: _Sides, groups: list) -> list:
 
 # ---- 主語と目的語の入れ替え ----
 
-_CASE_WORD = re.compile(r"[一-龥々ァ-ヴーA-Za-z0-9０-９・]{1,12}")
+_CASE_WORD = _lazy_compile(r"[一-龥々ァ-ヴーA-Za-z0-9０-９・]{1,12}")
 
 
-_HONORIFIC = re.compile(r"さん|くん|ちゃん")
-_CASE_PARTICLE = re.compile(r"から|より|が|を|に|は|へ")
+_HONORIFIC = _lazy_compile(r"さん|くん|ちゃん")
+_CASE_PARTICLE = _lazy_compile(r"から|より|が|を|に|は|へ")
 
 
 def _case_map(text: str) -> dict:
@@ -5346,7 +5375,7 @@ def _case_map(text: str) -> dict:
 
 
 # 受け身の形（される、された、されて、られる、られた など）
-_PASSIVE = re.compile(r"(?:さ|ら)れ(?:る|た|て|ます|ました|ない)")
+_PASSIVE = _lazy_compile(r"(?:さ|ら)れ(?:る|た|て|ます|ました|ない)")
 
 
 def _passive_rewrite(old_text: str, new_text: str, before: dict[str, str], after: dict[str, str], words: Collection[str]) -> bool:
@@ -5389,10 +5418,10 @@ def _swap_risks(sides: _Sides, groups: list) -> list:
 
 # ---- 問い ----
 
-_QUESTION = re.compile(r"(?:[？?]|か[。？?])[」』）)]*$")
+_QUESTION = _lazy_compile(r"(?:[？?]|か[。？?])[」』）)]*$")
 # 「か。」で終わっても問いでない語（形容動詞の語幹と「ほか」。原因は明らか。→ 原因は明らかだ）
-_NOT_QUESTION_KA = re.compile(r"(?:明ら|確|わず|僅|静|豊|ほ|速や|穏や|鮮や|細や|爽や|健や|和や|緩や|賑や|にぎや|華や|"
-                              r"密|愚|疎|おろ|遥|はる|ほの|柔ら|滑ら|なめら|清ら|朗ら|安ら|大ま)か。[」』）)]*$")
+_NOT_QUESTION_KA = _lazy_compile(r"(?:明ら|確|わず|僅|静|豊|ほ|速や|穏や|鮮や|細や|爽や|健や|和や|緩や|賑や|にぎや|華や|"
+                                 r"密|愚|疎|おろ|遥|はる|ほの|柔ら|滑ら|なめら|清ら|朗ら|安ら|大ま)か。[」』）)]*$")
 
 
 def _is_question(text: str) -> bool:
@@ -5401,7 +5430,7 @@ def _is_question(text: str) -> bool:
 
 
 # 台詞の最後の「。」（閉じ括弧の前）。2.2.0 の台詞・脚本の推敲は、この「。」だけを外す
-_FINAL_PERIOD_IN_QUOTE = re.compile(r"。(?=[」』]+$)")
+_FINAL_PERIOD_IN_QUOTE = _lazy_compile(r"。(?=[」』]+$)")
 
 
 def _only_final_period_removed(old: str, new: str) -> bool:
@@ -5617,18 +5646,18 @@ def _logic_risks(sides: _Sides, changes: Sequence | None) -> list:
 # 相手の側の、同じ数のすぐ隣の、印に近い語（まで、最大、上限、少なくとも、最低、規模、に満たない、より前 など）と、相手の文の、
 # 見積もりを言う語（推定、推計、概算、見込み、目安、想定、と見られる など）は、その家族の印があるとみなす（消えた・増えたにしない）。
 # 数量を主張しない「一つ」（weak の値）と、元と後で同じ数の数が違う値（数値の候補 number が扱う）は見ない。
-_QUALIFIER_JOIN = re.compile(r"[ \t]*(?:[~〜]|から)[ \t]*|[-/:‐-–−]")
+_QUALIFIER_JOIN = _lazy_compile(r"[ \t]*(?:[~〜]|から)[ \t]*|[-/:‐-–−]")
 # 数のあとに読み飛ばすもの（強調の記号、万・億・兆と単位、「3日間」の「間」、片仮名の単位）
-_QUALIFIER_SKIP = re.compile(r"\*{0,2}(?:[万億兆](?:" + _unit_pattern(_UNITS) + r")?)?間?")
+_QUALIFIER_SKIP = _lazy_compile(r"\*{0,2}(?:[万億兆](?:" + _unit_pattern(_UNITS) + r")?)?間?")
 # 人が読む数の書き方に含める、数のあとの万・億・兆と単位（10万円、3億円）
-_QUALIFIER_SHOWN = re.compile(r"[万億兆](?:" + _unit_pattern(_UNITS) + r")?")
-_QUALIFIER_KATAKANA_UNIT = re.compile(r"[ァ-ヴー]{1,6}")
+_QUALIFIER_SHOWN = _lazy_compile(r"[万億兆](?:" + _unit_pattern(_UNITS) + r")?")
+_QUALIFIER_KATAKANA_UNIT = _lazy_compile(r"[ァ-ヴー]{1,6}")
 # 単位のある数のあとの、時期と半端を言う語（10月中旬ごろ、15時半ごろ、3月末ごろ、2年半ほど）。読み飛ばしてから印を見る
-_QUALIFIER_PART = re.compile(r"上旬|中旬|下旬|初旬|半ば|半|末")
+_QUALIFIER_PART = _lazy_compile(r"上旬|中旬|下旬|初旬|半ば|半|末")
 # 数のすぐあとの印。名前は 家族_含むか（approx は概数、lower は下限、upper は上限。in は含む、ex は含まない）。
 # 弱・強・余は、あとに続けて語を作る字（弱点、強化、強制、余裕、余計）と、動詞の活用（弱い、強める、余る、余ります）なら
 # 印にしない（5分弱かかる、1時間弱要した、3年余働いた は印）
-_QUALIFIER_AFTER = re.compile(
+_QUALIFIER_AFTER = _lazy_compile(
     r"[ 　]?(?:"
     r"(?P<approx>ほど|程度|程(?![度遠])|前後(?!関係|左右|不覚|逆|差|し|の関係|の文脈)|ぐらい|くらい|位(?![置相階牌取])|ごろ|頃"
     r"|余り(?!ま[すしせ]|そう)|余(?![裕計地分白剰談韻波興震熱力命暇生罪念儀所程技病勢光香情弊禄話聞部事日人りるっすせられさし])"
@@ -5643,13 +5672,13 @@ _QUALIFIER_UNIT_ONLY = frozenset(("弱", "強", "位"))
 # 文書の中の場所を言う単位のあとの「以下」は「それより後」（第3章以下、第5条以下）。下限として読む
 _QUALIFIER_PLACE_UNITS = frozenset(("章", "節", "項", "条", "号"))
 # バージョンの番号（v2.0前後、バージョン2.0前後）のあとの「前後」は「そのバージョンの前と後」。概数を表す語として取らない
-_QUALIFIER_VERSION_BEFORE = re.compile(r"(?:[vV]|[Vv]er\.?|[Vv]ersion|バージョン)[ 　]?$")
+_QUALIFIER_VERSION_BEFORE = _lazy_compile(r"(?:[vV]|[Vv]er\.?|[Vv]ersion|バージョン)[ 　]?$")
 # 動詞の言い方（を超える、を上回る、を下回る）は、範囲の印があることだけを見る（bound の家族）。下限か上限かは、あとの打ち消し
 # （を超えて使えません、を下回らない）で入れ替わり、印のすぐ隣だけでは決まらないので、下限と上限のどちらとも同じとみなす。
 # 含むかも比べない（「2秒を超え → 2秒以上かかり」のように、文章では含むかを気にせずに言い換えることが多い。測って決めた）
 # 数のすぐ前の印（直前の字を見る範囲は _QUALIFIER_BEFORE_REACH）
-_QUALIFIER_BEFORE = re.compile(r"(?:(?P<approx>約|およそ|おおよそ|凡そ|概ね|おおむね|ほぼ|推定|大体|だいたい))"
-                               r"(?:で|、)?[ 　]*\*{0,2}$")
+_QUALIFIER_BEFORE = _lazy_compile(r"(?:(?P<approx>約|およそ|おおよそ|凡そ|概ね|おおむね|ほぼ|推定|大体|だいたい))"
+                                  r"(?:で|、)?[ 　]*\*{0,2}$")
 _QUALIFIER_BEFORE_REACH = 8
 # 「約」で終わる語（契約3件、予約2件、要約3行）。この語の「約」は印にしない。人口、取引先 のほうが多いので 口約、先約 は入れない
 _QUALIFIER_YAKU_WORDS = frozenset(("契約", "予約", "集約", "要約", "節約", "制約", "公約", "条約", "特約", "規約", "確約",
@@ -5660,21 +5689,21 @@ _QUALIFIER_YAKU_NOUNS = frozenset(("所要", "必要", "主要", "需要", "重�
                                    "生成", "結成", "更新", "最新", "刷新", "体制", "募集", "収集", "編集", "結婚", "猶予"))
 # 相手の側の、同じ数のすぐ隣の、印に近い語（消えた・増えたを比べるとき、その家族の印があるとみなす。家族だけを見る）。
 # より古い、より新しい は、版（3.9より古い）なら上限、日数（90日より古い）なら下限なので、下限と上限のどちらともみなす
-_QUALIFIER_NEAR_AFTER = re.compile(
+_QUALIFIER_NEAR_AFTER = _lazy_compile(
     r"[ 　]?(?:(?P<both>より古|より新)"
     r"|(?P<upper>まで|より(?:少|前|下|短|低|早|小|手前|若)|に満たな|に届かな|を切[りっるらろれ]|を割[りっるらろれ]|のうちに"
     r"|を上限|が上限|を限度|を最大)"
     r"|(?P<lower>から|より|を下限|が下限|を最低|でも|過ぎ|すぎ|はかか|は必要|は要)"
     r"|(?P<approx>規模|見当|ちょっと|ちょい|そこそこ|ばかり|に迫|に近))")
-_QUALIFIER_NEAR_BEFORE = re.compile(r"(?:(?P<upper>最大|最長|最高|最多|多くて|多くとも|多い時で|上限|最大限)"
-                                    r"|(?P<lower>最低|最小|最短|少なくとも|少なくて|下限)|(?P<approx>ざっと|およそ))"
-                                    r"(?:で|は|、)?[ 　]*\*{0,2}$")
+_QUALIFIER_NEAR_BEFORE = _lazy_compile(r"(?:(?P<upper>最大|最長|最高|最多|多くて|多くとも|多い時で|上限|最大限)"
+                                       r"|(?P<lower>最低|最小|最短|少なくとも|少なくて|下限)|(?P<approx>ざっと|およそ))"
+                                       r"(?:で|は|、)?[ 　]*\*{0,2}$")
 # 相手の文のどこかにあれば、その家族の印があるとみなす語。概数は見積もりを言う語。下限と上限は、範囲の語と、指す語で数を受けた
 # 言い方（タイムアウトは30秒で、待ちがこれを超えた → 待ちが30秒を超えた。測って決めた）
 _QUALIFIER_SENTENCE = {
-    "approx": re.compile(r"推定|推計|概算|見込|見積|目安|想定|概数|大まか|おおまか|ざっと|と見られ|とみられ"),
-    "lower": re.compile(r"以上|以降|超え|超す|超し|超過|上回|少なくとも|最低|下限"),
-    "upper": re.compile(r"以下|以内|未満|下回|上限|最大|最長|超えな|超えず|超えませ|まで|満たな"),
+    "approx": _lazy_compile(r"推定|推計|概算|見込|見積|目安|想定|概数|大まか|おおまか|ざっと|と見られ|とみられ"),
+    "lower": _lazy_compile(r"以上|以降|超え|超す|超し|超過|上回|少なくとも|最低|下限"),
+    "upper": _lazy_compile(r"以下|以内|未満|下回|上限|最大|最長|超えな|超えず|超えませ|まで|満たな"),
 }
 _QUALIFIER_FAMILIES = ("approx", "lower", "upper", "bound")
 _QUALIFIER_BOUNDS = frozenset(("lower", "upper", "bound"))
@@ -5788,8 +5817,8 @@ def _qualifier_joined(text: str, previous: _Number, number: _Number, end: int) -
 
 
 # 数が文の範囲を越えたときに、範囲を延ばす先の文の終わり。全角の小数点（３．５）で切れた文の終わり
-_QUALIFIER_SENTENCE_STOP = re.compile(r"[。！？!?\n]")
-_QUALIFIER_SPLIT_DECIMAL = re.compile(r"[0-9０-９]．$")
+_QUALIFIER_SENTENCE_STOP = _lazy_compile(r"[。！？!?\n]")
+_QUALIFIER_SPLIT_DECIMAL = _lazy_compile(r"[0-9０-９]．$")
 
 
 def _qualifier_reach(sides: _Sides, side: int, sentence: _Sentence, numbers: Sequence[_Number]) -> str:
@@ -6244,7 +6273,7 @@ _BODY_SKIP_KINDS = frozenset(("code", "frontmatter", "html_block", "table", "hea
 # 文の中で伏せる範囲（インラインのコード、URL、リンク先、画像、HTML のタグ）
 _BODY_MASK_KINDS = frozenset(("inline_code", "autolink", "bare_url", "link_destination", "image", "html_token"))
 _K = "㐀-䶿一-鿿豈-﫿々〆"          # 漢字（々 と 〆 を含む）
-_STIFF_KANJI = re.compile("[" + _K + "]")
+_STIFF_KANJI = _lazy_compile("[" + _K + "]")
 # 文の長さに数える句読点とかっこ（記号と空白は数えない。文字と数字は数える）
 _LENGTH_PUNCT = frozenset("、。，．！？!?「」『』（）()…・")
 
@@ -6324,19 +6353,19 @@ def _all_bodies(sides: _Sides, side: int, masker: _Masker | None = None) -> list
 
 # 否定対比を表す語（「Aではなく」「Aではない」「Aじゃない」「Aでもなく」「Aでなく」「Aではありません」と、diff を詰めたときに
 # 足した「Aは使わず」「Aはせず」（反証で見つけた例。正しい推敲の組で誤検出が増えないことを測って足した）
-_CONTRAST = re.compile(r"(?:では|じゃ|でも)(?:なく(?:て)?|ない|なかっ|ありません)|でなく(?:て)?|は(?:使わ|せ)ずに?")
+_CONTRAST = _lazy_compile(r"(?:では|じゃ|でも)(?:なく(?:て)?|ない|なかっ|ありません)|でなく(?:て)?|は(?:使わ|せ)ずに?")
 # 「Aは使わず」「Aはせず」の印
-_ZU_MARK = re.compile(r"は(?:使わ|せ)ず")
+_ZU_MARK = _lazy_compile(r"は(?:使わ|せ)ず")
 # 「Aだけでなく」「Aばかりではなく」「Aのみでなく」（A に加えて B も）。否定対比の印のすぐ前がこれなら、A を否定していない
 _NOT_ONLY = ("だけ", "ばかり", "のみ")
 # 反語と推量（「キャッシュではないか」「〜ではないでしょうか」）は否定にしない
-_RHETORICAL = re.compile(r"(?:ない|ありません)(?:か|でしょうか|だろうか|かと|のか)")
+_RHETORICAL = _lazy_compile(r"(?:ない|ありません)(?:か|でしょうか|だろうか|かと|のか)")
 # 「ではない」のあとの理由や条件の節（「まだ本番環境ではないので、まず検証環境で試します」）。対比ではないので名詞を取らない
-_SUBORDINATE = re.compile(r"(?:た)?(?:ので|から|ため|場合|とき|時|なら|限り|かぎり)")
+_SUBORDINATE = _lazy_compile(r"(?:た)?(?:ので|から|ため|場合|とき|時|なら|限り|かぎり)")
 # 節の切れ目（表のセルの区切りの「|」も切れ目にする。見出しと表の中の否定対比も見るため）
-_CLAUSE_BREAK = re.compile(r"[、。，,．！？!?「」『』（）()：:\n|｜]")
+_CLAUSE_BREAK = _lazy_compile(r"[、。，,．！？!?「」『』（）()：:\n|｜]")
 # 主題の「は」（直前が仮名でない、直前が の・に・と・で、または直後が仮名でない）。否定の節はこのあとから数える
-_TOPIC = re.compile(r"(?:(?<=[^ぁ-ゖ])|(?<=[のにとで]))は|は(?=[^ぁ-ゖ])")
+_TOPIC = _lazy_compile(r"(?:(?<=[^ぁ-ゖ])|(?<=[のにとで]))は|は(?=[^ぁ-ゖ])")
 _OKURI_MID = "りきけしみえちびれげせじつ"
 _OKURI_TAIL = "りきけしみえちびれげせじ"
 # 否定対比の名詞では、平仮名の入る和語の名詞（見た目、使い方、締め切り、言い方）も取る（反証で見つけた例: 「見た目ではなく」を
@@ -6344,8 +6373,8 @@ _OKURI_TAIL = "りきけしみえちびれげせじ"
 # 数え方（_NOUN、_KANGO）は変えない
 _TOKEN_OKURI_MID = _OKURI_MID + "たいめわ"
 # 名詞（2字以上の漢字の並び、送り仮名を挟む漢字の語、2字以上の片仮名、英字の語）
-_TOKEN = re.compile("[" + _K + "]+(?:[" + _TOKEN_OKURI_MID + "][" + _K + "]+)*(?:[" + _OKURI_TAIL + "]|(?<=[" + _K + "])[さみ](?![ぁ-ゖ]))?"
-                    "|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_.+#-]+")
+_TOKEN = _lazy_compile("[" + _K + "]+(?:[" + _TOKEN_OKURI_MID + "][" + _K + "]+)*(?:[" + _OKURI_TAIL + "]|(?<=[" + _K + "])[さみ](?![ぁ-ゖ]))?"
+                       "|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_.+#-]+")
 # 重みを置く語。はじめの5つ（目的、狙い、重要、まず、第一に）に、似た働きの語を足したもの（試作で、5つだけでは逆転の30組中21組しか拾えなかった）
 CONTRAST_WEIGHTS = ("目的", "狙い", "重要", "まず", "第一に", "ねらい", "狙っ", "狙う", "主眼", "主目的", "主な", "最優先",
                     "優先", "何より", "最も", "一番", "重視", "重点", "大事", "大切", "目指", "筆頭", "中心")
@@ -6363,22 +6392,22 @@ _STOP_TOKENS = frozenset(CONTRAST_WEIGHTS + ("場合", "部分", "程度", "意�
 # （「の〜」を挟まない。「コストが原因の不具合はその次」の「原因」を別の名詞にしないため）。名詞は漢字・片仮名・英数字の並びと、
 # ほか・それ・あと・これ。A の句の中の動詞の活用や「で」の句（見た目の話し合いはその次、見た目で悩むのはその次）は別の名詞に
 # しない（反証で見つけた例）。読点を挟んだ「Aは、その次に」は見ない
-_NEG_AFTER = re.compile(r"(?:では|じゃ|でも)な|でな[くい]|ではありません|ない|なく|なかっ|ません"
-                        r"|以外|を除|を除い|抜き|不要|二の次|後回し")
-_DEMOTE_WORD = re.compile(r"(?<=[はもがを])(?:その次|二番手|二番目|脇に置|脇役|添え物|おまけ|どうでも|そのあとに回)")
+_NEG_AFTER = _lazy_compile(r"(?:では|じゃ|でも)な|でな[くい]|ではありません|ない|なく|なかっ|ません"
+                           r"|以外|を除|を除い|抜き|不要|二の次|後回し")
+_DEMOTE_WORD = _lazy_compile(r"(?<=[はもがを])(?:その次|二番手|二番目|脇に置|脇役|添え物|おまけ|どうでも|そのあとに回)")
 _OTHER_NOUN = "(?:[" + _K + "ァ-ヴーA-Za-z0-9]+|ほか|それ|あと|これ)"
-_DEMOTE_WORD_OTHER = re.compile("(?:(?:で|て|にし|し)" + _OTHER_NOUN + "(?:の[^、。はもがを]{1,12})?"
-                                "|(?:に|が|けど|から|ので)" + _OTHER_NOUN + ")[はもがを]$")
+_DEMOTE_WORD_OTHER = _lazy_compile("(?:(?:で|て|にし|し)" + _OTHER_NOUN + "(?:の[^、。はもがを]{1,12})?"
+                                   "|(?:に|が|けど|から|ので)" + _OTHER_NOUN + ")[はもがを]$")
 # 語で否定した節（AとBは対象外、Aは非対応、Aは範囲外 など）も否定のある節にする（反証で見つけた例）。ただし、A と並べた
 # 別の名詞の句の語（「AとXの廃止」の「廃止」は X のもの。A のすぐあとが並べる語で、語の直前が「の」、間に「は」「も」「が」が
 # ない）は数えない（反証で見つけた例。「性能改善と古いAPIの廃止」）。_neg_after
-_LEXICAL_NEG = re.compile(r"対象外|範囲外|適用外|非対応|未対応|無効|廃止|禁止|除外|据え置")
-_COORD_HEAD = re.compile(r"と|や|及び|および|並びに|ならびに|・")
-_TOPIC_MARKS = re.compile(r"[はもが]")
+_LEXICAL_NEG = _lazy_compile(r"対象外|範囲外|適用外|非対応|未対応|無効|廃止|禁止|除外|据え置")
+_COORD_HEAD = _lazy_compile(r"と|や|及び|および|並びに|ならびに|・")
+_TOPIC_MARKS = _lazy_compile(r"[はもが]")
 # 打ち消しの「ず」（狙わず、使わずに、せず、求めずに）。直前は動詞の未然形の仮名、直後は読点・句点・文末・「に」・漢字・片仮名・
 # 英字。副詞の「まず」、「必ず」、「とりあえず」「かならず」、「少しずつ」「わずか」「はず」は打ち消しにしない
 _ZU_PREV = frozenset("わかさたなまらがばぱせけげてでねべめれえきぎしじちにびみりい")
-_ZU_NEXT = re.compile("[、。，．" + _K + "ァ-ヴA-Za-zＡ-Ｚａ-ｚ]|に")
+_ZU_NEXT = _lazy_compile("[、。，．" + _K + "ァ-ヴA-Za-zＡ-Ｚａ-ｚ]|に")
 # 比べて下げる形（名詞のあとから節の終わりまでにあれば、A を下げたとみなす）。「Aより」と、diff を詰めたときに足した
 # 「Aの代わりに」「Aに代わり」「Aに替えて」「Aから B に切り替え・移行・置き換え」「Aを書く前に」「Aの前に」「Aは後にする」
 # 「Aはあとで」「Aは後日」「Aは次回」「Aは見送る」「Aは保留」「Aを控える」「Aを避ける」「Aをやめる」「Aを止める」。
@@ -6407,15 +6436,15 @@ _PROMOTE_TO = "".join("(?<!" + word + ")" for word in ("本番", "有効", "先�
                                                        "主軸", "前面", "最初", "一番", "トップ", "優先", "オン"))
 _USE_A = "(?!使|用い|中心|基本|軸|前提|主体|活か|生か|ベース|重視|優先)"
 _DEMOTE_REDUCE = "は減ら"
-_DEMOTE = re.compile(r"(?<!に)より|の代わり|に代わ|に替え|から[^、。]{0,12}?(?:切り替|切替|移行|移し|乗り換|置き換)"
-                     "|^[" + _K + "ァ-ヴーA-Za-z0-9]{0,8}(?:[ぁ-ゖ]{0,2}|の[^、。をはもがでにへと]{0,12})[をはも]" + _USE_A
-                     + "[^、。を]{1,12}?(?:" + _PROMOTE_TO + "[にへ](?:切り替|切替|移行|移[しす]|乗り換|置き換|置換|入れ替|差し替"
-                     "|変更|改め|転換)|で置き換)"
-                     r"|(?:[うくぐすつぬぶむる]|の)前に|[はをも](?:後|あと)(?:に(?:し|す|回|まわ)|で|$)|後日|後回し"
-                     r"|次回(?!も|から(?![にと]))|見送|保留|(?<!に)控え|避け|(?<!は)やめ|はやめ(?!に)"
-                     r"|(?<!突き)(?<!食い)(?<!受け)(?<!引き)(?<!歯)止め|^(?:[ぁ-ゖ]{0,2}|の(?:数|回数|件数|時間|量|頻度|割合))は減ら")
+_DEMOTE = _lazy_compile(r"(?<!に)より|の代わり|に代わ|に替え|から[^、。]{0,12}?(?:切り替|切替|移行|移し|乗り換|置き換)"
+                        "|^[" + _K + "ァ-ヴーA-Za-z0-9]{0,8}(?:[ぁ-ゖ]{0,2}|の[^、。をはもがでにへと]{0,12})[をはも]" + _USE_A
+                        + "[^、。を]{1,12}?(?:" + _PROMOTE_TO + "[にへ](?:切り替|切替|移行|移[しす]|乗り換|置き換|置換|入れ替|差し替"
+                        "|変更|改め|転換)|で置き換)"
+                        r"|(?:[うくぐすつぬぶむる]|の)前に|[はをも](?:後|あと)(?:に(?:し|す|回|まわ)|で|$)|後日|後回し"
+                        r"|次回(?!も|から(?![にと]))|見送|保留|(?<!に)控え|避け|(?<!は)やめ|はやめ(?!に)"
+                        r"|(?<!突き)(?<!食い)(?<!受け)(?<!引き)(?<!歯)止め|^(?:[ぁ-ゖ]{0,2}|の(?:数|回数|件数|時間|量|頻度|割合))は減ら")
 # 「Aは減らすこと」「Aは減らすのが」（A を減らすことそのものを言う形）。このときだけ、あとの重みの語を「減らす」の重みとみなす
-_REDUCE_ITSELF = re.compile(r"[ぁ-ゖ]{0,5}?(?:こと|の(?=[がはを]))")
+_REDUCE_ITSELF = _lazy_compile(r"[ぁ-ゖ]{0,5}?(?:こと|の(?=[がはを]))")
 # 動詞・名詞の下げる語（見送る、保留、控える、避ける、やめる、止める、次回、後日、Aは後にする）。A と下げる語の間に、別の名詞に
 # 付いた「を」があれば、下げたのは A ではない（「移行で障害を避ける」「移行は障害を避ける」。反証で見つけた例）。A の句
 # （「Aの追加」「Aの〜」）のあとの最初の助詞より後ろの「を」だけを見る。「ことを」「のを」は A の句の続きなので見ない。
@@ -6423,40 +6452,40 @@ _REDUCE_ITSELF = re.compile(r"[ぁ-ゖ]{0,5}?(?:こと|の(?=[がはを]))")
 # 「契約社員への適用は見送る」「原因に関する調査は後日」「キャッシュを本番で使うのは避け」のように、A を下げたままの言い換えを
 # 逆転の候補にした（反証で見つけた例）ので、下げたのが A でないと分かる形だけを除く形にした（_other_object）。
 # 「より」「の代わり」「に代わ」「に替え」「から〜切り替」「前に」は A のすぐあとに出る形なので、この条件をかけない
-_DEMOTE_ANCHORED = re.compile(r"見送|保留|控え|避け|やめ|止め|次回|後日|[はをも](?:後|あと)")
-_A_PHRASE = re.compile(r"の[^、。をはもがでにへと]{0,12}")
-_OTHER_OBJECT = re.compile(r"(?<!こと)(?<!の)を")
+_DEMOTE_ANCHORED = _lazy_compile(r"見送|保留|控え|避け|やめ|止め|次回|後日|[はをも](?:後|あと)")
+_A_PHRASE = _lazy_compile(r"の[^、。をはもがでにへと]{0,12}")
+_OTHER_OBJECT = _lazy_compile(r"(?<!こと)(?<!の)を")
 # 「XをAに替える」「XがAに代わる」の A は置き換えた先（下げた形でない）。A のすぐあとの「に替え」「に代わ」で、節の A より前に
 # 「を」「が」「から」があれば、下げた形とみなさない
-_SWITCH_TO = re.compile(r"に(?:替え|代わ)")
-_SWITCH_FROM = re.compile(r"[をが]|から")
+_SWITCH_TO = _lazy_compile(r"に(?:替え|代わ)")
+_SWITCH_FROM = _lazy_compile(r"[をが]|から")
 # 否定対比の逆転で文として数えない行の種類。硬化の数え方（_BODY_SKIP_KINDS）と違い、見出しと表の中も見る（反証で見つけた例。
 # 技術記事やスライドの見出しの「AではなくB」。コーパス48組、keep の組、正しい推敲の組で誤検出が増えないことを測って入れた）
 _CONTRAST_SKIP_KINDS = _BODY_SKIP_KINDS - frozenset(("heading", "table"))
 # 推敲後で A のすぐあとがこれなら、A を B と並べて肯定している（重みの語がなくても候補にする）
-_ALSO_AFTER = re.compile(r"(?:だけ|ばかり|のみ)(?:では|で|じゃ)なく|のみならず|に加え|に限らず|のほか")
+_ALSO_AFTER = _lazy_compile(r"(?:だけ|ばかり|のみ)(?:では|で|じゃ)なく|のみならず|に加え|に限らず|のほか")
 # 推敲後で A のすぐあとの並べる語。引用・言い換え・比べの「と」（という、として、とは、との、と同じ、と違う、となる、
 # とする、と呼ぶ、と考える など）は並べる語にしない
-_COORD_AFTER = re.compile(r"及び|および|並びに|ならびに|や|・"
-                          r"|と(?!い[うっ]|して|しては|は|の|同|違|異|比|な[るりっれ]|す[るれ]|し[たてま]|呼|言|考|思|見|感|聞)")
+_COORD_AFTER = _lazy_compile(r"及び|および|並びに|ならびに|や|・"
+                             r"|と(?!い[うっ]|して|しては|は|の|同|違|異|比|な[るりっれ]|す[るれ]|し[たてま]|呼|言|考|思|見|感|聞)")
 # 並べた2つを比べた・調べた・選んだ形（「AとBの両方を調べた」「AとBのうち」）。この節にあれば、並べる語の形では候補にしない。
 # 「試し」「試す」「試み」は、反証で見つけた残る恐れ（AとBを並べて試した形）を見て、この段で足した。
 # 「確かめ」「確認」は、確かめた結果を言う「AとBだと確認」「AとBであることを確認」（結論の言い方）を除く（反証で見つけた例）。1回目に直したときは「を」「の」のすぐあとだけを比べた形にしたが、「AとBを順に確認し」「AとBを再確認した」「AとBも確認し」
 # 「AとBは確認済み」「AとBが正しいか確認し」を逆転の候補にした（反証で見つけた例）ので、結論の言い方のほうを除く形にした。
 # 「AとBについて確認」も比べた形になる（A を肯定していない文なので、逆転の候補にしない）。「だと再確認」は結論の言い方
-_COMPARE_CLAUSE = re.compile(r"のうち|から選|比べ|比較|両方|どちら|いずれ|調べ|(?<!と)(?<!ことを)(?<!ことが)(?<!ことも)(?<!再)再?(?:確かめ|確認)"
-                             r"|検討|検証|候補|試[しすみ]")
+_COMPARE_CLAUSE = _lazy_compile(r"のうち|から選|比べ|比較|両方|どちら|いずれ|調べ|(?<!と)(?<!ことを)(?<!ことが)(?<!ことも)(?<!再)再?(?:確かめ|確認)"
+                                r"|検討|検証|候補|試[しすみ]")
 # 仮説の言い方（「キャッシュを疑ったが」「書き込みが遅いと考えていたが」）。名詞の節にあれば、肯定の主張とみなさない。
 # 障害報告で結論を言う決まった言い方の「〜と考えられます」「〜と考えられる」は仮説にしない（反証で見つけた例）
-_HYPOTHESIS = re.compile(r"疑|考え(?!られ(?:ます|る))|思っ|思い|予想|想定|見込|仮説|推測|睨")
+_HYPOTHESIS = _lazy_compile(r"疑|考え(?!られ(?:ます|る))|思っ|思い|予想|想定|見込|仮説|推測|睨")
 # 逆接で終わる節（「〜したが、」「〜だけど、」）
-_ADVERSATIVE_END = re.compile(r"(?:が|けど|けれど|けれども|ものの|のに|ても|でも)$")
-_WEIGHT_PATTERN = re.compile("|".join(r"(?<![" + _K + r"])まず(?!い)" if word == "まず" else re.escape(word)
-                                      for word in CONTRAST_WEIGHTS))
+_ADVERSATIVE_END = _lazy_compile(r"(?:が|けど|けれど|けれども|ものの|のに|ても|でも)$")
+_WEIGHT_PATTERN = _lazy_compile("|".join(r"(?<![" + _K + r"])まず(?!い)" if word == "まず" else re.escape(word)
+                                         for word in CONTRAST_WEIGHTS))
 # 重みの語だけの句（まず、第一に、何よりも、最優先で、一番に）。見出しと「Aは使わず」「Aはせず」で、A の節の前の節がこれなら、
 # A の節の重みとして見る（「## まず、手作業で回す」。反証で見つけた例。前の節に名詞がある「## まず習慣、ツールはその次」は
 # 数えない）
-_WEIGHT_ONLY_CLAUSE = re.compile(r"^#*\s*(?:まず(?:は)?|第一に|何より(?:も)?|最優先(?:で|として)|一番に)$")
+_WEIGHT_ONLY_CLAUSE = _lazy_compile(r"^#*\s*(?:まず(?:は)?|第一に|何より(?:も)?|最優先(?:で|として)|一番に)$")
 
 
 def _neg_after(after: str, token: str = "") -> bool:
@@ -6508,8 +6537,8 @@ def _clause_bounds(text: str, position: int) -> tuple[int, int]:
     return left, (match.start() if match else len(text))
 
 
-_KATAKANA_HEAD = re.compile(r"[ァ-ヴー]")
-_LATIN_HEAD = re.compile(r"[A-Za-z]")
+_KATAKANA_HEAD = _lazy_compile(r"[ァ-ヴー]")
+_LATIN_HEAD = _lazy_compile(r"[A-Za-z]")
 
 
 def _is_token(token: str) -> bool:
@@ -6525,7 +6554,7 @@ def _is_token(token: str) -> bool:
 # 漢字1字の形容詞と名詞（高い品質、長い説明、古い仕組み）。送り仮名に「い」を許したので1つの語として取る（_TOKEN_OKURI_MID）。
 # 送り仮名の「い」「た」「め」のあとに2字以上の漢字が続く語（支払い期限、見習い期間、立ち会い検査、得た知識、褒め言葉）も、
 # あとの名詞を見る（反証で見つけた例）
-_ADJ_NOUN = re.compile("^[" + _K + "]い([" + _K + "].*)$|^.*[いため]([" + _K + "]{2,}.*)$")
+_ADJ_NOUN = _lazy_compile("^[" + _K + "]い([" + _K + "].*)$|^.*[いため]([" + _K + "]{2,}.*)$")
 
 
 def _negated_tokens(sentence: str) -> list:
@@ -6564,7 +6593,7 @@ def _negated_tokens(sentence: str) -> list:
 # 否定対比の逆転の候補で示す語の送り仮名（取った語のすぐあとから否定を表す語までの平仮名1〜2字。助詞で始まるものと、2字の助詞
 # （など、まで、ほど、しか、さえ、こそ）は除く。ただし「も」「が」に送り仮名の字が続く2字（見積もり、出来上がり）は送り仮名。
 # どれも反証で見つけた例）
-_SHOWN_TAIL = re.compile("[ぁ-ゖ]{1,2}$")
+_SHOWN_TAIL = _lazy_compile("[ぁ-ゖ]{1,2}$")
 _SHOWN_TAIL_NOT_HEAD = frozenset("はがをのにとでもへやかよ")
 _SHOWN_TAIL_PARTICLES = frozenset(("など", "まで", "ほど", "しか", "さえ", "こそ"))
 _SHOWN_TAIL_MO_GA = frozenset("もが")
@@ -6655,11 +6684,11 @@ def _affirmed_with_weight(text: str, token: str, clause_only: bool = False, affi
 
 # B の語のすぐあとの、B を置き換えられる側にする言い方（「まず、外部のツールで社内のツールを置き換える」の「社内」。B を肯定した
 # のではない。反証で見つけた例）
-_SIDE_REPLACED = re.compile("(?:の[^、。をはもがでにへと]{0,12})?を(?:置き換|置換|差し替|入れ替|切り替|切替)")
+_SIDE_REPLACED = _lazy_compile("(?:の[^、。をはもがでにへと]{0,12})?を(?:置き換|置換|差し替|入れ替|切り替|切替)")
 # B の語のすぐあとの、B を退ける言い方（「まず、手作業で回して自動化を中止する」「まず、会議で決めて文書は省く」の「自動化」「文書」。
 # B を肯定したのではない。反証で見つけた例）。B のすぐあとの「を・は・も」に続くときだけ見る（「自動化の漏れを減らす」は B を
 # 退けていない）
-_SIDE_REJECTED = re.compile("[をはも](?:中止|減ら|省|捨て|廃止|控え|見送|禁止|やめ|止め|取りやめ|なく[さしすせ]|削)")
+_SIDE_REJECTED = _lazy_compile("[をはも](?:中止|減ら|省|捨て|廃止|控え|見送|禁止|やめ|止め|取りやめ|なく[さしすせ]|削)")
 
 
 def _side_affirmed(text: str, position: int, token: str, right: int, words: Collection) -> bool:
@@ -6925,19 +6954,19 @@ STIFFNESS_THRESHOLDS = {
 # v1.1.2 の人間A/Bの好み「報告書では『障害が起きた朝』より『障害が発生した朝』が合う」と、SKILL.md の incident の行（発生、
 # 復旧などの報告の語の規則を当てない）に合わせる）。並びは DOC_TYPES の順
 STIFFNESS_INFO_DOC_TYPES = ("incident", "formal", "paper")
-_HIRAGANA_CHARS = re.compile("[ぁ-ゖ]")
+_HIRAGANA_CHARS = _lazy_compile("[ぁ-ゖ]")
 # 「の」の連続の名詞（漢字・片仮名・英数字の並び。漢字の間の送り仮名を1字ずつ許す。助詞になりうる仮名は送り仮名にしない）。
 # 量指定子を入れ子にしない（入れ子にすると長い名詞の並びで後戻りが爆発する）
 _NOUN_CHARS = "[" + _K + "ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ]"
 _NOUN = (_NOUN_CHARS + "+(?:[" + _OKURI_MID + "](?=[" + _K + "])" + _NOUN_CHARS + "+)*"
          "(?:[" + _OKURI_TAIL + "](?=の))?")
-_NO_CHAIN = re.compile("(?<!" + _NOUN_CHARS + ")" + _NOUN + "(?:の" + _NOUN + "){2,}")
-_KANGO = re.compile("^[" + _K + "]+(?:[" + _OKURI_MID + "][" + _K + "]+)*[" + _OKURI_TAIL + "]?$")
+_NO_CHAIN = _lazy_compile("(?<!" + _NOUN_CHARS + ")" + _NOUN + "(?:の" + _NOUN + "){2,}")
+_KANGO = _lazy_compile("^[" + _K + "]+(?:[" + _OKURI_MID + "][" + _K + "]+)*[" + _OKURI_TAIL + "]?$")
 
 
 # 文字と数字（Unicode の分類が L か N の字。Python の \w から「_」を除いたもの）と、長さに数える句読点とかっこ
-_LETTER_OR_DIGIT = re.compile(r"[^\W_]")
-_LENGTH_PUNCT_PATTERN = re.compile("[" + re.escape("".join(sorted(_LENGTH_PUNCT))) + "]")
+_LETTER_OR_DIGIT = _lazy_compile(r"[^\W_]")
+_LENGTH_PUNCT_PATTERN = _lazy_compile("[" + re.escape("".join(sorted(_LENGTH_PUNCT))) + "]")
 
 
 def _measure(text: str) -> tuple[int, int, int]:
@@ -6971,7 +7000,7 @@ def _nominal_hits(text: str, patterns: Sequence) -> list:
 
 # 漢数字で始まる語（一日、一回、三つ）。「の」の連続の漢語に数えない（「工場の最後の一日」は普通の言い方。diff の詰めで、
 # 評価用の文の比喩を直した推敲で測って足した）
-_NUMERAL_HEAD = re.compile("[〇一二三四五六七八九十百千万]")
+_NUMERAL_HEAD = _lazy_compile("[〇一二三四五六七八九十百千万]")
 
 
 def _no_chains(text: str) -> list:
@@ -7221,21 +7250,21 @@ _TONE_EXCERPT_WIDTH = 20        # 位置の抜き出しの、印の前後の字�
 # ような語の終わりの「か」に「と」が付いた形も問いではないので、「か」のあとの形を決まった言い方に限る（反証で見つけた例）。
 # 「かと」と問う語の間には、句読点を除く6字までを許し（「かとお問い合わせ」「かとよく聞かれ」「かとご相談」）、問う語に「相談」
 # 「訊」を足す（反証で見つけた例）
-_INDIRECT_QUESTION = re.compile(r"(?<![ほ確何])か(?:との|という|といった|どうか|否か"
-                                r"|と[^。、！？!?\n]{0,6}?(?:聞|尋|問|質問|相談|訊|たず|き[いか]))")
+_INDIRECT_QUESTION = _lazy_compile(r"(?<![ほ確何])か(?:との|という|といった|どうか|否か"
+                                   r"|と[^。、！？!?\n]{0,6}?(?:聞|尋|問|質問|相談|訊|たず|き[いか]))")
 _TONE_SKIP_KINDS = frozenset(("code", "frontmatter", "html_block", "table", "reference_definition", "thematic_break",
                               "blank", "heading_underline"))
 _TONE_KINDS = ("exclamation", "question", "emoji", "intensifier")
 _TONE_LABELS = {"exclamation": "「！」", "question": "「？」", "emoji": "絵文字"}
-_EXCLAMATION = re.compile(r"[！!]")
-_QUESTION_MARK = re.compile(r"[？?]")
+_EXCLAMATION = _lazy_compile(r"[！!]")
+_QUESTION_MARK = _lazy_compile(r"[？?]")
 # 強める語の数え方から外す語（「絶対値」「絶対パス」は強める語ではない）
-_INTENSIFIER_EXCLUDED = re.compile(r"絶対(?:値|パス|参照|座標|位置|時間|温度|音感|零度|的)")
-_ATX_MARKERS = re.compile(r"^[ \t]{0,3}#{1,6}(?:[ \t]+|$)|[ \t]+#+[ \t]*$")
-_FALLBACK_EMOJI = re.compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B50\u2B55\u231A\u231B\u23E9-\u23FA]\uFE0F?")
+_INTENSIFIER_EXCLUDED = _lazy_compile(r"絶対(?:値|パス|参照|座標|位置|時間|温度|音感|零度|的)")
+_ATX_MARKERS = _lazy_compile(r"^[ \t]{0,3}#{1,6}(?:[ \t]+|$)|[ \t]+#+[ \t]*$")
+_FALLBACK_EMOJI = _lazy_compile("[\U0001F000-\U0001FAFF\u2600-\u27BF\u2B50\u2B55\u231A\u231B\u23E9-\u23FA]\uFE0F?")
 _EMOJI_FINDER = []
 # 絵文字かもしれない字（U+2000 以上で、CJK の文字と記号、全角の英数字と記号を除く）。ない行では lint の数え方を呼ばない
-_MAYBE_EMOJI = re.compile("[\u2000-\u2fff\ua000-\ufeff\ufff0-\U0010ffff]")
+_MAYBE_EMOJI = _lazy_compile("[\u2000-\u2fff\ua000-\ufeff\ufff0-\U0010ffff]")
 
 
 def _emoji_finder() -> Callable[[str], Sequence[str]]:
@@ -7267,8 +7296,8 @@ def _intensifier_pattern(words: Collection[str]) -> re.Pattern[str] | None:
 
 # 紹介記事・宣伝文で見出しとして書かれることの多い行（「1. 昭和から愛される…」のような番号つきの見出し）。番号つき項目の行
 # （「1. …」「2) …」。行頭の空白は3つまで）と、段落の行の全体を太字にした行（「**…**」「__…__」）
-_ORDERED_ITEM_LINE = re.compile(r"^[ \t]{0,3}\d{1,9}[.)][ \t]+(.+)$")
-_BOLD_ONLY_LINE = re.compile(r"^[ \t]{0,3}(?:\*\*|__)(?![ \t])(.+?)(?<![ \t])(?:\*\*|__)[ \t]*$")
+_ORDERED_ITEM_LINE = _lazy_compile(r"^[ \t]{0,3}\d{1,9}[.)][ \t]+(.+)$")
+_BOLD_ONLY_LINE = _lazy_compile(r"^[ \t]{0,3}(?:\*\*|__)(?![ \t])(.+?)(?<![ \t])(?:\*\*|__)[ \t]*$")
 
 
 def _pseudo_heading(line: str, kind: str) -> str | None:
@@ -7527,18 +7556,18 @@ def _tone_places(full: dict, old_lines: dict, new_lines: dict, kind: str, intens
 # 照らすのは数値、名前、語、確度の語だけ。主張、条件、担当が資料どおりかは判定しない。
 
 # 名前（製品名や識別子）。NFKC のあとの英数字2字以上
-_NAME = re.compile(r"[A-Za-z][A-Za-z0-9_.+#/-]*[A-Za-z0-9]")
+_NAME = _lazy_compile(r"[A-Za-z][A-Za-z0-9_.+#/-]*[A-Za-z0-9]")
 # URL の頭（https:// など）は名前にしない（残りの example.com/guide を1つの名前として照らす）。
 # 頭の長さに上限を置く（「a.b.c.d…」のような長い並びで2乗の時間にしない）
-_URL_SCHEME = re.compile(r"\b[A-Za-z][A-Za-z0-9+.-]{0,31}://")
+_URL_SCHEME = _lazy_compile(r"\b[A-Za-z][A-Za-z0-9+.-]{0,31}://")
 # 語（CONTENT のうち、漢字2字以上と片仮名2字以上）
-_GROUND_WORD = re.compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴー]{2,}")
+_GROUND_WORD = _lazy_compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴー]{2,}")
 # 確度の語。「はず」は「はずれ」「はずす」の頭を除く
 _CERTAINTY_WORDS = ("未確認", "未定", "予定", "検討中", "調査中", "見込み", "可能性", "かもしれ", "はず", "確認済み", "確定", "暫定")
 # 「未定」は「未定義」を、「確定」は「確定する」「確定申告」を除く（確度の語ではない）
 _CERTAINTY_NOT = {"はず": "(?![れさしすせ])", "未定": "(?!義)", "確定": "(?!する|申告)"}
-_CERTAINTY = re.compile("|".join(re.escape(word) + _CERTAINTY_NOT.get(word, "")
-                                 for word in sorted(_CERTAINTY_WORDS, key=len, reverse=True)))
+_CERTAINTY = _lazy_compile("|".join(re.escape(word) + _CERTAINTY_NOT.get(word, "")
+                                    for word in sorted(_CERTAINTY_WORDS, key=len, reverse=True)))
 # 名前と語を取る前に伏せる protected_spans の種類（Markdown や HTML の書き方の語を拾わない）
 _GROUND_MASKED = ("frontmatter", "html_block", "html_token")
 _GROUND_NOT_JUDGED = ["claims", "conditions", "assignees", "meaning_equivalence"]
@@ -7575,7 +7604,7 @@ def _squash(text: str) -> str:
     return _SQUASHED.sub("", unicodedata.normalize("NFKC", text))
 
 
-_SQUASHED = re.compile(r"[\s*]+")
+_SQUASHED = _lazy_compile(r"[\s*]+")
 
 
 def _ground_mask(text: str, analysis: dict) -> str:
@@ -7593,7 +7622,7 @@ def _ground_mask(text: str, analysis: dict) -> str:
 _GROUND_SAME_UNIT = {"s": "秒", "sec": "秒", "secs": "秒", "ms": "ミリ秒", "msec": "ミリ秒",
                     "min": "分", "mins": "分"}
 # 照合だけで使う単位。msec を ms より先に読み、英単語の途中の s / min などは単位にしない。
-_GROUND_UNIT = re.compile(r"(?:secs|sec|msec|mins|min|ms|s)(?![A-Za-z])|ミリ秒|" + _UNIT.pattern)
+_GROUND_UNIT = _lazy_compile(r"(?:secs|sec|msec|mins|min|ms|s)(?![A-Za-z])|ミリ秒|" + _UNIT.pattern)
 
 
 def _ground_number_key(key: tuple) -> tuple:
@@ -7758,10 +7787,10 @@ class _Source:
 
 
 # 照合だけに足す語。既存の diff の確度判定と候補件数は変えない。
-_GROUND_CERTAINTY = re.compile(_CERTAINTY.pattern +
+_GROUND_CERTAINTY = _lazy_compile(_CERTAINTY.pattern +
     r"|たぶん|多分|おそらく|恐らく|きっと|と思います|と思う|気がする|記憶では|方向で|検討して|まだ決まって|確かめていない"
     + "|" + TYPE_MARKERS["推量"].pattern, re.M)
-_BARE_SETTING = re.compile(
+_BARE_SETTING = _lazy_compile(
     r"^[ \t]*[+-]?[ \t]*[^\W\d]\w*[ \t]*[=:][ \t]*"
     r"([0-9]+(?:\.[0-9]+)?)(?=[ \t]*(?:$|[#;]))")
 
@@ -7999,24 +8028,24 @@ _CERTAINTY_TABLE = [
     (5, "確定", r"確定(?:です|だ|である|済|して(?:いる|います|おり)|しました(?!ら)|した(?!ら))", True),
     (5, "絶対に", r"絶対に", True),
 ]
-_CERT = [(lv, name, re.compile(p), core) for lv, name, p, core in _CERTAINTY_TABLE]
+_CERT = [(lv, name, _lazy_compile(p), core) for lv, name, p, core in _CERTAINTY_TABLE]
 # --fail-on に数えるのは、強さ1と2（可能性、見込み・推量）の core の語が、より強い語か断定に替わったときだけ。
 # 予定（強さ3）から断定への言い切り（「見直す予定です」→「見直します」）は、書き手の予定を言い切る正しい書き換えでも
 # 起きる（SKILL.md の例）ので、見直し候補にとどめる（反証で見つけた例）。
 _COUNTED_FROM = (1, 2)
-_CERTAINTY_NEG_AFTER = re.compile(r"^[^、。]{0,4}?(?:は|が|も)?(?:な[いくかし]|ありません|ございません|低|小さ|少な|薄)")
-_CERTAINTY_NEG_FORMS = re.compile(r"可能性(?:は|が|も)?(?:低|小さ|少な|な[いく]|ほぼな|ありません)|見込(?:み|め)(?:は|が)?(?:な[いく]|薄|低|ありません)"
+_CERTAINTY_NEG_AFTER = _lazy_compile(r"^[^、。]{0,4}?(?:は|が|も)?(?:な[いくかし]|ありません|ございません|低|小さ|少な|薄)")
+_CERTAINTY_NEG_FORMS = _lazy_compile(r"可能性(?:は|が|も)?(?:低|小さ|少な|な[いく]|ほぼな|ありません)|見込(?:み|め)(?:は|が)?(?:な[いく]|薄|低|ありません)"
                         r"|予定(?:は|が)?(?:な[いく]|ありません)|はず(?:が|は)(?:な|ありません)|(?:おそれ|恐れ)(?:は|が)?(?:な[いく]|ありません)"
                         r"|リスク(?:は|が)?(?:な[いく]|低|小さ|少な|ありません)|懸念(?:は|が)?(?:な[いく]|ありません)"
                         r"|(?:あり|起こり|なり|し)(?:得|え)(?:ない|ません)")
 
-_CERTAINTY_QUESTION = re.compile(r"でしょうか[。？?]?[」』）)]*$")
+_CERTAINTY_QUESTION = _lazy_compile(r"でしょうか[。？?]?[」』）)]*$")
 _CERTAINTY_LEVELS = {1: "可能性", 2: "見込み・推量", 3: "予定", 4: "断定", 5: "確実"}
 # 会話の行（行頭に8字以内の話し手の名前があってもよい）。「」と『』、閉じのあとの句点も見る（反証で見つけた例）
-_DIALOGUE = re.compile(r"^[^「」『』、。\s]{0,8}[「『].*[」』][。．]?$")
+_DIALOGUE = _lazy_compile(r"^[^「」『』、。\s]{0,8}[「『].*[」』][。．]?$")
 _QUOTE_CLOSE = {"「": "」", "『": "』"}
 # 書き方だけの違いとして外す字。長音の「ー」は語の一部なので外さない（「ビール」と「ビル」。反証で見つけた例）
-_QUOTE_DROP = re.compile(r"[\s、。，．,.!！…‥・〜~－-]|\.\.\.")
+_QUOTE_DROP = _lazy_compile(r"[\s、。，．,.!！…‥・〜~－-]|\.\.\.")
 
 
 def _certainty_words(text: str) -> list:
@@ -8067,10 +8096,10 @@ def _cancel_pairs(before: Sequence, after: Sequence) -> tuple:
 
 
 # 推量の語のすぐあとの条件の形（おそれがあれば、可能性がある場合）。条件の有無が変わった文は同じ強さにしない（反証で見つけた例）
-_HEDGE_CONDITION = re.compile(r"[^、。！？!?\n]{0,8}?(?:れば|たら|なら|場合|とき|時(?:は|に))")
+_HEDGE_CONDITION = _lazy_compile(r"[^、。！？!?\n]{0,8}?(?:れば|たら|なら|場合|とき|時(?:は|に))")
 # 節の初めを決める字と、節の中身として比べる字（漢字、片仮名、英数字）
-_HEDGE_CLAUSE_STOP = re.compile(r"[、。！？!?\n，,]")
-_HEDGE_CONTENT = re.compile(r"[一-龥々〆ヵヶァ-ヴA-Za-z0-9０-９Ａ-Ｚａ-ｚ]")
+_HEDGE_CLAUSE_STOP = _lazy_compile(r"[、。！？!?\n，,]")
+_HEDGE_CONTENT = _lazy_compile(r"[一-龥々〆ヵヶァ-ヴA-Za-z0-9０-９Ａ-Ｚａ-ｚ]")
 
 
 def _hedge_polarity(text: str, word: tuple, words: Sequence[tuple]) -> int:
@@ -8196,11 +8225,11 @@ def _cancel_with_context(rest: Sequence, pools: Sequence) -> list:
 _COUNTED_BY_DOC_TYPE_FROM = ("場合がある", "ことがある")
 # 「場合がある」「ことがある」を消しても、書き直した文に残っていれば言い切りにならない頻度の言い方（まれに遅れる、一部の環境で
 # 崩れる）。この語のある文では、種類で数える言い切りにしない。
-_CERTAINTY_FREQUENCY = re.compile(r"まれに|稀に|ときどき|時々|時折|ときおり|たまに|一部|によっては|場合によって|こともある")
+_CERTAINTY_FREQUENCY = _lazy_compile(r"まれに|稀に|ときどき|時々|時折|ときおり|たまに|一部|によっては|場合によって|こともある")
 # 断定に強さ5の語（必ず、確実 など）を足した段を、種類で数えない原文の言い方（決まりを言う文の「必須にする」を「必ず実施する」に
 # した書き換えは、決まりの強さを言い換えただけのことが多い）。文の種類を表す語の「依頼・決まり」（してください、なければならない、
 # べき、必要がある など）と同じ表に、必須、ものとする、手順の「〜すること。」を足したもの。
-_CERTAINTY_DUTY = re.compile(TYPE_MARKERS["依頼・決まり"].pattern + r"|必須|ものと(?:する|します)|こと(?=[。]|$)", re.M)
+_CERTAINTY_DUTY = _lazy_compile(TYPE_MARKERS["依頼・決まり"].pattern + r"|必須|ものと(?:する|します)|こと(?=[。]|$)", re.M)
 
 
 def _certainty_change(old: str, new: str, old_context: Sequence = (), new_context: Sequence = (), split_context: Sequence = (), doc_type: str | None = None, duty: bool = False) -> tuple | None:
@@ -8373,9 +8402,9 @@ _ADD_STATE = [
     ("in_progress", "対応中（読点）", r"(?:対応|作業|進行|準備|作成|修正|開発|移行|実施|実装|改修|復旧|集計|手配)中" + _ADD_CHU_COMMA),
 ]
 
-_ADD_STATE_RX = [(fam, name, re.compile(p)) for fam, name, p in _ADD_STATE]
+_ADD_STATE_RX = [(fam, name, _lazy_compile(p)) for fam, name, p in _ADD_STATE]
 # 当たる語のない文は、家族ごとの走査を省く（語の表は同じ）。
-_ADD_STATE_ANY = re.compile("|".join("(?:" + p + ")" for _, _, p in _ADD_STATE))
+_ADD_STATE_ANY = _lazy_compile("|".join("(?:" + p + ")" for _, _, p in _ADD_STATE))
 
 # 推敲後に同じ状態が残ったとみなす言い方。
 
@@ -8406,23 +8435,23 @@ _ADD_KEEP_CROSS = {  # ほかの家族の語でも残ったとみなす
     "no_plan": (),
 }
 
-_ADD_KEEP_EXTRA_RX = dict((k, [re.compile(p) for p in v]) for k, v in _ADD_KEEP_EXTRA.items())
+_ADD_KEEP_EXTRA_RX = dict((k, [_lazy_compile(p) for p in v]) for k, v in _ADD_KEEP_EXTRA.items())
 
 # 条件の中の語は、状態の主張にしない。
 
-_ADD_COND = re.compile(r"[^。、]{0,12}?(?:場合|なら|とき|時(?:は|に)|うちは|(?<=[けれ])ば|たら)")
+_ADD_COND = _lazy_compile(r"[^。、]{0,12}?(?:場合|なら|とき|時(?:は|に)|うちは|(?<=[けれ])ば|たら)")
 
 # 状態そのものを打ち消す言い方（「未確認の項目はありません」「原因不明ではありません」）は、状態の主張にしない。
 
-_ADD_STATE_DENIED = re.compile(r"(?:では|じゃ)(?:ない|なく|ありません|ございません)|(?:の|な)[^。、]{1,10}?(?:は|が|も)(?:ありません|ない(?=[。、]|$)|ございません|なし|ゼロ|0件|０件)")
+_ADD_STATE_DENIED = _lazy_compile(r"(?:では|じゃ)(?:ない|なく|ありません|ございません)|(?:の|な)[^。、]{1,10}?(?:は|が|も)(?:ありません|ない(?=[。、]|$)|ございません|なし|ゼロ|0件|０件)")
 
 # 「見送り」は、見送る中身（導入、実施など）が同じ節にあるか、名詞の言い切りのときだけ保留とみなす（人を見送る、を除く）。
 
-_ADD_SEND_OFF_OBJECT = re.compile(r"導入|実施|採用|開催|参加|発売|公開|リリース|購入|変更|対応|提出|出店|契約|発注|申請|更新|移行|延長|追加|掲載|配布|出荷|発表|決定|判断|今回|今年|今期|今月|計画|案|予定|検討|見直し|改定|値上げ")
+_ADD_SEND_OFF_OBJECT = _lazy_compile(r"導入|実施|採用|開催|参加|発売|公開|リリース|購入|変更|対応|提出|出店|契約|発注|申請|更新|移行|延長|追加|掲載|配布|出荷|発表|決定|判断|今回|今年|今期|今月|計画|案|予定|検討|見直し|改定|値上げ")
 
 # 推敲後に済んだ・決まったと言い切っていれば、否定の形だけでは状態が残ったとみなさない。
 
-_ADD_DONE = re.compile(r"済み|済ませ|完了し(?:た|ました)|判明し(?:た|ました)|特定(?:し|でき)(?:た|ました)|決まり?ました|決まった|決定し(?:た|ました)|確定し(?:た|ました)|終わ(?:った|りました)|解決し(?:た|ました)")
+_ADD_DONE = _lazy_compile(r"済み|済ませ|完了し(?:た|ました)|判明し(?:た|ました)|特定(?:し|でき)(?:た|ました)|決まり?ました|決まった|決定し(?:た|ました)|確定し(?:た|ました)|終わ(?:った|りました)|解決し(?:た|ました)")
 
 # 「〜中」を「〜している」と言い換えた形は、同じ途中の状態とみなす。
 
@@ -8430,21 +8459,21 @@ _ADD_PROGRESSIVE = r"(?:を|に|の)?(?:進め|続け)?(?:し|させていただ
 
 _ADD_TOPIC_STOP = ("現在", "現時点", "時点", "今回", "本日", "当日", "以下", "下記", "件")
 
-_ADD_APOLOGY = re.compile(r"申し訳(?:ありません|ございません|ない)|すみません|かまいません|構いません")
+_ADD_APOLOGY = _lazy_compile(r"申し訳(?:ありません|ございません|ない)|すみません|かまいません|構いません")
 
-_ADD_ANY_NEG = re.compile(r"(?:て|で)(?:い|お)り?(?:ない|ません|らず|なかった)|でき(?:ない|ず|ません|なかった)|(?:ない|ず)まま|困難|不能|不可能|難し|(?:分か|わか)ら|知らない|まだ|いまだ")
+_ADD_ANY_NEG = _lazy_compile(r"(?:て|で)(?:い|お)り?(?:ない|ません|らず|なかった)|でき(?:ない|ず|ません|なかった)|(?:ない|ず)まま|困難|不能|不可能|難し|(?:分か|わか)ら|知らない|まだ|いまだ")
 
 # 依頼・あいさつ・名乗り、自動詞や状態の述語を除く。
 
-_ADD_PERFORMATIVE = re.compile(r"お願い|お詫び|おわび|感謝|お礼|御礼|失礼|恐縮|承知|了解|存じ|拝見|申し上げ|お祈り|祈念|歓迎")
+_ADD_PERFORMATIVE = _lazy_compile(r"お願い|お詫び|おわび|感謝|お礼|御礼|失礼|恐縮|承知|了解|存じ|拝見|申し上げ|お祈り|祈念|歓迎")
 
-_ADD_REPORT = re.compile(r"(?:ご)?(?:報告|共有|紹介)")
+_ADD_REPORT = _lazy_compile(r"(?:ご)?(?:報告|共有|紹介)")
 
-_ADD_REPORT_MAYBE = re.compile(r"(?:ご)?(?:お知らせ|案内|連絡|説明|提案|回答|返信)")
+_ADD_REPORT_MAYBE = _lazy_compile(r"(?:ご)?(?:お知らせ|案内|連絡|説明|提案|回答|返信)")
 
-_ADD_PERF_MARK = re.compile(r"以下|下記|次の|とおり|通り|取り急ぎ|まずは|本メール|この(?:メール|場|たび)|ここに|本日は|について|の件で|件につき")
+_ADD_PERF_MARK = _lazy_compile(r"以下|下記|次の|とおり|通り|取り急ぎ|まずは|本メール|この(?:メール|場|たび)|ここに|本日は|について|の件で|件につき")
 
-_ADD_FUTURE_MARK = re.compile(r"今後|以後|以降|次回|次の(?:版|回|リリース|会議)|来週|来月|来年|明日|明朝|本日中|今日中|今週中|月内|年内|後日|改めて|あらためて|追って|"
+_ADD_FUTURE_MARK = _lazy_compile(r"今後|以後|以降|次回|次の(?:版|回|リリース|会議)|来週|来月|来年|明日|明朝|本日中|今日中|今週中|月内|年内|後日|改めて|あらためて|追って|"
                           r"別途|順次|引き続き|必ず|責任を(?:もって|持って)|までに|次第|こちらで|当方で|弊社で|当社で|私(?:から|が|より|ども)|"
                           r"担当(?:者)?(?:が|から)|チームが|前日に|事前に|早急に|速やかに|至急|すぐに|のちほど|後ほど|あとで|(?:ない|ぬ)よう(?:に)?")
 
@@ -8453,15 +8482,15 @@ _ADD_FUTURE_MARK = re.compile(r"今後|以後|以降|次回|次の(?:版|回|リ
 # 名乗りの文（ご報告いたします）を約束として見るための、あとで行う印。「について」「以下」があっても、
 # 追って・改めて・後日のような印があれば約束とみなす。
 
-_ADD_LATER_MARK = re.compile(r"今後|以後|次回|来週|来月|明日|後日|改めて|あらためて|追って|別途|順次|のちほど|後ほど|あとで|次第|までに|本日中|今日中|今週中|月内|年内")
+_ADD_LATER_MARK = _lazy_compile(r"今後|以後|次回|来週|来月|明日|後日|改めて|あらためて|追って|別途|順次|のちほど|後ほど|あとで|次第|までに|本日中|今日中|今週中|月内|年内")
 
-_ADD_LATER_STRONG = re.compile(r"後日|改めて|あらためて|追って|別途|のちほど|後ほど|次第|までに")
+_ADD_LATER_STRONG = _lazy_compile(r"後日|改めて|あらためて|追って|別途|のちほど|後ほど|次第|までに")
 
-_ADD_OTHER_SUBJECT = re.compile(r"(?:先方|お客様|お客さま|貴社|御社|皆様|皆さま|皆さん|取引先|委託先|メーカー|業者)(?:が|から(?!の)|より(?!の))")
+_ADD_OTHER_SUBJECT = _lazy_compile(r"(?:先方|お客様|お客さま|貴社|御社|皆様|皆さま|皆さん|取引先|委託先|メーカー|業者)(?:が|から(?!の)|より(?!の))")
 
 # 書き手の行為と読める印。これがない普通の「〜します」は、説明や手順の文かもしれないので数えない（promise_review）。
 
-_ADD_WRITER_MARK = re.compile(r"私|わたくし|弊社|当社|当方|当店|当課|当部|当室|我々|われわれ|こちら|担当|当チーム|当センター")
+_ADD_WRITER_MARK = _lazy_compile(r"私|わたくし|弊社|当社|当方|当店|当課|当部|当室|我々|われわれ|こちら|担当|当チーム|当センター")
 
 _ADD_STATIVE = ("あり", "い", "なり", "おり", "でき", "ござい", "分かり", "わかり", "変わり", "始まり", "終わり", "決まり", "届き", "かかり",
             "起き", "起こり", "生じ", "減り", "増え", "消え", "見え", "聞こえ", "思い", "考え", "感じ", "存じ", "困り", "異なり", "違い",
@@ -8470,7 +8499,7 @@ _ADD_STATIVE = ("あり", "い", "なり", "おり", "でき", "ござい", "分
 
 # 原文の未来の行為や決まり。約束の言い換えを一つずつ打ち消す。
 
-_ADD_OLD_FUTURE = re.compile(r"(?:[" + _ADD_K + "ァ-ヴー]{1,6}|[ぁ-ん]{1,3})(?:ます|ません|する|しない|します|いたします|致します|まいります|参ります|"
+_ADD_OLD_FUTURE = _lazy_compile(r"(?:[" + _ADD_K + "ァ-ヴー]{1,6}|[ぁ-ん]{1,3})(?:ます|ません|する|しない|します|いたします|致します|まいります|参ります|"
                          r"(?<=[るうくすつぬぶむぐ])(?=[。、]|ので|が|けど|[よねわなぞさ](?:[。、!！?？]|$)|$)|ない(?=[。、]|ので|が|[よねわ](?:[。、!！]|$)|$))"
                          r"|予定|つもり|方針|ことに(?:なり|なる|し)|たい(?=[。、]|と|です|$)|次第|ましょう")
 
@@ -8501,9 +8530,9 @@ _ADD_PROMISE = [
     ("promise", "常体の約束", r"(?P<k>[" + _ADD_K + "ァ-ヴー]{1,6}[ぁ-ん]{0,3}?)(?:する|る|う|く|す|つ|む|ぶ|ぐ)(?=[。]|$)"),
 ]
 
-_ADD_PROMISE_RX = [(sub, name, re.compile(p)) for sub, name, p in _ADD_PROMISE]
+_ADD_PROMISE_RX = [(sub, name, _lazy_compile(p)) for sub, name, p in _ADD_PROMISE]
 
-_ADD_REQUEST = re.compile(r"ください|下さい|お願い|いただけ(?:ます|ません)(?:か|でしょうか)|もらえ(?:ます|ません)か|いただきたく|いただければ|てほしい")
+_ADD_REQUEST = _lazy_compile(r"ください|下さい|お願い|いただけ(?:ます|ません)(?:か|でしょうか)|もらえ(?:ます|ません)か|いただきたく|いただければ|てほしい")
 
 _ADD_INTRANSITIVE_SAHEN = ("発生", "存在", "増加", "減少", "低下", "上昇", "変化", "成功", "失敗", "到着", "経過", "一致",
                        "依存", "該当", "動作", "稼働", "機能", "関係", "影響", "相当", "共通", "意味", "比例", "集中",
@@ -8513,31 +8542,31 @@ _ADD_INTRANSITIVE_SAHEN = ("発生", "存在", "増加", "減少", "低下", "�
 
 _ADD_AGENTIVE_SAHEN = ("完了", "終了", "対応", "参加", "出席", "欠席", "開始", "反映")
 
-_ADD_E_ROW = re.compile(r"(?:られ|れ|せ|え|け|げ|め|ね|べ|へ|ぜ|て)$")
+_ADD_E_ROW = _lazy_compile(r"(?:られ|れ|せ|え|け|げ|め|ね|べ|へ|ぜ|て)$")
 
-_ADD_INTRANSITIVE_TAIL = re.compile(r"(?:わり|まり|がり|さり|たり|なり|あり|おり|ござい|い|でき|れ|られ)$")
+_ADD_INTRANSITIVE_TAIL = _lazy_compile(r"(?:わり|まり|がり|さり|たり|なり|あり|おり|ござい|い|でき|れ|られ)$")
 
-_ADD_PAST_END = re.compile(r"(?:た|ました|でした|だった)[。]?[」』）)]*$")
+_ADD_PAST_END = _lazy_compile(r"(?:た|ました|でした|だった)[。]?[」』）)]*$")
 
-_ADD_OLD_INTRANSITIVE = re.compile(r"(?:見つか|分か|わか|消え|変わ|増え|減|届|始ま|終わ|決ま|遅れ|止ま|動|起き|起こ|残|続|かか|間に合|替わ|上が|下が|広が|つなが|生じ|現れ|壊れ|外れ|漏れ|集ま|伸び|延び|縮)(?:る|く|う|ります|ります|きます|えます|れます|びます|ません|らない|かない|わない|ない)$")
+_ADD_OLD_INTRANSITIVE = _lazy_compile(r"(?:見つか|分か|わか|消え|変わ|増え|減|届|始ま|終わ|決ま|遅れ|止ま|動|起き|起こ|残|続|かか|間に合|替わ|上が|下が|広が|つなが|生じ|現れ|壊れ|外れ|漏れ|集ま|伸び|延び|縮)(?:る|く|う|ります|ります|きます|えます|れます|びます|ません|らない|かない|わない|ない)$")
 
-_ADD_OLD_STATIVE = re.compile(r"(?:あり|い|おり|でき|ござい|分かり|わかり|なり)(?:ます|ません)$")
+_ADD_OLD_STATIVE = _lazy_compile(r"(?:あり|い|おり|でき|ござい|分かり|わかり|なり)(?:ます|ません)$")
 
 # 原文にある再発防止と保証の根拠は、表や見出しも含めて探す。
 
-_ADD_PREVENT_ANY = re.compile(r"再発|今後[^。]{0,16}(?:ない|ぬ)よう|二度と|徹底|気を(?:つけ|付け|引き締め)|注意(?:を払|し|いた)|心がけ|心掛け|肝に銘じ|努め|取り組")
+_ADD_PREVENT_ANY = _lazy_compile(r"再発|今後[^。]{0,16}(?:ない|ぬ)よう|二度と|徹底|気を(?:つけ|付け|引き締め)|注意(?:を払|し|いた)|心がけ|心掛け|肝に銘じ|努め|取り組")
 
 # 原文の再発防止の語が、まだない・決まっていない対策を言うときは、誓いの根拠にしない（「再発防止策は未定です」）。
 
-_ADD_PREVENT_UNSETTLED = re.compile(r"[^。]{0,10}?(?:未定|未|検討中|調査中|調整中|ない|ありません|不要|なし|求め|要請)")
+_ADD_PREVENT_UNSETTLED = _lazy_compile(r"[^。]{0,10}?(?:未定|未|検討中|調査中|調整中|ない|ありません|不要|なし|求め|要請)")
 
 # 再発防止の名詞には、書き手がこれから取り組む述語が要る（「再発防止策は実施済みです」「再発防止を求められました」を除く）。
 
-_ADD_PREVENT_ACT = re.compile(r"(?:ます|する(?=[。、]|$)|[るうくすつむぶぐ](?=[。、]|$)|こととし|ことにし|予定|てまいり|ていき)")
+_ADD_PREVENT_ACT = _lazy_compile(r"(?:ます|する(?=[。、]|$)|[るうくすつむぶぐ](?=[。、]|$)|こととし|ことにし|予定|てまいり|ていき)")
 
 # 済んだこと・不要・他人からの求め・打ち消しは誓いにしない。「〜こととした」「〜ことにした」はこれからの行為の決めなので除かない。
 
-_ADD_PREVENT_NOT_ACT = re.compile(r"済|不要|求め|要請|指摘|依頼され|ません|ない(?=[。、]|$)|(?<!こととし)(?<!ことにし)(?:でした|ました|だった|た(?=[。]|$))")
+_ADD_PREVENT_NOT_ACT = _lazy_compile(r"済|不要|求め|要請|指摘|依頼され|ません|ない(?=[。、]|$)|(?<!こととし)(?<!ことにし)(?:でした|ました|だった|た(?=[。]|$))")
 
 _ADD_GUARANTEE_FAM = {"ことはない": r"ことは(?:ありません|ございません|ない)",
                  "費用はかからない": r"(?:費用|料金|料(?=は|が|を|も)|負担|手数料)(?:は|が|も)?[^。]{0,8}?(?:かから|かかりません|発生し(?:ない|ません)|いただき?ません|不要|なし|ゼロ|[0０〇]円)|無料|無償|[0０〇]円",
@@ -8553,17 +8582,17 @@ _ADD_CAUSAL = [
                r"につなが(?:る|り|った|って|ります|りました)|をもたら|に寄与|に貢献|が功を奏"),
 ]
 
-_ADD_CAUSAL_RX = [(fam, re.compile(p)) for fam, p in _ADD_CAUSAL]
+_ADD_CAUSAL_RX = [(fam, _lazy_compile(p)) for fam, p in _ADD_CAUSAL]
 
 # 「調べた結果、分かった」は経緯で、因果の足しにしない。
 
-_ADD_INQUIRY_RESULT = re.compile(r"(?:調べ|調査し|確認し|検証し|比較し|試し|測定し|計測し|分析し|検討し|話し合っ|協議し|集計し|聞い|尋ね|試験し|点検し|審査し|見直し)た$")
+_ADD_INQUIRY_RESULT = _lazy_compile(r"(?:調べ|調査し|確認し|検証し|比較し|試し|測定し|計測し|分析し|検討し|話し合っ|協議し|集計し|聞い|尋ね|試験し|点検し|審査し|見直し)た$")
 
 # 原文の時を言う言い方（とき、時に、際に、直後に）。推敲で同じ中身を原因の語（により、ことで）にしたら、因果を足した書き換えとみなす。
 
-_ADD_TIME_LINK = re.compile(r"(?:とき|(?<![日同当常定随一臨即瞬何毎])時)(?:に|は|、)|(?<![実交国])際(?:に|は|、)|(?:直後|最中)に")
+_ADD_TIME_LINK = _lazy_compile(r"(?:とき|(?<![日同当常定随一臨即瞬何毎])時)(?:に|は|、)|(?<![実交国])際(?:に|は|、)|(?:直後|最中)に")
 
-_ADD_CONTENT = re.compile("[" + _ADD_K + "]{2,}|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9]+")
+_ADD_CONTENT = _lazy_compile("[" + _ADD_K + "]{2,}|[ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9]+")
 
 
 def _addition_state_words(text: str) -> list:
@@ -9340,14 +9369,14 @@ def _register_changes(sides: _Sides, groups: list, politeness: dict) -> dict:
 
 # ---- 事実の穴の候補（check の任意の手がかり。diff の出力には含めない） ----
 
-_GAP_DEGREE = re.compile(
+_GAP_DEGREE = _lazy_compile(
     r"大幅(?:に|な|の)|劇的(?:に|な)|飛躍的(?:に|な)|格段(?:に|の)|著し(?:く|い)|圧倒的(?:に|な)|桁違い|段違い"
     r"|大きく(?=改善|向上|短縮|削減|減|増|変わ|変え|速|下が|上が|低下|上昇|低減|前進|進歩)"
     r"|大きな(?=改善|効果|成果|前進|進歩|変化|向上)")
 
 # 変化の述語。形容詞と和語の動詞は丁寧の形（ました、ます、ています）だけにする（小説や随筆の「短くなった」「首を伸ばした」を
 # 拾わない）。漢語の動詞は常体の終止形も拾う。
-_GAP_CHANGE = re.compile(
+_GAP_CHANGE = _lazy_compile(
     r"(?:短く|長く|速く|早く|遅く|軽く|重く|多く|少なく|高く|低く|広く|狭く|細かく|厳しく|緩く|ゆるく)"
     r"(?:し(?:ました|ます|ています|ていました)|なり(?:ました|ます)|なって(?:います|いました))"
     r"|(?:増や|減ら|延ば|伸ば|縮め|引き上げ|引き下げ)(?:し(?:ました|ます|ています)|ます|ました)"
@@ -9355,7 +9384,7 @@ _GAP_CHANGE = re.compile(
     r"(?:し(?:ました|ます|ています)|され(?:ました|ます|ています)|でき(?:ました|ます)|しました|します"
     r"|した(?=[。]|$)|する(?=[。]|$))")
 
-_GAP_EFFECT = re.compile(
+_GAP_EFFECT = _lazy_compile(
     r"(?:信頼性|安定性|品質|性能|パフォーマンス|使い勝手|利便性|生産性|効率|保守性|可読性|開発体験|体験|満足度|安全性|堅牢性)"
     r"(?:が|を)(?:向上|高ま|高め|改善|上が|上げ|支え|底上げ|強化)"
     r"|(?:混乱|影響|リスク|負担|手間|ダウンタイム|ばらつき)(?:を|が)(?:最小限|最小|低減|軽減|抑え|減ら)"
@@ -9363,7 +9392,7 @@ _GAP_EFFECT = re.compile(
     r"|シームレス(?:に|な)"
     r"|(?:柔軟な|より良い|最適な)(?:選択肢|運用|対応|体験)")
 
-_GAP_FIGURE = re.compile(
+_GAP_FIGURE = _lazy_compile(
     r"土台(?:づくり|作り)?|(?<!基)礎(?!石)|基盤づくり|第一歩|大きな一歩|一歩前進|連鎖を断ち切|断ち切り"
     r"|道を(?:開|拓|ひら)(?!け)|扉を(?:開|ひら)(?!け)|(?:鍵|カギ)を握|武器(?:に|と)な|強力な武器|景色が(?:変わ|一変)|新たな(?:地平|ステージ|次元)"
     r"|次の(?:ステージ|次元)|底上げ|盤石|追い風|起爆剤|羅針盤|架け橋|屋台骨|息を吹き込|命を吹き込"
@@ -9372,23 +9401,23 @@ _GAP_FIGURE = re.compile(
 _GAP_NEED = {"degree": "程度の値（何がどれだけ）", "change": "変わる前と後の値", "effect": "何がどう変わるか",
         "figure": "比喩が指す中身（何が起きた、何をした）"}
 
-_GAP_HEDGE = re.compile(r"かもしれ|かも知れ|可能性|予定|未定|未確認|検討中|調査中|見込み|はず|でしょう|だろう|と思|ようです|らしい"
+_GAP_HEDGE = _lazy_compile(r"かもしれ|かも知れ|可能性|予定|未定|未確認|検討中|調査中|見込み|はず|でしょう|だろう|と思|ようです|らしい"
                    r"|おそれ|恐れ|と考えられ|と見られ|れば|なら(?=[、。]|$)|たら(?=[、。]|$)")
 # 当たった語のすぐあとの述語が打ち消し（大きく変わりません、一度に大きく変えず）なら出さない
-_GAP_NEGATED_TAIL = re.compile(r"^[^、。，！？!?]{0,6}?(?:ない|ません|ず(?![つっ])|なかっ|(?:する|される|した|している)こと(?:は|が)(?:ない|ありません))")
+_GAP_NEGATED_TAIL = _lazy_compile(r"^[^、。，！？!?]{0,6}?(?:ない|ません|ず(?![つっ])|なかっ|(?:する|される|した|している)こと(?:は|が)(?:ない|ありません))")
 # 意図してぼかした数・時期・相手。この語がある文は出さない（埋めるよう促さない）
-_GAP_VAGUE = re.compile(r"一部の|複数|いくつか|数(?:社|時間|分|秒|日|週間|か月|年|倍|割|件|回|人|台|十|百|千|万)|近日|後日|別途|ある取引先|関係者")
+_GAP_VAGUE = _lazy_compile(r"一部の|複数|いくつか|数(?:社|時間|分|秒|日|週間|か月|年|倍|割|件|回|人|台|十|百|千|万)|近日|後日|別途|ある取引先|関係者")
 # 比べる元がある（「本体より長く」）変化は、値がなくても穴にしない（change だけ）
-_GAP_COMPARED = re.compile(r"より")
-_GAP_QUESTION = re.compile(r"(?:[？?]|か[。？?])[」』）)]*$")
-_GAP_KANJI_NUM = re.compile(r"[〇一二三四五六七八九十百千万]+(?:倍|割|分|秒|時間|日|件|回|人|個|%|％)")
+_GAP_COMPARED = _lazy_compile(r"より")
+_GAP_QUESTION = _lazy_compile(r"(?:[？?]|か[。？?])[」』）)]*$")
+_GAP_KANJI_NUM = _lazy_compile(r"[〇一二三四五六七八九十百千万]+(?:倍|割|分|秒|時間|日|件|回|人|個|%|％)")
 _GAP_SKIP_KINDS = ("code", "frontmatter", "html_block", "table", "heading", "heading_underline", "blank", "thematic_break",
               "reference_definition")
 _GAP_ORDER = ("figure", "effect", "degree", "change")
 _GAP_NEXT_SENTENCE_RULE = True
-_GAP_ASSUMPTION = re.compile(r"もし|仮に|場合|とすれば|としたら|ならば")
-_GAP_QUOTE = re.compile(r"「[^」]*」|『[^』]*』")
-_GAP_OMISSION = re.compile(r"省きます|省略|伏せ|社外秘|非公開|別途|控え|今後|これからも|引き続き|まいります|ていきます|ていきたい|続けます|に向けて")
+_GAP_ASSUMPTION = _lazy_compile(r"もし|仮に|場合|とすれば|としたら|ならば")
+_GAP_QUOTE = _lazy_compile(r"「[^」]*」|『[^』]*』")
+_GAP_OMISSION = _lazy_compile(r"省きます|省略|伏せ|社外秘|非公開|別途|控え|今後|これからも|引き続き|まいります|ていきます|ていきたい|続けます|に向けて")
 BUILTIN_LISTS["fact-gaps"] = tuple((kind, pattern.pattern) for kind, pattern in
                                   (("figure", _GAP_FIGURE), ("effect", _GAP_EFFECT), ("degree", _GAP_DEGREE), ("change", _GAP_CHANGE)))
 _LIST_PATTERNS["fact-gaps"] = True
@@ -9516,7 +9545,7 @@ def _hedges(sides: _Sides, groups: list, risks: list[dict]) -> dict:
 _CITATION_LATIN = (r"[A-Z][a-z][A-Za-z'’.-]*(?:\s*(?:&|and)\s*[A-Z][A-Za-z'’.-]*)*"
                    r"(?:\s+et\s+al\.[,，]?\s*|[,，]\s*)")
 _CITATION_JA = r"[一-鿿々〆ァ-ヴー]+(?:ほか|ら)?[,，]?\s+"
-_CITATION = re.compile(
+_CITATION = _lazy_compile(
     r"\[[0-9]+(?:\s*[,、–—-]\s*[0-9]+)*\](?!\s*[([])"
     r"|[(（](?:" + _CITATION_JA + "|" + _CITATION_LATIN + r")[12][0-9]{3}[a-z]?[)）]")
 # 引用の表記は、書き方だけの違い（括弧の全角と半角、空白、「、」と「,」、ダッシュの種類）をそろえてから比べる（反証で見つけた例）
@@ -9526,24 +9555,24 @@ _CITATION_KEY = str.maketrans({"（": "(", "）": ")", "，": ",", "、": ",", "
 def _citation_key(text: str) -> str:
     return re.sub(r"\s+", "", text.translate(_CITATION_KEY))
 # 既存 number が空白つきの mg 等を単位として取らない穴だけを補う。未知の英単語は単位とみなさない。
-_SCIENTIFIC_VALUE = re.compile(r"(?<![A-Za-z0-9_.])[0-9]+(?:\.[0-9]+)?[ \t　]*"
-                               r"(?:[numcdkMGTμµ]?g|[numcdkμµ]?m(?:ol)?|[numcdkMμµ]?[lL]|[numkMGTμµ]?s|[kMGT]?Hz|[kMGT]?Pa|[kMGT]?W|℃|°C)(?![A-Za-z])")
+_SCIENTIFIC_VALUE = _lazy_compile(r"(?<![A-Za-z0-9_.])[0-9]+(?:\.[0-9]+)?[ \t　]*"
+                                  r"(?:[numcdkMGTμµ]?g|[numcdkμµ]?m(?:ol)?|[numcdkMμµ]?[lL]|[numkMGTμµ]?s|[kMGT]?Hz|[kMGT]?Pa|[kMGT]?W|℃|°C)(?![A-Za-z])")
 
 
 # 符号は、直前が漢字・片仮名・数字・英字・%・閉じ括弧でないときだけ取る。「10月-12月」「9時-17時」「1万円-2万円」の
 # 範囲のハイフンを負の数と取らないため（反証で見つけた例）。そのため「前年比-5%」の符号も見ない（限界）。
-_SIGNED_VALUE = re.compile(r"(?<![A-Za-z0-9_.])(?:(?<![一-鿿々〆ァ-ヴー%％)）\]])[+−-])?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)")
+_SIGNED_VALUE = _lazy_compile(r"(?<![A-Za-z0-9_.])(?:(?<![一-鿿々〆ァ-ヴー%％)）\]])[+−-])?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)")
 
 
-_STATISTIC_VALUE = re.compile(r"(?<![A-Za-z])(?:p|P|α|β|r|t|F|SD|SE)[ \t]*(?:<=|>=|[<>=≤≥])[ \t]*"
-                              r"[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
+_STATISTIC_VALUE = _lazy_compile(r"(?<![A-Za-z])(?:p|P|α|β|r|t|F|SD|SE)[ \t]*(?:<=|>=|[<>=≤≥])[ \t]*"
+                                 r"[+-]?(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?")
 
 
-_EMAIL = re.compile(r"(?<![A-Za-z0-9.!#$%&'*+/=?^_`{|}~@-])[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
+_EMAIL = _lazy_compile(r"(?<![A-Za-z0-9.!#$%&'*+/=?^_`{|}~@-])[A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)+")
 # 宛名と分かる行頭か「宛先:」の後だけ。名前のあとの助詞（田中さんは）は本文中の言及として対象外。
-_ADDRESSEE = re.compile(r"(?m)(?:^[ \t]*(?:宛先[：:][ \t]*)?|(?<=様、)[ \t]*|(?<=さん、)[ \t]*|(?<=様,)[ \t]*|(?<=さん,)[ \t]*)"
-                        r"(?P<address>(?P<name>[一-鿿々〆〇○ぁ-ゖァ-ヴーA-Za-zＡ-Ｚａ-ｚ][一-鿿々〆〇○ぁ-ゖァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９・＆& .　\t]{0,79}?)(?:様|さん))"
-                        r"(?=[ \t　]*(?:[、，,：:！!\n]|$))")
+_ADDRESSEE = _lazy_compile(r"(?m)(?:^[ \t]*(?:宛先[：:][ \t]*)?|(?<=様、)[ \t]*|(?<=さん、)[ \t]*|(?<=様,)[ \t]*|(?<=さん,)[ \t]*)"
+                           r"(?P<address>(?P<name>[一-鿿々〆〇○ぁ-ゖァ-ヴーA-Za-zＡ-Ｚａ-ｚ][一-鿿々〆〇○ぁ-ゖァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９・＆& .　\t]{0,79}?)(?:様|さん))"
+                           r"(?=[ \t　]*(?:[、，,：:！!\n]|$))")
 # 「さん」「様」が付いても宛名でない語（家族の呼び方など）。名前がこれで終わるものは除く（反証で見つけた例）
 _ADDRESSEE_FAMILY = ("婆", "爺", "母", "父", "娘", "息子", "奥", "嫁", "兄", "姉", "坊")
 _VALUE_SKIP_KINDS = frozenset(("code", "frontmatter", "html_block", "reference_definition"))
@@ -9747,11 +9776,11 @@ def _immutable_values(sides: _Sides, risks: Sequence, groups: list | None = None
 
 POLITENESS_THRESHOLD = 0.20
 # 活用形も数える。長い「させていただく」を先に取り、いただくと二重に数えない。
-_MAIL_HONORIFIC = re.compile(r"(?P<causative>させていただ(?:く|き|け|い|か))|(?P<receive>いただ(?:く|き|け|い|か))"
+_MAIL_HONORIFIC = _lazy_compile(r"(?P<causative>させていただ(?:く|き|け|い|か))|(?P<receive>いただ(?:く|き|け|い|か))"
                         r"|(?P<give>くださ(?:る|り|れ|い|っ|ら))|(?P<say>申し上げ(?:る|ま|た|て))|(?P<know>存じま(?:す|した|せん))")
 _MAIL_HONORIFIC_NAMES = {"causative": "させていただく", "receive": "いただく", "give": "くださる", "say": "申し上げる", "know": "存じます"}
-_POLITE_END = re.compile(r"(?:です|でした|ます|ました|ません|ませんでした)(?:か|ね|よ|よね)?$")
-_PLAIN_END = re.compile(r"(?:だ|だった|である|であった)(?:ね|よ)?$")
+_POLITE_END = _lazy_compile(r"(?:です|でした|ます|ました|ません|ませんでした)(?:か|ね|よ|よね)?$")
+_PLAIN_END = _lazy_compile(r"(?:だ|だった|である|であった)(?:ね|よ)?$")
 
 
 def _politeness_metrics(bodies: Sequence[_Body]) -> dict:
@@ -9819,18 +9848,18 @@ _ACTOR_PERSON = ("私たち", "私達", "我々", "弊社", "当社", "当チー
 _ACTOR_READER = frozenset(("皆さん", "皆様", "みなさん", "皆さま", "各位", "あなた"))
 _ACTOR_SPECIFIC_SET = frozenset(_ACTOR_SPECIFIC)
 _ACTOR_CHAR = "一-鿿㐀-䶿々〆ァ-ヴーA-Za-z0-9"
-_ACTOR_PREFIX_CHAR = re.compile("[" + _ACTOR_CHAR + "]")
-_ACTOR_NAME_CHAR = re.compile("[一-鿿㐀-䶿々〆ァ-ヴーA-Za-z]")
+_ACTOR_PREFIX_CHAR = _lazy_compile("[" + _ACTOR_CHAR + "]")
+_ACTOR_NAME_CHAR = _lazy_compile("[一-鿿㐀-䶿々〆ァ-ヴーA-Za-z]")
 _ACTOR_PREFIX_MAX = 8
 # 役割の語（長いものから当てる）。前に続く漢字・片仮名・英数字（運用担当者、バックエンドチーム、システム管理者）は、
 # 見つけたあとで前へたどって語に含める（語の頭から正規表現で探すより速い）
-_ACTOR_HEAD = re.compile("|".join(re.escape(head) for head in sorted(_ACTOR_SPECIFIC + _ACTOR_GENERIC, key=len,
-                                                                       reverse=True)))
-_ACTOR_HONORIFIC = re.compile(r"様|さま|さん|殿|の方|方々|たち|達|ら(?![しれ])")
-_ACTOR_PERSON_RE = re.compile("(?P<head>{})(?P<hon>たち|達|ども)?".format(
+_ACTOR_HEAD = _lazy_compile("|".join(re.escape(head) for head in sorted(_ACTOR_SPECIFIC + _ACTOR_GENERIC, key=len,
+                                                                          reverse=True)))
+_ACTOR_HONORIFIC = _lazy_compile(r"様|さま|さん|殿|の方|方々|たち|達|ら(?![しれ])")
+_ACTOR_PERSON_RE = _lazy_compile("(?P<head>{})(?P<hon>たち|達|ども)?".format(
     "|".join(re.escape(h) for h in sorted(_ACTOR_PERSON, key=len, reverse=True))))
 # 「〜さん」「〜様」「〜氏」「〜殿」の人名（敬称の前の漢字・片仮名・英字を1〜6字）
-_ACTOR_TITLE = re.compile(r"さん|様|さま|氏|殿")
+_ACTOR_TITLE = _lazy_compile(r"さん|様|さま|氏|殿")
 # 人名とみなさない名前。すぐ前に「お」があれば、「お」を付けた形（お子、お客）でも照らす（名前の字に平仮名を含めないので）
 _ACTOR_TITLE_BAD = frozenset(("皆", "お客", "皆々", "奥", "お子", "お母", "お父", "神", "仏"))
 # 人を指さない「〜様」「〜さま」「〜殿」（仕様、同様、逆さま、宮殿など。敬称の前の1字との組で見る）
@@ -9839,18 +9868,18 @@ _ACTOR_NOT_TITLE = frozenset(("仕様", "同様", "模様", "多様", "一様", 
                               "貴殿"))
 # 部署の語（〜部、〜課、〜グループ、〜班。前の語は2〜10字）
 _ACTOR_ORG_SUFFIX = r"(?:事業部|本部|部門|部署|部|課|グループ|班)"
-_ACTOR_ORG = re.compile(_ACTOR_ORG_SUFFIX + r"(?![分題金税品材門署外内面所長期限屋位数活下])")
-_ACTOR_ORG_END = re.compile(_ACTOR_ORG_SUFFIX + "$")
+_ACTOR_ORG = _lazy_compile(_ACTOR_ORG_SUFFIX + r"(?![分題金税品材門署外内面所長期限屋位数活下])")
+_ACTOR_ORG_END = _lazy_compile(_ACTOR_ORG_SUFFIX + "$")
 _ACTOR_ORG_STEM_BAD = frozenset((
     "一", "全", "内", "外", "上", "下", "細", "頭", "後", "前", "局", "中", "北", "南", "西", "東", "大", "腹", "胸", "日", "放", "学",
     "幹", "本", "支", "接続", "表示", "入力", "出力", "制御", "本体", "冒頭", "末尾", "先頭", "上層", "底", "一般", "最上", "最下",
     "外側", "内側", "中央", "上位", "下位", "中心", "周辺", "右", "左", "前半", "後半", "中盤", "終盤", "序盤", "導入", "結論",
     "本論", "付録", "巻末", "文末", "文頭", "上半", "下半"))
 # 文書の部や課（第1部、第三課）
-_ACTOR_ORG_NUMBERED = re.compile(r"^第|[0-9０-９一二三四五六七八九十百千]$")
+_ACTOR_ORG_NUMBERED = _lazy_compile(r"^第|[0-9０-９一二三四五六七八九十百千]$")
 # 部品や処理の「〜部」（特許や装置の文書の 記憶部、処理部 など）、データの区切りの「〜部」（データ部、署名部、仮数部）、
 # 地域の「〜部」（都市部、沿岸部、山間部）。前の語の末尾で見る
-_ACTOR_ORG_PART = re.compile(
+_ACTOR_ORG_PART = _lazy_compile(
     r"(?:処理|制御|記憶|表示|入力|出力|通信|検出|受信|送信|判定|演算|接続|接合|可動|開口|断面|記述|条件|本文|先端|後端|前端|"
     r"外周|内周|駆動|操作|取得|生成|変換|解析|算出|検知|撮像|発光|受光|給電|電源|筐体|基板|収容|保持|固定|支持|連結|係合|挿入|"
     r"排出|供給|搬送|冷却|加熱|貯留|格納|設定|記録|読取|書込|照合|認証|通知|送受信|ヘッダー|ヘッダ|フッター|フッタ|ボディー|"
@@ -9858,7 +9887,7 @@ _ACTOR_ORG_PART = re.compile(
     r"データ|ペイロード|符号|署名|仮数|宣言|定義|外縁|周縁|辺縁|末端|中枢|"
     r"都市|都心|市街|沿岸|臨海|山間|農村|漁村|内陸|郊外|平野|島嶼)$")
 # 「担当の人」「当番の方」
-_ACTOR_NO_HITO = re.compile(r"(?:担当|当番|運用|管理|責任|窓口|保守|経理|総務|人事|法務|情シス)の(?:人|方|者)")
+_ACTOR_NO_HITO = _lazy_compile(r"(?:担当|当番|運用|管理|責任|窓口|保守|経理|総務|人事|法務|情シス)の(?:人|方|者)")
 # 「〇〇の担当者」のように、前の人や担当の語を受けて同じ人を指す語（前の語が原文にあれば、あるとみなす）
 _ACTOR_OF_HEADS = frozenset(("担当者", "担当", "人", "方", "者", "メンバー", "チーム", "窓口", "スタッフ", "皆さん", "皆様",
                              "各位", "方々"))
@@ -9891,25 +9920,25 @@ _ACTOR_SAME = (
     ("スタッフ", "社員", "職員"),
 )
 # 動詞にもなるカタカナ語（「サポートする」）は、人や窓口として出た所だけを原文にあるとみなす
-_ACTOR_VERB_NOUN = {"サポート": re.compile(r"サポート(?=に|へ|が|は|から|まで|窓口|担当|チーム|デスク|センター|部|課|宛)")}
+_ACTOR_VERB_NOUN = {"サポート": _lazy_compile(r"サポート(?=に|へ|が|は|から|まで|窓口|担当|チーム|デスク|センター|部|課|宛)")}
 # 原文の書き手の自称（あれば、書き手の人称（区分 W）は出さない。こちら → 弊社 のような言い換えは人を足していない）
-_ACTOR_SELF_REF = re.compile(r"私|わたし|僕|ぼく|俺|自分|こちら|こっち|当方|うち|弊社|当社|我々|われわれ|私ども|わたくし|"
-                             r"当チーム|小社")
+_ACTOR_SELF_REF = _lazy_compile(r"私|わたし|僕|ぼく|俺|自分|こちら|こっち|当方|うち|弊社|当社|我々|われわれ|私ども|わたくし|"
+                                r"当チーム|小社")
 # 主語の助詞（「〜から」「〜によって」も動作主に数える）と、知らせる・頼む相手の助詞
-_ACTOR_SUBJECT = re.compile(r"(?:は|が|も(?!し)|では|には|から|によって|により|による|の手で|側で|として)")
-_ACTOR_RECIPIENT = re.compile(
+_ACTOR_SUBJECT = _lazy_compile(r"(?:は|が|も(?!し)|では|には|から|によって|により|による|の手で|側で|として)")
+_ACTOR_RECIPIENT = _lazy_compile(
     r"(?:に(?!とって|おいて|ついて|対し|関し|関す|向け|応じ|合わ|比べ|なる|なっ|なり|なれ|なら|よる|よっ|より|よれ|限|際し|"
     r"伴|沿|基づ|すぎ|過ぎ|似|近|は)|へ|宛てに|宛に|あてに|まで(?!に)|にも|へも)")
-_ACTOR_NOTIFY = re.compile(
+_ACTOR_NOTIFY = _lazy_compile(
     r"知らせ|しらせ|通知|連絡|報告|送(?:る|り|っ|ら|信|付)|依頼|頼(?:む|み|ん|ま)|求め|共有|伝え|伝わ|エスカレ|相談|提出|申請|"
     r"問い合わせ|問合せ|届(?:け|く|き)|アラート|メール|呼び出|引き継|渡(?:す|し)|回(?:す|し)|任せ|割り当て|割当|付与|"
     r"承認|確認|お願い|案内|周知|通報|発報|警告|コール|ページ|見て(?:もら|いただ|くだ)")
 _ACTOR_NOTIFY_WINDOW = 48
 # 動作主の「〜より」（総務部より連絡します、事務局より、お知らせです）。読点か、知らせる・伝える語がすぐあとに続くときだけ
 # 主語に数える（「前のチームより速い」「担当者よりも先に」のような比べる「より」は数えない）
-_ACTOR_FROM = re.compile(r"より(?=[、,]|[おご]?(?:" + _ACTOR_NOTIFY.pattern +
-                         r"|説明|発表|回答|返信|返答|申し|指示|提供|発信|配信|話し|話が))")
-_ACTOR_CORE = re.compile(r"(?:様|さま|さん|殿|の方|方々|たち|達|ら|ども)$")
+_ACTOR_FROM = _lazy_compile(r"より(?=[、,]|[おご]?(?:" + _ACTOR_NOTIFY.pattern +
+                            r"|説明|発表|回答|返信|返答|申し|指示|提供|発信|配信|話し|話が))")
+_ACTOR_CORE = _lazy_compile(r"(?:様|さま|さん|殿|の方|方々|たち|達|ら|ども)$")
 _ACTOR_SKIP_KINDS = frozenset(("code", "frontmatter", "html_block", "reference_definition", "thematic_break", "blank",
                                "heading_underline"))
 _ACTOR_FRAME_NAMES = {"subject": "主語", "recipient": "知らせる・頼む相手"}
@@ -10225,7 +10254,7 @@ def _added_actor_section(d: dict) -> str:
 # ない文（足した文）は挙げない。1文あたりの増え方は分数で比べる（0.3個ちょうどの増え方も出す）。
 # どちらも意味が変わる恐れの kind ではないので、meaning_risk_count、candidate_count、状態、状態の行、--fail-on には入れない。
 # 原文と最終稿が同じか、行の差がなければ、どちらも出さない（comma_increase は None）。
-_COMMA_MARKS = re.compile(r"[、，]")
+_COMMA_MARKS = _lazy_compile(r"[、，]")
 _COMMA_MIN_ADDED = 3
 _COMMA_MIN_RATE = Fraction(3, 10)
 _COMMA_SENTENCE_ADDED = 2
