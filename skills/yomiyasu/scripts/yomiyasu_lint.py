@@ -677,7 +677,9 @@ def _emoji_flag_pattern() -> str:
     return "(?:" + "|".join(groups) + ")"
 
 
-# Preserve the public compiled Pattern interface and noncapturing findall.
+# Preserve the public pattern's interface (findall, search and the other
+# re.Pattern methods) and noncapturing findall. Since 3.0.1 the object is a
+# _LazyPattern compiled on first use, not an re.Pattern instance.
 # Legacy Emoji=Yes/default-emoji bases remain style candidates. Registered
 # VS15 is text; qualified keycaps/flags and explicit VS16 are emoji candidates.
 EMOJI_PATTERN = _lazy_compile(
@@ -690,11 +692,11 @@ EMOJI_PATTERN = _lazy_compile(
 
 # Every default branch begins with one of these scalar classes. Enumerating
 # only those starts avoids retrying the flag/variation alternation at each
-# Japanese character, while the original Pattern remains the public object.
+# Japanese character, while the original pattern remains the public object.
 _EMOJI_DEFAULT_PATTERN = EMOJI_PATTERN
 # A small conservative superset is faster than hundreds of duplicate scalar
 # intervals. All pinned default-branch starts are inside these intervals;
-# extra symbols remain candidates only and the original Pattern rejects them.
+# extra symbols remain candidates only and the original pattern rejects them.
 _EMOJI_START_PATTERN = _lazy_compile(
     r"[0-9#*](?=\ufe0f\u20e3)|[\u00a9-\u2fff\u3030\u303d\u3297\u3299\U0001f000-\U0001faff]"
 )
