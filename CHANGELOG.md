@@ -2,6 +2,72 @@
 
 yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変更は、各バージョンの GitHub のリリースノートを見てください。
 
+## 3.1.0 - 2026-11-12
+
+スキルのフォルダ（skills/yomiyasu/）から、Codex 用のプラグインの設定を外したバージョンです。パッケージマネージャーの apm がこのフォルダをプロジェクトに入れられなかった原因をなくしました（Hol1kgmg さんの [issue #61](https://github.com/nanaism/yomiyasu/issues/61)）。Codex にスキルのフォルダを写して入れる形では、スキルの名前が `yomiyasu:yomiyasu` から `yomiyasu` に変わります。推敲の手順（SKILL.md と references）は、SKILL.md のバージョンの行のほかは 3.0.1 から変えていません。lint、diff、check、フックの出力も 3.0.1 と同じです（`tool_version` と `--version` のバージョンだけが 3.1.0 になります）。
+
+### Codex でのスキルの名前が変わります
+
+- スキルのフォルダを写して入れる形（README の「6. Codex で使うリポジトリに置く」、`npx skills add`、`gh skill install`）では、名前は 3.0.1 までは `yomiyasu:yomiyasu`、3.1.0 からは `yomiyasu` です。3.1.0 以降に更新するか入れ直して、スキルのフォルダからプラグインの設定がなくなると、名前が変わります。
+- どちらの名前になっているかは、スキルのフォルダ（`.agents/skills/yomiyasu` など）に `.codex-plugin/` があるかで分かります（2.0.1 までの写しでは `.claude-plugin/`）。あれば `yomiyasu:yomiyasu`、なければ `yomiyasu` です。3.0.1 までを写して入れたまま使う場合は、何も変える必要はありません。
+- 名前が変わったあとは、次の3つを書き換えてください。
+  - 依頼の文の `$yomiyasu:yomiyasu` を `$yomiyasu` にします。Codex がスキルの指示を自動で差し込むのは、`$` に続く名前が一覧の名前と1字ずつ同じときだけです。
+  - `AGENTS.md` に足した1行の `yomiyasu:yomiyasu` を `yomiyasu` にします（README の「毎回 yomiyasu を使いたいとき」）。
+  - Codex の設定でスキルを名前で指定している場合は、その名前を `yomiyasu` にします（`config.toml` の `[[skills.config]]` の `name`、`environments.toml` の `skills` の `required`）。
+- 書き換える前の書き方のままでも、測った8回ではスキルが読まれました（codex-cli 0.164.0、gpt-6-astra、effort high、`codex exec`）。名前が `yomiyasu` の形で、`$yomiyasu:yomiyasu` と書いた依頼を3回、「yomiyasu:yomiyasu で」と書いた依頼を2回、`AGENTS.md` の1行を `yomiyasu:yomiyasu` のままにして名前を出さない依頼を3回送った結果です。この8回では、Codex はスキルの指示を自動では差し込まず、モデルが自分で SKILL.md を読みました。読むかどうかはモデルしだいなので、依頼の文と `AGENTS.md` の1行は書き換えてください。3つ目の設定の名前は、この8回では試していません。こちらも書き換えてください。
+- 前のフォルダを消さずに新しいファイルを重ねる入れ方（`gh skill install --force` など）では、3.1.0 に更新しても前のバージョンのプラグインの設定（`.codex-plugin/`。2.0.1 までの写しでは `.claude-plugin/`）が残り、名前は `yomiyasu:yomiyasu` のままです。残った設定のフォルダを消してください。スキルのフォルダを消してから入れ直してもかまいません。
+- 次の形では、名前は変わりません。
+  - Claude Code（プラグインで入れた形は `yomiyasu:yomiyasu`、`npx skills add` や `gh skill install` で入れた形は `yomiyasu`）、Claude.ai の ZIP、`npx openskills install`。
+  - このリポジトリを clone して `.agents/skills/yomiyasu` を clone の中の `skills/yomiyasu` への symlink にした形と、このリポジトリを Codex のプラグインとして入れた形。どちらも `yomiyasu:yomiyasu` のままです。Codex はスキルのフォルダから上のフォルダへ順にプラグインの設定を探し、最初に見つけた設定の名前をスキルの名前の先頭に付けます。この2つの形では、リポジトリの直下の `.claude-plugin/plugin.json` が見つかります。
+- スキルを置いたリポジトリか、その上のフォルダに別のプラグインの設定があると、3.1.0 からはその設定の名前が先頭に付きます（3.0.1 までは、スキルのフォルダの設定が先に見つかるので `yomiyasu:yomiyasu` でした）。
+- フックは今までどおり `$yomiyasu` と `$yomiyasu:yomiyasu` のどちらの書き方でも原稿を登録します。別のプラグインの設定の名前が先頭に付いた形の書き方（`$その名前:yomiyasu`）では原稿を登録しません。
+
+### きっかけ
+
+- apm（microsoft/apm）は、依存を `nanaism/yomiyasu/skills/yomiyasu` のようにフォルダまで書くと、そのフォルダの中身だけを取り出して種類を決めます。0.35.0 から、フォルダに `.codex-plugin/plugin.json` があると、SKILL.md より先にこれを見て「Codex のプラグイン」と決めるようになりました。apm は Codex のプラグインをユーザー単位でしか入れない決まりにしているので、プロジェクト単位の `apm install` は失敗します。
+- `skills/yomiyasu/.codex-plugin/plugin.json` は 2.0.2 で足した、名前だけを書いた設定です。Codex がスキルを `yomiyasu:yomiyasu` という名前で一覧に載せるように置いていました。
+
+### 変えたこと
+
+- `skills/yomiyasu/.codex-plugin/plugin.json` を消しました。報告ではリポジトリの直下へ移す案をいただきましたが、移さずに消しています。apm のソースを読むかぎり、apm はフォルダの中身だけで種類を決めるので、スキルのフォルダからこのファイルがなくなればスキルと判定されます。Codex のプラグインとして入れる形は、直下の `.claude-plugin/` の2つのファイルだけで動きます。名前だけの設定を直下に置くと、Codex はそちらを先に読むので、プラグインのバージョンが `local` になります。
+- スクリプトの中にそのまま書いていた BOM（U+FEFF）の文字を、`\ufeff` のエスケープに替えました（yomiyasu_diff.py と yomiyasu_check.py の1か所ずつ）。動きは同じです。apm は入れる前にファイルの見えない文字を検査し、ファイルの途中の U+FEFF を警告に数えます。この文字は、見えない文字を消す道具をスクリプトにかけると消えます（apm のソースを読むかぎり、0.32.0 までは `apm audit --strip` を実行したとき、0.33.0 からは `apm audit --file` でスクリプトを指定して `--strip` を付けたとき）。消えると `text.startswith("")` という常に真の条件になり、語の一覧の1文字目が読まれなくなります。
+- README、README.en.md、docs/usage.md、docs/tools.md、docs/limitations.md の、Codex での名前と呼び方の説明を書き直しました。名前の見分け方と、名前が `yomiyasu` にならない形は、docs/usage.md の「Codex で使うリポジトリに置いたとき」に書いています。
+
+### 確かめたこと
+
+- 3.0.1 と 3.1.0 の lint、diff、check の CLI を同じ5,131件の入力で動かし、バージョンの文字列をそろえて比べました（Python 3.14.5 と 3.9.6）。標準出力、標準エラー、終了コードは5,131件すべて同じでした。語の一覧（`.yomiyasu-words/`）を置いた形でも、2,715件の出力が同じでした。
+- Codex（codex-cli 0.164.0）で、モデルを呼ぶ前に決まる一覧の名前と `$` の扱いを確かめました。`.codex-plugin/plugin.json` のあるフォルダを `.agents/skills/yomiyasu` に写すと名前は `yomiyasu:yomiyasu`、ないフォルダを写すと `yomiyasu` です。名前が `yomiyasu` のとき、`$yomiyasu` と書いた依頼にはスキルの指示が差し込まれ、`$yomiyasu:yomiyasu` と書いた依頼には差し込まれませんでした。
+- `codex exec`（codex-cli 0.164.0、gpt-6-astra、effort high）で、モデルがスキルを読むかを32回測りました。
+  - 名前が `yomiyasu` の形（3.1.0 のフォルダを写した形）に新しい書き方で頼んだ9回は、どれもスキルを読みました。内訳は「/yomiyasu」だけ、`$yomiyasu`、「yomiyasu で」の依頼が2回ずつと、`AGENTS.md` に新しい名前の1行を足して、名前を出さずに日本語を書かせた3回です。`$yomiyasu` の2回は、Codex がスキルの指示を自動で差し込みました。
+  - 同じ形に古い書き方で頼んだ8回も、どれもスキルを読みました（`$yomiyasu:yomiyasu` が3回、「yomiyasu:yomiyasu で」が2回、`AGENTS.md` の古い名前の1行が3回）。Codex はスキルの指示を自動では差し込まず、モデルが自分で SKILL.md を読んでいます。
+  - 同じ形で `AGENTS.md` を置かず、名前を出さずに日本語を書かせる依頼とコードを直させる依頼を2回ずつ送ると、4回ともスキルを読みませんでした。
+  - 同じ形で `AGENTS.md` の1行を「日本語の文章を書いたり直したりするときは、常に yomiyasu スキルで推敲してください。」だけにすると、変数の名前を変えるだけの依頼を2回送って、2回ともスキルを読みました。
+  - 名前が `yomiyasu:yomiyasu` の形（3.0.1 のフォルダを写した形）の9回も、どれもスキルを読みました（「/yomiyasu」だけが1回、`$yomiyasu:yomiyasu`、`$yomiyasu`、`AGENTS.md` の古い名前の1行、新しい名前の1行が2回ずつ）。`$yomiyasu:yomiyasu` の2回は、Codex がスキルの指示を自動で差し込みました。`$yomiyasu` の2回は自動では差し込まれず、モデルが自分で SKILL.md を読んでいます。
+- Codex のプラグインとして入れる形は、GitHub から `codex plugin marketplace add nanaism/yomiyasu` と `codex plugin add yomiyasu@yomiyasu` で入れて確かめました（codex-cli 0.164.0。入ったのは公開している 3.0.1 で、一覧の名前は `yomiyasu:yomiyasu` でした）。スキルのフォルダの設定を外した 3.1.0 のツリーを、手元のフォルダから同じ2つのコマンドで入れた形でも、名前は `yomiyasu:yomiyasu` でした。
+- apm は動かしていません。0.35.0 のソースを読み、種類を決める順番（format_detection.py）と、見えない文字の検査の表（content_scanner.py）を確かめました。検査の表を写して、配るフォルダを走査すると、警告に当たる文字は 3.0.1 が2か所（上の BOM）、3.1.0 が0か所です。3.0.1 のスクリプトからこの文字を消した写しでは、語の一覧を読む試験が落ち、一覧の1行目の注記が語として読まれました。3.1.0 の写しに同じ処理をかけても、ファイルは変わりません。
+- `gh skill install --force`（gh 2.103.3。手元のフォルダから `--from-local` で入れました）で 3.0.1 のフォルダの上から 3.1.0 を入れると、`.codex-plugin/plugin.json` が消えずに残りました。
+- tests/test_skill_package.py に、スキルのフォルダにプラグインの設定がないことと、配るファイルに見えない文字（途中の BOM、幅のない文字、文字の向きを変える制御の文字など）をそのまま書いていないことの試験を足しました。
+- 登録用の ZIP は、入るファイルが 3.0.1 と同じ40個です（`.codex-plugin` はもとから ZIP に入れていません）。
+- 試験一式（2,601件）は macOS の Python 3.14.5 と 3.9.6 で通りました（飛ばしたのは、Linux だけで動かす試験2件と、Windows でしか動かない試験2件です。3.14.5 では、Python 3.9 でだけ動かす試験3件も飛ばしています）。
+
+### 試験と CI
+
+- CI は、時間を測らない試験を3組に分けて別々のジョブで流し、時間を測る試験（72件）は別のジョブで1件ずつ流すようにしました（[PR #60](https://github.com/nanaism/yomiyasu/pull/60)。3.0.1 のあとに main へ入れた変更で、配布するファイルは変えていません）。いちばん遅い pytest のジョブの時間は、分ける前（3.0.1 の変更を入れたあと）の3回が9〜12分、分けたあとの3回が3分55秒〜4分16秒でした。
+- このとき、試験の数は12件増えました（check の出力を照らす試験1本を8本に分け、組の分け方などを確かめる試験を5件足しました）。試験一式は 3.0.1 の 2,586件から 2,598件になり、今回足した3件を合わせて 2,601件です。
+
+### 限界
+
+- apm は動かしていません。プロジェクト単位の `apm install` がスキルとして通ることと、見えない文字の警告に数えられなくなることは、apm のソースを読んだ結果です。
+- `npx skills add` と `gh skill update` が前のフォルダを新しい中身に入れ替えること（更新すると名前が変わること）は、それぞれのソースを読んだ結果で、動かしていません。
+- モデルを動かして測ったのは `codex exec` だけです。Codex の対話の画面、IDE の拡張、Codex Cloud、Windows では確かめていません。
+- 別のプラグインの設定の名前が先頭に付いた形では、一覧の名前どおりに `$` で呼んでも、フックは原稿を登録しません（上の「Codex でのスキルの名前が変わります」）。
+
+### 更新するときの注意
+
+- 既存の JSON のキーと値の意味、`*_FORMAT_VERSION`、記録の形、コマンドの引数と既定値、状態の行の形は変えていません。
+- 3.0.1 で残した検査の記録を 3.1.0 の `verify` で照らすと、検査スクリプトが変わったので `tool_changed` になります。もう一度 `run` を実行してください。
+- apm で `nanaism/yomiyasu/skills/yomiyasu` をバージョンで留めるときは、v3.1.0 以降のタグを指定してください。v2.0.2 から v3.0.1 までのタグのフォルダには `.codex-plugin/plugin.json` が入っています。
+
 ## 3.0.1 - 2026-11-11
 
 lint と diff の起動を速くしたバージョンです。lint、diff、check、フックの出力は 3.0.0 と1字も変わりません（`tool_version` と `--version` のバージョンだけが 3.0.1 になります）。Eotel さんの [PR #58](https://github.com/nanaism/yomiyasu/pull/58) を取り込みました。推敲の手順（SKILL.md と references）は、SKILL.md のバージョンの行のほかは変えていません。

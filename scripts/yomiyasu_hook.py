@@ -12,7 +12,7 @@ from collections.abc import Callable
 from types import FrameType, ModuleType
 from typing import NoReturn
 
-__version__ = "3.0.1"
+__version__ = "3.1.0"
 _EVENTS = ("UserPromptExpansion", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop", "SessionEnd")
 _BUDGETS = {"UserPromptExpansion": 4, "UserPromptSubmit": 4, "PreToolUse": 7,
             "PostToolUse": 7, "Stop": 20, "SessionEnd": 0.8}

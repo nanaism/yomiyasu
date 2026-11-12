@@ -15,7 +15,7 @@ mail（メール・チャット）と paper（論文・研究レポート）も�
 """
 
 from __future__ import annotations
-__version__ = "3.0.1"
+__version__ = "3.1.0"
 
 import sys
 
@@ -940,7 +940,7 @@ def _list_sha256(tools: dict, key: str) -> str | None:
 def _skill_version(data: bytes) -> str | None:
     """SKILL.md の frontmatter の metadata.version（YAML のライブラリなしで、metadata: の次の字下げした行から取る。4章）。"""
     try:
-        lines = data.decode("utf-8").lstrip("﻿").split("\n")
+        lines = data.decode("utf-8").lstrip("\ufeff").split("\n")
     except UnicodeDecodeError:
         return None
     if not lines or lines[0].rstrip("\r") != "---":

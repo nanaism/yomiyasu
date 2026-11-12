@@ -438,7 +438,7 @@ class HookTests(ManagedCase):
         self.assertEqual(before, sorted(str(p) for p in self.root.rglob('*')))
         result = subprocess.run([sys.executable, '-B', str(HOOK), '--version'], cwd=str(self.root),
                                 env=self.env, capture_output=True, text=True, encoding='utf-8', timeout=5)
-        self.assertEqual(result.stdout, 'yomiyasu_hook.py 3.0.1\n')
+        self.assertEqual(result.stdout, 'yomiyasu_hook.py 3.1.0\n')
 
     def test_h16b_help_and_print_config_errors(self):
         """--help に引数、環境変数、終了コードがあり、--print-config の値の誤りだけが終了コード2。
@@ -468,9 +468,10 @@ class HookTests(ManagedCase):
         self.assertEqual(list(ROOT.rglob('SKILL.md')), [ROOT / 'skills' / 'yomiyasu' / 'SKILL.md'])
         front = (ROOT / 'skills' / 'yomiyasu' / 'SKILL.md').read_text(encoding='utf-8').split('---')[1]
         self.assertNotIn('hooks:', front)
-        for path in (ROOT / 'hooks', ROOT / 'skills' / 'yomiyasu' / 'hooks', ROOT / '.codex-plugin'):
+        for path in (ROOT / 'hooks', ROOT / 'skills' / 'yomiyasu' / 'hooks', ROOT / '.codex-plugin', ROOT / 'skills' / 'yomiyasu' / '.codex-plugin'):
             self.assertFalse(path.exists())
-        manifests = list((ROOT / '.claude-plugin').glob('*.json')) + list((ROOT / 'skills' / 'yomiyasu' / '.codex-plugin').glob('*.json'))
+        manifests = list((ROOT / '.claude-plugin').glob('*.json'))
+        self.assertEqual(len(manifests), 2)
         for path in manifests:
             self.assertNotIn('hooks', json.loads(path.read_text(encoding='utf-8')))
 

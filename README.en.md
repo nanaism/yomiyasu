@@ -23,7 +23,7 @@ Since 2.0.0, the instructions tell yomiyasu to run the bundled checks on its fin
 
 The package is a set of instructions (SKILL.md) plus these checks.
 
-If your environment cannot load the full skill, two versions built from it are published in separate repositories. Both are 2.0.0, built from 3.0.0. Use the full skill when your environment can load it.
+If your environment cannot load the full skill, two versions built from it are published in separate repositories. Both are 2.0.0, built from 3.0.0; 3.0.1 and 3.1.0 did not change the rewriting procedure, so the two have not been updated. Use the full skill when your environment can load it.
 
 - [yomiyasu-mini](https://github.com/nanaism/yomiyasu-mini) copies the full skill's SKILL.md section by section and packs the skill into 17 files, for hosts that limit the number or size of files, such as Microsoft 365 Copilot declarative agents. The full skill has many reference files, and its lint, diff and check scripts are each over 100KB. mini keeps each script at 90KB or less and each reference file at 100KB or less. It includes the meaning-change check, with the same results as the 3.0.0 diff.
 - [yomiyasu-pocket](https://github.com/nanaism/yomiyasu-pocket) is a 400 to 500 character instruction to paste into an AI's instructions field, such as an email app's AI or a chat app's custom instructions. It has no bundled checks.
@@ -89,7 +89,7 @@ mv .agents/yomiyasu.bak-20261024-153000 .agents/skills/yomiyasu
 
 Do not commit the backup folder, and delete it when you no longer need it.
 
-Codex then lists the skill as `yomiyasu:yomiyasu`. Call it by sending only `/yomiyasu` or by writing 「yomiyasu で」 ("with yomiyasu") in the request. Writing the listed name, `$yomiyasu:yomiyasu`, also works. The copied folder is not updated automatically; run the commands again to update.
+Codex then lists the skill as `yomiyasu`. Call it by sending only `/yomiyasu` or by writing 「yomiyasu で」 ("with yomiyasu") in the request. Writing the listed name, `$yomiyasu`, also works. Up to 3.0.1 the copied skill was listed as `yomiyasu:yomiyasu`; after you install 3.1.0 or later, write `$yomiyasu` instead of `$yomiyasu:yomiyasu`, and change the name in your `AGENTS.md` line if you have one. The copied folder is not updated automatically; run the commands again to update.
 
 Do not edit files inside the installed skill folder. Some install methods replace the whole folder on update, and your edits are not kept. Put project words in `.yomiyasu-words/` and your own instructions in `CLAUDE.md` or `AGENTS.md`, outside the skill folder.
 
