@@ -14,8 +14,8 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
   - 依頼の文の `$yomiyasu:yomiyasu` を `$yomiyasu` にします。Codex がスキルの指示を自動で差し込むのは、`$` に続く名前が一覧の名前と1字ずつ同じときだけです。
   - `AGENTS.md` に足した1行の `yomiyasu:yomiyasu` を `yomiyasu` にします（README の「毎回 yomiyasu を使いたいとき」）。
   - Codex の設定でスキルを名前で指定している場合は、その名前を `yomiyasu` にします（`config.toml` の `[[skills.config]]` の `name`、`environments.toml` の `skills` の `required`）。
-- 書き換える前の書き方のままでも、測った8回ではスキルが読まれました（codex-cli 0.164.0、gpt-6-astra、effort high、`codex exec`）。名前が `yomiyasu` の形で、`$yomiyasu:yomiyasu` と書いた依頼を3回、「yomiyasu:yomiyasu で」と書いた依頼を2回、`AGENTS.md` の1行を `yomiyasu:yomiyasu` のままにして名前を出さない依頼を3回送った結果です。この8回では、Codex はスキルの指示を自動では差し込まず、モデルが自分で SKILL.md を読みました。読むかどうかはモデルしだいなので、上の3つは書き換えてください。
-- 前のフォルダを消さずに新しいファイルを重ねる入れ方（`gh skill install --force` など）では、3.1.0 に更新しても前のバージョンのプラグインの設定（`.codex-plugin/`。2.0.1 までの写しでは `.claude-plugin/`）が残り、名前は `yomiyasu:yomiyasu` のままです。残った設定のフォルダを消すか、スキルのフォルダを消してから入れ直してください。
+- 書き換える前の書き方のままでも、測った8回ではスキルが読まれました（codex-cli 0.164.0、gpt-6-astra、effort high、`codex exec`）。名前が `yomiyasu` の形で、`$yomiyasu:yomiyasu` と書いた依頼を3回、「yomiyasu:yomiyasu で」と書いた依頼を2回、`AGENTS.md` の1行を `yomiyasu:yomiyasu` のままにして名前を出さない依頼を3回送った結果です。この8回では、Codex はスキルの指示を自動では差し込まず、モデルが自分で SKILL.md を読みました。読むかどうかはモデルしだいなので、依頼の文と `AGENTS.md` の1行は書き換えてください。3つ目の設定の名前は、この8回では試していません。こちらも書き換えてください。
+- 前のフォルダを消さずに新しいファイルを重ねる入れ方（`gh skill install --force` など）では、3.1.0 に更新しても前のバージョンのプラグインの設定（`.codex-plugin/`。2.0.1 までの写しでは `.claude-plugin/`）が残り、名前は `yomiyasu:yomiyasu` のままです。残った設定のフォルダを消してください。スキルのフォルダを消してから入れ直してもかまいません。
 - 次の形では、名前は変わりません。
   - Claude Code（プラグインで入れた形は `yomiyasu:yomiyasu`、`npx skills add` や `gh skill install` で入れた形は `yomiyasu`）、Claude.ai の ZIP、`npx openskills install`。
   - このリポジトリを clone して `.agents/skills/yomiyasu` を clone の中の `skills/yomiyasu` への symlink にした形と、このリポジトリを Codex のプラグインとして入れた形。どちらも `yomiyasu:yomiyasu` のままです。Codex はスキルのフォルダから上のフォルダへ順にプラグインの設定を探し、最初に見つけた設定の名前をスキルの名前の先頭に付けます。この2つの形では、リポジトリの直下の `.claude-plugin/plugin.json` が見つかります。
@@ -42,7 +42,7 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
   - 同じ形に古い書き方で頼んだ8回も、どれもスキルを読みました（`$yomiyasu:yomiyasu` が3回、「yomiyasu:yomiyasu で」が2回、`AGENTS.md` の古い名前の1行が3回）。Codex はスキルの指示を自動では差し込まず、モデルが自分で SKILL.md を読んでいます。
   - 同じ形で `AGENTS.md` を置かず、名前を出さずに日本語を書かせる依頼とコードを直させる依頼を2回ずつ送ると、4回ともスキルを読みませんでした。
   - 同じ形で `AGENTS.md` の1行を「日本語の文章を書いたり直したりするときは、常に yomiyasu スキルで推敲してください。」だけにすると、変数の名前を変えるだけの依頼を2回送って、2回ともスキルを読みました。
-  - 名前が `yomiyasu:yomiyasu` の形（3.0.1 のフォルダを写した形）の9回も、どれもスキルを読みました（「/yomiyasu」だけが1回、`$yomiyasu:yomiyasu`、`$yomiyasu`、`AGENTS.md` の古い名前の1行、新しい名前の1行が2回ずつ）。
+  - 名前が `yomiyasu:yomiyasu` の形（3.0.1 のフォルダを写した形）の9回も、どれもスキルを読みました（「/yomiyasu」だけが1回、`$yomiyasu:yomiyasu`、`$yomiyasu`、`AGENTS.md` の古い名前の1行、新しい名前の1行が2回ずつ）。`$yomiyasu:yomiyasu` の2回は、Codex がスキルの指示を自動で差し込みました。`$yomiyasu` の2回は自動では差し込まれず、モデルが自分で SKILL.md を読んでいます。
 - Codex のプラグインとして入れる形は、GitHub から `codex plugin marketplace add nanaism/yomiyasu` と `codex plugin add yomiyasu@yomiyasu` で入れて確かめました（codex-cli 0.164.0。入ったのは公開している 3.0.1 で、一覧の名前は `yomiyasu:yomiyasu` でした）。スキルのフォルダの設定を外した 3.1.0 のツリーを、手元のフォルダから同じ2つのコマンドで入れた形でも、名前は `yomiyasu:yomiyasu` でした。
 - apm は動かしていません。0.35.0 のソースを読み、種類を決める順番（format_detection.py）と、見えない文字の検査の表（content_scanner.py）を確かめました。検査の表を写して、配るフォルダを走査すると、警告に当たる文字は 3.0.1 が2か所（上の BOM）、3.1.0 が0か所です。3.0.1 のスクリプトからこの文字を消した写しでは、語の一覧を読む試験が落ち、一覧の1行目の注記が語として読まれました。3.1.0 の写しに同じ処理をかけても、ファイルは変わりません。
 - `gh skill install --force`（gh 2.103.3。手元のフォルダから `--from-local` で入れました）で 3.0.1 のフォルダの上から 3.1.0 を入れると、`.codex-plugin/plugin.json` が消えずに残りました。
@@ -52,7 +52,7 @@ yomiyasu のバージョンごとの変更を書きます。1.1.2 以前の変�
 
 ### 試験と CI
 
-- CI は、時間を測らない試験を3組に分けて別々のジョブで流し、時間を測る試験（72件）は別のジョブで1件ずつ流すようにしました（[PR #60](https://github.com/nanaism/yomiyasu/pull/60)。3.0.1 のあとに main へ入れた変更で、配布するファイルは変えていません）。いちばん遅い pytest のジョブの時間は、分ける前の2回が9〜12分、分けたあとの3回が3分55秒〜4分16秒でした。
+- CI は、時間を測らない試験を3組に分けて別々のジョブで流し、時間を測る試験（72件）は別のジョブで1件ずつ流すようにしました（[PR #60](https://github.com/nanaism/yomiyasu/pull/60)。3.0.1 のあとに main へ入れた変更で、配布するファイルは変えていません）。いちばん遅い pytest のジョブの時間は、分ける前（3.0.1 の変更を入れたあと）の3回が9〜12分、分けたあとの3回が3分55秒〜4分16秒でした。
 - このとき、試験の数は12件増えました（check の出力を照らす試験1本を8本に分け、組の分け方などを確かめる試験を5件足しました）。試験一式は 3.0.1 の 2,586件から 2,598件になり、今回足した3件を合わせて 2,601件です。
 
 ### 限界
