@@ -3341,10 +3341,44 @@ def _pause_comma_object_hits(plain_text: str) -> list[tuple[int, str, str]]:
     return hits
 
 
-def _pause_comma_line_hits(analysis: dict, objects: bool = False) -> dict[int, list[tuple[int, str, str]]]:
+# 3.2.0: 文頭の場面の枠（この記事では、この画面には、）のあとで文が長いとき、pause_comma の message の最後に足す1文。
+# 指摘はそのまま出し（件数、行、severity、snippet は変えない）、残してよい場合だけを書き添える。当てるのは、拾った読点の
+# どれかが文頭の句に続く「では、」「には、」で、その読点のあと、次の読点か文末までが空白を除いて20字以上ある行
+_PAUSE_FRAME_NOTE = "文頭の場面の枠（「この記事では、」など）のあとで文が長く、外すと区切りが見えにくくなるときは、残してかまいません。"
+_PAUSE_FRAME_NOTE_CHUNKS = ("では", "には")
+_PAUSE_FRAME_NOTE_MIN = 20
+
+
+def _pause_comma_frame_notes(plain_text: str, hits: Sequence[tuple[int, str, str]]) -> set[int]:
+    """3.2.0: hits（_pause_comma_hits と同じ形）のうち、_PAUSE_FRAME_NOTE を足す読点の助詞の位置。
+    文頭は _pause_comma_hits と同じく、文の頭から句の頭までに箇条書きの記号と開きかっこのほかの字がないこと。
+    読点のあとの字数は、かっこの外の次の読点か文末までを、空白を除いて数える。"""
+    if not any(chunk in _PAUSE_FRAME_NOTE_CHUNKS for _, chunk, _ in hits):
+        return set()
+    t = plain_text
+    depth, starts, sentence_ids, spans, nonlead = _pause_comma_context(t)
+    found = set()
+    for i, chunk, _ in hits:
+        if chunk not in _PAUSE_FRAME_NOTE_CHUNKS or i + 1 >= len(t):
+            continue
+        sstart, send = spans[sentence_ids[i]]
+        if nonlead[starts[i + 1 - len(chunk)]] != nonlead[sstart]:
+            continue    # 文頭の句ではない（なお、この記事では、）
+        end = i + 2
+        while end < send and not (depth[end] == 0 and t[end] in "、，,"):
+            end += 1
+        if len(re.sub(r"\s", "", t[i + 2:end])) >= _PAUSE_FRAME_NOTE_MIN:
+            found.add(i)
+    return found
+
+
+def _pause_comma_line_hits(analysis: dict, objects: bool = False,
+                           notes: set[tuple[int, int]] | None = None) -> dict[int, list[tuple[int, str, str]]]:
     """段落と箇条書きの1項目ごとに、見える行をつないで当てる（行をまたぐ文と引用を1つに読む）。
     行番号から、その行の見える文字での (助詞の位置, かたまり, 句) の並びへの表を返す。
-    objects が真なら、短い目的語の「を、」（_pause_comma_object_hits）も位置の順に混ぜる（2.5.0）。"""
+    objects が真なら、短い目的語の「を、」（_pause_comma_object_hits）も位置の順に混ぜる（2.5.0）。
+    notes を渡すと、message に _PAUSE_FRAME_NOTE を足す読点の (行番号, その行の見える文字での位置) を入れる（3.2.0。
+    つないだ段落の文字で、文頭と読点のあとの字数を見る）。"""
     out = {}
 
     def flush(unit: list[tuple[int, str]], kind: str) -> None:
@@ -3364,11 +3398,14 @@ def _pause_comma_line_hits(analysis: dict, objects: bool = False) -> dict[int, l
         hits = _pause_comma_hits(joined)
         if objects:
             hits = sorted(hits + _pause_comma_object_hits(joined))
+        framed = _pause_comma_frame_notes(joined, hits) if notes is not None else set()
         for i, chunk, phrase in hits:
             if i > tail:
                 continue
             k = bisect_right(offsets, i) - 1
             out[unit[k][0]].append((i - offsets[k], chunk, phrase))
+            if notes is not None and i in framed:
+                notes.add((unit[k][0], i - offsets[k]))
         del unit[:]
 
     for block in analysis["blocks"]:
@@ -5664,6 +5701,7 @@ def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = No
 
     # 3. 語彙・構文パターン検査
     pause_lines = None
+    pause_notes: set[tuple[int, int]] = set()    # 3.2.0: message に _PAUSE_FRAME_NOTE を足す読点（_pause_comma_line_hits が入れる）
     for row in analysis["lines"]:
         line_no, line = row["line"], row["raw"]
         if row["kind"] in ("code", "frontmatter", "html_block", "reference_definition"):
@@ -5890,13 +5928,15 @@ def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = No
         # 表にない規則は当て、表にある規則は指定した種類が含まれるときだけ検出する。
         if "pause_comma" not in DOC_TYPE_ONLY_RULES or doc_type in DOC_TYPE_ONLY_RULES["pause_comma"]:
             if pause_lines is None:
-                pause_lines = _pause_comma_line_hits(analysis, objects=doc_type != "essay")
+                pause_lines = _pause_comma_line_hits(analysis, objects=doc_type != "essay", notes=pause_notes)
             if line_no in pause_lines:
                 pause_hits = pause_lines[line_no]
+                frame_note = any((line_no, i) in pause_notes for i, _, _ in pause_hits)
             else:
                 pause_hits = _pause_comma_hits(plain_text)
                 if doc_type != "essay":
                     pause_hits = sorted(pause_hits + _pause_comma_object_hits(plain_text))
+                frame_note = bool(_pause_comma_frame_notes(plain_text, pause_hits))
             if pause_hits:
                 phrases = "".join("「{}{}、」".format(phrase, chunk) for _, chunk, phrase in pause_hits[:3])
                 if len(pause_hits) > 3:
@@ -5909,7 +5949,9 @@ def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = No
                     "rule": "pause_comma",
                     "line": line_no,
                     "severity": "info",
-                    "message": f"{where}のすぐあとに読点があります（{phrases}）。間を作るだけの読点は、AIの文章らしく見えます。読点のあとに別の主語が来る、条件や場面の枠を示す、並べている、外すと語がつながったり掛かり先が変わったりする、のどれにも当たらなければ、読点だけを外してください（語順と述語は変えません）。小説や随筆で書き手が間として置いた読点は残してかまいません。",
+                    "message": f"{where}のすぐあとに読点があります（{phrases}）。間を作るだけの読点は、AIの文章らしく見えます。読点のあとに別の主語が来る、条件や場面の枠を示す、並べている、外すと語がつながったり掛かり先が変わったりする、のどれにも当たらなければ、読点だけを外してください（語順と述語は変えません）。小説や随筆で書き手が間として置いた読点は残してかまいません。"
+                               # 3.2.0: 文頭の場面の枠のあとで文が長い行だけ（ほかの行の message は 3.1.0 と同じ）
+                               + (_PAUSE_FRAME_NOTE if frame_note else ""),
                     "snippet": line.strip(),
                     "_objects": objects,
                     "_heads": heads
