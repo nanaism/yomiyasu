@@ -368,6 +368,56 @@ class ChoiceJoinedTest(unittest.TestCase):
         self.assertEqual(kinds(result), [("choice", "one_to_all")])
 
 
+class QuantifierTest(unittest.TestCase):
+    """16章: 範囲の語が消えた書き換え（kind quantifier。--fail-on に数えない見直しの候補）。全部（すべて、全て、全部、全件）、
+    全員、一切、例外なく（例外なく、もれなく、漏れなく）の集まりごとに数え、同じ集まりの言い換えは消えたことにしない。"""
+
+    # (元, 後, 消えた語)
+    FOUND = (
+        ("新しい規程は全員に適用されます。", "新しい規程が適用されます。", ["全員"]),
+        ("参加者は例外なく名札を着用してください。", "参加者は名札を着用してください。", ["例外なく"]),
+        ("すべての端末を更新します。", "一部の端末を更新します。", ["すべて"]),
+        # 類例
+        ("申込書はもれなく提出してください。", "申込書を提出してください。", ["もれなく"]),
+    )
+    NOT_FOUND = (
+        ("全部のファイルを保存してください。", "すべてのファイルを保存してください。"),
+        ("すべての項目を確認します。", "項目はすべて確認します。"),
+        ("全員に配布します。", "皆さん全員に配布します。"),
+        ("閲覧、更新、バッチ処理のすべてがご利用いただけません。", "閲覧も更新もバッチ処理もできません。"),
+        # 類例: 別の集まりの語で言い直した組（文を分けた組も）、別の文へ移した組、「一切れ」
+        ("書類は漏れなくそろえてください。", "書類はすべてそろえてください。"),
+        ("申請はWebまたは郵送で受け付け、書類は漏れなくそろえてください。", "申請はWeb・郵送で受け付けます。書類はすべてそろえてください。"),
+        ("資料は全員に配ります。説明会を開きます。", "資料を配ります。説明会は全員が対象です。"),
+        ("ケーキを一切れ食べました。", "ケーキを食べました。"),
+    )
+
+    def test_found(self):
+        for before, after, words in self.FOUND:
+            with self.subTest(before=before, after=after):
+                found = of_kind(run(before, after), "quantifier")
+                self.assertEqual([(risk["subkind"], risk["detail"]) for risk in found], [(None, {"words": words})])
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before, after=after):
+                self.assertEqual(of_kind(run(before, after), "quantifier"), [])
+
+    def test_existing_negation_is_kept(self):
+        """「例外なく」の消えは、今までどおり否定の数の変化にも出る（範囲の語の候補は既存の候補の後ろ）。"""
+        result = run("参加者は例外なく名札を着用してください。", "参加者は名札を着用してください。")
+        self.assertEqual(kinds(result), [("negation", None), ("quantifier", None)])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_message_and_not_counted(self):
+        report = yomiyasu_diff.report(run("新しい規程は全員に適用されます。", "新しい規程が適用されます。"))
+        self.assertIn("- 範囲の語が消えた（1行目）: 「全員」。--fail-on には数えません。原文は全部に当てはまると書いています。"
+                      "推敲後の文で範囲があいまいになっていないか確かめてください。", report)
+        self.assertNotIn("quantifier", yomiyasu_diff.FAIL_ON_KINDS)
+        self.assertEqual(yomiyasu_diff._RISK_ORDER["quantifier"], 22)
+        self.assertEqual(diff_exit_code("新しい規程は全員に適用されます。", "新しい規程が適用されます。"), 0)
+
+
 class CorpusFalsePositiveTest(unittest.TestCase):
     """21章: 推敲の実例（tests/corpus の48組）で見つけた誤った指摘を3つ直す。「事例がある」を「ことがある」と同じ強さに数える、
     「お願いしたい」を依頼の印にする（11章と同じ直し）、後の文の「ところまで」などを範囲を絞る言い方に数える（limiter）。"""

@@ -3684,7 +3684,7 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
                "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17,
-               "number_qualifier": 18, "limiter": 19, "obligation": 21}
+               "number_qualifier": 18, "limiter": 19, "obligation": 21, "quantifier": 22}
 # 状態の語が消えた書き換え（state）と、約束を足した書き換え（promise）も数える。因果を足した書き換え（claim）と、書き手を
 # 表す語のない「〜します」を足した書き換え（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の書き方の変化、確度の強まり）。
@@ -6162,6 +6162,14 @@ _ONE_OF_KEEP = _lazy_compile(r"または|又は|もしくは|若しくは|ある
 _ONE_OF_KINDS = frozenset(("どれか一つ", "どれでも", "どれか一つ（連体）", "全部", "全部（連体）"))
 _ONE_OF_JOINS = ("と", "および", "及び")
 
+# 範囲の語（kind quantifier。3.2.0）。全部（すべて、全て、全部、全件）、全員、一切、例外なく（例外なく、もれなく、漏れなく）の
+# 4つの意味の集まりに分け、同じ集まりの語は同じに数える（全部 → すべて は消えたことにしない）。組の文で、ある集まりの語が元の文
+# より後の文で少なく、文書全体でも少ないときに出す。4つの集まりを合わせた語の数が後の文か推敲後の文書全体で減っていない組
+# （書類は漏れなく → 書類はすべて）と、後の文で「も」が元の文より2つ以上増えた書き換え（閲覧、更新、バッチ処理のすべて →
+# 閲覧も更新もバッチ処理も）は、範囲を言い直したので出さない。「一切れ」は数えない。
+_QUANTIFIER_WORDS = (_lazy_compile(r"すべて|全て|全部|全件"), _lazy_compile(r"全員"), _lazy_compile(r"一切(?!れ)"),
+                     _lazy_compile(r"例外なく|もれなく|漏れなく"))
+
 
 def _obligation_hits(text: str) -> dict[str, re.Match[str]]:
     """義務の強さの集まりごとの、text でいちばん前に当たった語。任意の言い方（してもしなくてもよい）の中の不要の言い方は数えない。"""
@@ -6222,17 +6230,57 @@ def _choice_joined_risk(old: _Sentence, new: _Sentence) -> dict | None:
                  {"from": "どれか一つ", "to": "全部", "old_hits": [found[0]], "new_hits": [found[1]]})
 
 
+class _ScopeCounts:
+    """文書全体の語の数（範囲の語と期限の語で、組の文の語が文書全体でも減ったかを見る）。初めて要るときに数えて覚える。"""
+
+    def __init__(self, sides: _Sides) -> None:
+        self.texts = sides.texts
+        self.counts: dict[tuple[int, int], int] = {}
+
+    def count(self, side: int, pattern: re.Pattern[str]) -> int:
+        """pattern の語の、side の側の文書全体での数。"""
+        key = (side, id(pattern))
+        if key not in self.counts:
+            self.counts[key] = len(pattern.findall(self.texts[side]))
+        return self.counts[key]
+
+    def fewer(self, *patterns: re.Pattern[str]) -> bool:
+        """patterns の語を合わせた数が、推敲後の文書で元の文書より少ないか。"""
+        return sum(self.count(1, pattern) for pattern in patterns) < sum(self.count(0, pattern) for pattern in patterns)
+
+
+def _quantifier_risk(old: _Sentence, new: _Sentence, counts: _ScopeCounts) -> dict | None:
+    """範囲の語が消えた書き換え（kind quantifier。3.2.0。数えない）。detail の words は、減った集まりの元の文の語。
+    4つの集まりを合わせた語の数が、後の文か推敲後の文書全体で減っていない組（漏れなく → すべて。文を分けて「すべて」を次の文に
+    書いた組も）は、別の集まりの語で範囲を言い直したので出さない。"""
+    if new.text.count("も") - old.text.count("も") >= 2:
+        return None
+    old_hits = [pattern.findall(old.text) for pattern in _QUANTIFIER_WORDS]
+    new_counts = [len(pattern.findall(new.text)) for pattern in _QUANTIFIER_WORDS]
+    if sum(new_counts) >= sum(len(hits) for hits in old_hits) or not counts.fewer(*_QUANTIFIER_WORDS):
+        return None
+    words = []
+    for pattern, hits, after in zip(_QUANTIFIER_WORDS, old_hits, new_counts):
+        if len(hits) > after and counts.fewer(pattern):
+            words.extend(hit for hit in _unique(hits) if hit not in words)
+    if not words:
+        return None
+    return _risk("quantifier", None, old.line, new.line, old.text, new.text, {"words": words})
+
+
 def _scope_risks(sides: _Sides, groups: list, choices: bool) -> list:
     """3.2.0 で足した意味が変わる恐れ（上の kind ごとの関数）を作り、行の順に、同じ行では kind の並び（_RISK_ORDER）の順に
     並べる。組の文は、中身が同じ組を見ない。choices が偽のとき（meaning_risks() に type_changes を渡さないとき）は、既存の
     選ぶ範囲の候補と同じく、「と」でつないだ書き換えの候補（choice）を作らない。"""
+    counts = _ScopeCounts(sides)
     out = []
     for group in groups:
         for i, j in group["pairs"]:
             old, new = group["old"][i], group["new"][j]
             if old.text == new.text:
                 continue
-            found = (_choice_joined_risk(old, new) if choices else None, _obligation_risk(old, new))
+            found = (_choice_joined_risk(old, new) if choices else None, _obligation_risk(old, new),
+                     _quantifier_risk(old, new, counts))
             out.extend(risk for risk in found if risk is not None)
     out.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                             r["new_line"] if r["new_line"] is not None else 0, _RISK_ORDER[r["kind"]]))
@@ -10951,6 +10999,9 @@ def _risk_line(risk: dict) -> str:
         return ("{}{}: {} → {}。--fail-on には数えません。原文の強さ（してもしなくてもよい、しなくてよい、しなければならない）が"
                 "変わっていないか確かめてください。".format(_OBLIGATION_LABELS.get(subkind or "", "義務の強さが変わった"), where,
                                                     detail["from"], detail["to"]))
+    if kind == "quantifier":
+        return ("範囲の語が消えた{}: {}。--fail-on には数えません。原文は全部に当てはまると書いています。推敲後の文で範囲が"
+                "あいまいになっていないか確かめてください。".format(where, "、".join("「{}」".format(w) for w in detail["words"])))
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(
