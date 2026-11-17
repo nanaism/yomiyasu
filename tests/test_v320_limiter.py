@@ -153,6 +153,34 @@ class LimiterNotFoundTest(unittest.TestCase):
                          [("number", "replaced", {"removed": ["3日"], "added": ["30日"]})])
 
 
+class LimiterKeptTest(unittest.TestCase):
+    """21章: 後の文の「ところまで」「までにとどめ」「にとどめ」「に留め」「に絞（っ・り・る）」を、範囲を絞る言い方として後の文の
+    限定の語の数に足す（範囲を保った言い換えに出さない）。"""
+
+    NOT_FOUND = (
+        ("受付は本人確認だけを窓口で行います。", "受付は本人確認をするところまでを窓口で行います。"),
+        ("今回の調査は原因の特定だけにします。", "今回の調査は原因の特定にとどめます。"),
+        ("修正は表示の崩れだけにします。", "修正は表示の崩れまでにとどめます。"),
+        ("公開は社内だけにします。", "公開は社内に留めます。"),
+        ("対象は東京の店舗だけです。", "対象は東京の店舗に絞ります。"),
+        ("案内は会員だけに送ります。", "案内は会員に絞って送ります。"),
+    )
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before, after=after):
+                self.assertEqual(limiters(run(before, after)), [])
+
+    def test_kept_expression_does_not_count_on_the_original_side(self):
+        """範囲を絞る言い方は後の文の側だけで数える。元の文の「にとどめ」が消えただけの組は、限定の語の候補にしない。"""
+        self.assertEqual(limiters(run("今回の調査は原因の特定にとどめます。", "今回の調査で原因を特定します。")), [])
+
+    def test_without_the_expression_it_is_found(self):
+        """同じ組でも、後の文に範囲を絞る言い方がなければ今までどおり出す。"""
+        result = run("受付は本人確認だけを窓口で行います。", "受付は本人確認を窓口で行います。")
+        self.assertEqual([risk["detail"] for risk in limiters(result)], [{"words": ["だけ"]}])
+
+
 class LimiterContractTest(unittest.TestCase):
     def test_kind_order_and_fail_on(self):
         """limiter は number_qualifier のあとに足し、--fail-on=meaning-risk に数える。既存の kind の並びはそのまま。"""

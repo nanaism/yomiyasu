@@ -225,5 +225,36 @@ class NegatedProhibitionTest(unittest.TestCase):
                 self.assertEqual(kinds_of(text), ["禁止"])
 
 
+class CorpusFalsePositiveTest(unittest.TestCase):
+    """21章: 推敲の実例（tests/corpus の48組）で見つけた誤った指摘を3つ直す。「事例がある」を「ことがある」と同じ強さに数える、
+    「お願いしたい」を依頼の印にする（11章と同じ直し）、後の文の「ところまで」などを範囲を絞る言い方に数える（limiter）。"""
+
+    CORPUS = ROOT / "tests" / "corpus"
+
+    def pair(self, name):
+        source = ("blacklist_ai", name[:-6] + ".md") if name.endswith("_bl.md") else ("raw_ai", name)
+        before = (self.CORPUS / source[0] / source[1]).read_bytes().decode("utf-8")
+        after = (self.CORPUS / "yomiyasu_rewritten" / name).read_bytes().decode("utf-8")
+        return yomiyasu_diff.diff(before, after)
+
+    def test_case_word_counts_like_koto_ga_aru(self):
+        """「〜事例がある」は「ことがある」と同じ強さ。「事例がありました → ことがありました」は確度の弱まりにしない。"""
+        for before, after in (("同時に要求が届くと、更新に失敗する事例がありました。", "同時に要求が届くと、更新に失敗することがありました。"),
+                              ("古い端末では表示が崩れる事例があります。", "古い端末では表示が崩れることがあります。")):
+            with self.subTest(before=before):
+                self.assertEqual(run(before, after)["meaning_risks"], [])
+
+    def test_corpus_pairs(self):
+        """3つの組で、直した誤った指摘が出ない（ほかの候補はそのまま）。"""
+        result = self.pair("03_pr_description_sonnet_default_bl.md")
+        self.assertNotIn(("certainty_review", "weakened"), kinds(result))
+        result = self.pair("04_slack_announce_sonnet_default.md")
+        self.assertFalse([risk for risk in result["meaning_risks"] if (risk["kind"], risk["subkind"]) == ("sentence_type", "marks")
+                          and "お願いしたい" in (risk["old"] or "")])
+        result = self.pair("06_spec_draft_sonnet_casual_bl.md")
+        self.assertNotIn("limiter", [risk["kind"] for risk in result["meaning_risks"]])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()

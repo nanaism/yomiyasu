@@ -705,13 +705,15 @@ class TestCorpusWatch(RiskCase):
     # promise/guarantee 1（01_tech_arch_sonnet_formal の「事態を防げる → 処理を止めることはない」。否定の数が原文より増えた
     # 「〜ことはない」を、組の原文の文の述語で打ち消さなくなった）、modality_review/ability_lost 1（08_essay_retrospective_sonnet_formal の
     # 「担当できるまでになっている → 担当している」。種類なしなので数えない）。
-    # 3.2.0 で limiter（範囲を絞る語の消え。数える）が2件出た。05_comparison_sonnet_casual の「ホーム画面だけは → ホーム画面は」
-    # （どちらとも言えない。同じ段落の次の文に「この画面に限って」が残る）と、06_spec_draft_sonnet_casual_bl の「保存だけを同期で
-    # 行い → 保存するところまでを同期で実行し」（誤検知。範囲は保たれている）。01_tech_arch_sonnet_formal_bl の「キューを導入する
-    # だけでは耐障害性は確保されず」は、「だけでは」「だけで」のあとの同じ節に打ち消しがある形（それだけでは足りないという意味）を
-    # 数えないので出ない。
+    # 3.2.0 で limiter（範囲を絞る語の消え。数える）が1件出た。05_comparison_sonnet_casual の「ホーム画面だけは → ホーム画面は」
+    # （どちらとも言えない。同じ段落の次の文に「この画面に限って」が残る）。06_spec_draft_sonnet_casual_bl の「保存だけを同期で
+    # 行い → 保存するところまでを同期で実行し」（範囲は保たれている）は、後の文の「ところまで」を範囲を絞る言い方に数えるので
+    # 出ない。01_tech_arch_sonnet_formal_bl の「キューを導入するだけでは耐障害性は確保されず」（誤検知）は、「だけでは」「だけで」の
+    # あとの同じ節に打ち消しがある形（それだけでは足りないという意味）を数えないので出ない。
+    # 3.2.0 の直しで、sentence_type/marks（04_slack_announce_sonnet_default の「お願いしたいことは3点あります → 次の3点を
+    # お願いします」）が1件減った（上限は据え置く）。
     MEASURED = {"claim/evaluation": 5, "negation": 1, "number/added": 4, "number/lost": 1, "number/replaced": 1, "sentence_type/marks": 5,
-                "promise/guarantee": 1, "modality_review/ability_lost": 1, "limiter": 2}
+                "promise/guarantee": 1, "modality_review/ability_lost": 1, "limiter": 1}
 
     def test_corpus_48_pairs_kind_counts_do_not_exceed_the_measured_values(self):
         self.need_v2_diff()
