@@ -4991,7 +4991,10 @@ def _v230_renyo_findings(analysis: dict) -> list[dict]:
 # HTML は見ない。1行に1件で、当たった言い方を _words に並べる。
 _V250_RULES = ("ai_phrase",)
 _AI_PHRASE_MESSAGE = "AIの文章によく出る言い回し（当たった言い方: {}）" + _V220_MESSAGE_TAIL
-_AI_PHRASE_HEAD = _lazy_compile(r"見立て|潜|招く|欠かせない存在|挙動を|なんよ|を[一-龥々]{2,}[。．]|多岐に|求められて")
+_AI_PHRASE_HEAD = _lazy_compile(r"見立て|潜|招く|欠かせない存在|挙動を|なんよ|を[一-龥々]{2,}[。．]")
+# 3.2.0 で足した2つの形の手掛かり。この手掛かりだけが当たった行では、3.2.0 の2つの形だけを調べる（2.5.0 からの7つの形の
+# 当たり方は、同じ行に新しい語があるかで変えない。強調の記号を挟んだ「を**改善**。」は、2.5.0 の手掛かりに当たらない）
+_AI_PHRASE_HEAD_V320 = _lazy_compile(r"多岐に|求められて")
 # 3.2.0 で足した形。段落の文だけに当て、script と essay では外す
 _AI_PHRASE_PARAGRAPH_ONLY = ("多岐にわたる", "が求められている")
 # 判断した人と招く人や組織の語。語のあとに「たち」「ら」「ども」「陣」「側」が付いてもよい
@@ -5022,7 +5025,8 @@ _AI_PHRASE_FORMS = (
 
 
 def _v250_ai_phrase_findings(analysis: dict, doc_type: str | None) -> list[dict]:
-    """ai_phrase の候補。文書全体に一度だけ手掛かり（_AI_PHRASE_HEAD）を当て、当たった行を見える文字で調べる。"""
+    """ai_phrase の候補。文書全体に一度だけ手掛かり（_AI_PHRASE_HEAD と、3.2.0 の _AI_PHRASE_HEAD_V320）を当て、当たった行を
+    見える文字で調べる。_AI_PHRASE_HEAD_V320 だけが当たった行は、3.2.0 の2つの形だけを調べる。"""
     rows = analysis["lines"]
     if not rows:
         return []
@@ -5033,8 +5037,15 @@ def _v250_ai_phrase_findings(analysis: dict, doc_type: str | None) -> list[dict]
         if starts is None:
             starts = [row["start"] for row in rows]
         candidate_lines.add(bisect_right(starts, match.start()))
+    new_only = set()
+    for match in _AI_PHRASE_HEAD_V320.finditer(text):
+        if starts is None:
+            starts = [row["start"] for row in rows]
+        line_no = bisect_right(starts, match.start())
+        if line_no not in candidate_lines:
+            new_only.add(line_no)
     out = []
-    for line_no in sorted(candidate_lines):
+    for line_no in sorted(candidate_lines | new_only):
         row = rows[line_no - 1]
         if row["kind"] not in ("paragraph", "list", "heading", "table") or row["quote_depth"]:
             continue
@@ -5044,6 +5055,8 @@ def _v250_ai_phrase_findings(analysis: dict, doc_type: str | None) -> list[dict]
             if not sentence:
                 continue
             for name, pattern in _AI_PHRASE_FORMS:
+                if line_no in new_only and name not in _AI_PHRASE_PARAGRAPH_ONLY:
+                    continue
                 match = pattern.search(sentence)
                 if match is None or name in words:
                     continue

@@ -58,7 +58,7 @@ class VerbGaTest(unittest.TestCase):
     # 限界: 直前が漢字の「が」（広がる、上がる）は動詞の中の「が」と見分けず、今までどおり別の主語に数える
     LIMIT = (
         "毎日の練習が、少しずつ自信に広がっていきます。",
-        "今年の目標は、売上が上がることです。",
+        "今年の売上は、少しずつ上がっていきます。",
     )
 
     def test_verb_ga_does_not_hide_the_comma(self):
@@ -283,6 +283,19 @@ class AiPhraseTest(unittest.TestCase):
                                  "多岐にわたる", "が求められている"])
         found = ai("この設計は、運用時にリスクが潜む構造で、確かめる項目は多岐にわたります。")
         self.assertEqual(found[0]["message"], yomiyasu_lint._AI_PHRASE_MESSAGE.format("潜む、多岐にわたる"))
+
+    def test_existing_forms_do_not_depend_on_the_new_words(self):
+        """3.2.0 の語が同じ行にあっても、2.5.0 からの7つの形の当たり方は変わらない（強調の記号を挟んだ「を**改善**。」は、
+        3.1.0 と同じく「て形の体言止め」にしない）。"""
+        message = yomiyasu_lint._AI_PHRASE_MESSAGE.format
+        found = ai("手順をそろえることが求められています。設定を見直して、速度を**改善**。")
+        self.assertEqual([f["message"] for f in found], [message("が求められている")])
+        found = ai("課題は多岐にわたります。見直して、速度を*改善*。")
+        self.assertEqual([f["message"] for f in found], [message("多岐にわたる")])
+        self.assertEqual(ai("設定を見直して、速度を**改善**。"), [])
+        # 2.5.0 の手掛かりが当たる行では、今までどおり両方を出す
+        found = ai("手順をそろえることが求められています。設定を見直して、速度を改善。")
+        self.assertEqual([f["message"] for f in found], [message("が求められている、て形の体言止め")])
 
     def test_allow_words_remove_the_finding(self):
         text = "取り組むべき課題は多岐にわたります。まず、手順をそろえることが求められています。\n"
