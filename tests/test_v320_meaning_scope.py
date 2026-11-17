@@ -106,6 +106,15 @@ class ZeroMinuteTimeTest(unittest.TestCase):
         self.assertEqual(result["meaning_risks"][0]["detail"]["added"], ["21時"])
         self.assertEqual(kinds(run("会議は18:00と20:00に開きます。", "会議は18時と20時に開きます。")), [])
 
+    def test_swapped_times_are_not_cancelled(self):
+        """時の並びが相手の側と同じ順でない書き換え（時刻の入れ替え）は打ち消さず、今までどおり数値の候補にする。"""
+        for before, after in (("会議は18:00、懇親会は19:00からです。", "会議は19時、懇親会は18時からです。"),
+                              ("受付は9:00〜17:00です。", "受付は17時〜9時です。")):
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(kinds(result), [("number", "replaced")])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+
     def test_seconds_are_not_cancelled(self):
         """時:分:秒 の形は打ち消さない（分と秒の組を時と分の組と取り違えないため）。"""
         self.assertEqual(kinds(run("時刻は18:00:00です。", "時刻は18時です。")), [("number", "replaced")])
@@ -127,6 +136,8 @@ class RequestRestatedTest(unittest.TestCase):
         ("資料をお送りいただけますでしょうか。", "資料を送ってください。"),
         ("ご連絡いただけますか。", "ご連絡ください。"),
         ("お願いしたいことは3点あります。", "次の3点をお願いします。"),
+        # 元の文も頼む内容を打ち消した依頼なら、言い直し
+        ("資料を送らないでいただけますか。", "資料を送らないでください。"),
     )
     # 今までどおり出す: (元, 後, 候補の kind と subkind)
     KEPT = (
@@ -134,6 +145,10 @@ class RequestRestatedTest(unittest.TestCase):
          [("sentence_type", "question"), ("sentence_type", "marks")]),
         ("目を通しておいてもらえますか。", "お目通しいただけますでしょうか。", [("sentence_type", "marks")]),
         ("ご確認いただけますか。", "確認は不要です。", [("sentence_type", "question")]),
+        # 問いの形の依頼を、頼む内容を打ち消した依頼に変えた組は、言い直しとして外さない
+        ("資料をお送りいただけますか。", "資料を送らないでください。", [("sentence_type", "question"), ("sentence_type", "marks")]),
+        ("会議にご参加いただけますか。", "会議へのご参加はご遠慮ください。",
+         [("sentence_type", "question"), ("sentence_type", "marks")]),
     )
 
     def test_not_found(self):
@@ -196,6 +211,20 @@ class RequestRestatedTest(unittest.TestCase):
                 self.assertIn(("sentence_type", "marks"), kinds(result))
                 self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
 
+    def test_more_request_forms(self):
+        """「いただけましたら幸い」「お願いできれば幸い」も依頼の印にする。お礼の決まり文句「そう言っていただけると助かります」は
+        依頼の印にしない。「お願いしたく」「いただきたく」は印にしない（「〜いただきたく、ご連絡いたしました」のような知らせの文で、
+        片方の文だけが印になる組が増えるため。限界）。"""
+        for before, after in (("ご確認いただけましたら幸いです。", "ご確認ください。"),
+                              ("ご確認をお願いできれば幸いです。", "ご確認をお願いします。"),
+                              ("そう言っていただけると助かります。", "お気遣いありがとうございます。"),
+                              ("そう言っていただけるとありがたいです。", "そう言っていただき、ありがとうございます。")):
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(result["meaning_risks"], [])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+        self.assertNotIn("依頼・決まり", yomiyasu_diff.type_marks("そう言っていただけると助かります。"))
+
     def test_rule_candidates_still_show_the_change(self):
         """意味が変わる恐れには出さないが、規則の見直し候補の「文の種類を表す語が変わった文」には今までどおり出る。"""
         result = run("資料をお送りいただけますでしょうか。", "資料を送ってください。")
@@ -231,6 +260,14 @@ class IntensifierWordsTest(unittest.TestCase):
                 self.assertEqual(result["meaning_risks"], [])
                 self.assertEqual(result["fail_on_meaning_risk_count"], 0)
 
+    def test_words_inside_other_words_are_not_counted(self):
+        """「中心より」「重心より」「演劇的」の中の「心より」「劇的」は、強める語に数えない。"""
+        for before, after in (("ボタンは画面の中心より右に置きます。", "ボタンは画面の中央から右に置きます。"),
+                              ("荷物は重心より前に積みます。", "荷物は重心の前方に積みます。"),
+                              ("演劇的な照明を使います。", "舞台のような照明を使います。")):
+            with self.subTest(before=before, after=after):
+                self.assertEqual(self.tone_words(run(before, after)), [])
+
     def test_same_count_is_not_found(self):
         """強める語を同じ数のまま別の語に替えた書き換えは出さない。"""
         result = run("処理速度が劇的に向上しました。", "処理速度が飛躍的に向上しました。")
@@ -256,6 +293,8 @@ class NegatedProhibitionTest(unittest.TestCase):
         ("飲み物の持ち込みは禁止されていません。", "飲み物は持ち込んでもかまいません。"),
         ("持ち込みは禁止しておりません。", "持ち込んでもかまいません。"),
         ("持ち込みは禁止ではありません。", "持ち込んでもかまいません。"),
+        ("持ち込みは禁止されてはいません。", "持ち込んでもかまいません。"),
+        ("持ち込みは禁止されておらず、自由です。", "持ち込んでもかまいません。"),
     )
     # 今までどおり出す: (元, 後, subkind, from, to)
     KEPT = (
@@ -305,6 +344,8 @@ class ObligationTest(unittest.TestCase):
         ("身分証の提示が義務付けられています。", "身分証をご提示ください。", "duty_to_request", "義務", "ご提示ください"),
         # 類例: 逆の向き、丁寧な形の不要、任意を言い直した「してもしなくてもよい」
         ("事前の登録は不要です。", "事前の登録は任意です。", "unneeded_to_optional", "不要", "任意"),
+        # 「してもしなくてもよい」は任意に数え、中の「しなくてもよい」を不要に数えない
+        ("提出は不要です。", "提出はしてもしなくてもよいです。", "unneeded_to_optional", "不要", "てもしなくてもよい"),
         ("アンケートへの回答は任意です。", "アンケートへの回答は必須です。", "optional_to_duty", "任意", "必須"),
         ("名札の着用は必須ではありません。", "名札は着用しなくてかまいません。", "optional_to_unneeded", "必須ではありません",
          "なくてかまいません"),
@@ -379,6 +420,10 @@ class ChoiceJoinedTest(unittest.TestCase):
         ("何かあれば連絡してください。", "何かあったら連絡してください。"),
         # 類例: つないだ名詞の中から選ぶ言い方
         ("AかBを選んでください。", "AとBから選んでください。"),
+        ("AプランかBプランを選んでください。", "AプランとBプランの一方を選んでください。"),
+        ("AプランかBプランを選んでください。", "AプランとBプランの片方を選んでください。"),
+        # 問いの「か」（設定が有効か確認する）は、どれか一つを選ぶ言い方ではない
+        ("設定が有効か管理者に確認します。", "設定が有効と管理者に確認しました。"),
     )
 
     def test_found(self):
@@ -681,6 +726,13 @@ class BoundaryTest(unittest.TestCase):
         # 類例
         ("上限回数を超えた場合は退避します。", "回数が上限に達したら退避します。", "strict_to_inclusive", "超え", "達し"),
         ("対象は18歳以上の方です。", "対象は18歳を超える方です。", "inclusive_to_strict", "以上", "超え"),
+        # 禁止の形の「超えてはいけない」は含む側。含まない側への言い直しは出す
+        ("ファイルの大きさは10MBを超えてはいけません。", "ファイルの大きさは10MB未満にしてください。", "inclusive_to_strict",
+         "超えてはいけ", "未満"),
+        # 期待と想像のほかの比べ（売上と予想、接続数と想定）は数の境目
+        ("売上は予想を上回りました。", "売上は予想以上でした。", "strict_to_inclusive", "上回", "以上"),
+        ("同時接続数が想定を超えたらスケールアウトします。", "同時接続数が想定以上になったらスケールアウトします。",
+         "strict_to_inclusive", "超え", "以上"),
     )
     NOT_FOUND = (
         ("10個以上あれば発送します。", "10個以上あるときに発送します。"),
@@ -690,6 +742,14 @@ class BoundaryTest(unittest.TestCase):
         ("上限を超えたらエラーにします。", "上限を超えたら、以下のエラーを返します。"),
         ("以上の理由で、Aを選びました。", "この理由で、Aを選びました。"),
         ("在庫が10個を下回ったら発注します。", "在庫が少なくなったら発注し、翌日に配達します。"),
+        # 禁止と不可能の形（超えてはいけない、超えてはならない、超えられない、下回ってはいけない）は、その値を含む側
+        ("ファイルの大きさは10MBを超えてはいけません。", "ファイルの大きさは10MB以下にしてください。"),
+        ("人数は10人を超えてはならない。", "人数は10人以下でなければならない。"),
+        ("1回の送信は100件を超えられません。", "1回に送信できるのは100件以下です。"),
+        ("気温が下限を下回ってはいけません。", "気温は下限以上に保ってください。"),
+        # 数の境目でない「期待」「想像」との比べ
+        ("期待を超える成果が出ました。", "期待以上の成果が出ました。"),
+        ("想像を超える反響がありました。", "想像以上の反響がありました。"),
     )
 
     def test_found(self):
