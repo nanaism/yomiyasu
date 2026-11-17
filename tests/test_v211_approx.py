@@ -496,8 +496,11 @@ class ContractsTest(unittest.TestCase):
         self.assertEqual(yomiyasu_diff.FAIL_ON_KINDS[:11], ("number", "negation", "swap", "sentence_type", "citation",
                                                            "certainty", "state", "promise", "modality", "choice",
                                                            "causality"))
-        self.assertEqual(yomiyasu_diff.FAIL_ON_KINDS[-1], KIND)
+        # 3.2.0: 範囲を絞る語の消え（limiter）を、number_qualifier のあとに足した。
+        self.assertEqual(yomiyasu_diff.FAIL_ON_KINDS[-1], "limiter")
+        self.assertEqual(yomiyasu_diff.FAIL_ON_KINDS[-2], KIND)
         self.assertLess(yomiyasu_diff._RISK_ORDER["causality"], yomiyasu_diff._RISK_ORDER[KIND])
+        self.assertLess(yomiyasu_diff._RISK_ORDER[KIND], yomiyasu_diff._RISK_ORDER["limiter"])
 
     def test_existing_number_kind_is_unchanged(self):
         """数値の候補（kind number）の形は変えない（印の候補は別の kind）。"""

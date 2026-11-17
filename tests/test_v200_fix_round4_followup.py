@@ -361,7 +361,14 @@ class KnownLimitsFollowupTest(unittest.TestCase):
                 ("窓口はみっつある。", "窓口がある。")):
             with self.subTest(before=before, after=after):
                 self.assertEqual(number_risks(before, after), [])
-                self.assertEqual(result_of(before, after)["fail_on_meaning_risk_count"], 0)
+                # 3.2.0: 「ひとりだけ」の「だけ」が消えた組は、範囲を絞る語の候補（limiter。--fail-on に数える）になる。
+                # 平仮名の数を比べない限界（数値の候補が出ない）は変わらない。
+                result = result_of(before, after)
+                if before == "参加はひとりだけです。":
+                    self.assertEqual([risk["kind"] for risk in result["meaning_risks"]], ["limiter"])
+                    self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+                else:
+                    self.assertEqual(result["fail_on_meaning_risk_count"], 0)
         self.assertEqual(number_risks("会議室は二つあります。", "会議室があります。"), [("lost", ["二つ"], [])])
         self.assertEqual(number_risks("参加は二人までです。", "参加は自由です。"), [("lost", ["二人"], [])])
 

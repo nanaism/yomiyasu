@@ -3677,7 +3677,7 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
                "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17,
-               "number_qualifier": 18}
+               "number_qualifier": 18, "limiter": 19}
 # 状態の語が消えた書き換え（state）と、約束を足した書き換え（promise）も数える。因果を足した書き換え（claim）と、書き手を
 # 表す語のない「〜します」を足した書き換え（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の書き方の変化、確度の強まり）。
@@ -3687,8 +3687,9 @@ _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "prote
 # 許可の言い方の変化（modality）も数える。能力の言い方の消え（modality_review）は、どの文書の種類でも数えない。
 # 選ぶ範囲の入れ替え（choice。どれか一つ ↔ 全部）と、関連から因果への強まり（causality）も数える。
 # 数に付いた、概数と範囲を表す語の増減（number_qualifier。約120人 → 120人、100人以上 → 100人）も、数値の恐れとして数える。
+# 範囲を絞る語（だけ、のみ、しか〜ない、に限る）が消えた書き換え（limiter。3.2.0）も、読み手が受け取る範囲が広がるので数える。
 FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty", "state", "promise", "modality",
-                 "choice", "causality", "number_qualifier")
+                 "choice", "causality", "number_qualifier", "limiter")
 
 
 def fail_on_count(risks: Sequence) -> int:
@@ -5953,6 +5954,62 @@ def _qualifier_risks(sides: _Sides, groups: list) -> list:
     return out
 
 
+# ---- 範囲を絞る語（kind limiter。3.2.0）----
+# 範囲を絞る語（だけ、のみ、しか〜ない、に限る）が推敲で消えると、読み手が受け取る範囲が広がる（SKILL.md の言い直しテストの
+# 「範囲と条件」）。「撮影だけなら手伝えます → 撮影でしたら手伝えます」「会員だけが行えます → 会員が行えます」「未開封の場合に
+# 限ります → 未開封の場合に対応します」を拾う。--fail-on に数える（number_qualifier と同じ扱い）。
+# 範囲を絞らない使い方は数えない。だけ: できるだけ、どれだけ、あれだけ、だけでなく・だけではない・だけじゃない・だけではありません、
+# だけど・だけれど、だけあって、それだけに、動詞の「いただける」の中（ご利用いただけません、ご確認いただければ）、「だけでは」
+# 「だけで」のあとの同じ節に打ち消しがある形（導入するだけでは確保されず、それだけで上がるわけではありません。それだけでは
+# 足りないという意味で、範囲を絞っていない）。
+# のみ: のみならず。しか: あとの同じ節に打ち消しがあるものだけを数え、しかない・しかありません（保存するしかない、ふたつしか
+# ない）と、しかし・しかも・しかた・楽しかった・たしかに は数えない。に限る: に限らず・に限らない・に限りません・限りなく。
+_LIMITER = _lazy_compile(
+    r"だけ(?<!できるだけ)(?<!出来るだけ)(?<!どれだけ)(?<!あれだけ)"
+    r"(?!で(?:は)?な|では(?:あり|ござ)|じゃな|ど|れど|あって|(?<=それだけ)に"
+    r"|(?<=いただけ)(?:ま|る|れ|な(?!ら)|ず|た|て|そう)"
+    r"|で(?:は)?(?=[^、。！？!?\n]{0,30}?(?:ない|なく|なかっ|ません|(?<!ま)ず(?:[、。に]|$))))"
+    r"|のみ(?!ならず)"
+    r"|しか(?![しもたけくるっろれらな]|あり|ござ|(?<=たしか)[にめな])(?=[^、。！？!?\n]{1,30}?(?:ない|なか|ません|ず))"
+    r"|に限(?:る|り(?!ませ|な[くい])|られ|って|定)")
+
+
+def _limiter_count(text: str) -> int:
+    """推敲後の文の、限定の語（_LIMITER）の数。"""
+    return len(_LIMITER.findall(text))
+
+
+def _limiter_risks(sides: _Sides, groups: list) -> list:
+    """範囲を絞る語が消えた書き換え（kind limiter。3.2.0。--fail-on に数える）。
+
+    変わった塊ごとに、元の文の限定の語の数と、後の文の限定の語の数を比べ、減っていない塊は見ない（同じ塊の別の文へ移した
+    書き換えを外すため）。組の文で、元の文の限定の語のうち、直前の2字ごと推敲後の文書に残っていないものが、後の文の限定の語の
+    数より多いときに出す。detail の words は、残っていない語（同じ語は1回）。"""
+    out = []
+    new_doc = sides.texts[1]
+    for group in groups:
+        if not group["pairs"]:
+            continue
+        old_total = sum(len(_LIMITER.findall(sentence.text)) for sentence in group["old"])
+        if not old_total or sum(_limiter_count(sentence.text) for sentence in group["new"]) >= old_total:
+            continue
+        for i, j in group["pairs"]:
+            old, new = group["old"][i], group["new"][j]
+            if old.text == new.text:
+                continue
+            words = []
+            missing = 0
+            for match in _LIMITER.finditer(old.text):
+                if old.text[max(0, match.start() - 2):match.start() + 2] in new_doc:
+                    continue
+                missing += 1
+                if match.group(0) not in words:
+                    words.append(match.group(0))
+            if missing and missing > _limiter_count(new.text):
+                out.append(_risk("limiter", None, old.line, new.line, old.text, new.text, {"words": words}))
+    return out
+
+
 def meaning_risks(orig: str, rw: str, full: dict | None = None, type_changes: Sequence | None = None, *, doc_type: str | None = None) -> list:
     """意味が変わる恐れ（JSON の meaning_risks）。
 
@@ -6020,9 +6077,9 @@ def _meaning_risks(sides: _Sides, full: dict, type_changes: Sequence | None, gro
         certainty = _certainty_risks(sides, groups, risks, masks, doc_type=doc_type)
     sides.quiet_marks = [mark for mark in quiet if id(mark) in quiet_ids]
     # 許可・能力の言い方の候補と、選ぶ範囲・因果の言い方の候補、数に付いた、概数と範囲を表す語の候補も、確度とかぎかっこの候補と同じく、
-    # 既存の候補の後ろに行の順で並べる。
+    # 既存の候補の後ろに行の順で並べる。範囲を絞る語の候補（3.2.0）も同じ。
     added = (certainty + _quote_risks(sides, groups, masks) + _modality_risks(sides, modality) + _logic_risks(sides, logic)
-             + _qualifier_risks(sides, groups))
+             + _qualifier_risks(sides, groups) + _limiter_risks(sides, groups))
     added.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                               r["new_line"] if r["new_line"] is not None else 0))
     risks += added
@@ -10647,6 +10704,9 @@ def _risk_line(risk: dict) -> str:
             advice = ("原文と語の種類が違います（以上と超、以下と未満は、その数を含むかどうかが違います）。数の範囲を"
                       "変えていないか確かめ、変えていれば原文の語に戻してください。")
         return "数に付いた概数・範囲を表す語が変わった{}: {}。{}".format(where, change, advice)
+    if kind == "limiter":
+        return ("限定の語が消えた{}: {}。原文は範囲を絞っています。推敲後の文で範囲が広がっていないか確かめ、"
+                "広がっていれば原文の語を戻してください。".format(where, "、".join("「{}」".format(w) for w in detail["words"])))
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(
@@ -11373,7 +11433,7 @@ def _fail_on_line(total: int, counted: int, risks: Sequence = ()) -> str:
             "（意味が変わる恐れ {}件のうち、数値・否定・入れ替え・文の種類{} {}件）。".format(
                 total, "".join(label for kind, label in (("certainty", "・確度"), ("state", "・状態の語"), ("promise", "・約束"),
                                                          ("modality", "・許可の言い方"), ("choice", "・選ぶ範囲"),
-                                                         ("causality", "・因果"))
+                                                         ("causality", "・因果"), ("limiter", "・限定の語"))
                                if any(r["kind"] == kind for r in risks)), counted))
 
 
