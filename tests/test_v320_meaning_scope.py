@@ -626,6 +626,147 @@ class DroppedSentenceTest(unittest.TestCase):
         self.assertEqual(diff_exit_code(before, after), 0)
 
 
+class BoundaryTest(unittest.TestCase):
+    """20章: 境目の言い方の変化（kind boundary。--fail-on に数える）。「超える」「未満」はその値を含まず、「以上」「以下」
+    「達する」は含む。"""
+
+    # (元, 後, subkind, 元の語, 後の語)
+    FOUND = (
+        ("応答が2秒を超えたら警告します。", "応答が2秒以上なら警告します。", "strict_to_inclusive", "超え", "以上"),
+        ("18歳未満は保護者の同意が必要です。", "18歳以下は保護者の同意が必要です。", "strict_to_inclusive", "未満", "以下"),
+        ("タイムアウトに達して504になりました。", "タイムアウトを超えたものから504を返しました。", "inclusive_to_strict", "達し",
+         "超え"),
+        # 類例
+        ("上限回数を超えた場合は退避します。", "回数が上限に達したら退避します。", "strict_to_inclusive", "超え", "達し"),
+        ("対象は18歳以上の方です。", "対象は18歳を超える方です。", "inclusive_to_strict", "以上", "超え"),
+    )
+    NOT_FOUND = (
+        ("10個以上あれば発送します。", "10個以上あるときに発送します。"),
+        ("30度を超えたら休憩します。", "30度を上回ったら休憩します。"),
+        # 類例: 打ち消した「超えない」（その値を含む）、文の頭や助詞のあとの「以上」「以下」、「配達し」
+        ("メモリの使用量が8GBを超えないように設定します。", "メモリの使用量を8GB以下に抑えます。"),
+        ("上限を超えたらエラーにします。", "上限を超えたら、以下のエラーを返します。"),
+        ("以上の理由で、Aを選びました。", "この理由で、Aを選びました。"),
+        ("在庫が10個を下回ったら発注します。", "在庫が少なくなったら発注し、翌日に配達します。"),
+    )
+
+    def test_found(self):
+        for before, after, subkind, source, target in self.FOUND:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual([(risk["subkind"], risk["detail"]) for risk in of_kind(result, "boundary")],
+                                 [(subkind, {"from": source, "to": target})])
+                self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(of_kind(result, "boundary"), [])
+        # 表の「出さない」の組は、--fail-on の数も0のまま
+        for before, after in self.NOT_FOUND[:2]:
+            with self.subTest(before=before, after=after):
+                self.assertEqual(run(before, after)["fail_on_meaning_risk_count"], 0)
+
+    def test_counted_and_exit_codes(self):
+        self.assertIn("boundary", yomiyasu_diff.FAIL_ON_KINDS)
+        self.assertEqual(yomiyasu_diff._RISK_ORDER["boundary"], 25)
+        self.assertEqual(diff_exit_code("応答が2秒を超えたら警告します。", "応答が2秒以上なら警告します。"), 1)
+        self.assertEqual(diff_exit_code("タイムアウトに達して504になりました。", "タイムアウトを超えたものから504を返しました。"), 1)
+        self.assertEqual(diff_exit_code("10個以上あれば発送します。", "10個以上あるときに発送します。"), 0)
+        self.assertEqual(diff_exit_code("30度を超えたら休憩します。", "30度を上回ったら休憩します。"), 0)
+
+    def test_message_and_fail_on_line(self):
+        result = run("応答が2秒を超えたら警告します。", "応答が2秒以上なら警告します。")
+        report = yomiyasu_diff.report(result)
+        self.assertIn("- 境目の言い方が変わった（1行目）: 超え → 以上。「超える」「未満」はその値を含まず、「以上」「以下」「達する」は"
+                      "その値を含みます。境目の値ちょうどの扱いが変わっていないか確かめてください。", report)
+        self.assertNotIn("数えません", yomiyasu_diff._risk_line(result["meaning_risks"][0]))
+        risks = result["meaning_risks"]
+        self.assertIn("・境目の言い方", yomiyasu_diff._fail_on_line(len(risks) + 1, yomiyasu_diff.fail_on_count(risks), risks))
+
+    def test_corpus_48_pairs(self):
+        """推敲の48組では3件（02 の2組と 03 の1組）。どれも境目が変わった組。"""
+        found = []
+        for before, after, name in rewrite_pairs():
+            result = yomiyasu_diff.diff(before, after)
+            found.extend((name, risk["subkind"], risk["detail"]["from"], risk["detail"]["to"])
+                         for risk in of_kind(result, "boundary"))
+            if name == "02_incident_report_sonnet_casual_bl.md":
+                # ほかの候補は数えない候補だけなので、境目の言い方の候補で --fail-on の数が0から1になる
+                self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+        self.assertEqual(found, [("02_incident_report_sonnet_casual.md", "inclusive_to_strict", "達し", "超え"),
+                                 ("02_incident_report_sonnet_casual_bl.md", "strict_to_inclusive", "超え", "以上"),
+                                 ("03_pr_description_sonnet_formal.md", "strict_to_inclusive", "超え", "達し")])
+
+
+class ScopeCommonTest(unittest.TestCase):
+    """9章: 3.2.0 で足した kind の共通の決まり（並びの番号、--fail-on に数える kind、候補の並べ方、JSON の形、公開の関数）。"""
+
+    PAIRS = (
+        ("回答は必須ではありません。", "回答は不要です。"),
+        ("お問い合わせは電話かメールで受け付けます。", "お問い合わせは電話とメールで受け付けます。"),
+        ("新しい規程は全員に適用されます。", "新しい規程が適用されます。"),
+        ("経費精算は月末までに提出してください。", "経費精算は月末に提出してください。"),
+        ("管理者権限がある場合は、設定を変更できます。", "設定を変更できます。"),
+        ("メンテナンスは22時から翌2時までです。作業中はログインできません。終了後にお知らせします。",
+         "メンテナンスは22時から翌2時までです。終了後にお知らせします。"),
+        ("応答が2秒を超えたら警告します。", "応答が2秒以上なら警告します。"),
+    )
+
+    def test_risk_order_and_fail_on_kinds(self):
+        order = yomiyasu_diff._RISK_ORDER
+        self.assertEqual([order[kind] for kind in ("limiter", "dropped_sentence", "obligation", "quantifier", "deadline",
+                                                   "condition", "boundary")], [19, 20, 21, 22, 23, 24, 25])
+        self.assertEqual(yomiyasu_diff.FAIL_ON_KINDS[-2:], ("limiter", "boundary"))
+        for kind in ("dropped_sentence", "obligation", "quantifier", "deadline", "condition"):
+            with self.subTest(kind=kind):
+                self.assertNotIn(kind, yomiyasu_diff.FAIL_ON_KINDS)
+
+    def test_shape_and_messages(self):
+        """ほかの kind と同じ8つのキーで出し、数えない5つの message には「--fail-on には数えません。」を入れる。"""
+        keys = {"kind", "subkind", "old_line", "new_line", "old", "new", "detail", "basis"}
+        seen = set()
+        for before, after in self.PAIRS:
+            with self.subTest(before=before):
+                result = run(before, after)
+                self.assertTrue(result["meaning_risks"])
+                for risk in result["meaning_risks"]:
+                    self.assertEqual(set(risk), keys)
+                    self.assertIsNone(risk["basis"])
+                    seen.add(risk["kind"])
+                    line = yomiyasu_diff._risk_line(risk)
+                    counted = risk["kind"] in yomiyasu_diff.FAIL_ON_KINDS
+                    self.assertEqual("--fail-on には数えません。" in line, not counted, line)
+        self.assertTrue({"obligation", "choice", "quantifier", "deadline", "condition", "dropped_sentence", "boundary"} <= seen)
+
+    def test_new_candidates_follow_the_existing_ones(self):
+        """同じ行では、既存の候補（数に付いた範囲の語）の後ろに並べる。"""
+        result = run("18歳未満は保護者の同意が必要です。", "18歳以下は保護者の同意が必要です。")
+        self.assertEqual(kinds(result), [("number_qualifier", "changed"), ("boundary", "strict_to_inclusive")])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 2)
+
+    def test_lines_in_a_longer_document(self):
+        """候補は行の順に並び、行番号は元と後の文書の行。"""
+        before = "## 申請\n\n申請を行う必要があります。\n\n## 受付\n\n電話かメールで受け付けます。\n"
+        after = "## 申請\n\n申請をお願いします。\n\n## 受付\n\n電話とメールで受け付けます。\n"
+        result = yomiyasu_diff.diff(before, after)
+        self.assertEqual([(risk["kind"], risk["old_line"], risk["new_line"]) for risk in result["meaning_risks"]],
+                         [("obligation", 3, 3), ("choice", 7, 7)])
+
+    def test_public_function_matches_diff(self):
+        """type_changes を渡した meaning_risks() は diff() と同じ。"""
+        for before, after in self.PAIRS:
+            with self.subTest(before=before):
+                result = run(before, after)
+                found = yomiyasu_diff.meaning_risks(before + "\n", after + "\n", type_changes=result["type_changes"])
+                self.assertEqual(found, result["meaning_risks"])
+
+    def test_twin_scripts_are_identical(self):
+        self.assertEqual((ROOT / "scripts" / "yomiyasu_diff.py").read_bytes(),
+                         (ROOT / "skills" / "yomiyasu" / "scripts" / "yomiyasu_diff.py").read_bytes())
+
+
 class CorpusFalsePositiveTest(unittest.TestCase):
     """21章: 推敲の実例（tests/corpus の48組）で見つけた誤った指摘を3つ直す。「事例がある」を「ことがある」と同じ強さに数える、
     「お願いしたい」を依頼の印にする（11章と同じ直し）、後の文の「ところまで」などを範囲を絞る言い方に数える（limiter）。"""

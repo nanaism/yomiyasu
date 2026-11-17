@@ -3685,7 +3685,7 @@ _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "prote
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
                "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17,
                "number_qualifier": 18, "limiter": 19, "dropped_sentence": 20, "obligation": 21, "quantifier": 22,
-               "deadline": 23, "condition": 24}
+               "deadline": 23, "condition": 24, "boundary": 25}
 # 状態の語が消えた書き換え（state）と、約束を足した書き換え（promise）も数える。因果を足した書き換え（claim）と、書き手を
 # 表す語のない「〜します」を足した書き換え（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の書き方の変化、確度の強まり）。
@@ -3696,8 +3696,11 @@ _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "prote
 # 選ぶ範囲の入れ替え（choice。どれか一つ ↔ 全部）と、関連から因果への強まり（causality）も数える。
 # 数に付いた、概数と範囲を表す語の増減（number_qualifier。約120人 → 120人、100人以上 → 100人）も、数値の恐れとして数える。
 # 範囲を絞る語（だけ、のみ、しか〜ない、に限る）が消えた書き換え（limiter。3.2.0）も、読み手が受け取る範囲が広がるので数える。
+# 境目の言い方の変化（boundary。3.2.0。超える・未満 ↔ 以上・以下・達する）も、仕様や運用の文で数の範囲の境目が読み手の動きを
+# 変えるので数える。3.2.0 で足したほかの5つ（obligation、quantifier、deadline、condition、dropped_sentence）は見直しの候補で、
+# 数えない。
 FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty", "state", "promise", "modality",
-                 "choice", "causality", "number_qualifier", "limiter")
+                 "choice", "causality", "number_qualifier", "limiter", "boundary")
 
 
 def fail_on_count(risks: Sequence) -> int:
@@ -6212,6 +6215,17 @@ _DROPPED_PREVIEW = _lazy_compile(r"以下|次の|下記|について[^。]*?(?:�
 _DROPPED_WORD = _lazy_compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴ][ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_]{2,}")
 _DROPPED_LIMIT = 3              # 1つの文書でこの数以上になったら、消えた文の候補を出さない
 
+# 境目の言い方（kind boundary。3.2.0。--fail-on に数える）。「超える」「未満」はその値を含まず、「以上」「以下」「達する」は含む。
+# 組の文で、元の文に含まない側の語があって含む側の語がなく、後の文に含む側の語があって含まない側の語がないとき strict_to_inclusive、
+# 逆は inclusive_to_strict。打ち消した「超えない」「上回らない」「下回らない」はその値を含むので、含む側に数える（8GBを超えない
+# ように → 8GB以下に は同じ境目）。「配達」「伝達」「調達」などの「達し」「達す」と、文の頭や助詞のすぐあとの「以上」「以下」
+# （以上の理由で、手順は以下のとおり）は数えない。
+_BOUNDARY_STRICT = _lazy_compile(r"超え(?!な|ず|ませ)|超す|超過(?!しな|せず|しませ)|上回(?!らな|らず|りませ)|未満"
+                                 r"|下回(?!らな|らず|りませ)|満たな|満たず")
+_BOUNDARY_INCLUSIVE = _lazy_compile(r"(?<=[^はがをにでもと。、「（\s])以[上下]|(?<![配伝通調発上速熟練送示栄先])達[しす]|到達"
+                                    r"|超え(?:ない|なかった|ず|ません)|超過(?:しない|せず|しません)"
+                                    r"|[上下]回(?:らない|らなかった|らず|りません)")
+
 
 def _obligation_hits(text: str) -> dict[str, re.Match[str]]:
     """義務の強さの集まりごとの、text でいちばん前に当たった語。任意の言い方（してもしなくてもよい）の中の不要の言い方は数えない。"""
@@ -6345,6 +6359,19 @@ def _condition_risk(old: _Sentence, new: _Sentence, new_doc: str) -> dict | None
     return None
 
 
+def _boundary_risk(old: _Sentence, new: _Sentence) -> dict | None:
+    """境目の言い方の変化（kind boundary。3.2.0。数える）。detail は元の語（from）と後の語（to）。"""
+    old_strict, old_inclusive = _BOUNDARY_STRICT.search(old.text), _BOUNDARY_INCLUSIVE.search(old.text)
+    new_strict, new_inclusive = _BOUNDARY_STRICT.search(new.text), _BOUNDARY_INCLUSIVE.search(new.text)
+    if old_strict and not old_inclusive and new_inclusive and not new_strict:
+        subkind, before, after = "strict_to_inclusive", old_strict, new_inclusive
+    elif old_inclusive and not old_strict and new_strict and not new_inclusive:
+        subkind, before, after = "inclusive_to_strict", old_inclusive, new_strict
+    else:
+        return None
+    return _risk("boundary", subkind, old.line, new.line, old.text, new.text, {"from": before.group(0), "to": after.group(0)})
+
+
 def _dropped_words(sides: _Sides, sentence: _Sentence) -> list[str]:
     """組にならなかった元の文 sentence が段落から丸ごと消えた文なら、推敲後の文書にない内容の語（そうでなければ空）。"""
     text, new_doc = sentence.text, sides.texts[1]
@@ -6387,7 +6414,7 @@ def _scope_risks(sides: _Sides, groups: list, choices: bool) -> list:
                 continue
             found = (_choice_joined_risk(old, new) if choices else None, _obligation_risk(old, new),
                      _quantifier_risk(old, new, counts), _deadline_risk(old, new, counts, sides.texts[1]),
-                     _condition_risk(old, new, sides.texts[1]))
+                     _condition_risk(old, new, sides.texts[1]), _boundary_risk(old, new))
             out.extend(risk for risk in found if risk is not None)
     out.extend(_dropped_sentence_risks(sides, groups))
     out.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
@@ -11126,6 +11153,9 @@ def _risk_line(risk: dict) -> str:
     if kind == "dropped_sentence":
         return ("消えた文{}: 内容の語（{}）が推敲後のどこにもありません。--fail-on には数えません。読み手に要らない文として"
                 "外したのでなければ、文を戻してください。".format(where, "、".join(detail["words"])))
+    if kind == "boundary":
+        return ("境目の言い方が変わった{}: {} → {}。「超える」「未満」はその値を含まず、「以上」「以下」「達する」はその値を"
+                "含みます。境目の値ちょうどの扱いが変わっていないか確かめてください。".format(where, detail["from"], detail["to"]))
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(
@@ -11852,7 +11882,8 @@ def _fail_on_line(total: int, counted: int, risks: Sequence = ()) -> str:
             "（意味が変わる恐れ {}件のうち、数値・否定・入れ替え・文の種類{} {}件）。".format(
                 total, "".join(label for kind, label in (("certainty", "・確度"), ("state", "・状態の語"), ("promise", "・約束"),
                                                          ("modality", "・許可の言い方"), ("choice", "・選ぶ範囲"),
-                                                         ("causality", "・因果"), ("limiter", "・限定の語"))
+                                                         ("causality", "・因果"), ("limiter", "・限定の語"),
+                                                         ("boundary", "・境目の言い方"))
                                if any(r["kind"] == kind for r in risks)), counted))
 
 
