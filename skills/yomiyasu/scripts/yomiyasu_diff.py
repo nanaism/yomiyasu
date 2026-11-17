@@ -219,8 +219,11 @@ _TYPE_PATTERNS = (
     ("例え", r"まるで|あたかも|さながら|(?:ごと|如)(?<!前述のごと)(?<!上記のごと)(?<!周知のごと)(?<!以下のごと)(?<!次のごと)"
            r"(?<!前述の如)(?<!上記の如)(?<!周知の如)(?<!以下の如)(?<!次の如)[くき]"),
     ("依頼・決まり", r"(?:て|で)(?:ください|下さい)|を(?:ください|下さい)|(?:ご|お)[一-龥ぁ-んァ-ヴー]{1,8}(?:ください|下さい)"
-                 r"|お願い(?<!よろしくお願い)(?<!宜しくお願い)(?:します|いたします|致します|申し上げます|できますか|できますでしょうか)"
+                 r"|お願い(?<!よろしくお願い)(?<!宜しくお願い)(?:します|いたします|致します|申し上げます|できますか|できますでしょうか"
+                 r"|したい)"
                  r"|て(?:いただけ|もらえ)(?:ますか|ませんか)|てほしい|てもらいたい|ていただきたい"
+                 # 「ご提出いただけますと幸いです」「ご確認いただければ助かります」も依頼の印にする（3.2.0）
+                 r"|(?:て|で|(?:ご|お)[一-龥ぁ-んァ-ヴー]{1,8})(?:いただけ|頂け)(?:ますと|れば|たら)(?:幸い|助かり|ありがた|有難)"
                  r"|べき(?<!しかるべき)(?<!然るべき)(?<!驚くべき)(?<!恐るべき)(?<!来るべき)(?<!特筆すべき)(?<!注目すべき)(?!乗)"
                  r"|なければ(?:ならない|なりません|ならず|いけない|いけません)|なくては(?:ならない|なりません|ならず|いけない|いけません)"
                  r"|ないといけ(?:ない|ません)|(?:て|で)は(?:いけ|なら)(?:ない|ません)|ねばなら(?:ない|ず)"
@@ -235,7 +238,7 @@ _TYPE_LITERALS = {
     "意見": ("と思", "とおも", "と考え", "と感じ", "は思", "はおも", "は考え", "は感じ", "ように思", "ように感じ"),
     "例え": ("まるで", "あたかも", "さながら", "ごと", "如"),
     "依頼・決まり": ("ください", "下さい", "お願い", "いただけ", "もらえ", "ほしい", "もらいた", "いただきた", "べき", "なければ",
-                 "なくては", "ないといけ", "はいけ", "はなら", "ねばなら", "必要"),
+                 "なくては", "ないといけ", "はいけ", "はなら", "ねばなら", "必要", "頂け"),
 }
 # 「まるで〜のようだ」の「よう」「みたい」は、推量ではなく例えを表す語として数える。
 # 対にするのは、同じ文の中で「まるで」「あたかも」「さながら」のあとに最初に出てくる1つだけ。
@@ -5505,9 +5508,31 @@ def _only_final_period_removed(old: str, new: str) -> bool:
     return _FINAL_PERIOD_IN_QUOTE.sub("", old) == new or _FINAL_PERIOD_IN_QUOTE.sub("", new) == old
 
 
+# 問いの形の依頼の文末（3.2.0）。「お送りいただけますでしょうか → 送ってください」「ご連絡いただけますか → ご連絡ください」の
+# ように、元の文がすでに依頼で、そのまま依頼の文に言い直した組は、問いの変化と依頼の印の足しにしない（_question_risks と
+# _meaning_risks）。逆向き（してください → していただけますでしょうか）は今までどおり出す。
+_REQUEST_QUESTION = _lazy_compile(r"(?:(?:いただけ|頂け|もらえ|くれ)(?:ます|ません)|お願い(?:でき|いたせ)(?:ます|ません))"
+                                  r"(?:でしょう)?か[。？?]*[」』）)]*$")
+
+
+def _request_restated(old: str, new: str) -> bool:
+    """元の文が問いの形の依頼で、後の文が問いでなく、依頼・決まりの印を持つか（3.2.0）。"""
+    return (_REQUEST_QUESTION.search(old.rstrip()) is not None and not _is_question(new)
+            and "依頼・決まり" in type_marks(new))
+
+
+def _request_restated_mark(mark: dict) -> bool:
+    """文の種類を表す語の候補（sentence_type/marks）が、問いの形の依頼を依頼の文に言い直して、依頼・決まりの印が増えただけの
+    ものか（3.2.0）。"""
+    detail = mark["detail"]
+    return (not detail["lost"] and [item["kind"] for item in detail["added"]] == ["依頼・決まり"]
+            and _request_restated(mark["old"] or "", mark["new"] or ""))
+
+
 def _question_risks(sides: _Sides, groups: list) -> list:
     """問い（kind sentence_type、subkind question）。組になった文の片方だけが問いの文（文末が ？、?、か。、か？）なら出す。
-    句点のない「…か」で終わる文は問いに数えない。"""
+    句点のない「…か」で終わる文は問いに数えない。問いの形の依頼をそのまま依頼の文に言い直した組（3.2.0。_request_restated）は
+    出さない。"""
     out = []
     order = 0
     for group in groups:
@@ -5515,7 +5540,8 @@ def _question_risks(sides: _Sides, groups: list) -> list:
             old, new = group["old"][i], group["new"][j]
             old_question, new_question = _is_question(old.text), _is_question(new.text)
             # 台詞の最後の「。」だけを外した組は、問いのまま読めるので出さない
-            if old_question != new_question and not _only_final_period_removed(old.text, new.text):
+            if (old_question != new_question and not _only_final_period_removed(old.text, new.text)
+                    and not (old_question and _request_restated(old.text, new.text))):
                 out.append((_group_index(group, new), order, _risk(
                     "sentence_type", "question", old.line, new.line, old.text, new.text,
                     {"old_is_question": old_question, "new_is_question": new_question})))
@@ -5670,7 +5696,9 @@ def _find_line(sides: _Sides, side: int, text: str) -> int | None:
 
 
 def _marks_risks(sides: _Sides, type_changes: Sequence | None) -> list:
-    """文の種類の印（kind sentence_type、subkind marks）。type_changes の各項目をそのまま数える（判定は変えない）。"""
+    """文の種類の印（kind sentence_type、subkind marks）。type_changes の各項目をそのまま数える（判定は変えない）。
+    問いの形の依頼を依頼の文に言い直して、依頼・決まりの印が増えただけの項目（3.2.0。_request_restated_mark）は、
+    _meaning_risks が出力から外す。"""
     return [_risk("sentence_type", "marks", _find_line(sides, 0, change["orig"]), _find_line(sides, 1, change["rewrite"]),
                   change["orig"], change["rewrite"], {"lost": change["lost"], "added": change["added"]})
             for change in (type_changes or [])]
@@ -6111,6 +6139,11 @@ def _meaning_risks(sides: _Sides, full: dict, type_changes: Sequence | None, gro
     all_marks = _marks_risks(sides, type_changes)
     quiet, delegated = [], []
     for mark in all_marks:
+        # 問いの形の依頼をそのまま依頼の文に言い直して、依頼・決まりの印が増えただけの候補は出さない（3.2.0）。出力から外した
+        # ほかの候補と同じく、状態・約束の候補を重ねないかを決めるのには使う
+        if _request_restated_mark(mark):
+            quiet.append(mark)
+            continue
         classification = _classify_hedge_marks(mark["old"], mark["new"], mark["detail"]["lost"], mark["detail"]["added"])
         if classification in ("same", "strengthen"):
             quiet.append(mark)

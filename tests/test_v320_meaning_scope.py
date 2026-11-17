@@ -86,5 +86,56 @@ class ZeroMinuteTimeTest(unittest.TestCase):
         self.assertEqual(yomiyasu_diff.diff(before, after)["meaning_risks"], [])
 
 
+class RequestRestatedTest(unittest.TestCase):
+    """11章: 「ご提出いただけますと幸いです」「お願いしたい」を依頼の印にし、問いの形の依頼をそのまま依頼の文に言い直した組を、
+    問いの変化と依頼の印の足しにしない。逆向き（設計例 PN3a と P6）と、依頼が消えた組は今までどおり出す。"""
+
+    NOT_FOUND = (
+        ("書類は金曜までにご提出いただけますと幸いです。", "書類は金曜までに提出してください。"),
+        ("ご確認いただけますと助かります。", "確認をお願いします。"),
+        ("資料をお送りいただけますでしょうか。", "資料を送ってください。"),
+        ("ご連絡いただけますか。", "ご連絡ください。"),
+        ("お願いしたいことは3点あります。", "次の3点をお願いします。"),
+    )
+    # 今までどおり出す: (元, 後, 候補の kind と subkind)
+    KEPT = (
+        ("資料を確認してください。", "資料をご確認いただけますでしょうか。",
+         [("sentence_type", "question"), ("sentence_type", "marks")]),
+        ("目を通しておいてもらえますか。", "お目通しいただけますでしょうか。", [("sentence_type", "marks")]),
+        ("ご確認いただけますか。", "確認は不要です。", [("sentence_type", "question")]),
+    )
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(result["meaning_risks"], [])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+
+    def test_kept(self):
+        for before, after, expected in self.KEPT:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(kinds(result), expected)
+                self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_new_request_marks(self):
+        """依頼・決まりの印に足した2つの形。「よろしくお願いしたい」は今までどおり印にしない。"""
+        for text in ("書類をご提出いただけますと幸いです。", "ご確認いただければ助かります。", "ご返信頂けますと幸いです。",
+                     "教えていただけたらありがたいです。", "お願いしたいことがあります。"):
+            with self.subTest(text=text):
+                self.assertIn("依頼・決まり", yomiyasu_diff.type_marks(text))
+        for text in ("今後ともよろしくお願いしたいと存じます。", "ご提出いただけますか。"):
+            with self.subTest(text=text):
+                self.assertNotIn("依頼・決まり", yomiyasu_diff.type_marks(text))
+
+    def test_rule_candidates_still_show_the_change(self):
+        """意味が変わる恐れには出さないが、規則の見直し候補の「文の種類を表す語が変わった文」には今までどおり出る。"""
+        result = run("資料をお送りいただけますでしょうか。", "資料を送ってください。")
+        self.assertEqual(result["meaning_risks"], [])
+        self.assertEqual([[item["kind"] for item in change["added"]] for change in result["type_changes"]],
+                         [["依頼・決まり"]])
+
+
 if __name__ == "__main__":
     unittest.main()
