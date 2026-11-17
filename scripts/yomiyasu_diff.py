@@ -4527,6 +4527,8 @@ def _number_risks(sides: _Sides, full: dict, groups: list) -> list:
             if moved_added:
                 raw_added -= moved_added
             removed, added = _cancel_notation(raw_removed, raw_added, old_numbers, new_numbers)
+            # 分が0の時刻を「時」だけで書いた形（18:00 → 18時）も、表記の違いとして打ち消す（3.2.0）
+            removed, added = _cancel_zero_minutes(removed, added, old_numbers, new_numbers)
             # 表記の違いとして打ち消した値は、文書全体で比べるときにもう一度出さない
             shown_removed.update(raw_removed - removed)
             shown_added.update(raw_added - added)
@@ -4968,6 +4970,69 @@ def _cancel_notation(removed: Counter, added: Counter, old_numbers: Sequence[_Nu
                 mine[number.key] -= 1
                 other[(number.value, match)] -= 1
     return +removed, +added
+
+
+def _colon_times(numbers: Sequence[_Number]) -> list[tuple[_Number, _Number, int]]:
+    """組の文の数値のうち、「:」でつないだ時と分の組（18:00、9:30。時:分:秒 は除く）を (時の数, 分の数, まとまりの頭の番号) で返す
+    （3.2.0。_cancel_zero_minutes が使う）。まとまりの頭の番号は numbers の中の番号で、同じ範囲（9:00〜17:00）の組は同じ番号になる。"""
+    found = []
+    for index, number in enumerate(numbers[:-1]):
+        notation, following = number.notation, numbers[index + 1].notation
+        if notation is None or notation[2] is None or following is None or following[2] is None:
+            continue
+        joins, units, at = notation[2]
+        if following[2][2] != at + 1 or index - at < 0:
+            continue
+        if joins[at] != "colon" or (at > 0 and joins[at - 1] == "colon"):
+            continue
+        if at + 1 < len(joins) and joins[at + 1] == "colon":
+            continue
+        if units[at] or units[at + 1]:
+            continue
+        found.append((number, numbers[index + 1], index - at))
+    return found
+
+
+def _cancel_zero_minutes(removed: Counter, added: Counter, old_numbers: Sequence[_Number], new_numbers: Sequence[_Number]) -> tuple[Counter, Counter]:
+    """分が0の時刻を「時」だけで書いた形（18:00 → 18時、9:00〜17:00 → 9時〜17時。逆向きも）を、表記の違いとして打ち消す（3.2.0）。
+    _cancel_notation は「10:30 → 10時30分」を打ち消すが、分が0のときは相手の側に「0分」がないので残っていた。
+
+    片側の「:」でつないだ (時, 分) の組（_colon_times）で、分が0の組の (時, 単位なし) と (0, 単位なし) がその側の消えた値にあり、
+    反対の側に (時, "時") があれば、両方から引く。そうして引いた組と同じ範囲の、分が0でない組（14:00〜15:30 の 15:30）は、
+    反対の側に (時, "時") と (分, "分") があれば一緒に引く。時の値が違う組（13:00 → 15時）と、分が0でない組だけの範囲
+    （9:30 → 9時、8:45 → 8時）は打ち消さない。"""
+    if not removed or not added:
+        return removed, added
+    removed, added = Counter(removed), Counter(added)
+    for mine, other, numbers in ((removed, added, old_numbers), (added, removed, new_numbers)):
+        times = _colon_times(numbers)
+        heads = []
+        for _, minute, head in times:
+            if minute.value == "0" and head not in heads:
+                heads.append(head)
+        for head in heads:
+            members = [(hour, minute) for hour, minute, at in times if at == head]
+            zero_pairs = [pair for pair in members if pair[1].value == "0"]
+            other_pairs = [pair for pair in members if pair[1].value != "0"]
+            if not _take_time_pairs(mine, other, zero_pairs, False):
+                continue
+            _take_time_pairs(mine, other, other_pairs, True)
+    return +removed, +added
+
+
+def _take_time_pairs(mine: Counter, other: Counter, pairs: Sequence[tuple[_Number, _Number]], with_minutes: bool) -> bool:
+    """時と分の組ごとに、mine に (時, 単位なし) と (分, 単位なし) があり、other に (時, "時")（with_minutes が真なら
+    (分, "分") も）があれば、両方から引く（_cancel_zero_minutes）。1組でも引けば真。"""
+    taken = False
+    for hour, minute in pairs:
+        need_mine = Counter([(hour.value, ""), (minute.value, "")])
+        need_other = Counter([(hour.value, "時")] + ([(minute.value, "分")] if with_minutes else []))
+        if all(mine[key] >= count for key, count in need_mine.items()) and all(
+                other[key] >= count for key, count in need_other.items()):
+            mine.subtract(need_mine)
+            other.subtract(need_other)
+            taken = True
+    return taken
 
 
 def _quantity_words(text: str) -> set[str]:
