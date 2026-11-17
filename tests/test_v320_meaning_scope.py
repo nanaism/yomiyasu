@@ -180,5 +180,50 @@ class IntensifierWordsTest(unittest.TestCase):
                          (ROOT / "skills" / "yomiyasu" / "references" / "lists" / "intensifiers.txt").read_bytes())
 
 
+class NegatedProhibitionTest(unittest.TestCase):
+    """13章: 打ち消した「禁止」（禁止されていません、禁止しません）を許可として読む。「禁止です → かまいません」は今までどおり出す。"""
+
+    NOT_FOUND = (
+        ("持ち込みは禁止されていません。", "持ち込んでもかまいません。"),
+        ("持ち込みを禁止しません。", "持ち込んでも構いません。"),
+        ("飲み物の持ち込みは禁止されていません。", "飲み物は持ち込んでもかまいません。"),
+        ("持ち込みは禁止しておりません。", "持ち込んでもかまいません。"),
+        ("持ち込みは禁止ではありません。", "持ち込んでもかまいません。"),
+    )
+    # 今までどおり出す: (元, 後, subkind, from, to)
+    KEPT = (
+        ("撮影は禁止です。", "撮影してもかまいません。", "permission_added", "禁止", "許可"),
+        ("立ち入りは禁止されています。", "立ち入ってもかまいません。", "permission_added", "禁止", "許可"),
+        ("持ち込んでもかまいません。", "持ち込みは禁止されています。", "permission_lost", "許可", "禁止"),
+    )
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(result["meaning_risks"], [])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+
+    def test_kept(self):
+        for before, after, subkind, source, target in self.KEPT:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual([(risk["kind"], risk["subkind"], risk["detail"]["from"], risk["detail"]["to"])
+                                  for risk in result["meaning_risks"]], [("modality", subkind, source, target)])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_negated_prohibition_is_permission(self):
+        """打ち消した「禁止」は許可の印になり、禁止の印にならない。打ち消していない「禁止」は今までどおり禁止の印。"""
+        def kinds_of(text):
+            return [kind for _, kind, _ in yomiyasu_diff._modality_positions(text)]
+        for text in ("持ち込みは禁止されていません。", "持ち込みを禁止しません。", "持ち込みは禁止しておりません。",
+                     "持ち込みは禁止されていない。", "持ち込みは禁止ではありません。"):
+            with self.subTest(text=text):
+                self.assertEqual(kinds_of(text), ["許可"])
+        for text in ("撮影は禁止です。", "立ち入りは禁止されています。", "持ち込みを禁止します。"):
+            with self.subTest(text=text):
+                self.assertEqual(kinds_of(text), ["禁止"])
+
+
 if __name__ == "__main__":
     unittest.main()
