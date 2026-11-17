@@ -3,6 +3,7 @@
 
 - 1章: pause_comma で、読点のあとの句の動詞の中の「が」（つながる、ながら）を別の主語と読まない。
   直前が漢字の「が」（広がる）は見分けない（限界）。
+- 2章: pause_comma で、文頭の「実は、」「要は、」を前置きとして扱い、拾わない。
 
 3章（「〜とは、」を指摘しない）の試験は tests/test_v200_pause_comma.py にある。
 文はすべてこのファイルで作った類例。指示書の再現の欄で投稿や記事から引いた文は入れない。
@@ -73,6 +74,40 @@ class VerbGaTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertEqual([(hit[1], hit[2]) for hit in yomiyasu_lint._pause_comma_hits(text)],
                                  [(phrase[-1], phrase[:-1])])
+
+
+class LeadAdverbTest(unittest.TestCase):
+    """2章: 文頭の副詞の「実は」「要は」は主題ではないので、あとの読点を拾わない。句全体がこの語のときだけ外す。"""
+
+    KEEP = (
+        "実は、明日から受付を始めます。",
+        "要は、手順を一つ減らせば足ります。",
+        "- 実は、明日から受付を始めます。",
+        "新しい棚は、実は、来月に入れ替えます。",
+    )
+    # 句の一部に「実は」「要は」を含むだけの主題と、ほかの短い主題は今までどおり拾う
+    REMOVE = (
+        ("事実は、記録の中にあります。", "事実は"),
+        ("概要は、次のページにまとめます。", "概要は"),
+        ("今は、紙の帳簿で数えています。", "今は"),
+    )
+
+    def test_lead_adverbs_are_not_topics(self):
+        for text in self.KEEP:
+            with self.subTest(text=text):
+                self.assertEqual(pauses(text), [])
+
+    def test_other_short_topics_are_still_found(self):
+        for text, phrase in self.REMOVE:
+            with self.subTest(text=text):
+                found = pauses(text)
+                self.assertEqual(len(found), 1)
+                self.assertEqual(found[0]["message"], MESSAGE.format(phrases=phrases(phrase)))
+
+    def test_whole_phrase_only(self):
+        self.assertIn("実は", yomiyasu_lint._PAUSE_CONNECTIVE)
+        self.assertIn("要は", yomiyasu_lint._PAUSE_CONNECTIVE)
+        self.assertNotIn("事実は", yomiyasu_lint._PAUSE_CONNECTIVE)
 
 
 if __name__ == "__main__":
