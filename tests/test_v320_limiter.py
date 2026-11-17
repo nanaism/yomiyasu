@@ -266,5 +266,61 @@ class LimiterContractTest(unittest.TestCase):
                          (ROOT / "skills" / "yomiyasu" / "scripts" / "yomiyasu_diff.py").read_bytes())
 
 
+class LimiterRoundTwoTest(unittest.TestCase):
+    """直したあとの確かめで見つけた形（3.2.0）。打ち消した限定の丁寧な形と「わけではない」、「限定しなくても」「限定しないと
+    決めた」、決まりの「限定しなければならない」、程度の「必要なだけ」と範囲を絞る「必要なだけです」。"""
+
+    # 元の文の限定の語を数えない形（範囲を絞っていない）: (元, 後)
+    NOT_COUNTED = (
+        ("対象は会員に限られておりません。", "会員以外も対象です。"),
+        ("利用は国内に限定されておりません。", "国内でも海外でも使えます。"),
+        ("対象は会員に限られてはいません。", "会員以外も対象です。"),
+        ("対象は会員に限られるわけではありません。", "会員以外も対象です。"),
+        ("利用は国内に限定されるわけではありません。", "国内でも海外でも使えます。"),
+        ("当社は対象を会員に限定しておりません。", "当社は会員以外も対象にしています。"),
+        ("対象を会員に限定しなくてもかまいません。", "対象を会員に絞らなくてもかまいません。"),
+        ("配布先を社内に限定しなくてもよいです。", "配布先は社内でなくてもよいです。"),
+        ("今回は対象を会員に限定しないと決めました。", "今回は会員以外も対象にすると決めました。"),
+        ("メモリを必要なだけ確保します。", "メモリを確保します。"),
+    )
+    # 数える形: (元, 後)
+    COUNTED = (
+        ("公開範囲を社内に限定しなければなりません。", "公開範囲を社内にしなければなりません。"),
+        ("公開範囲を社内に限定しないといけません。", "公開範囲を社内にしないといけません。"),
+        ("変更は再起動が必要なだけで、設定はそのまま使えます。", "変更には再起動が必要で、設定はそのまま使えます。"),
+        ("話を聞いてほしいだけなので、助言は要りません。", "話を聞いてほしいので、助言は要りません。"),
+        # 後の文の「限定していません」「限定しておりません」は、範囲を絞る言い方に数えない
+        ("この講座は会員だけが受講できます。", "この講座は受講者を限定していません。"),
+        ("この講座は会員だけが受講できます。", "この講座の受講者は限定されていません。"),
+        ("この講座は会員だけが受講できます。", "この講座は受講者を限定しておりません。"),
+    )
+    # 後の文の決まりの「限定しなければならない」は範囲を絞る言い方に数える: (元, 後)
+    KEPT = (
+        ("公開は社員だけにしてください。", "公開する相手を限定しなければなりません。"),
+        ("公開は社員だけにしてください。", "公開する相手を限定しなくてはいけません。"),
+        ("公開は社員だけにしてください。", "公開する相手を限定しないといけません。"),
+        ("公開は社員だけにしてください。", "公開する相手は限定されなければなりません。"),
+    )
+
+    def test_not_counted(self):
+        for before, after in self.NOT_COUNTED:
+            with self.subTest(before=before):
+                self.assertEqual(limiters(run(before, after)), [])
+
+    def test_counted(self):
+        for before, after in self.COUNTED:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(len(limiters(result)), 1)
+                self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_kept_obligation_form(self):
+        for before, after in self.KEPT:
+            with self.subTest(after=after):
+                result = run(before, after)
+                self.assertEqual(limiters(result), [])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
