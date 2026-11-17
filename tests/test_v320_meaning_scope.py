@@ -418,6 +418,63 @@ class QuantifierTest(unittest.TestCase):
         self.assertEqual(diff_exit_code("新しい規程は全員に適用されます。", "新しい規程が適用されます。"), 0)
 
 
+class DeadlineTest(unittest.TestCase):
+    """17章: 期限の語（までに、以内、より前に、期限、必着）が消えた書き換え（kind deadline。--fail-on に数えない見直しの候補）。"""
+
+    # (元, 後, 消えた語)
+    FOUND = (
+        ("経費精算は月末までに提出してください。", "経費精算は月末に提出してください。", ["までに"]),
+        ("返金は申請から3営業日以内に行います。", "返金は申請から3営業日で行います。", ["以内"]),
+        ("申込書は15日必着でお送りください。", "申込書は15日にお送りください。", ["必着"]),
+        ("解約は30日前までに通知してください。", "解約は30日前に通知してください。", ["までに"]),
+        # 類例
+        ("返金は3営業日以内に行います。", "返金は3営業日ほどで行います。", ["以内"]),
+    )
+    NOT_FOUND = (
+        ("金曜までに提出してください。", "提出の期限は金曜です。"),
+        ("10日までに申し込んでください。", "申し込みの期限は10日です。"),
+        ("一人で運用できるまでになった。", "一人で運用できるようになった。"),
+        ("3日以内にご返信ください。", "3日以内に返信してください。"),
+        # 類例: 期限でない「までに」「以内」、同じ意味の言い換え、文書全体で数が減らない組
+        ("参考までに、手順を書きます。", "手順を書きます。"),
+        ("これまでに3回の障害がありました。", "3回の障害がありました。"),
+        ("画像は5MB以内にしてください。", "画像は5MBにしてください。"),
+        ("会議より前に資料を送ってください。", "会議の前に資料を送ってください。"),
+        ("提出期限は10日です。", "提出の期日は10日です。"),
+        ("月末までに提出してください。窓口は平日に開きます。", "月末に提出してください。窓口は17時までに閉まります。"),
+    )
+
+    def test_found(self):
+        for before, after, words in self.FOUND:
+            with self.subTest(before=before, after=after):
+                found = of_kind(run(before, after), "deadline")
+                self.assertEqual([(risk["subkind"], risk["detail"]) for risk in found], [(None, {"words": words})])
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before, after=after):
+                self.assertEqual(of_kind(run(before, after), "deadline"), [])
+
+    def test_request_candidate_is_kept(self):
+        """「期限は金曜です」の組には、今までどおり文の種類の候補（依頼が消えた）が出る。"""
+        result = run("金曜までに提出してください。", "提出の期限は金曜です。")
+        self.assertEqual(kinds(result), [("sentence_type", "marks")])
+
+    def test_deadline_kept_elsewhere_in_the_document(self):
+        """見出しの「返却（14日以内）」を「返却」にしても、本文に同じ「14日以内」が残っていれば出さない。"""
+        before = "## 返却（14日以内）\n\n借りた本は14日以内に返してください。\n"
+        after = "## 返却\n\n借りた本は14日以内に返してください。\n"
+        self.assertEqual(of_kind(yomiyasu_diff.diff(before, after), "deadline"), [])
+
+    def test_message_and_not_counted(self):
+        report = yomiyasu_diff.report(run("経費精算は月末までに提出してください。", "経費精算は月末に提出してください。"))
+        self.assertIn("- 期限の語が消えた（1行目）: 「までに」。--fail-on には数えません。原文の期限（その日までに、その日数以内に）が、"
+                      "その日ちょうどの意味に変わっていないか確かめてください。", report)
+        self.assertNotIn("deadline", yomiyasu_diff.FAIL_ON_KINDS)
+        self.assertEqual(yomiyasu_diff._RISK_ORDER["deadline"], 23)
+        self.assertEqual(diff_exit_code("経費精算は月末までに提出してください。", "経費精算は月末に提出してください。"), 0)
+
+
 class CorpusFalsePositiveTest(unittest.TestCase):
     """21章: 推敲の実例（tests/corpus の48組）で見つけた誤った指摘を3つ直す。「事例がある」を「ことがある」と同じ強さに数える、
     「お願いしたい」を依頼の印にする（11章と同じ直し）、後の文の「ところまで」などを範囲を絞る言い方に数える（limiter）。"""
