@@ -4,8 +4,8 @@
 - 1章: pause_comma で、読点のあとの句の動詞の中の「が」（つながる、ながら）を別の主語と読まない。
   直前が漢字の「が」（広がる）は見分けない（限界）。
 - 2章: pause_comma で、文頭の「実は、」「要は、」を前置きとして扱い、拾わない。
-
-3章（「〜とは、」を指摘しない）の試験は tests/test_v200_pause_comma.py にある。
+- 3章: pause_comma で、定義の「〜とは、」を拾わない（仕様の変更。「uv とは、」を KEEP へ移したのは
+  tests/test_v200_pause_comma.py）。ここでは、同じ文のほかの主題を今までどおり拾うことを見る。
 文はすべてこのファイルで作った類例。指示書の再現の欄で投稿や記事から引いた文は入れない。
 """
 from pathlib import Path
@@ -108,6 +108,26 @@ class LeadAdverbTest(unittest.TestCase):
         self.assertIn("実は", yomiyasu_lint._PAUSE_CONNECTIVE)
         self.assertIn("要は", yomiyasu_lint._PAUSE_CONNECTIVE)
         self.assertNotIn("事実は", yomiyasu_lint._PAUSE_CONNECTIVE)
+
+
+class DefinitionTopicTest(unittest.TestCase):
+    """3章: 定義の「〜とは、」は拾わない。同じ行や同じ文のほかの短い主題の読点は、今までどおり拾う
+    （拾わない文と、uv の文を KEEP に移したことは tests/test_v200_pause_comma.py）。"""
+
+    ONLY_OTHERS = (
+        ("この章では、ブランチとは、作業の流れを分けて記録する仕組みだと説明します。", ["この章では"]),
+        ("ブランチとは、作業の流れを分ける仕組みです。新しい棚は、来月に入れ替えます。", ["新しい棚は"]),
+        # 「ことは、」「あとは、」は「は」のかたまり（定義の「とは」ではない）
+        ("大事なことは、毎日続けることです。", ["大事なことは"]),
+        ("あとは、来週の棚に並べます。", ["あとは"]),
+    )
+
+    def test_only_the_other_topics_are_found(self):
+        for text, names in self.ONLY_OTHERS:
+            with self.subTest(text=text):
+                found = pauses(text)
+                self.assertEqual(len(found), 1)
+                self.assertEqual(found[0]["message"], MESSAGE.format(phrases=phrases(*names)))
 
 
 if __name__ == "__main__":
