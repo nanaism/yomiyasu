@@ -33,13 +33,16 @@ SUBKINDS = {
     "protected": {"code", "inline_code", "url", "link", "frontmatter", "html", "quote"},
     "modality": {"permission_lost", "permission_added", "ability_lost"},
     "modality_review": {"ability_lost"},
+    # 3.2.0: 義務の強さの変化（obligation）
+    "obligation": {"optional_to_unneeded", "unneeded_to_optional", "duty_to_optional", "optional_to_duty", "duty_to_request"},
 }
 # diff の詰め（10.7、追加文書 1.4）: 否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）を足した。
 # どちらも意味が変わる恐れの節に出すが、--fail-on=meaning-risk には数えない
 # v2.1.0: 許可・能力の言い方の変化（modality は数える。事実や仕様を述べる種類でない文書の能力の消えは modality_review で数えない）を足した
 # 3.2.0: 範囲を絞る語（だけ、のみ、しか〜ない、に限る）が消えた書き換え（limiter。数える）を足した
+# 3.2.0: 見直しの候補の義務の強さの変化（obligation。数えない）を足した
 KINDS = {"number", "negation", "swap", "sentence_type", "protected", "contrast_reversal", "feeling", "certainty", "certainty_review", "quote", "state", "promise", "claim",
-         "modality", "modality_review", "limiter"}
+         "modality", "modality_review", "limiter", "obligation"}
 
 # 2.8 の meaning_risks の要素の例（入力は 2.7 の例A）
 EXAMPLE_A_RISK = {"kind": "number", "subkind": "replaced", "old_line": 1, "new_line": 1,

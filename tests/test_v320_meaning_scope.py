@@ -5,7 +5,9 @@
 """
 
 from pathlib import Path
+import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -21,6 +23,21 @@ def run(before, after, doc_type=None):
 
 def kinds(result):
     return [(risk["kind"], risk["subkind"]) for risk in result["meaning_risks"]]
+
+
+def of_kind(result, kind):
+    return [risk for risk in result["meaning_risks"] if risk["kind"] == kind]
+
+
+def diff_exit_code(before, after):
+    """diff --fail-on meaning-risk の終了コード（元と後は1行の文）。"""
+    with tempfile.TemporaryDirectory() as folder:
+        old, new = Path(folder) / "old.md", Path(folder) / "new.md"
+        old.write_bytes((before + "\n").encode("utf-8"))
+        new.write_bytes((after + "\n").encode("utf-8"))
+        process = subprocess.run([sys.executable, "-B", str(ROOT / "scripts" / "yomiyasu_diff.py"), "--fail-on", "meaning-risk",
+                                  str(old), str(new)], capture_output=True, text=True, encoding="utf-8", cwd=folder)
+    return process.returncode
 
 
 class ZeroMinuteTimeTest(unittest.TestCase):
@@ -223,6 +240,70 @@ class NegatedProhibitionTest(unittest.TestCase):
         for text in ("撮影は禁止です。", "立ち入りは禁止されています。", "持ち込みを禁止します。"):
             with self.subTest(text=text):
                 self.assertEqual(kinds_of(text), ["禁止"])
+
+
+class ObligationTest(unittest.TestCase):
+    """14章: 義務の強さの変化（kind obligation）。「必須ではない（任意）」「不要」「必要がある（決まり）」「お願い」の入れ替わりを、
+    --fail-on に数えない見直しの候補にする。既存の文の種類の候補などは、重なっても消さない。"""
+
+    # (元, 後, subkind, 元の語, 後の語)
+    FOUND = (
+        ("回答は必須ではありません。", "回答は不要です。", "optional_to_unneeded", "必須ではありません", "不要"),
+        ("事前予約は任意です。", "事前予約は不要です。", "optional_to_unneeded", "任意", "不要"),
+        ("参加は必須です。", "参加は任意です。", "duty_to_optional", "必須", "任意"),
+        ("申請を行う必要があります。", "申請をお願いします。", "duty_to_request", "必要があります", "お願いします"),
+        ("身分証の提示が義務付けられています。", "身分証をご提示ください。", "duty_to_request", "義務", "ご提示ください"),
+        # 類例: 逆の向き、丁寧な形の不要、任意を言い直した「してもしなくてもよい」
+        ("事前の登録は不要です。", "事前の登録は任意です。", "unneeded_to_optional", "不要", "任意"),
+        ("アンケートへの回答は任意です。", "アンケートへの回答は必須です。", "optional_to_duty", "任意", "必須"),
+        ("名札の着用は必須ではありません。", "名札は着用しなくてかまいません。", "optional_to_unneeded", "必須ではありません",
+         "なくてかまいません"),
+        ("書類は提出しなければなりません。", "書類は提出しなくても構いません。", "duty_to_optional", "なければなりません",
+         "なくても構いません"),
+        ("登録は必須です。", "登録はしてもしなくてもよいです。", "duty_to_optional", "必須", "てもしなくてもよい"),
+    )
+    NOT_FOUND = (
+        ("参加は任意です。", "参加は自由です。"),
+        ("全員が出席する必要があります。", "全員の出席が必要です。"),
+        ("申請してください。", "申請をお願いします。"),
+        ("不要です。", "しなくてかまいません。"),
+        # 類例: 任意を「してもしなくてもよい」と言い直した組（中の「しなくてもかまいません」を不要に数えない）
+        ("回答は任意です。", "回答はしてもしなくてもかまいません。"),
+    )
+
+    def test_found(self):
+        for before, after, subkind, source, target in self.FOUND:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual([(risk["subkind"], risk["detail"]) for risk in of_kind(result, "obligation")],
+                                 [(subkind, {"from": source, "to": target})])
+                # 数えない候補なので、--fail-on の数は義務の強さの候補を除いた数と同じ
+                self.assertEqual(result["fail_on_meaning_risk_count"],
+                                 yomiyasu_diff.fail_on_count([risk for risk in result["meaning_risks"]
+                                                              if risk["kind"] != "obligation"]))
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before, after=after):
+                self.assertEqual(of_kind(run(before, after), "obligation"), [])
+
+    def test_existing_candidates_are_kept(self):
+        """文の種類の候補（依頼の印が増えた）は、義務の強さの候補と重なっても消さず、既存の候補の後ろに並べる。"""
+        result = run("身分証の提示が義務付けられています。", "身分証をご提示ください。")
+        self.assertEqual(kinds(result), [("sentence_type", "marks"), ("obligation", "duty_to_request")])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_message(self):
+        report = yomiyasu_diff.report(run("回答は必須ではありません。", "回答は不要です。"))
+        self.assertIn("- 「必須ではない（任意）」が「不要」に変わった（1行目）: 必須ではありません → 不要。--fail-on には数えません。"
+                      "原文の強さ（してもしなくてもよい、しなくてよい、しなければならない）が変わっていないか確かめてください。", report)
+        report = yomiyasu_diff.report(run("申請を行う必要があります。", "申請をお願いします。"))
+        self.assertIn("- 決まり（必須、しなければならない）が「お願い」に変わった（1行目）: 必要があります → お願いします。", report)
+
+    def test_not_counted(self):
+        self.assertNotIn("obligation", yomiyasu_diff.FAIL_ON_KINDS)
+        self.assertEqual(yomiyasu_diff._RISK_ORDER["obligation"], 21)
+        self.assertEqual(diff_exit_code("回答は必須ではありません。", "回答は不要です。"), 0)
 
 
 class CorpusFalsePositiveTest(unittest.TestCase):

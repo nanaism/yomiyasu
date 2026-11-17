@@ -3684,7 +3684,7 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
                "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17,
-               "number_qualifier": 18, "limiter": 19}
+               "number_qualifier": 18, "limiter": 19, "obligation": 21}
 # 状態の語が消えた書き換え（state）と、約束を足した書き換え（promise）も数える。因果を足した書き換え（claim）と、書き手を
 # 表す語のない「〜します」を足した書き換え（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の書き方の変化、確度の強まり）。
@@ -6110,6 +6110,90 @@ def _limiter_risks(sides: _Sides, groups: list) -> list:
     return out
 
 
+# ---- 意味の範囲を広げた照らし合わせ（3.2.0）----
+# 3.2.0 で足した意味が変わる恐れ。_scope_risks がまとめて作り、_meaning_risks が既存の候補の後ろに行の順で並べる。--fail-on に
+# 数えるかは kind ごとに書く（数えない kind は promise_review と同じ扱いで、message に「--fail-on には数えません。」を入れる）。
+
+# 義務の強さ（kind obligation。3.2.0）。「必須ではない（任意）」は「してもしなくてもよい」、「不要」は「しなくてよい」、「必要がある」
+# 「必須」は「しなければならない」で、読み手の受け取る強さが違う。「必要がある → お願いします」は決まりを頼みに弱める。
+# 不要の集まりには、丁寧な形の「しなくてかまいません」「しなくても構いません」も入れる。任意の集まりには、任意を言い直した
+# 「してもしなくてもよい」も入れ、その中の「しなくてもよい」は不要に数えない（_obligation_hits）。語は活用の終わりまで取る
+# （detail に、しなければなりません、しなくても構わない のように出す）。許可・能力の候補（modality）と文の種類の候補は、
+# この kind と重なっても消さずにそのまま出す。
+_OBLIGATION_FINE = r"(?:よい|良い|いい|結構|(?:構|かま)(?:わない|わず|いません|わ))"
+_OBLIGATION_WORDS = {
+    "任意": _lazy_compile(r"必須で(?:は)?(?:な[いく]|ありません|ございません)|任意"
+                        r"|(?:て|で)も[一-龥ぁ-んァ-ヴー]{0,6}?なくても" + _OBLIGATION_FINE),
+    "不要": _lazy_compile(r"不要|必要(?:は|が|も)?(?:な[いく]|ありません|ございません)|なくて(?:も)?" + _OBLIGATION_FINE),
+    "決まり": _lazy_compile(r"必要があ(?:る|ります|り)|必須(?!で(?:は)?(?:な|あり|ござ))"
+                          r"|なければ(?:ならな|なりませ|いけな|いけませ)(?:い|ん|かった)?"
+                          r"|なくては(?:ならな|なりませ)(?:い|ん|かった)?|ねばなら(?:ない|ず|ぬ)?|義務"),
+    "お願い": _lazy_compile(r"お願い(?:します|いたします|致します|申し上げます)|(?:て|で)(?:ください|下さい)"
+                          r"|(?:ご|お)[一-龥ぁ-んァ-ヴー]{1,8}(?:ください|下さい)"),
+}
+# (subkind, 元の集まり, 後の集まり)。上から順に見て、最初に当たった1つを出す。元の文に元の集まりの語があり、後の文に後の集まりの
+# 語があって元の集まりの語がないとき。duty_to_request は、元の文にお願いの語がないときだけ。
+_OBLIGATION_CHANGES = (("optional_to_unneeded", ("任意",), ("不要",)), ("unneeded_to_optional", ("不要",), ("任意",)),
+                       ("duty_to_optional", ("決まり",), ("任意", "不要")), ("optional_to_duty", ("任意", "不要"), ("決まり",)),
+                       ("duty_to_request", ("決まり",), ("お願い",)))
+_OBLIGATION_LABELS = {"optional_to_unneeded": "「必須ではない（任意）」が「不要」に変わった",
+                      "unneeded_to_optional": "「不要」が「必須ではない（任意）」に変わった",
+                      "duty_to_optional": "決まり（必須、しなければならない）が「任意」「不要」に変わった",
+                      "optional_to_duty": "「任意」「不要」が決まり（必須、しなければならない）に変わった",
+                      "duty_to_request": "決まり（必須、しなければならない）が「お願い」に変わった"}
+
+
+def _obligation_hits(text: str) -> dict[str, re.Match[str]]:
+    """義務の強さの集まりごとの、text でいちばん前に当たった語。任意の言い方（してもしなくてもよい）の中の不要の言い方は数えない。"""
+    found = {}
+    optional = [match.span() for match in _OBLIGATION_WORDS["任意"].finditer(text)]
+    for name, pattern in _OBLIGATION_WORDS.items():
+        for match in pattern.finditer(text):
+            if name == "不要" and any(start <= match.start() < end for start, end in optional):
+                continue
+            found[name] = match
+            break
+    return found
+
+
+def _earliest_hit(hits: Mapping[str, re.Match[str]], names: Sequence[str]) -> str | None:
+    """_obligation_hits の結果 hits で、集まり names の語のうちいちばん前に当たった語（なければ None）。"""
+    matches = [hits[name] for name in names if name in hits]
+    return min(matches, key=lambda match: match.start()).group(0) if matches else None
+
+
+def _obligation_risk(old: _Sentence, new: _Sentence) -> dict | None:
+    """組の文の義務の強さの変化（kind obligation。3.2.0。数えない）。_OBLIGATION_CHANGES の順で最初に当たった1つ。
+    detail は元の語（from）と後の語（to）。"""
+    old_hits, new_hits = _obligation_hits(old.text), _obligation_hits(new.text)
+    if not old_hits or not new_hits:
+        return None
+    for subkind, source, target in _OBLIGATION_CHANGES:
+        before, after = _earliest_hit(old_hits, source), _earliest_hit(new_hits, target)
+        if before is None or after is None or _earliest_hit(new_hits, source) is not None:
+            continue
+        if subkind == "duty_to_request" and "お願い" in old_hits:
+            continue
+        return _risk("obligation", subkind, old.line, new.line, old.text, new.text, {"from": before, "to": after})
+    return None
+
+
+def _scope_risks(sides: _Sides, groups: list) -> list:
+    """3.2.0 で足した意味が変わる恐れ（上の kind ごとの関数）を作り、行の順に、同じ行では kind の並び（_RISK_ORDER）の順に
+    並べる。組の文は、中身が同じ組を見ない。"""
+    out = []
+    for group in groups:
+        for i, j in group["pairs"]:
+            old, new = group["old"][i], group["new"][j]
+            if old.text == new.text:
+                continue
+            found = (_obligation_risk(old, new),)
+            out.extend(risk for risk in found if risk is not None)
+    out.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
+                            r["new_line"] if r["new_line"] is not None else 0, _RISK_ORDER[r["kind"]]))
+    return out
+
+
 def meaning_risks(orig: str, rw: str, full: dict | None = None, type_changes: Sequence | None = None, *, doc_type: str | None = None) -> list:
     """意味が変わる恐れ（JSON の meaning_risks）。
 
@@ -6182,9 +6266,10 @@ def _meaning_risks(sides: _Sides, full: dict, type_changes: Sequence | None, gro
         certainty = _certainty_risks(sides, groups, risks, masks, doc_type=doc_type)
     sides.quiet_marks = [mark for mark in quiet if id(mark) in quiet_ids]
     # 許可・能力の言い方の候補と、選ぶ範囲・因果の言い方の候補、数に付いた、概数と範囲を表す語の候補も、確度とかぎかっこの候補と同じく、
-    # 既存の候補の後ろに行の順で並べる。範囲を絞る語の候補（3.2.0）も同じ。
+    # 既存の候補の後ろに行の順で並べる。範囲を絞る語の候補（3.2.0）も同じ。3.2.0 で足したほかの候補（_scope_risks）は最後に足し、
+    # 同じ行では既存の候補の後ろに並べる。
     added = (certainty + _quote_risks(sides, groups, masks) + _modality_risks(sides, modality) + _logic_risks(sides, logic)
-             + _qualifier_risks(sides, groups) + _limiter_risks(sides, groups))
+             + _qualifier_risks(sides, groups) + _limiter_risks(sides, groups) + _scope_risks(sides, groups))
     added.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                               r["new_line"] if r["new_line"] is not None else 0))
     risks += added
@@ -10816,6 +10901,10 @@ def _risk_line(risk: dict) -> str:
     if kind == "limiter":
         return ("限定の語が消えた{}: {}。原文は範囲を絞っています。推敲後の文で範囲が広がっていないか確かめ、"
                 "広がっていれば原文の語を戻してください。".format(where, "、".join("「{}」".format(w) for w in detail["words"])))
+    if kind == "obligation":
+        return ("{}{}: {} → {}。--fail-on には数えません。原文の強さ（してもしなくてもよい、しなくてよい、しなければならない）が"
+                "変わっていないか確かめてください。".format(_OBLIGATION_LABELS.get(subkind or "", "義務の強さが変わった"), where,
+                                                    detail["from"], detail["to"]))
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(
