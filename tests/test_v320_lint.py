@@ -8,17 +8,23 @@
   tests/test_v200_pause_comma.py）。ここでは、同じ文のほかの主題を今までどおり拾うことを見る。
 - 4章: pause_comma で、文頭の場面の枠（「この記事では、」）のあとで文が長い行は、指摘を続けたうえで、残してよい場合を
   message の最後に1文足す。
+- 6章: ai_phrase に「多岐にわたる」「が求められている」を足す（info。点数、--strict、--fail-on に入らない。allow.txt で外せる）。
 文はすべてこのファイルで作った類例。指示書の再現の欄で投稿や記事から引いた文は入れない。
 """
 from pathlib import Path
+from contextlib import redirect_stdout, redirect_stderr
 from unittest import mock
+import io
 import sys
+import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 import yomiyasu_lint  # noqa: E402
+from markdown_visibility import resolve_words  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from portable import working_folder  # noqa: E402
 from test_v200_pause_comma import MESSAGE  # noqa: E402
 
 
@@ -213,6 +219,102 @@ class FrameNoteTest(unittest.TestCase):
         """pause_comma は種類を指定したときだけ出る（種類なしの出力は変わらない）。"""
         text = self.WITH_NOTE[0][0]
         self.assertEqual(pauses(text, doc_type=None), [])
+
+
+def ai(text, **options):
+    result = yomiyasu_lint.lint_text(text if text.endswith("\n") else text + "\n", **options)
+    return [f for f in result["findings"] if f["rule"] == "ai_phrase"]
+
+
+class AiPhraseTest(unittest.TestCase):
+    """6章: ai_phrase に「多岐にわたる」「が求められている」を足す。段落の文だけに当て、script と essay では外す。
+    何が多いのか、誰が何を求めているのかを確かめる候補で、message に置き換え先の語は出さない。"""
+
+    TARGETS = (
+        ("取り組むべき課題は多岐にわたります。", "多岐にわたる"),
+        ("確かめる項目は多岐に渡り、一日では終わりません。", "多岐にわたる"),
+        ("相談の内容は多岐にわたっていました。", "多岐にわたる"),
+        ("現場では、手順をそろえることが求められています。", "が求められている"),
+        ("窓口には、早い返事が求められており、人を増やします。", "が求められている"),
+        ("新しい窓口には、短い待ち時間が求められていた。", "が求められている"),
+        ("取り組むべき課題は多岐にわたります。まず、手順をそろえることが求められています。", "多岐にわたる、が求められている"),
+    )
+    KEEPS = (
+        # カギ括弧と引用、見出し、箇条書き、表
+        "「課題は多岐にわたります」と書かれていた。",
+        "> 課題は多岐にわたります。",
+        "# 課題は多岐にわたる",
+        "- 現場では、手順をそろえることが求められています。",
+        "| 課題は多岐にわたります。 |\n|---|\n| a |",
+        # ほかの形
+        "担当者は、上司から早い返事を求められています。",
+        "これからは、早い返事が求められる。",
+        "課題は多岐です。",
+    )
+
+    def test_targets_get_one_finding(self):
+        for text, words in self.TARGETS:
+            with self.subTest(text=text):
+                found = ai(text)
+                self.assertEqual(len(found), 1)
+                self.assertEqual(found[0]["severity"], "info")
+                self.assertEqual(found[0]["message"], yomiyasu_lint._AI_PHRASE_MESSAGE.format(words))
+
+    def test_keeps_have_no_findings(self):
+        for text in self.KEEPS:
+            with self.subTest(text=text):
+                self.assertEqual(ai(text), [])
+                self.assertEqual(ai(text, doc_type="article"), [])
+
+    def test_document_types(self):
+        text = "取り組むべき課題は多岐にわたります。まず、手順をそろえることが求められています。\n"
+        for doc_type in (None, "article", "pr", "manual", "slides", "minutes", "promo", "formal", "mail", "paper"):
+            with self.subTest(doc_type=doc_type):
+                self.assertEqual(len(ai(text, doc_type=doc_type)), 1)
+        for doc_type in ("essay", "script"):
+            with self.subTest(doc_type=doc_type):
+                self.assertEqual(ai(text, doc_type=doc_type), [])
+                self.assertNotIn("ai_phrase", yomiyasu_lint.lint_text(text, doc_type=doc_type)["context"]["skipped_by_doc_type"])
+
+    def test_existing_forms_keep_their_order(self):
+        names = [name for name, _ in yomiyasu_lint._AI_PHRASE_FORMS]
+        self.assertEqual(names, ["見立てです", "潜む", "が招く", "欠かせない存在", "という挙動を排除", "なんよ", "て形の体言止め",
+                                 "多岐にわたる", "が求められている"])
+        found = ai("この設計は、運用時にリスクが潜む構造で、確かめる項目は多岐にわたります。")
+        self.assertEqual(found[0]["message"], yomiyasu_lint._AI_PHRASE_MESSAGE.format("潜む、多岐にわたる"))
+
+    def test_allow_words_remove_the_finding(self):
+        text = "取り組むべき課題は多岐にわたります。まず、手順をそろえることが求められています。\n"
+        with tempfile.TemporaryDirectory() as folder:
+            words_dir = Path(folder) / ".yomiyasu-words"
+            words_dir.mkdir()
+            (words_dir / "allow.txt").write_bytes("多岐にわたる\n".encode("utf-8"))
+            result = yomiyasu_lint.lint_text(text, words=resolve_words(folder, str(words_dir)))
+            found = [f for f in result["findings"] if f["rule"] == "ai_phrase"]
+            self.assertEqual([f["message"] for f in found], [yomiyasu_lint._AI_PHRASE_MESSAGE.format("が求められている")])
+            (words_dir / "allow.txt").write_bytes("多岐にわたる\nが求められている\n".encode("utf-8"))
+            result = yomiyasu_lint.lint_text(text, words=resolve_words(folder, str(words_dir)))
+            self.assertEqual([f for f in result["findings"] if f["rule"] == "ai_phrase"], [])
+            self.assertEqual(result["context"]["words"]["allow_removed"]["ai_phrase"], 1)
+
+    def test_not_in_score_strict_or_fail_on(self):
+        text = "取り組むべき課題は多岐にわたります。\n"
+        result = yomiyasu_lint.lint_text(text)
+        self.assertEqual([f["rule"] for f in result["findings"]], ["ai_phrase"])
+        self.assertEqual(result["rule_penalty_score"], 100)
+        with tempfile.TemporaryDirectory() as folder, working_folder(folder):
+            path = Path(folder) / "a.md"
+            path.write_bytes(text.encode("utf-8"))
+            for args in (["--strict"], ["--fail-on", "warn"], ["--fail-on", "error"]):
+                with self.subTest(args=args):
+                    out, err = io.StringIO(), io.StringIO()
+                    with redirect_stdout(out), redirect_stderr(err):
+                        try:
+                            code = yomiyasu_lint.main(args + ["--no-words", str(path)])
+                        except SystemExit as stop:
+                            code = stop.code
+                    self.assertEqual(code, 0, out.getvalue() + err.getvalue())
+                    self.assertIn("ai_phrase", out.getvalue())
 
 
 if __name__ == "__main__":

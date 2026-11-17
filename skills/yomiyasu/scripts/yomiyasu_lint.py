@@ -4980,11 +4980,17 @@ def _v230_renyo_findings(analysis: dict) -> list[dict]:
 # - なんよ: 地の文の文末の「なんよ」「なんよね」。台詞の script と読み物の essay では外す
 # - て形の体言止め: 段落の文で「〜して、〜を＋漢語の名詞。」で終わる形（見直して、速度を改善。）。見出し、箇条書き、表は見ない。
 #   slides、minutes、promo、script では外す。「について、」「に応じて、」「にて、」「のせいで、」のような、動詞でない「て」「で」は数えない
+# - 多岐にわたる（3.2.0）: 「多岐にわたる」「多岐に渡り」「多岐にわたって」。何が多いのかを確かめる候補
+# - が求められている（3.2.0）: 「が求められている」「が求められています」「が求められており」など。誰が何を求めているのかを
+#   確かめる候補。「を求められている」「が求められる」は当てない
+#   この2つは段落の文だけに当て（見出し、箇条書き、表は見ない）、script と essay では外す
 # 見るのは新しい語の規則と同じ見える文字（カギ括弧と引用符の中、英数字の識別子を伏せた字）。引用（> の行）、コード、frontmatter、
 # HTML は見ない。1行に1件で、当たった言い方を _words に並べる。
 _V250_RULES = ("ai_phrase",)
 _AI_PHRASE_MESSAGE = "AIの文章によく出る言い回し（当たった言い方: {}）" + _V220_MESSAGE_TAIL
-_AI_PHRASE_HEAD = _lazy_compile(r"見立て|潜|招く|欠かせない存在|挙動を|なんよ|を[一-龥々]{2,}[。．]")
+_AI_PHRASE_HEAD = _lazy_compile(r"見立て|潜|招く|欠かせない存在|挙動を|なんよ|を[一-龥々]{2,}[。．]|多岐に|求められて")
+# 3.2.0 で足した形。段落の文だけに当て、script と essay では外す
+_AI_PHRASE_PARAGRAPH_ONLY = ("多岐にわたる", "が求められている")
 # 判断した人と招く人や組織の語。語のあとに「たち」「ら」「ども」「陣」「側」が付いてもよい
 _AI_PERSON_WORDS = (r"人|者|員|士|医|さん|様|さま|氏|先生|医師|専門家|アナリスト|エコノミスト|記者|筆者|編集部|当社|弊社|同社|会社"
                     r"|政府|当局|警察|検察|日銀|銀行|気象台|省|庁|局|都|府|県|市|区|町|村|国|自治体|委員会|協会|機関|大学|研究所"
@@ -5006,6 +5012,9 @@ _AI_PHRASE_FORMS = (
     ("という挙動を排除", _lazy_compile(r"という挙動を(?:排除|防止|阻止)")),
     ("なんよ", _lazy_compile(r"なんよね?[。．！!？?]*$")),
     ("て形の体言止め", _lazy_compile(r"(?:[ぁ-ん]て|[んい]で|[一-龥々]て)[、，,][^。、，,]{1,20}?を[一-龥々]{2,}[。．]$")),
+    # 3.2.0
+    ("多岐にわたる", _lazy_compile(r"多岐に(?:わた|渡)(?:る|り|っ)")),
+    ("が求められている", _lazy_compile(r"が求められて(?:いる|います|いた|いました|おり)")),
 )
 
 
@@ -5044,6 +5053,8 @@ def _v250_ai_phrase_findings(analysis: dict, doc_type: str | None) -> list[dict]
                 if name == "て形の体言止め" and (doc_type in ("slides", "minutes", "promo", "script")
                                               or row["kind"] != "paragraph"
                                               or sentence[:match.start() + 2].endswith(_TE_NOT_VERB)):
+                    continue
+                if name in _AI_PHRASE_PARAGRAPH_ONLY and (doc_type in ("script", "essay") or row["kind"] != "paragraph"):
                     continue
                 words.append(name)
         if words:
