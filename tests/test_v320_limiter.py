@@ -358,5 +358,30 @@ class LimiterRoundThreeTest(unittest.TestCase):
                 self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
 
 
+class LimiterRoundFiveTest(unittest.TestCase):
+    """4回目の直しを確かめ直して見つけた形（3.2.0）。後の文の「に限定しなくても」「限定しないと決めた」は範囲を絞る言い方に
+    数えず、後の文の「必要なだけ」は範囲を絞る言い方に数える。"""
+
+    COUNTED = (
+        ("このクーポンは会員だけが使えます。", "このクーポンは会員に限定しなくても使えます。"),
+        ("参加は会員だけです。", "参加者を会員に限定しないと決めました。"),
+        ("参加は会員だけです。", "参加者を限定しないと決めました。"),
+    )
+    NOT_COUNTED = (
+        ("印刷は必要な分だけで結構です。", "印刷は必要なだけで結構です。"),
+        ("必要な分だけご用意ください。", "必要なだけご用意ください。"),
+    )
+
+    def test_counted(self):
+        for before, after in self.COUNTED:
+            with self.subTest(after=after):
+                self.assertEqual(len(limiters(run(before, after))), 1)
+
+    def test_not_counted(self):
+        for before, after in self.NOT_COUNTED:
+            with self.subTest(after=after):
+                self.assertEqual(limiters(run(before, after)), [])
+
+
 if __name__ == "__main__":
     unittest.main()

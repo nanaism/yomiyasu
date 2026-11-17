@@ -1192,5 +1192,56 @@ class RoundFourFixesTest(unittest.TestCase):
                 self.assertEqual(result["fail_on_meaning_risk_count"], 0)
 
 
+class RoundFiveFixesTest(unittest.TestCase):
+    """4回目の直しを確かめ直して見つけた形（3.2.0）。3.2.0 で依頼を表す語にした言い方の依頼と、依頼を続けている文（お願い、
+    お待ち、〜いただきますよう、〜のほど・の程）のあいだの言い直しは、どちらの向きでも候補にしない（3.1.0 と同じ）。問いの依頼の
+    言い直しは、禁止の語の有り無しが両方の文でそろうときだけ外し、「控えたうえで」「ご遠慮なさって」「お控えの上」も禁止に読む。
+    境目の語は、あとの平仮名の続きに打ち消しがある文だけを比べず、漢字の語のあとの述語の打ち消しのある文は比べる。"""
+
+    # (元, 後, --fail-on の数, 出る候補の kind と subkind（並びは問わない）)
+    CASES = (
+        ("資料をご確認いただけますと幸いです。", "資料のご確認よろしくお願いいたします。", 0, []),
+        ("ご参加いただけますと幸いです。", "皆様のご参加を心よりお待ちしております。", 0, []),
+        ("ご連絡いただけますと幸いです。", "ご連絡お待ちしております。", 0, []),
+        ("資料をご確認いただけますと幸いです。", "資料をご確認いただきますよう、よろしくお願いいたします。", 0, []),
+        ("ご検討いただけますと幸いです。", "ご検討賜りますよう、よろしくお願い申し上げます。", 0, []),
+        ("ご確認いただけますと幸いです。", "ご確認の程よろしくお願いいたします。", 0, []),
+        # 逆向き（依頼を続けている文を、新しく依頼を表す語にした言い方の依頼にした組）も出さない
+        ("ご確認のほど、よろしくお願いいたします。", "ご確認いただけますと幸いです。", 0, []),
+        ("ご返信をお待ちしております。", "ご返信いただけますと幸いです。", 0, []),
+        # 依頼でない文を新しい言い方の依頼にした組は、依頼を表す語が足された候補として出す
+        ("資料を添付します。", "資料をご確認いただけますと幸いです。", 1, [("sentence_type", "marks")]),
+        # 問いの依頼を禁止の依頼に変えた組と、禁止の問いの依頼をふつうの依頼に変えた組は、言い直しとして外さない
+        ("車でお越しいただけますか。", "車でのお越しは控えたうえで、電車をご利用ください。", 2,
+         [("sentence_type", "question"), ("sentence_type", "marks")]),
+        ("車でお越しいただけますか。", "車でのお越しはご遠慮なさって、電車をご利用ください。", 2,
+         [("sentence_type", "question"), ("sentence_type", "marks")]),
+        ("当日はお車でお越しいただけますか。", "当日はお車でのご来場はお控えの上、公共交通機関をご利用ください。", 2,
+         [("sentence_type", "question"), ("sentence_type", "marks")]),
+        ("資料を送らないでいただけますか。", "資料を送ってください。", 2, [("sentence_type", "question"), ("sentence_type", "marks")]),
+        # 両方の文が同じ「控え」の依頼の組は言い直し（書き留める意味の「控えて」どうし）
+        ("受付番号をお控えいただけますか。", "受付番号を控えてください。", 0, []),
+    )
+
+    def test_cases(self):
+        for before, after, count, expected in self.CASES:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(sorted(kinds(result), key=str), sorted(expected, key=str))
+                self.assertEqual(result["fail_on_meaning_risk_count"], count)
+
+    # 境目の語のあとが漢字の語の述語の打ち消しなら比べる: (元, 後, subkind)
+    BOUNDARY_COMPARED = (
+        ("10件を超えると表示されません。", "10件以上になると表示されません。", "strict_to_inclusive"),
+        ("100MBを超えるとアップロードできません。", "100MB以上ではアップロードできません。", "strict_to_inclusive"),
+        ("20歳未満では購入できません。", "20歳以下では購入できません。", "strict_to_inclusive"),
+    )
+
+    def test_boundary_with_predicate_negation(self):
+        for before, after, subkind in self.BOUNDARY_COMPARED:
+            with self.subTest(before=before):
+                self.assertEqual([risk["subkind"] for risk in of_kind(run(before, after), "boundary")], [subkind])
+
+
 if __name__ == "__main__":
     unittest.main()
