@@ -322,5 +322,36 @@ class LimiterRoundTwoTest(unittest.TestCase):
                 self.assertEqual(result["fail_on_meaning_risk_count"], 0)
 
 
+class LimiterRoundThreeTest(unittest.TestCase):
+    """2回目の直しを確かめ直して見つけた形（3.2.0）。「限られているわけではない」「限っていない」と、程度の「必要なだけで足りる」を
+    数えない。決まりの「限定しないとなりません」「限定しないと駄目」は数え、条件の「限定しなければ、」は範囲を絞る言い方に
+    数えない。後の文の「限定しているわけではありません」も範囲を絞る言い方に数えない。"""
+
+    NOT_COUNTED = (
+        ("対象は会員に限られているわけではありません。", "会員以外も対象です。"),
+        ("当社は対象を会員に限定しているわけではありません。", "当社は会員以外も対象にしています。"),
+        ("対象は会員に限っていません。", "会員以外も対象です。"),
+        ("容量は必要なだけで足ります。", "容量は必要な分で足ります。"),
+    )
+    COUNTED = (
+        ("公開範囲を社内に限定しないと駄目です。", "公開範囲を社内にしないと駄目です。"),
+        ("公開範囲を社内に限定しないとなりません。", "公開範囲を社内にしないとなりません。"),
+        ("このクーポンは会員だけが使えます。", "このクーポンは、対象を限定しなければ誰でも使えます。"),
+        ("この講座は会員だけが受講できます。", "この講座は受講者を限定しているわけではありません。"),
+    )
+
+    def test_not_counted(self):
+        for before, after in self.NOT_COUNTED:
+            with self.subTest(before=before):
+                self.assertEqual(limiters(run(before, after)), [])
+
+    def test_counted(self):
+        for before, after in self.COUNTED:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(len(limiters(result)), 1)
+                self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
+
+
 if __name__ == "__main__":
     unittest.main()
