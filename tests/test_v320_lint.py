@@ -9,6 +9,7 @@
 - 4章: pause_comma で、文頭の場面の枠（「この記事では、」）のあとで文が長い行は、指摘を続けたうえで、残してよい場合を
   message の最後に1文足す。
 - 6章: ai_phrase に「多岐にわたる」「が求められている」を足す（info。点数、--strict、--fail-on に入らない。allow.txt で外せる）。
+- 7章: slop_vocabulary で、文字どおりの「装置」（装置の中で動く、装置に組み込む、装置を制御する）を拾わない。
 文はすべてこのファイルで作った類例。指示書の再現の欄で投稿や記事から引いた文は入れない。
 """
 from pathlib import Path
@@ -315,6 +316,40 @@ class AiPhraseTest(unittest.TestCase):
                             code = stop.code
                     self.assertEqual(code, 0, out.getvalue() + err.getvalue())
                     self.assertIn("ai_phrase", out.getvalue())
+
+
+def slop_words(text):
+    found = yomiyasu_lint.lint_text(text if text.endswith("\n") else text + "\n")["findings"]
+    return [f["message"].split("「", 1)[1].split("」", 1)[0] for f in found if f["rule"] == "slop_vocabulary"]
+
+
+class LiteralDeviceTest(unittest.TestCase):
+    """7章: すぐあとが「の中で動」「内で動」「に組み込」「を制御」「の制御」の「装置」は、文字どおりの機器なので拾わない。
+    比喩の「装置」と定着した複合語の扱い（tests/test_v211_lint.py）は変えない。"""
+
+    LITERAL = (
+        "装置の中で動くソフトウェアを開発しています。",
+        "装置内で動くプログラムを書き換えます。",
+        "新しいセンサーは、装置に組み込む前に確かめます。",
+        "画面から装置を制御する手順をまとめます。",
+        "装置の制御に使う基板を替えます。",
+    )
+    # すぐあとでない語や、ほかの語が続く比喩の「装置」は今までどおり拾う
+    METAPHOR = (
+        "SNSは承認欲求の増幅装置だ。",
+        "この町は、記憶を呼び起こす装置として機能している。",
+        "物語は、記憶を呼び起こす装置の中で特別な位置を占める。",
+    )
+
+    def test_literal_devices_do_not_fire(self):
+        for text in self.LITERAL:
+            with self.subTest(text=text):
+                self.assertEqual([word for word in slop_words(text) if word == "装置"], [])
+
+    def test_metaphors_still_fire(self):
+        for text in self.METAPHOR:
+            with self.subTest(text=text):
+                self.assertEqual(slop_words(text), ["装置"])
 
 
 if __name__ == "__main__":
