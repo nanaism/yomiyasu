@@ -3000,6 +3000,11 @@ _PAUSE_GA_CONJ_END = _lazy_compile(
     r"う|く|ぐ|す|つ|ぬ|ぶ|む|よう|たい|らしい|ん|ある|いる|した|する|れる|せる|ている|ていた|ておく|けれど)$")
 _PAUSE_GA_NOUN_HIRA = _lazy_compile(r"(?:さん|さま|様|くん|ちゃん|こと|もの|とき|ところ|ほう|ため|の|さ|たち|ら|など|だけ|まで|ばかり|"
                           r"くらい|ぐらい|ほど|こそ|もと|うち|あと|まえ|わけ|はず|よう|みんな|それ|これ|あれ|どれ|ここ|そこ|どこ|誰|僕|私)$")
+# 3.2.0: 動詞の中の「が」（つながる、つながり、ながら、したがって）。読点のあとの句で、直前が平仮名で（_PAUSE_GA_NOUN_HIRA の
+# 語の終わりを除く）、すぐあとが「ら」「り」「る」「れ」「ろ」「っ」の「が」は、別の主語の「が」に数えない。
+# 直前が漢字の「が」（広がる、上がる）は見分けない
+_PAUSE_GA_KANA_BEFORE = _lazy_compile(r"[ぁ-ん]$")
+_PAUSE_GA_VERB_AFTER = _lazy_compile(r"[らりるれろっ]")
 _PAUSE_NOUNISH_END = _lazy_compile(r"[" + _PAUSE_KANJI + r"ァ-ヴーｦ-ﾟA-Za-z0-9０-９Ａ-Ｚａ-ｚ」』）)\]>%％]$")
 
 _PAUSE_VERB_ATTR = (r"(?:[るたうくすつぬむぶぐ]|ない|ている|ていた|された|される|できる|した|する|った|んだ|いた|えた|れた|せた|"
@@ -3106,6 +3111,9 @@ def _pause_comma_next_subject(after: str) -> bool:
                 continue
             if _PAUSE_FIXED_SUBJ.search(before) and re.match(r"(?:あ|な|でき|大き|高)", text[m.end():]):
                 continue
+            if (_PAUSE_GA_KANA_BEFORE.search(before) and not _PAUSE_GA_NOUN_HIRA.search(before)
+                    and _PAUSE_GA_VERB_AFTER.match(text, m.end())):
+                continue    # 3.2.0: 動詞の中の「が」（つながります、切り替わりながら）
         # 「〜ことが」「〜するのが」は名詞化した主語なので、助詞の「と」「の」と分ける。
         nominal = _PAUSE_NOMINAL_END.search(before)
         if m.group(1) == "は" and not nominal:
