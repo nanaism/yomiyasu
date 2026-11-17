@@ -5539,6 +5539,24 @@ def _request_restated_mark(mark: dict) -> bool:
             and _request_restated(mark["old"] or "", mark["new"] or ""))
 
 
+# 依頼の語「お願い」が後の文に残っている組（3.2.0）。3.2.0 で依頼の印にした「お願いしたい」が元の文にあり、後の文が印の形でない
+# 「お願い」（お願いし、お願いです、お願いがあります）で依頼を続けた組（まずお願いしたいのは内容の確認です → まず内容の確認を
+# お願いし、…）は、依頼・決まりの印が消えたことにしない。「お願いした」「お願いしました」（済んだことの報告）は残ったと数えない。
+_REQUEST_ONEGAI_ADDED = _lazy_compile(r"お願いしたい")
+_REQUEST_ONEGAI_KEPT = _lazy_compile(r"(?<!よろしく)(?<!宜しく)お願い(?!し(?:まし)?た(?!い))")
+
+
+def _request_onegai_kept_mark(mark: dict) -> bool:
+    """文の種類を表す語の候補（sentence_type/marks）が、元の文の「お願いしたい」が消えただけで、後の文に「お願い」が残っている
+    ものか（3.2.0）。"""
+    detail = mark["detail"]
+    if detail["added"] or [item["kind"] for item in detail["lost"]] != ["依頼・決まり"]:
+        return False
+    hits = [hit for item in detail["lost"] for hit in item["hits"]]
+    return (bool(hits) and all(_REQUEST_ONEGAI_ADDED.search(hit) for hit in hits)
+            and _REQUEST_ONEGAI_KEPT.search(mark["new"] or "") is not None)
+
+
 def _question_risks(sides: _Sides, groups: list) -> list:
     """問い（kind sentence_type、subkind question）。組になった文の片方だけが問いの文（文末が ？、?、か。、か？）なら出す。
     句点のない「…か」で終わる文は問いに数えない。問いの形の依頼をそのまま依頼の文に言い直した組（3.2.0。_request_restated）は
@@ -6467,9 +6485,10 @@ def _meaning_risks(sides: _Sides, full: dict, type_changes: Sequence | None, gro
     all_marks = _marks_risks(sides, type_changes)
     quiet, delegated = [], []
     for mark in all_marks:
-        # 問いの形の依頼をそのまま依頼の文に言い直して、依頼・決まりの印が増えただけの候補は出さない（3.2.0）。出力から外した
-        # ほかの候補と同じく、状態・約束の候補を重ねないかを決めるのには使う
-        if _request_restated_mark(mark):
+        # 問いの形の依頼をそのまま依頼の文に言い直して、依頼・決まりの印が増えただけの候補と、「お願いしたい」を印の形でない
+        # 「お願い」で言い直した候補は出さない（3.2.0）。出力から外したほかの候補と同じく、状態・約束の候補を重ねないかを
+        # 決めるのには使う
+        if _request_restated_mark(mark) or _request_onegai_kept_mark(mark):
             quiet.append(mark)
             continue
         classification = _classify_hedge_marks(mark["old"], mark["new"], mark["detail"]["lost"], mark["detail"]["added"])

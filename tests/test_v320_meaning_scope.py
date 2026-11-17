@@ -177,6 +177,25 @@ class RequestRestatedTest(unittest.TestCase):
         self.assertIn(("sentence_type", "marks"), kinds(result))
         self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
 
+    def test_onegai_kept_in_another_form(self):
+        """「お願いしたい」を印の形でない「お願い」（お願いし、お願いです）で言い直した組は、依頼・決まりの印が消えたことにしない。
+        「お願い」が残らない組と、済んだことの報告（お願いしました）にした組は今までどおり出す。3.1.0 からの「お願いします」の
+        消えは変えない。"""
+        for before, after in (("まずお願いしたいのは資料の作成ではなく、内容の確認です。",
+                               "まず内容の確認をお願いし、資料の作成については後日で構いません。"),
+                              ("先方にお願いしたい点を整理します。", "先方へのお願いを整理します。")):
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertNotIn(("sentence_type", "marks"), kinds(result))
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+        for before, after in (("お願いしたいことは3点あります。", "次の3点です。"),
+                              ("お願いしたいことは3点あります。", "次の3点をお願いしました。"),
+                              ("確認をお願いします。", "確認をお願いし、結果を共有しました。")):
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertIn(("sentence_type", "marks"), kinds(result))
+                self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
+
     def test_rule_candidates_still_show_the_change(self):
         """意味が変わる恐れには出さないが、規則の見直し候補の「文の種類を表す語が変わった文」には今までどおり出る。"""
         result = run("資料をお送りいただけますでしょうか。", "資料を送ってください。")
