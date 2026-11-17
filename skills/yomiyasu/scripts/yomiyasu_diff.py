@@ -3685,7 +3685,7 @@ _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "prote
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
                "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17,
                "number_qualifier": 18, "limiter": 19, "obligation": 21, "quantifier": 22,
-               "deadline": 23}
+               "deadline": 23, "condition": 24}
 # 状態の語が消えた書き換え（state）と、約束を足した書き換え（promise）も数える。因果を足した書き換え（claim）と、書き手を
 # 表す語のない「〜します」を足した書き換え（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の書き方の変化、確度の強まり）。
@@ -6182,6 +6182,19 @@ _DEADLINE = _lazy_compile(r"までに(?!な)(?<!参考までに)(?<!これまで
                           r"|より前に|期限|必着")
 _DEADLINE_KEPT = _lazy_compile(r"まで|以内|期限|期日|締め?切|〆切|より前|以前|必着")
 
+# 条件の句（kind condition。3.2.0 で仕様を変えた。3.1.0 までは条件の句が消えた書き換えを意味が変わる恐れにしないと決めていた）。
+# 「〜場合は」「〜ときは」「〜際は」「〜なら、」「〜たら、」「〜れば、」「〜した方は」「〜の日は」「〜ある限り」の句の中の語
+# （漢字の並び、2字以上の片仮名、英字の語、数字。場合・時・際・方・日・上記・以下・次・今回・前回・これ・それ は除く）が、
+# 推敲後の文書のどこにもないときに出す。3字以上の漢字の語は、2字ずつに切ったどれかが残っていれば残ったとみなす（上限回数 →
+# 回数が上限に）。語のない句（その場合は）は見ない。後の文の条件の句の数が元の文より少ないときだけ見る（鍵が開かないときは →
+# 解錠できないときは のように、句を言い換えて条件を残した書き換えは出さない）。1つの組で1件だけ。「雨天」と「雨」のような
+# 言い換えは同じ語とみなさない（限界。雨天の場合 → 雨が降ったら には出る）。
+_CONDITION_CLAUSE = _lazy_compile(r"([^、。！？!?\n]{1,25}?)(?:場合(?:に)?は|場合、|場合に限|ときは|時は|際は|際には|ならば?、"
+                                  r"|たら、|れば、|(?<=[たる])方は|(?<=の)日は|(?<=[るいた])限り、?)")
+_CONDITION_WORD = _lazy_compile(r"[一-龥々〆ヵヶ]+|[ァ-ヴー]{2,}|[A-Za-zＡ-Ｚａ-ｚ][A-Za-zＡ-Ｚａ-ｚ0-9０-９_]*|[0-9０-９]+")
+_CONDITION_SKIP = frozenset(("場合", "時", "際", "方", "日", "上記", "以下", "次", "今回", "前回", "これ", "それ"))
+_LONG_KANJI_WORD = _lazy_compile(r"[一-龥々〆ヵヶ]{3,}")
+
 
 def _obligation_hits(text: str) -> dict[str, re.Match[str]]:
     """義務の強さの集まりごとの、text でいちばん前に当たった語。任意の言い方（してもしなくてもよい）の中の不要の言い方は数えない。"""
@@ -6293,6 +6306,28 @@ def _deadline_risk(old: _Sentence, new: _Sentence, counts: _ScopeCounts, new_doc
     return _risk("deadline", None, old.line, new.line, old.text, new.text, {"words": words})
 
 
+def _word_remains(word: str, doc: str) -> bool:
+    """条件の句の語 word が推敲後の文書 doc に残っているか。3字以上の漢字の語は、2字ずつに切ったどれかが残っていればよい。"""
+    if word in doc:
+        return True
+    return (_LONG_KANJI_WORD.fullmatch(word) is not None
+            and any(word[index:index + 2] in doc for index in range(len(word) - 1)))
+
+
+def _condition_risk(old: _Sentence, new: _Sentence, new_doc: str) -> dict | None:
+    """条件の句が消えた書き換え（kind condition。3.2.0。数えない）。detail の clause は消えた句（「〜場合は」まで）。
+    後の文の条件の句の数が元の文より少ないときだけ見る（鍵が開かないときは → 解錠できないときは のように、句を言い換えて
+    条件を残した書き換えは出さない）。"""
+    clauses = list(_CONDITION_CLAUSE.finditer(old.text))
+    if not clauses or len(_CONDITION_CLAUSE.findall(new.text)) >= len(clauses):
+        return None
+    for match in clauses:
+        words = [word for word in _CONDITION_WORD.findall(match.group(1)) if word not in _CONDITION_SKIP]
+        if words and not any(_word_remains(word, new_doc) for word in words):
+            return _risk("condition", None, old.line, new.line, old.text, new.text, {"clause": match.group(0)})
+    return None
+
+
 def _scope_risks(sides: _Sides, groups: list, choices: bool) -> list:
     """3.2.0 で足した意味が変わる恐れ（上の kind ごとの関数）を作り、行の順に、同じ行では kind の並び（_RISK_ORDER）の順に
     並べる。組の文は、中身が同じ組を見ない。choices が偽のとき（meaning_risks() に type_changes を渡さないとき）は、既存の
@@ -6305,7 +6340,8 @@ def _scope_risks(sides: _Sides, groups: list, choices: bool) -> list:
             if old.text == new.text:
                 continue
             found = (_choice_joined_risk(old, new) if choices else None, _obligation_risk(old, new),
-                     _quantifier_risk(old, new, counts), _deadline_risk(old, new, counts, sides.texts[1]))
+                     _quantifier_risk(old, new, counts), _deadline_risk(old, new, counts, sides.texts[1]),
+                     _condition_risk(old, new, sides.texts[1]))
             out.extend(risk for risk in found if risk is not None)
     out.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                             r["new_line"] if r["new_line"] is not None else 0, _RISK_ORDER[r["kind"]]))
@@ -11030,6 +11066,9 @@ def _risk_line(risk: dict) -> str:
     if kind == "deadline":
         return ("期限の語が消えた{}: {}。--fail-on には数えません。原文の期限（その日までに、その日数以内に）が、その日ちょうどの"
                 "意味に変わっていないか確かめてください。".format(where, "、".join("「{}」".format(w) for w in detail["words"])))
+    if kind == "condition":
+        return ("条件の句が消えた{}: 「{}」。--fail-on には数えません。原文は、この条件のときだけの話として書いています。"
+                "条件を外して、いつでも当てはまる文にしていないか確かめてください。".format(where, detail["clause"]))
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(

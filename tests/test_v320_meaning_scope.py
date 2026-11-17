@@ -475,6 +475,57 @@ class DeadlineTest(unittest.TestCase):
         self.assertEqual(diff_exit_code("経費精算は月末までに提出してください。", "経費精算は月末に提出してください。"), 0)
 
 
+class ConditionTest(unittest.TestCase):
+    """18章: 条件の句が消えた書き換え（kind condition。--fail-on に数えない見直しの候補）。3.1.0 までは意味が変わる恐れに
+    しないと決めていた（test_v200_meaning_risks の test_removed_condition）が、3.2.0 で仕様を変えた。"""
+
+    # (元, 後, 消えた句)
+    FOUND = (
+        ("管理者権限がある場合は、設定を変更できます。", "設定を変更できます。", "管理者権限がある場合は"),
+        ("会員登録をした方は、送料が無料になります。", "送料が無料になります。", "会員登録をした方は"),
+        ("体調が優れないときは、無理せず休んでください。", "無理せず休んでください。", "体調が優れないときは"),
+        ("海外から接続する際には、VPNを経由してください。", "VPNを経由してください。", "海外から接続する際には"),
+        ("在庫がある限り、即日発送します。", "即日発送します。", "在庫がある限り、"),
+        ("雨なら、中止する。", "中止する。", "雨なら、"),
+    )
+    NOT_FOUND = (
+        ("雨の場合は中止します。", "雨が降ったら中止します。"),
+        ("障害が起きた場合は、担当者に連絡します。", "担当者に連絡するのは、障害が起きたときです。"),
+        ("ログを確認する際は、管理画面を開きます。", "ログを確認するときは、管理画面を開きます。"),
+        ("上限回数を超えた場合は退避します。", "回数が上限に達したら退避します。"),
+        # 類例: 句を言い換えて条件を残した組、語のない句、読点のない「なら」
+        ("会議室の鍵が開かないときは、受付に連絡してください。", "解錠できないときは、受付にご連絡ください。"),
+        ("その場合は、担当者に連絡します。", "担当者に連絡します。"),
+        ("雨なら中止する。", "中止する。"),
+    )
+
+    def test_found(self):
+        for before, after, clause in self.FOUND:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual([(risk["subkind"], risk["detail"]) for risk in of_kind(result, "condition")],
+                                 [(None, {"clause": clause})])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before, after=after):
+                self.assertEqual(of_kind(run(before, after), "condition"), [])
+
+    def test_known_limit(self):
+        """限界: 「雨天」と「雨」を同じ語とみなさないので、「雨天の場合、→ 雨が降ったら」には出る。"""
+        self.assertEqual([risk["detail"] for risk in of_kind(run("雨天の場合、中止します。", "雨が降ったら中止します。"), "condition")],
+                         [{"clause": "雨天の場合、"}])
+
+    def test_message_and_not_counted(self):
+        report = yomiyasu_diff.report(run("管理者権限がある場合は、設定を変更できます。", "設定を変更できます。"))
+        self.assertIn("- 条件の句が消えた（1行目）: 「管理者権限がある場合は」。--fail-on には数えません。原文は、この条件のときだけの話"
+                      "として書いています。条件を外して、いつでも当てはまる文にしていないか確かめてください。", report)
+        self.assertNotIn("condition", yomiyasu_diff.FAIL_ON_KINDS)
+        self.assertEqual(yomiyasu_diff._RISK_ORDER["condition"], 24)
+        self.assertEqual(diff_exit_code("管理者権限がある場合は、設定を変更できます。", "設定を変更できます。"), 0)
+
+
 class CorpusFalsePositiveTest(unittest.TestCase):
     """21章: 推敲の実例（tests/corpus の48組）で見つけた誤った指摘を3つ直す。「事例がある」を「ことがある」と同じ強さに数える、
     「お願いしたい」を依頼の印にする（11章と同じ直し）、後の文の「ところまで」などを範囲を絞る言い方に数える（limiter）。"""

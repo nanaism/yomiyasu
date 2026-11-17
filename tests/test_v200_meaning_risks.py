@@ -40,9 +40,9 @@ SUBKINDS = {
 # どちらも意味が変わる恐れの節に出すが、--fail-on=meaning-risk には数えない
 # v2.1.0: 許可・能力の言い方の変化（modality は数える。事実や仕様を述べる種類でない文書の能力の消えは modality_review で数えない）を足した
 # 3.2.0: 範囲を絞る語（だけ、のみ、しか〜ない、に限る）が消えた書き換え（limiter。数える）を足した
-# 3.2.0: 見直しの候補の3つ（obligation、quantifier、deadline。数えない）を足した
+# 3.2.0: 見直しの候補の4つ（obligation、quantifier、deadline、condition。数えない）を足した
 KINDS = {"number", "negation", "swap", "sentence_type", "protected", "contrast_reversal", "feeling", "certainty", "certainty_review", "quote", "state", "promise", "claim",
-         "modality", "modality_review", "limiter", "obligation", "quantifier", "deadline"}
+         "modality", "modality_review", "limiter", "obligation", "quantifier", "deadline", "condition"}
 
 # 2.8 の meaning_risks の要素の例（入力は 2.7 の例A）
 EXAMPLE_A_RISK = {"kind": "number", "subkind": "replaced", "old_line": 1, "new_line": 1,
@@ -644,11 +644,13 @@ class TestFixedLimits(RiskCase):
         self.assertIn("すずきさんが確認した。", self.changed_lines(result))
 
     def test_removed_condition(self):
-        """設計の表から入力を変えた: 「雨なら中止する」は条件の印（なら の直後が読点・句点・行末）に当たらない。
-        書いたとおりの入力では meaning_risks が空であることだけを見て、markers の条件は読点つきの形で確かめる（questions-diff.md 3）。"""
+        """3.2.0 で仕様を変えた: 条件の句（なら の直後が読点）が消えた書き換えは、condition の見直しの候補になる（--fail-on には数えない）。
+        読点のない「雨なら中止する」は条件の句に当たらず、今までどおり候補にしない。markers の条件は読点つきの形で確かめる
+        （questions-diff.md 3）。"""
         self.assertEqual(self.risks("雨なら中止する。", "中止する。"), [])
         result = self.result("雨なら、中止する。", "中止する。")
-        self.assertEqual(result["meaning_risks"], [])
+        self.assertEqual([risk["kind"] for risk in result["meaning_risks"]], ["condition"])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 0)
         self.assertIn("条件", [marker["kind"] for marker in result["markers"]])
 
     def test_removed_exception_is_only_in_the_full_diff(self):
