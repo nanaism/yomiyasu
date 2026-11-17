@@ -137,5 +137,48 @@ class RequestRestatedTest(unittest.TestCase):
                          [["依頼・決まり"]])
 
 
+class IntensifierWordsTest(unittest.TestCase):
+    """12章: 強める語の一覧に、程度や意気込みを強める語を7語足す（勢いの検査。意味が変わる恐れと --fail-on には入らない）。"""
+
+    WORDS = ("大幅", "抜本的", "全力", "飛躍的", "劇的", "心より", "格段")
+    # 勢いの候補を出す: (元, 後, 減った語)
+    FOUND = (
+        ("処理速度が劇的に向上しました。", "処理速度が向上しました。", ["劇的"]),
+        ("作業時間を大幅に減らしました。", "作業時間を減らしました。", ["大幅"]),
+        ("手順を抜本的に見直し、作業時間を大幅に減らしました。", "手順を見直し、作業時間を減らしました。", ["大幅", "抜本的"]),
+        ("新しい窓口の準備に全力で取り組みます。", "新しい窓口の準備に取り組みます。", ["全力"]),
+        ("登録の件数が飛躍的に伸びました。", "登録の件数が伸びました。", ["飛躍的"]),
+        ("ご参加いただいた皆さまに心よりお礼申し上げます。", "ご参加いただいた皆さまにお礼申し上げます。", ["心より"]),
+        ("検索の精度が格段に上がりました。", "検索の精度が上がりました。", ["格段"]),
+    )
+
+    def tone_words(self, result):
+        return [candidate["detail"]["words"] for candidate in result["tone"]["candidates"]
+                if candidate["subkind"] == "intensifier"]
+
+    def test_found(self):
+        for before, after, words in self.FOUND:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(self.tone_words(result), [words])
+                self.assertEqual(result["meaning_risks"], [])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+
+    def test_same_count_is_not_found(self):
+        """強める語を同じ数のまま別の語に替えた書き換えは出さない。"""
+        result = run("処理速度が劇的に向上しました。", "処理速度が飛躍的に向上しました。")
+        self.assertEqual(self.tone_words(result), [])
+
+    def test_words_are_in_the_files_and_the_builtin_list(self):
+        """2つの一覧のファイルの最後と内蔵の一覧の最後に、同じ7語が同じ順で入っている。"""
+        self.assertEqual(yomiyasu_diff.BUILTIN_LISTS["intensifiers"][-7:], self.WORDS)
+        for base in (ROOT / "references" / "lists", ROOT / "skills" / "yomiyasu" / "references" / "lists"):
+            with self.subTest(base=str(base.relative_to(ROOT))):
+                parsed = yomiyasu_diff.parse_list((base / "intensifiers.txt").read_text(encoding="utf-8"))
+                self.assertEqual(tuple(parsed[-7:]), self.WORDS)
+        self.assertEqual((ROOT / "references" / "lists" / "intensifiers.txt").read_bytes(),
+                         (ROOT / "skills" / "yomiyasu" / "references" / "lists" / "intensifiers.txt").read_bytes())
+
+
 if __name__ == "__main__":
     unittest.main()
