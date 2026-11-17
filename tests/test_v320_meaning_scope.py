@@ -306,6 +306,68 @@ class ObligationTest(unittest.TestCase):
         self.assertEqual(diff_exit_code("回答は必須ではありません。", "回答は不要です。"), 0)
 
 
+class ChoiceJoinedTest(unittest.TestCase):
+    """15章: 「AまたはB」「AかB」（どれか一つ）を「AとB」（全部）にした書き換え（既存の kind choice、subkind one_to_all。
+    --fail-on に数える）。後の文にどれか一つか全部を表す言い方があれば出さず、既存の choice と合わせて1件だけにする。"""
+
+    # (元, 後, 元の語, 後の語)
+    FOUND = (
+        ("お問い合わせは電話かメールで受け付けます。", "お問い合わせは電話とメールで受け付けます。", "か", "と"),
+        ("申請は紙の申請書もしくはWebフォームで行います。", "申請は紙の申請書とWebフォームで行います。", "もしくは", "と"),
+        ("AプランかBプランのいずれかを選べます。", "AプランとBプランを選べます。", "か", "と"),
+        ("お支払いはクレジットカード、または銀行振込です。", "お支払いはクレジットカードと銀行振込です。", "または", "と"),
+        # 類例: あるいは → および
+        ("連絡先には電話番号あるいはメールアドレスを書きます。", "連絡先には電話番号およびメールアドレスを書きます。", "あるいは",
+         "および"),
+    )
+    NOT_FOUND = (
+        ("申請はWebまたは郵送で受け付け、書類は漏れなくそろえてください。", "申請はWeb・郵送で受け付けます。書類はすべてそろえてください。"),
+        ("WebまたはCLIで設定できる。", "WebとCLIのいずれでも設定できる。"),
+        ("WebまたはCLIで設定できる。", "WebとCLIのどちらでも設定できる。"),
+        ("AまたはBを選んでください。", "AかBを選んでください。"),
+        ("電話かメールでご連絡ください。", "電話やメールなどでご連絡ください。"),
+        ("何かあれば連絡してください。", "何かあったら連絡してください。"),
+        # 類例: つないだ名詞の中から選ぶ言い方
+        ("AかBを選んでください。", "AとBから選んでください。"),
+    )
+
+    def test_found(self):
+        for before, after, source, target in self.FOUND:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual([(risk["subkind"], risk["detail"]) for risk in of_kind(result, "choice")],
+                                 [("one_to_all", {"from": "どれか一つ", "to": "全部", "old_hits": [source], "new_hits": [target]})])
+                self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before, after=after):
+                self.assertEqual(of_kind(run(before, after), "choice"), [])
+
+    def test_one_candidate_with_the_existing_rule(self):
+        """後の文に全部の言い方（両方、双方）がある組は、既存の choice の候補1件だけ。"""
+        for before, after, target in (("AまたはBを選ぶ。", "AとBの両方を選ぶ。", "両方"),
+                                      ("メールもしくは電話で連絡する。", "メールと電話の双方で連絡する。", "双方")):
+            with self.subTest(before=before):
+                found = of_kind(run(before, after), "choice")
+                self.assertEqual([risk["detail"]["new_hits"] for risk in found], [[target]])
+
+    def test_message_and_exit_code(self):
+        report = yomiyasu_diff.report(run("お問い合わせは電話かメールで受け付けます。", "お問い合わせは電話とメールで受け付けます。"))
+        self.assertIn("- 選ぶ範囲が「どれか一つ」から「全部」に変わった（1行目）: どれか一つ（か） → 全部（と）。", report)
+        self.assertEqual(diff_exit_code("お問い合わせは電話かメールで受け付けます。", "お問い合わせは電話とメールで受け付けます。"), 1)
+        self.assertEqual(diff_exit_code("AまたはBを選んでください。", "AかBを選んでください。"), 0)
+
+    def test_public_function_without_type_changes(self):
+        """meaning_risks() に type_changes を渡さないときは、既存の選ぶ範囲の候補と同じく、「と」でつないだ書き換えの候補も
+        足さない。渡したときは diff() と同じ。"""
+        before, after = "お問い合わせは電話かメールで受け付けます。\n", "お問い合わせは電話とメールで受け付けます。\n"
+        self.assertEqual(yomiyasu_diff.meaning_risks(before, after), [])
+        result = yomiyasu_diff.diff(before, after)
+        self.assertEqual(yomiyasu_diff.meaning_risks(before, after, type_changes=result["type_changes"]), result["meaning_risks"])
+        self.assertEqual(kinds(result), [("choice", "one_to_all")])
+
+
 class CorpusFalsePositiveTest(unittest.TestCase):
     """21章: 推敲の実例（tests/corpus の48組）で見つけた誤った指摘を3つ直す。「事例がある」を「ことがある」と同じ強さに数える、
     「お願いしたい」を依頼の印にする（11章と同じ直し）、後の文の「ところまで」などを範囲を絞る言い方に数える（limiter）。"""

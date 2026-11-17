@@ -6142,6 +6142,26 @@ _OBLIGATION_LABELS = {"optional_to_unneeded": "「必須ではない（任意）
                       "optional_to_duty": "「任意」「不要」が決まり（必須、しなければならない）に変わった",
                       "duty_to_request": "決まり（必須、しなければならない）が「お願い」に変わった"}
 
+# 選ぶ範囲の「と」（kind choice、subkind one_to_all。3.2.0）。「電話かメール」「申請書もしくはWebフォーム」（どれか一つ）を
+# 「電話とメール」（全部）にした書き換え。既存の choice は後の文に全部の言い方（両方、すべて など）があるときだけ出すので、
+# 全部の言い方なしに「と」でつないだ形を見落としていた。元の文の「名詞 + または・もしくは・あるいは・か + 名詞」（前後の読点は
+# あってもよい。名詞は漢字、片仮名、英数字の1〜15字）の、左の名詞の最後の2字 + と・および・及び + 右の名詞の最初の2字が
+# 後の文にあれば出す。「か」は既存の選ぶ「か」と同じく、何か・誰か・数回か・3か月・か否か と、問いの「か」（設定が有効か
+# 管理者に確認する）を除く。後の文に、どれか一つか全部を表す言い方（または、いずれ、どちら、どれ、両方、すべて、ともに、
+# 名詞か名詞、既存の選ぶ範囲の印）があれば出さない（全部の言い方がある組は既存の choice が出すので、2回出さない）。
+# 「AとBから選ぶ」「AとBのうち」のように、つないだ名詞の中から選ぶ言い方の後の文も出さない。
+# 1つの組で1件だけ。既存の choice と同じく --fail-on に数える。
+_ONE_OF = _lazy_compile(
+    r"(?P<left>" + _CHOICE_NOUN + r"{1,15})、?(?P<word>または|又は|もしくは|若しくは|あるいは|或いは"
+    r"|か(?<![何誰数幾]か)(?<![何数幾][一-龥]か)(?<![0-9０-９一二三四五六七八九十百千]か)"
+    r"(?!所|箇所|ヵ所|月|国|条|年|日|否|確|判|検|調|評|決|点|把|見極|吟味|試|迷|問|尋|分か|明|心配|不安|気))"
+    r"、?(?P<right>" + _CHOICE_NOUN + r"{1,15})")
+_ONE_OF_KEEP = _lazy_compile(r"または|又は|もしくは|若しくは|あるいは|或いは|いずれ|どちら|どれ|両方|すべて|全て|全部|ともに|共に"
+                             r"|から選|の中から|のうち")
+# 後の文にあれば出さない、既存の選ぶ範囲の印の種類（_LOGIC_PATTERNS）
+_ONE_OF_KINDS = frozenset(("どれか一つ", "どれでも", "どれか一つ（連体）", "全部", "全部（連体）"))
+_ONE_OF_JOINS = ("と", "および", "及び")
+
 
 def _obligation_hits(text: str) -> dict[str, re.Match[str]]:
     """義務の強さの集まりごとの、text でいちばん前に当たった語。任意の言い方（してもしなくてもよい）の中の不要の言い方は数えない。"""
@@ -6178,16 +6198,41 @@ def _obligation_risk(old: _Sentence, new: _Sentence) -> dict | None:
     return None
 
 
-def _scope_risks(sides: _Sides, groups: list) -> list:
+def _choice_joined_risk(old: _Sentence, new: _Sentence) -> dict | None:
+    """元の文のどれか一つの言い方（名詞 + または・か + 名詞）を、後の文で「と」「および」でつないだ書き換え（kind choice、
+    subkind one_to_all。3.2.0。数える）。detail は既存の choice と同じ形（from、to、old_hits、new_hits）。"""
+    if not any(join in new.text for join in _ONE_OF_JOINS):
+        return None
+    found = None
+    for match in _ONE_OF.finditer(old.text):
+        word, at = match.group("word"), match.start("word")
+        if (word == "か" and _QUESTION_KA_LEFT.search(old.text, max(0, at - 16), at)
+                and _QUESTION_KA_RIGHT.match(old.text, at + 1)):
+            continue
+        left, right = match.group("left")[-2:], match.group("right")[:2]
+        joins = [join for join in _ONE_OF_JOINS if left + join + right in new.text]
+        if joins:
+            found = (word, joins[0])
+            break
+    if found is None or _ONE_OF_KEEP.search(new.text) or _ONE_OF.search(new.text):
+        return None
+    if any(kind in _ONE_OF_KINDS for _, kind, _ in _logic_positions(new.text)):
+        return None
+    return _risk("choice", "one_to_all", old.line, new.line, old.text, new.text,
+                 {"from": "どれか一つ", "to": "全部", "old_hits": [found[0]], "new_hits": [found[1]]})
+
+
+def _scope_risks(sides: _Sides, groups: list, choices: bool) -> list:
     """3.2.0 で足した意味が変わる恐れ（上の kind ごとの関数）を作り、行の順に、同じ行では kind の並び（_RISK_ORDER）の順に
-    並べる。組の文は、中身が同じ組を見ない。"""
+    並べる。組の文は、中身が同じ組を見ない。choices が偽のとき（meaning_risks() に type_changes を渡さないとき）は、既存の
+    選ぶ範囲の候補と同じく、「と」でつないだ書き換えの候補（choice）を作らない。"""
     out = []
     for group in groups:
         for i, j in group["pairs"]:
             old, new = group["old"][i], group["new"][j]
             if old.text == new.text:
                 continue
-            found = (_obligation_risk(old, new),)
+            found = (_choice_joined_risk(old, new) if choices else None, _obligation_risk(old, new))
             out.extend(risk for risk in found if risk is not None)
     out.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                             r["new_line"] if r["new_line"] is not None else 0, _RISK_ORDER[r["kind"]]))
@@ -6200,7 +6245,7 @@ def meaning_risks(orig: str, rw: str, full: dict | None = None, type_changes: Se
     full は full_diff(orig, rw) の戻り値（渡さなければ作る）。type_changes は diff() の type_changes で、
     None か [] なら文の種類の印（sentence_type/marks）を含めない。この関数の中で9キーの分析は作らない。
     type_changes を渡したとき（[] も含む）は、diff() と同じく許可・能力の言い方の候補（modality、modality_review）と、
-    選ぶ範囲・因果の言い方の候補（choice、causality）も足すので、
+    選ぶ範囲・因果の言い方の候補（choice、causality。3.2.0 で足した「と」でつないだ書き換えの choice も）も足すので、
     同じ文章の diff() の type_changes を渡せば diff() の meaning_risks と同じになる。そのときだけ、許可・能力の印があれば
     文字の対応と範囲をこの関数の中で作る。None なら許可・能力の候補を足さない。
     doc_type は diff() と同じ文書の種類（事実や仕様を述べる種類では、確度の2つの強まりを数える側に入れる）。"""
@@ -6269,7 +6314,8 @@ def _meaning_risks(sides: _Sides, full: dict, type_changes: Sequence | None, gro
     # 既存の候補の後ろに行の順で並べる。範囲を絞る語の候補（3.2.0）も同じ。3.2.0 で足したほかの候補（_scope_risks）は最後に足し、
     # 同じ行では既存の候補の後ろに並べる。
     added = (certainty + _quote_risks(sides, groups, masks) + _modality_risks(sides, modality) + _logic_risks(sides, logic)
-             + _qualifier_risks(sides, groups) + _limiter_risks(sides, groups) + _scope_risks(sides, groups))
+             + _qualifier_risks(sides, groups) + _limiter_risks(sides, groups)
+             + _scope_risks(sides, groups, logic is not None))
     added.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                               r["new_line"] if r["new_line"] is not None else 0))
     risks += added
