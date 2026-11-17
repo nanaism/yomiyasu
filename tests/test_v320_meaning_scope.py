@@ -160,6 +160,23 @@ class RequestRestatedTest(unittest.TestCase):
             with self.subTest(text=text):
                 self.assertNotIn("依頼・決まり", yomiyasu_diff.type_marks(text))
 
+    def test_casual_request_counts_like_the_polite_one(self):
+        """くだけた「〜てもらえると助かります」「〜いただけると助かります」も依頼の印にする。敬語に直しただけの推敲（見てもらえると
+        助かります → ご確認いただけますと幸いです）を、依頼の印の足しにしない。依頼が消えた書き換えは今までどおり出す。"""
+        for text in ("見てもらえると助かります。", "お返事をいただけると助かります。", "読んでもらえればありがたいです。"):
+            with self.subTest(text=text):
+                self.assertIn("依頼・決まり", yomiyasu_diff.type_marks(text))
+        for before, after in (("住所が合っているか、見てもらえると助かります。", "住所が合っているか、ご確認いただけますと幸いです。"),
+                              ("お返事をいただけると助かります。", "お返事をいただけますと幸いです。"),
+                              ("14日までに送ってもらえると助かります。", "14日までにお送りいただけますと助かります。")):
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(result["meaning_risks"], [])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 0)
+        result = run("手伝ってもらえると助かります。", "手伝ってもらえました。")
+        self.assertIn(("sentence_type", "marks"), kinds(result))
+        self.assertGreaterEqual(result["fail_on_meaning_risk_count"], 1)
+
     def test_rule_candidates_still_show_the_change(self):
         """意味が変わる恐れには出さないが、規則の見直し候補の「文の種類を表す語が変わった文」には今までどおり出る。"""
         result = run("資料をお送りいただけますでしょうか。", "資料を送ってください。")
