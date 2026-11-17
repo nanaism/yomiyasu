@@ -3684,7 +3684,7 @@ _PROTECTED_LABELS = {"code": "コード", "inline_code": "インラインのコ�
 _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "protected": 4, "contrast_reversal": 5,
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
                "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17,
-               "number_qualifier": 18, "limiter": 19, "obligation": 21, "quantifier": 22,
+               "number_qualifier": 18, "limiter": 19, "dropped_sentence": 20, "obligation": 21, "quantifier": 22,
                "deadline": 23, "condition": 24}
 # 状態の語が消えた書き換え（state）と、約束を足した書き換え（promise）も数える。因果を足した書き換え（claim）と、書き手を
 # 表す語のない「〜します」を足した書き換え（promise_review。説明や手順の文かもしれない）は数えない。
@@ -6195,6 +6195,23 @@ _CONDITION_WORD = _lazy_compile(r"[一-龥々〆ヵヶ]+|[ァ-ヴー]{2,}|[A-Za-
 _CONDITION_SKIP = frozenset(("場合", "時", "際", "方", "日", "上記", "以下", "次", "今回", "前回", "これ", "それ"))
 _LONG_KANJI_WORD = _lazy_compile(r"[一-龥々〆ヵヶ]{3,}")
 
+# 段落から丸ごと消えた文（kind dropped_sentence。3.2.0）。段落の中で言い換えて組にならなかった文と、本当に消えた文を分けるため、
+# 条件を絞る。変わった塊で元の文の数が後の文の数より多いときだけ、組にならなかった元の文を見る。文の全体が推敲後の文書に
+# そのまま残っておらず、見出しの行、先頭15字に「：」「:」がある文、「■」「【」で始まる文、句点・「！」「？」で終わらない文
+# （閉じかっこが続くのはよい）、予告の文（以下、次の、下記、〜について説明・解説・紹介・まとめ、提案します、とおり、を順に、
+# 文書そのものを指して始まる「本記事では、」「このページでは、」「ここでは、」など）でなく、内容の語（2字以上の漢字、3字以上の
+# 片仮名、3字以上の英字の語）のうち推敲後の文書にないものが2つ以上で、かつ半分以上のときに出す。3字以上の漢字の語は、条件の
+# 句と同じく、2字ずつに切ったどれかが残っていれば残ったとみなす（設備点検完了後 → 点検が終わってから）。
+# 1つの文書で3件以上になったときは、書き直しが大きいので、どれも出さない（全文差分で読む）。同じ元の行にほかの kind の候補
+# （状態、約束など）があれば、その行には出さない（同じ変化を2回数えない。_meaning_risks の最後で外す）。
+_DROPPED_HEADING = _lazy_compile(r"[ \t]{0,3}#")
+_DROPPED_END = _lazy_compile(r"[。．！？!?][」』）)]*$")
+_DROPPED_PREVIEW = _lazy_compile(r"以下|次の|下記|について[^。]*?(?:説明|解説|紹介|まとめ)|提案します|とおり|通り|を順に"
+                                 r"|^(?:(?:本|この)(?:記事|稿|文書|書|章|節|ページ|資料|ガイド|ドキュメント|セクション|手引き"
+                                 r"|マニュアル|レポート|報告書|エントリー?|ノート|投稿)|ここ)では")
+_DROPPED_WORD = _lazy_compile(r"[一-龥々〆ヵヶ]{2,}|[ァ-ヴ][ァ-ヴー]{2,}|[A-Za-z][A-Za-z0-9_]{2,}")
+_DROPPED_LIMIT = 3              # 1つの文書でこの数以上になったら、消えた文の候補を出さない
+
 
 def _obligation_hits(text: str) -> dict[str, re.Match[str]]:
     """義務の強さの集まりごとの、text でいちばん前に当たった語。任意の言い方（してもしなくてもよい）の中の不要の言い方は数えない。"""
@@ -6328,6 +6345,35 @@ def _condition_risk(old: _Sentence, new: _Sentence, new_doc: str) -> dict | None
     return None
 
 
+def _dropped_words(sides: _Sides, sentence: _Sentence) -> list[str]:
+    """組にならなかった元の文 sentence が段落から丸ごと消えた文なら、推敲後の文書にない内容の語（そうでなければ空）。"""
+    text, new_doc = sentence.text, sides.texts[1]
+    if (text in new_doc or _DROPPED_HEADING.match(sides.lines[0][sentence.line - 1])
+            or "：" in text[:15] or ":" in text[:15] or text.startswith(("■", "【"))
+            or not _DROPPED_END.search(text) or _DROPPED_PREVIEW.search(text)):
+        return []
+    words = _unique(_DROPPED_WORD.findall(text))
+    missing = [word for word in words if not _word_remains(word, new_doc)]
+    return missing if len(missing) >= 2 and len(missing) * 2 >= len(words) else []
+
+
+def _dropped_sentence_risks(sides: _Sides, groups: list) -> list:
+    """段落から丸ごと消えた文（kind dropped_sentence。3.2.0。数えない）。old_line は元の行、new_line と new は None。
+    1つの文書で _DROPPED_LIMIT 件以上になったときは、どれも出さない。"""
+    out = []
+    for group in groups:
+        if len(group["old"]) <= len(group["new"]):
+            continue
+        paired = {i for i, _ in group["pairs"]}
+        for i, sentence in enumerate(group["old"]):
+            if i in paired:
+                continue
+            words = _dropped_words(sides, sentence)
+            if words:
+                out.append(_risk("dropped_sentence", None, sentence.line, None, sentence.text, None, {"words": words}))
+    return out if len(out) < _DROPPED_LIMIT else []
+
+
 def _scope_risks(sides: _Sides, groups: list, choices: bool) -> list:
     """3.2.0 で足した意味が変わる恐れ（上の kind ごとの関数）を作り、行の順に、同じ行では kind の並び（_RISK_ORDER）の順に
     並べる。組の文は、中身が同じ組を見ない。choices が偽のとき（meaning_risks() に type_changes を渡さないとき）は、既存の
@@ -6343,9 +6389,16 @@ def _scope_risks(sides: _Sides, groups: list, choices: bool) -> list:
                      _quantifier_risk(old, new, counts), _deadline_risk(old, new, counts, sides.texts[1]),
                      _condition_risk(old, new, sides.texts[1]))
             out.extend(risk for risk in found if risk is not None)
+    out.extend(_dropped_sentence_risks(sides, groups))
     out.sort(key=lambda r: (r["old_line"] if r["old_line"] is not None else r["new_line"] or 0,
                             r["new_line"] if r["new_line"] is not None else 0, _RISK_ORDER[r["kind"]]))
     return out
+
+
+def _without_covered_drops(risks: list) -> list:
+    """消えた文の候補（dropped_sentence）のうち、同じ元の行にほかの kind の候補があるものを外す（3.2.0。同じ変化を2回数えない）。"""
+    covered = {risk["old_line"] for risk in risks if risk["kind"] != "dropped_sentence" and risk["old_line"] is not None}
+    return [risk for risk in risks if risk["kind"] != "dropped_sentence" or risk["old_line"] not in covered]
 
 
 def meaning_risks(orig: str, rw: str, full: dict | None = None, type_changes: Sequence | None = None, *, doc_type: str | None = None) -> list:
@@ -6436,7 +6489,8 @@ def _meaning_risks(sides: _Sides, full: dict, type_changes: Sequence | None, gro
              or not any(_same_review_sentence(body, r) for body in lost)]
     additions.sort(key=lambda r: (r['old_line'] if r['old_line'] is not None else r['new_line'] or 0,
                                   r['new_line'] if r['new_line'] is not None else 0))
-    return risks + additions
+    # 消えた文の候補は、同じ元の行に状態・約束などほかの候補があれば外す（3.2.0）
+    return _without_covered_drops(risks + additions)
 
 
 # ---- 一覧のファイル（diff の詰め）----
@@ -11069,6 +11123,9 @@ def _risk_line(risk: dict) -> str:
     if kind == "condition":
         return ("条件の句が消えた{}: 「{}」。--fail-on には数えません。原文は、この条件のときだけの話として書いています。"
                 "条件を外して、いつでも当てはまる文にしていないか確かめてください。".format(where, detail["clause"]))
+    if kind == "dropped_sentence":
+        return ("消えた文{}: 内容の語（{}）が推敲後のどこにもありません。--fail-on には数えません。読み手に要らない文として"
+                "外したのでなければ、文を戻してください。".format(where, "、".join(detail["words"])))
     if kind == "promise_review":
         return ("原文にない「〜します」{}: {}。--fail-on には数えません。説明や手順の文なら残し、"
                 "書き手の約束として足したのなら外してください。".format(

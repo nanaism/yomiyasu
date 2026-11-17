@@ -5,6 +5,7 @@
 """
 
 from pathlib import Path
+import os
 import subprocess
 import sys
 import tempfile
@@ -12,6 +13,7 @@ import unittest
 
 
 ROOT = Path(__file__).resolve().parent.parent
+CORPUS = ROOT / "tests" / "corpus"
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import yomiyasu_diff  # noqa: E402
@@ -27,6 +29,18 @@ def kinds(result):
 
 def of_kind(result, kind):
     return [risk for risk in result["meaning_risks"] if risk["kind"] == kind]
+
+
+def rewrite_pairs():
+    """推敲の48組（元、後、名前）。tests/test_v200_meaning_risks.py の corpus_pairs() と同じ作り方。"""
+    pairs = []
+    for name in sorted(os.listdir(CORPUS / "yomiyasu_rewritten")):
+        if not name.endswith(".md"):
+            continue
+        source = CORPUS / "blacklist_ai" / (name[:-6] + ".md") if name.endswith("_bl.md") else CORPUS / "raw_ai" / name
+        pairs.append((source.read_bytes().decode("utf-8"),
+                      (CORPUS / "yomiyasu_rewritten" / name).read_bytes().decode("utf-8"), name))
+    return pairs
 
 
 def diff_exit_code(before, after):
@@ -524,6 +538,92 @@ class ConditionTest(unittest.TestCase):
         self.assertNotIn("condition", yomiyasu_diff.FAIL_ON_KINDS)
         self.assertEqual(yomiyasu_diff._RISK_ORDER["condition"], 24)
         self.assertEqual(diff_exit_code("管理者権限がある場合は、設定を変更できます。", "設定を変更できます。"), 0)
+
+
+class DroppedSentenceTest(unittest.TestCase):
+    """19章: 段落から文が丸ごと消えた書き換え（kind dropped_sentence。--fail-on に数えない見直しの候補）。言い換えて組に
+    ならなかった文と分けるため、条件を絞る。"""
+
+    # (元, 後, 消えた内容の語)
+    FOUND = (
+        ("メンテナンスは22時から翌2時までです。作業中はログインできません。終了後にお知らせします。",
+         "メンテナンスは22時から翌2時までです。終了後にお知らせします。", ["作業中", "ログイン"]),
+        ("4月から料金を改定します。既存の契約は更新日まで旧料金のままです。詳しくは窓口へお問い合わせください。",
+         "4月から料金を改定します。詳しくは窓口へお問い合わせください。", ["既存", "契約", "更新日"]),
+        ("商品は到着から8日以内であれば返品できます。返品の送料はお客様のご負担となります。返品の際は、購入時の伝票を同封してください。",
+         "商品は到着から8日以内であれば返品できます。返品の際は、購入時の伝票を同封してください。", ["送料", "客様", "負担"]),
+    )
+    NOT_FOUND = (
+        # 1文を2文に分けた書き換え、2文を1文にまとめた書き換え
+        ("会議は10時に始まり、資料は前日までに共有します。", "会議は10時に始まります。資料は前日までに共有します。"),
+        ("会議は10時に始まります。資料は前日までに共有します。", "会議は10時に始まり、資料は前日までに共有します。"),
+        # 3文を3文のまま言い換えた段落
+        ("障害の原因はメモリ不足だった。再起動で復旧した。今後は監視を強める。",
+         "原因はメモリが足りなかったことだった。再起動して復旧した。今後は監視を強化する。"),
+        # 予告の文（類例: 文書そのものを指して始まる予告の文も）
+        ("比較結果は以下のとおり。処理Aは処理Bより速い。", "処理Aは処理Bより速い。"),
+        ("この記事では、旅行の計画を立てる手順を紹介します。まず行き先と日程を決めます。", "まず行き先と日程を決めます。"),
+        # 類例: 句点で終わらない文、先頭15字にコロンがある文、「■」で始まる文
+        ("料金は4月に改定します。既存の契約は更新日まで旧料金のまま", "料金は4月に改定します。"),
+        ("料金は4月に改定します。注意：既存の契約は更新日まで旧料金です。", "料金は4月に改定します。"),
+        ("料金は4月に改定します。■既存の契約は更新日まで旧料金です。", "料金は4月に改定します。"),
+    )
+
+    def test_found(self):
+        for before, after, words in self.FOUND:
+            with self.subTest(before=before):
+                found = of_kind(run(before, after), "dropped_sentence")
+                self.assertEqual([(risk["subkind"], risk["old_line"], risk["new_line"], risk["new"], risk["detail"])
+                                  for risk in found], [(None, 1, None, None, {"words": words})])
+                self.assertEqual(run(before, after)["fail_on_meaning_risk_count"], 0)
+
+    def test_not_found(self):
+        for before, after in self.NOT_FOUND:
+            with self.subTest(before=before):
+                self.assertEqual(of_kind(run(before, after), "dropped_sentence"), [])
+
+    def test_heading_line_is_not_found(self):
+        before = "# 料金の改定\n\n## 既存の契約は更新日まで旧料金です。\n\n4月から料金を改定します。\n"
+        after = "# 料金の改定\n\n4月から料金を改定します。\n"
+        self.assertEqual(of_kind(yomiyasu_diff.diff(before, after), "dropped_sentence"), [])
+
+    def test_other_candidate_on_the_same_line(self):
+        """設計例 S1: 状態の候補が同じ元の行にあるので、消えた文の候補は出さない（同じ変化を2回数えない）。"""
+        result = run("ご依頼の部材の納期は未定です。メーカーからの回答を待っています。",
+                     "ご依頼の部材は、メーカーからの回答を受けて来週中にお届けします。")
+        self.assertEqual(of_kind(result, "dropped_sentence"), [])
+        self.assertIn("state", [kind for kind, _ in kinds(result)])
+
+    def test_slides_without_periods(self):
+        """見出しと句点のない行（スライドの要約の行）を外した組（test_v250_heading の slides）には出さない。"""
+        requests = CORPUS / "requests"
+        result = yomiyasu_diff.diff((requests / "slides_heading_orig.txt").read_text(encoding="utf-8"),
+                                    (requests / "slides_heading_final.txt").read_text(encoding="utf-8"))
+        self.assertEqual(of_kind(result, "dropped_sentence"), [])
+
+    def test_three_or_more_in_a_document_are_not_found(self):
+        """1つの文書で3件以上になったときは、書き直しが大きいので、どれも出さない。"""
+        before = ("会議は10時に始まります。会場の空調は午後に点検します。駐車場の区画は東側を使います。"
+                  "受付の名簿は総務課が用意します。\n")
+        after = "会議は10時に始まります。\n"
+        self.assertEqual(of_kind(yomiyasu_diff.diff(before, after), "dropped_sentence"), [])
+        two = "会議は10時に始まります。会場の空調は午後に点検します。駐車場の区画は東側を使います。\n"
+        self.assertEqual(len(of_kind(yomiyasu_diff.diff(two, after), "dropped_sentence")), 2)
+
+    def test_corpus_48_pairs_have_none(self):
+        """推敲の48組では、消えた文の候補は0件。"""
+        for before, after, name in rewrite_pairs():
+            with self.subTest(pair=name):
+                self.assertEqual(of_kind(yomiyasu_diff.diff(before, after), "dropped_sentence"), [])
+
+    def test_message_and_not_counted(self):
+        before, after, _ = self.FOUND[0]
+        report = yomiyasu_diff.report(run(before, after))
+        self.assertIn("- 消えた文（元1行目）: 内容の語（作業中、ログイン）が推敲後のどこにもありません。--fail-on には数えません。"
+                      "読み手に要らない文として外したのでなければ、文を戻してください。\n  元: 作業中はログインできません。\n\n", report)
+        self.assertNotIn("dropped_sentence", yomiyasu_diff.FAIL_ON_KINDS)
+        self.assertEqual(yomiyasu_diff._RISK_ORDER["dropped_sentence"], 20)
+        self.assertEqual(diff_exit_code(before, after), 0)
 
 
 class CorpusFalsePositiveTest(unittest.TestCase):
