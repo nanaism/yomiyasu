@@ -5562,11 +5562,11 @@ _REQUEST_QUESTION = _lazy_compile(r"(?:(?:いただけ|頂け|もらえ|くれ)(
 # 車でのお越しを控え、電車をご利用ください）は、頼む内容が逆になったので外さない。字の並びで見るので、予定の意味の「本番を
 # 控え、」と書き留める意味の「番号を控えてください」も禁止に読む（v3.1.0 と同じく候補を出す側）。「ご遠慮なく」「ご遠慮
 # なさらず」「遠慮せず」「遠慮しないで」「ご遠慮なさらないで」と、名詞の「控え」（控え室、控えの選手、控えめ）、「本番を
-# 控えた今」「発表を控えた皆さん」の「控えた」は数えない。「控えたうえで」「控えたほうがよい」「ご遠慮なさって」「お控えの上」は
-# 数える
+# 控えた今」「発表を控えた皆さん」の、予定の意味の「控えた」は数えない。「控えたうえで」「控えたほうがよい」「控えた状態で」
+# 「控えたい方」「ご遠慮なさって」「お控えの上」は数える
 _REQUEST_PROHIBIT = _lazy_compile(
     r"(?<!遠慮し)(?<!遠慮なさら)ないで(?:くださ|下さ|ほしい|欲しい|いただ|頂|もら)|ご?遠慮(?!なく|なさら|なし|せず|しな)"
-    r"|(?:を|は|も)控え(?![めの室た])|控えた(?:うえ|上で|ほう|方が)"
+    r"|(?:を|は|も)控え(?![めの室]|た(?:今|現在|時期|段階|この|皆|みな|方々|人|選手))|控えた(?:うえ|上で|ほう|方が)"
     r"|控え(?:て(?:くださ|下さ|いただ|頂|ほしい|欲しい|もら)|くださ|下さ|いただ|頂|願|るよう|ましょう|のほど|をお願い|ますよう"
     r"|るべき|ることを|の(?:上|うえ))"
     r"|ないよう(?:に)?[、，]?(?:くれぐれも|十分に?|充分に?)?(?:お願い|ご協力|協力|ご配慮|配慮|ご注意|注意|ご留意|留意"
@@ -5576,10 +5576,17 @@ _REQUEST_PROHIBIT = _lazy_compile(
 
 def _request_restated(old: str, new: str) -> bool:
     """元の文が問いの形の依頼で、後の文が問いでなく、依頼・決まりの印を持つか（3.2.0）。片方の文だけが頼む内容を打ち消した依頼
-    （_REQUEST_PROHIBIT）なら偽（送っていただけますか → 送らないでください、送らないでいただけますか → 送ってください）。"""
+    （_REQUEST_PROHIBIT。もう片方の文に同じ字の並びであるものは数えない。_request_prohibits_unshared）なら偽（送っていただけますか
+    → 送らないでください、送らないでいただけますか → 送ってください）。"""
     return (_REQUEST_QUESTION.search(old.rstrip()) is not None and not _is_question(new)
             and "依頼・決まり" in type_marks(new)
-            and (_REQUEST_PROHIBIT.search(new) is None) == (_REQUEST_PROHIBIT.search(old) is None))
+            and _request_prohibits_unshared(new, old) == _request_prohibits_unshared(old, new))
+
+
+def _request_prohibits_unshared(text: str, other: str) -> bool:
+    """text の、頼む内容を打ち消した依頼の語（_REQUEST_PROHIBIT）のうち、前の3字ごと other にないものがあるか（3.2.0）。両方の文に
+    同じ字の並びである語（受験を控えたお子さまの保護者の方は、〜）は、頼む内容の変化に数えない。"""
+    return any(text[max(0, match.start() - 3):match.end()] not in other for match in _REQUEST_PROHIBIT.finditer(text))
 
 
 def _request_restated_mark(mark: dict) -> bool:
@@ -5610,8 +5617,9 @@ _REQUEST_ONEGAI_KEPT = _lazy_compile(r"(?<!よろしく)(?<!宜しく)お願い(
 _REQUEST_STILL = _lazy_compile(r"お願い(?!し(?:まし)?た(?!い)|して(?:おき|あり|いまし|いた|おりまし|おった|きまし|きた(?![いく])|みまし"
                                r"|みた(?![いく]))|済|され|すること(?:は|も)(?:な|あり)|(?:いた|致)しまし|申し上げまし|させていただきまし"
                                r"|でし|を受け|の件)"
-                               r"|お待ち(?!して(?:おりまし|いまし|い?た)|しまし|かね|の(?:方|間)|いただ(?:きまし|いた)|申し上げておりまし)"
-                               r"|(?:いただき|頂き|賜り|くださいます|下さいます)(?:ます)?よう|(?<![こ偽身])のほど|の程(?!度)")
+                               r"|お待ち(?!して(?:おりまし|いまし|い?た(?!だ))|しまし|かね|の(?:方|間)|いただ(?:きまし|いた)|申し上げておりまし)"
+                               r"|(?:いただき|頂き|賜り|くださいます|下さいます)(?:ます)?よう|(?<![こ偽身])のほど|の程(?!度)"
+                               r"|(?:いただけ|頂け)れば(?:と(?:存じ|思)|[、，]?幸)|賜りたく")
 _REQUEST_NEW_MARK = _lazy_compile(r"(?:いただけ|頂け|もらえ)(?:ますと|ましたら|ると|れば|たら)|お願い(?:したい|でき(?:れば|ますと|ましたら))")
 
 
@@ -6523,7 +6531,8 @@ def _boundary_stem(word: str) -> str:
 def _boundary_risk(old: _Sentence, new: _Sentence) -> dict | None:
     """境目の言い方の変化（kind boundary。3.2.0。数える）。detail は元の語（from）と後の語（to）。同じ動詞の形を変えただけの組
     （100件を超えられません → 100件を超えるとエラーになります）は、同じ境目を言い直したので出さない。どちらかの文で境目の語の
-    あとの平仮名の続きに打ち消しがある組（_BOUNDARY_NEGATED_WORD）も出さない。"""
+    あとの動詞の打ち消しがある組（_BOUNDARY_NEGATED_WORD。「に」「と」のあとの平仮名の続きか漢字の動詞、「で」のあとの平仮名の
+    続き）も出さない。"""
     if _BOUNDARY_NEGATED_WORD.search(old.text) or _BOUNDARY_NEGATED_WORD.search(new.text):
         return None
     old_strict, old_inclusive = _BOUNDARY_STRICT.search(old.text), _BOUNDARY_INCLUSIVE.search(old.text)

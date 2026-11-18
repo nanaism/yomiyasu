@@ -1285,5 +1285,40 @@ class RoundSixFixesTest(unittest.TestCase):
                 self.assertEqual(of_kind(run(before, after), "boundary"), [])
 
 
+class RoundSevenFixesTest(unittest.TestCase):
+    """6回目の直しを確かめ直して見つけた形（3.2.0）。問いの依頼の言い直しで、予定の意味の「控えた」（控えた今、控えた皆さん）の
+    ほかは禁止に読む（控えた状態で、控えたい方）。依頼を続けている文の手がかりに「いただければと存じます」「賜りたく」を足し、
+    「お待ちしていただければ」は済んだことの報告に数えない。"""
+
+    # (元, 後, --fail-on の数, 出る候補の kind と subkind（並びは問わない）)
+    CASES = (
+        ("健康診断の当日は、朝食をとってからお越しいただけますか。", "健康診断の当日は、朝食を控えた状態でお越しください。", 2,
+         [("sentence_type", "question"), ("sentence_type", "marks")]),
+        ("健康診断の当日は、朝食を控えた状態でお越しいただけますか。", "健康診断の当日は、朝食をとってからお越しください。", 2,
+         [("sentence_type", "question"), ("sentence_type", "marks")]),
+        ("当日は、朝食を控えてお越しいただけますでしょうか。", "当日は、朝食を控えた状態でお越しください。", 0, []),
+        ("撮影したい方は、事前にお申し出いただけますか。", "撮影を控えたい方は、事前にお申し出ください。", 2,
+         [("sentence_type", "question"), ("sentence_type", "marks")]),
+        ("本番前に資料を確認していただけますか。", "本番を控えた今、資料を確認してください。", 0, []),
+        # 両方の文に同じ字の並びである禁止の語（受験を控えた）は、頼む内容の変化に数えない
+        ("受験を控えたお子さまの保護者の方は、説明会にご参加いただけますか。",
+         "受験を控えたお子さまの保護者の方は、説明会へのご参加はご遠慮ください。", 2,
+         [("sentence_type", "question"), ("sentence_type", "marks")]),
+        ("ご確認いただけますと幸いです。", "ご確認いただければと存じます。", 0, []),
+        ("先日お願いいたしました件につきまして、ご確認いただけますと幸いです。",
+         "先日お願いいたしました件につきまして、ご確認いただければと存じます。", 0, []),
+        ("このほど新しい窓口を設けましたので、ご利用いただけますと幸いです。",
+         "このほど新しい窓口を設けましたので、ご利用を賜りたく存じます。", 0, []),
+        ("受付で番号札をお取りいただけますと幸いです。", "受付で番号札をお取りのうえ、お待ちしていただければと存じます。", 0, []),
+    )
+
+    def test_cases(self):
+        for before, after, count, expected in self.CASES:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(sorted(kinds(result), key=str), sorted(expected, key=str))
+                self.assertEqual(result["fail_on_meaning_risk_count"], count)
+
+
 if __name__ == "__main__":
     unittest.main()
