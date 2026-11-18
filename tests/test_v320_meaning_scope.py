@@ -1079,8 +1079,10 @@ class RoundThreeFixesTest(unittest.TestCase):
          "来週が本番リリースのため、最終版の資料のご確認をよろしくお願いいたします。", 0, []),
         ("詳細は控えますが、ご確認いただけますと幸いです。", "詳細は省きますが、ご確認のほどよろしくお願いいたします。", 0, []),
         ("紙の申請はやめて、オンラインでご申請いただけますと幸いです。", "紙ではなく、オンラインでのご申請をよろしくお願いいたします。", 0, []),
+        # 打ち消した「禁止されていません」を「できます」にした組は、依頼の結びに言い直しても、依頼のない文と同じく許可の言い方が
+        # 消えた候補を出す（許可の候補を文の種類の候補に任せない）
         ("持ち込みは禁止されていませんので、ご持参いただけますと幸いです。", "持ち込みはできますので、ご持参のほどよろしくお願いいたします。",
-         0, []),
+         1, [("modality", "permission_lost")]),
         # 問いの依頼の言い直し: 「〜が控えている」「〜を控えた今」は禁止に読まず、「〜を控え、〜ください」は禁止に読む
         ("来週は監査があるので、資料をご準備いただけますか。", "来週に監査が控えているので、資料を準備してください。", 0, []),
         ("本番前に資料を確認していただけますか。", "本番を控えた今、資料を確認してください。", 0, []),
@@ -1241,6 +1243,46 @@ class RoundFiveFixesTest(unittest.TestCase):
         for before, after, subkind in self.BOUNDARY_COMPARED:
             with self.subTest(before=before):
                 self.assertEqual([risk["subkind"] for risk in of_kind(run(before, after), "boundary")], [subkind])
+
+
+class RoundSixFixesTest(unittest.TestCase):
+    """5回目の直しを確かめ直して見つけた形（3.2.0）。新しい言い方の依頼だけで依頼・決まりの語の有り無しが変わった範囲では、
+    許可の候補を文の種類の候補に任せない（3.1.0 と同じく許可の変化を出す）。予定の意味の「〜を控えた皆さん」は禁止に読まない。
+    境目の語の「未満に減らない」「以上に集まらない」は比べない。依頼を続けている文の手がかりは、済んだことの報告と名詞を外す。"""
+
+    # (元, 後, --fail-on の数, 出る候補の kind と subkind（並びは問わない）)
+    CASES = (
+        ("メールでも構いませんので、ご連絡いただけますと幸いです。", "ご連絡お待ちしております。", 1, [("modality", "permission_lost")]),
+        ("ご確認いただけますと幸いです。", "ご確認は後日でも構いませんので、ご連絡お待ちしております。", 1,
+         [("modality", "permission_added"), ("claim", "causal")]),
+        # 予定の意味の「控えた」が両方の文にある組で、依頼を禁止に変えた書き換えは出す
+        ("発表を控えた皆さん、スライドを事前に共有していただけますか。", "発表を控えた皆さん、スライドの事前の共有はご遠慮ください。",
+         1, [("sentence_type", "question")]),
+        ("発表を控えた皆さん、スライドを事前に共有していただけますか。", "スライドを事前に共有してください。", 0, []),
+        # 済んだことの報告と名詞は、依頼を続けている文の手がかりにしない
+        ("先日お願いいたしました資料を添付します。", "先日お願いいたしました資料をご確認いただけますと幸いです。", 1,
+         [("sentence_type", "marks")]),
+        ("どの程度の工数がかかるか、お知らせいただけますと幸いです。", "どの程度の工数がかかるかを調べます。", 1,
+         [("sentence_type", "marks")]),
+    )
+
+    def test_cases(self):
+        for before, after, count, expected in self.CASES:
+            with self.subTest(before=before, after=after):
+                result = run(before, after)
+                self.assertEqual(sorted(kinds(result), key=str), sorted(expected, key=str))
+                self.assertEqual(result["fail_on_meaning_risk_count"], count)
+
+    BOUNDARY_NOT_COMPARED = (
+        ("在庫が10個を下回らないよう、発注してください。", "在庫が10個未満に減らないよう、発注してください。"),
+        ("室温が10度を下回らないよう、暖房を入れてください。", "室温が10度未満に低下しないよう、暖房を入れてください。"),
+        ("応募が定員に満たない講座は、開講しません。", "応募が定員以上に集まらない講座は、開講しません。"),
+    )
+
+    def test_boundary_with_kanji_verb_negation(self):
+        for before, after in self.BOUNDARY_NOT_COMPARED:
+            with self.subTest(after=after):
+                self.assertEqual(of_kind(run(before, after), "boundary"), [])
 
 
 if __name__ == "__main__":
