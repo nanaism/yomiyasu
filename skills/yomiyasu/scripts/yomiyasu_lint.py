@@ -10,7 +10,7 @@ paper は慎重表現をぼかしとして削る規則がないので、外す�
 """
 
 from __future__ import annotations
-__version__ = "3.1.0"
+__version__ = "3.2.0"
 
 import os
 from pathlib import Path
@@ -950,11 +950,14 @@ _DEVICE_LITERAL_PREFIXES = (
 )
 # 前が漢字か平仮名か文頭で、上の語でないときだけ拾う。カタカナと英数字の語のあと（レーザー装置、X線装置）は機器の名前として除く。
 # 機器の操作や状態の語が同じ文で後ろに続く単独の「装置」（「この装置は、毎朝自動で起動します」）も除く。
+# 3.2.0: すぐあとが「の中で動」「内で動」「に組み込」「を制御」「の制御」の「装置」（装置の中で動くソフトウェア）も、
+# 文字どおりの機器として除く
 _DEVICE_PATTERN = (r"(?:(?<![ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ線])|(?<=イデオロギー))"
                    + "".join("(?<!" + "|".join(group) + ")" for group in (
                        sorted(w for w in _DEVICE_LITERAL_PREFIXES if len(w) == 2),
                        sorted(w for w in _DEVICE_LITERAL_PREFIXES if len(w) == 3)))
-                   + r"装置(?![^。！？!?]{0,20}?(?:電源|起動|停止|配線|ケーブル|スイッチ|ボタン|ランプ|点検|修理|故障|稼働"
+                   + r"装置(?!の中で動|内で動|に組み込|を制御|の制御)"
+                     r"(?![^。！？!?]{0,20}?(?:電源|起動|停止|配線|ケーブル|スイッチ|ボタン|ランプ|点検|修理|故障|稼働"
                      r"|作動|設置|取扱|取り扱|保守|校正|電池|電圧|電流))")
 SLOP_WORD_PATTERNS = [
     # ナビゲート、デリゲートなど -gate で終わる外来語は、直前のカタカナで除く（レビューゲートなどは拾う）。
@@ -2981,7 +2984,9 @@ _PAUSE_COMPOUND = sorted(set([
     "までも", "へも", "ても",
 ]), key=len, reverse=True)
 # 拾わない助詞のかたまり（接続・逆接・譲歩）
-_PAUSE_SKIP_CHUNKS = {"でも", "ても", "とも", "としても", "によっては"}
+# 3.2.0: 定義の「〜とは、」（ブランチとは、〜の仕組みです）も拾わない。読点を残したほうが読みやすく、AI の文と人の文で
+# 出る数の差も小さい（「ことは、」「あとは、」「ひとは、」は「は」のかたまりなので今までどおり）
+_PAUSE_SKIP_CHUNKS = {"でも", "ても", "とも", "としても", "によっては", "とは"}
 
 # 文頭の接続・前置き・手紙の定型。句全体がこれに当たれば拾わない。
 _PAUSE_CONNECTIVE = {
@@ -2989,6 +2994,8 @@ _PAUSE_CONNECTIVE = {
     "ただ", "もっとも", "それとも", "そもそも", "つきましては", "少なくとも", "そのためには",
     "今でも", "なかでも", "中でも", "それには", "まずは", "最後には", "さらには", "ひいては", "ついては",
     "このたびは", "この度は", "平素は", "日頃は", "日ごろは", "先日は", "昨日は", "本日は", "今回も",
+    # 3.2.0: 副詞の「実は」「要は」は主題ではない（句全体がこの語のときだけ。「事実は、」「概要は、」は今までどおり拾う）
+    "実は", "要は",
 }
 _PAUSE_CONNECTIVE_END = _lazy_compile(r"的には$|的にも$")
 # ほかの規則（meta_intro、meta_filler）がすでに拾う文頭の句。1つの読点に2つの候補を出さない。
@@ -3000,6 +3007,11 @@ _PAUSE_GA_CONJ_END = _lazy_compile(
     r"う|く|ぐ|す|つ|ぬ|ぶ|む|よう|たい|らしい|ん|ある|いる|した|する|れる|せる|ている|ていた|ておく|けれど)$")
 _PAUSE_GA_NOUN_HIRA = _lazy_compile(r"(?:さん|さま|様|くん|ちゃん|こと|もの|とき|ところ|ほう|ため|の|さ|たち|ら|など|だけ|まで|ばかり|"
                           r"くらい|ぐらい|ほど|こそ|もと|うち|あと|まえ|わけ|はず|よう|みんな|それ|これ|あれ|どれ|ここ|そこ|どこ|誰|僕|私)$")
+# 3.2.0: 動詞の中の「が」（つながる、つながり、ながら、したがって）。読点のあとの句で、直前が平仮名で（_PAUSE_GA_NOUN_HIRA の
+# 語の終わりを除く）、すぐあとが「ら」「り」「る」「れ」「ろ」「っ」の「が」は、別の主語の「が」に数えない。
+# 直前が漢字の「が」（広がる、上がる）は見分けない
+_PAUSE_GA_KANA_BEFORE = _lazy_compile(r"[ぁ-ん]$")
+_PAUSE_GA_VERB_AFTER = _lazy_compile(r"[らりるれろっ]")
 _PAUSE_NOUNISH_END = _lazy_compile(r"[" + _PAUSE_KANJI + r"ァ-ヴーｦ-ﾟA-Za-z0-9０-９Ａ-Ｚａ-ｚ」』）)\]>%％]$")
 
 _PAUSE_VERB_ATTR = (r"(?:[るたうくすつぬむぶぐ]|ない|ている|ていた|された|される|できる|した|する|った|んだ|いた|えた|れた|せた|"
@@ -3106,6 +3118,9 @@ def _pause_comma_next_subject(after: str) -> bool:
                 continue
             if _PAUSE_FIXED_SUBJ.search(before) and re.match(r"(?:あ|な|でき|大き|高)", text[m.end():]):
                 continue
+            if (_PAUSE_GA_KANA_BEFORE.search(before) and not _PAUSE_GA_NOUN_HIRA.search(before)
+                    and _PAUSE_GA_VERB_AFTER.match(text, m.end())):
+                continue    # 3.2.0: 動詞の中の「が」（つながります、切り替わりながら）
         # 「〜ことが」「〜するのが」は名詞化した主語なので、助詞の「と」「の」と分ける。
         nominal = _PAUSE_NOMINAL_END.search(before)
         if m.group(1) == "は" and not nominal:
@@ -3329,10 +3344,44 @@ def _pause_comma_object_hits(plain_text: str) -> list[tuple[int, str, str]]:
     return hits
 
 
-def _pause_comma_line_hits(analysis: dict, objects: bool = False) -> dict[int, list[tuple[int, str, str]]]:
+# 3.2.0: 文頭の場面の枠（この記事では、この画面には、）のあとで文が長いとき、pause_comma の message の最後に足す1文。
+# 指摘はそのまま出し（件数、行、severity、snippet は変えない）、残してよい場合だけを書き添える。当てるのは、拾った読点の
+# どれかが文頭の句に続く「では、」「には、」で、その読点のあと、次の読点か文末までが空白を除いて20字以上ある行
+_PAUSE_FRAME_NOTE = "文頭の場面の枠（「この記事では、」など）のあとで文が長く、外すと区切りが見えにくくなるときは、残してかまいません。"
+_PAUSE_FRAME_NOTE_CHUNKS = ("では", "には")
+_PAUSE_FRAME_NOTE_MIN = 20
+
+
+def _pause_comma_frame_notes(plain_text: str, hits: Sequence[tuple[int, str, str]]) -> set[int]:
+    """3.2.0: hits（_pause_comma_hits と同じ形）のうち、_PAUSE_FRAME_NOTE を足す読点の助詞の位置。
+    文頭は _pause_comma_hits と同じく、文の頭から句の頭までに箇条書きの記号と開きかっこのほかの字がないこと。
+    読点のあとの字数は、かっこの外の次の読点か文末までを、空白を除いて数える。"""
+    if not any(chunk in _PAUSE_FRAME_NOTE_CHUNKS for _, chunk, _ in hits):
+        return set()
+    t = plain_text
+    depth, starts, sentence_ids, spans, nonlead = _pause_comma_context(t)
+    found = set()
+    for i, chunk, _ in hits:
+        if chunk not in _PAUSE_FRAME_NOTE_CHUNKS or i + 1 >= len(t):
+            continue
+        sstart, send = spans[sentence_ids[i]]
+        if nonlead[starts[i + 1 - len(chunk)]] != nonlead[sstart]:
+            continue    # 文頭の句ではない（なお、この記事では、）
+        end = i + 2
+        while end < send and not (depth[end] == 0 and t[end] in "、，,"):
+            end += 1
+        if len(re.sub(r"\s", "", t[i + 2:end])) >= _PAUSE_FRAME_NOTE_MIN:
+            found.add(i)
+    return found
+
+
+def _pause_comma_line_hits(analysis: dict, objects: bool = False,
+                           notes: set[tuple[int, int]] | None = None) -> dict[int, list[tuple[int, str, str]]]:
     """段落と箇条書きの1項目ごとに、見える行をつないで当てる（行をまたぐ文と引用を1つに読む）。
     行番号から、その行の見える文字での (助詞の位置, かたまり, 句) の並びへの表を返す。
-    objects が真なら、短い目的語の「を、」（_pause_comma_object_hits）も位置の順に混ぜる（2.5.0）。"""
+    objects が真なら、短い目的語の「を、」（_pause_comma_object_hits）も位置の順に混ぜる（2.5.0）。
+    notes を渡すと、message に _PAUSE_FRAME_NOTE を足す読点の (行番号, その行の見える文字での位置) を入れる（3.2.0。
+    つないだ段落の文字で、文頭と読点のあとの字数を見る）。"""
     out = {}
 
     def flush(unit: list[tuple[int, str]], kind: str) -> None:
@@ -3352,11 +3401,14 @@ def _pause_comma_line_hits(analysis: dict, objects: bool = False) -> dict[int, l
         hits = _pause_comma_hits(joined)
         if objects:
             hits = sorted(hits + _pause_comma_object_hits(joined))
+        framed = _pause_comma_frame_notes(joined, hits) if notes is not None else set()
         for i, chunk, phrase in hits:
             if i > tail:
                 continue
             k = bisect_right(offsets, i) - 1
             out[unit[k][0]].append((i - offsets[k], chunk, phrase))
+            if notes is not None and i in framed:
+                notes.add((unit[k][0], i - offsets[k]))
         del unit[:]
 
     for block in analysis["blocks"]:
@@ -4931,11 +4983,20 @@ def _v230_renyo_findings(analysis: dict) -> list[dict]:
 # - なんよ: 地の文の文末の「なんよ」「なんよね」。台詞の script と読み物の essay では外す
 # - て形の体言止め: 段落の文で「〜して、〜を＋漢語の名詞。」で終わる形（見直して、速度を改善。）。見出し、箇条書き、表は見ない。
 #   slides、minutes、promo、script では外す。「について、」「に応じて、」「にて、」「のせいで、」のような、動詞でない「て」「で」は数えない
+# - 多岐にわたる（3.2.0）: 「多岐にわたる」「多岐に渡り」「多岐にわたって」。何が多いのかを確かめる候補
+# - が求められている（3.2.0）: 「が求められている」「が求められています」「が求められており」など。誰が何を求めているのかを
+#   確かめる候補。「を求められている」「が求められる」は当てない
+#   この2つは段落の文だけに当て（見出し、箇条書き、表は見ない）、script と essay では外す
 # 見るのは新しい語の規則と同じ見える文字（カギ括弧と引用符の中、英数字の識別子を伏せた字）。引用（> の行）、コード、frontmatter、
 # HTML は見ない。1行に1件で、当たった言い方を _words に並べる。
 _V250_RULES = ("ai_phrase",)
 _AI_PHRASE_MESSAGE = "AIの文章によく出る言い回し（当たった言い方: {}）" + _V220_MESSAGE_TAIL
 _AI_PHRASE_HEAD = _lazy_compile(r"見立て|潜|招く|欠かせない存在|挙動を|なんよ|を[一-龥々]{2,}[。．]")
+# 3.2.0 で足した2つの形の手掛かり。この手掛かりだけが当たった行では、3.2.0 の2つの形だけを調べる（2.5.0 からの7つの形の
+# 当たり方は、同じ行に新しい語があるかで変えない。強調の記号を挟んだ「を**改善**。」は、2.5.0 の手掛かりに当たらない）
+_AI_PHRASE_HEAD_V320 = _lazy_compile(r"多岐に|求められて")
+# 3.2.0 で足した形。段落の文だけに当て、script と essay では外す
+_AI_PHRASE_PARAGRAPH_ONLY = ("多岐にわたる", "が求められている")
 # 判断した人と招く人や組織の語。語のあとに「たち」「ら」「ども」「陣」「側」が付いてもよい
 _AI_PERSON_WORDS = (r"人|者|員|士|医|さん|様|さま|氏|先生|医師|専門家|アナリスト|エコノミスト|記者|筆者|編集部|当社|弊社|同社|会社"
                     r"|政府|当局|警察|検察|日銀|銀行|気象台|省|庁|局|都|府|県|市|区|町|村|国|自治体|委員会|協会|機関|大学|研究所"
@@ -4957,11 +5018,15 @@ _AI_PHRASE_FORMS = (
     ("という挙動を排除", _lazy_compile(r"という挙動を(?:排除|防止|阻止)")),
     ("なんよ", _lazy_compile(r"なんよね?[。．！!？?]*$")),
     ("て形の体言止め", _lazy_compile(r"(?:[ぁ-ん]て|[んい]で|[一-龥々]て)[、，,][^。、，,]{1,20}?を[一-龥々]{2,}[。．]$")),
+    # 3.2.0
+    ("多岐にわたる", _lazy_compile(r"多岐に(?:わた|渡)(?:る|り|っ)")),
+    ("が求められている", _lazy_compile(r"が求められて(?:いる|います|いた|いました|おり)")),
 )
 
 
 def _v250_ai_phrase_findings(analysis: dict, doc_type: str | None) -> list[dict]:
-    """ai_phrase の候補。文書全体に一度だけ手掛かり（_AI_PHRASE_HEAD）を当て、当たった行を見える文字で調べる。"""
+    """ai_phrase の候補。文書全体に一度だけ手掛かり（_AI_PHRASE_HEAD と、3.2.0 の _AI_PHRASE_HEAD_V320）を当て、当たった行を
+    見える文字で調べる。_AI_PHRASE_HEAD_V320 だけが当たった行は、3.2.0 の2つの形だけを調べる。"""
     rows = analysis["lines"]
     if not rows:
         return []
@@ -4972,8 +5037,15 @@ def _v250_ai_phrase_findings(analysis: dict, doc_type: str | None) -> list[dict]
         if starts is None:
             starts = [row["start"] for row in rows]
         candidate_lines.add(bisect_right(starts, match.start()))
+    new_only = set()
+    for match in _AI_PHRASE_HEAD_V320.finditer(text):
+        if starts is None:
+            starts = [row["start"] for row in rows]
+        line_no = bisect_right(starts, match.start())
+        if line_no not in candidate_lines:
+            new_only.add(line_no)
     out = []
-    for line_no in sorted(candidate_lines):
+    for line_no in sorted(candidate_lines | new_only):
         row = rows[line_no - 1]
         if row["kind"] not in ("paragraph", "list", "heading", "table") or row["quote_depth"]:
             continue
@@ -4983,6 +5055,8 @@ def _v250_ai_phrase_findings(analysis: dict, doc_type: str | None) -> list[dict]
             if not sentence:
                 continue
             for name, pattern in _AI_PHRASE_FORMS:
+                if line_no in new_only and name not in _AI_PHRASE_PARAGRAPH_ONLY:
+                    continue
                 match = pattern.search(sentence)
                 if match is None or name in words:
                     continue
@@ -4995,6 +5069,8 @@ def _v250_ai_phrase_findings(analysis: dict, doc_type: str | None) -> list[dict]
                 if name == "て形の体言止め" and (doc_type in ("slides", "minutes", "promo", "script")
                                               or row["kind"] != "paragraph"
                                               or sentence[:match.start() + 2].endswith(_TE_NOT_VERB)):
+                    continue
+                if name in _AI_PHRASE_PARAGRAPH_ONLY and (doc_type in ("script", "essay") or row["kind"] != "paragraph"):
                     continue
                 words.append(name)
         if words:
@@ -5652,6 +5728,7 @@ def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = No
 
     # 3. 語彙・構文パターン検査
     pause_lines = None
+    pause_notes: set[tuple[int, int]] = set()    # 3.2.0: message に _PAUSE_FRAME_NOTE を足す読点（_pause_comma_line_hits が入れる）
     for row in analysis["lines"]:
         line_no, line = row["line"], row["raw"]
         if row["kind"] in ("code", "frontmatter", "html_block", "reference_definition"):
@@ -5878,13 +5955,15 @@ def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = No
         # 表にない規則は当て、表にある規則は指定した種類が含まれるときだけ検出する。
         if "pause_comma" not in DOC_TYPE_ONLY_RULES or doc_type in DOC_TYPE_ONLY_RULES["pause_comma"]:
             if pause_lines is None:
-                pause_lines = _pause_comma_line_hits(analysis, objects=doc_type != "essay")
+                pause_lines = _pause_comma_line_hits(analysis, objects=doc_type != "essay", notes=pause_notes)
             if line_no in pause_lines:
                 pause_hits = pause_lines[line_no]
+                frame_note = any((line_no, i) in pause_notes for i, _, _ in pause_hits)
             else:
                 pause_hits = _pause_comma_hits(plain_text)
                 if doc_type != "essay":
                     pause_hits = sorted(pause_hits + _pause_comma_object_hits(plain_text))
+                frame_note = bool(_pause_comma_frame_notes(plain_text, pause_hits))
             if pause_hits:
                 phrases = "".join("「{}{}、」".format(phrase, chunk) for _, chunk, phrase in pause_hits[:3])
                 if len(pause_hits) > 3:
@@ -5897,7 +5976,9 @@ def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = No
                     "rule": "pause_comma",
                     "line": line_no,
                     "severity": "info",
-                    "message": f"{where}のすぐあとに読点があります（{phrases}）。間を作るだけの読点は、AIの文章らしく見えます。読点のあとに別の主語が来る、条件や場面の枠を示す、並べている、外すと語がつながったり掛かり先が変わったりする、のどれにも当たらなければ、読点だけを外してください（語順と述語は変えません）。小説や随筆で書き手が間として置いた読点は残してかまいません。",
+                    "message": f"{where}のすぐあとに読点があります（{phrases}）。間を作るだけの読点は、AIの文章らしく見えます。読点のあとに別の主語が来る、条件や場面の枠を示す、並べている、外すと語がつながったり掛かり先が変わったりする、のどれにも当たらなければ、読点だけを外してください（語順と述語は変えません）。小説や随筆で書き手が間として置いた読点は残してかまいません。"
+                               # 3.2.0: 文頭の場面の枠のあとで文が長い行だけ（ほかの行の message は 3.1.0 と同じ）
+                               + (_PAUSE_FRAME_NOTE if frame_note else ""),
                     "snippet": line.strip(),
                     "_objects": objects,
                     "_heads": heads

@@ -33,12 +33,19 @@ SUBKINDS = {
     "protected": {"code", "inline_code", "url", "link", "frontmatter", "html", "quote"},
     "modality": {"permission_lost", "permission_added", "ability_lost"},
     "modality_review": {"ability_lost"},
+    # 3.2.0: 義務の強さの変化（obligation）と、境目の言い方の変化（boundary）
+    "obligation": {"optional_to_unneeded", "unneeded_to_optional", "duty_to_optional", "optional_to_duty", "duty_to_request"},
+    "boundary": {"strict_to_inclusive", "inclusive_to_strict"},
 }
 # diff の詰め（10.7、追加文書 1.4）: 否定対比の主張の逆転（contrast_reversal）と気持ちの創作（feeling）を足した。
 # どちらも意味が変わる恐れの節に出すが、--fail-on=meaning-risk には数えない
 # v2.1.0: 許可・能力の言い方の変化（modality は数える。事実や仕様を述べる種類でない文書の能力の消えは modality_review で数えない）を足した
+# 3.2.0: 範囲を絞る語（だけ、のみ、しか〜ない、に限る）が消えた書き換え（limiter。数える）を足した
+# 3.2.0: 境目の言い方の変化（boundary。数える）と、見直しの候補の5つ（obligation、quantifier、deadline、condition、
+# dropped_sentence。数えない）を足した
 KINDS = {"number", "negation", "swap", "sentence_type", "protected", "contrast_reversal", "feeling", "certainty", "certainty_review", "quote", "state", "promise", "claim",
-         "modality", "modality_review"}
+         "modality", "modality_review", "limiter", "dropped_sentence", "obligation", "quantifier", "deadline", "condition",
+         "boundary"}
 
 # 2.8 の meaning_risks の要素の例（入力は 2.7 の例A）
 EXAMPLE_A_RISK = {"kind": "number", "subkind": "replaced", "old_line": 1, "new_line": 1,
@@ -640,11 +647,13 @@ class TestFixedLimits(RiskCase):
         self.assertIn("すずきさんが確認した。", self.changed_lines(result))
 
     def test_removed_condition(self):
-        """設計の表から入力を変えた: 「雨なら中止する」は条件の印（なら の直後が読点・句点・行末）に当たらない。
-        書いたとおりの入力では meaning_risks が空であることだけを見て、markers の条件は読点つきの形で確かめる（questions-diff.md 3）。"""
+        """3.2.0 で仕様を変えた: 条件の句（なら の直後が読点）が消えた書き換えは、condition の見直しの候補になる（--fail-on には数えない）。
+        読点のない「雨なら中止する」は条件の句に当たらず、今までどおり候補にしない。markers の条件は読点つきの形で確かめる
+        （questions-diff.md 3）。"""
         self.assertEqual(self.risks("雨なら中止する。", "中止する。"), [])
         result = self.result("雨なら、中止する。", "中止する。")
-        self.assertEqual(result["meaning_risks"], [])
+        self.assertEqual([risk["kind"] for risk in result["meaning_risks"]], ["condition"])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 0)
         self.assertIn("条件", [marker["kind"] for marker in result["markers"]])
 
     def test_removed_exception_is_only_in_the_full_diff(self):
@@ -704,8 +713,21 @@ class TestCorpusWatch(RiskCase):
     # promise/guarantee 1（01_tech_arch_sonnet_formal の「事態を防げる → 処理を止めることはない」。否定の数が原文より増えた
     # 「〜ことはない」を、組の原文の文の述語で打ち消さなくなった）、modality_review/ability_lost 1（08_essay_retrospective_sonnet_formal の
     # 「担当できるまでになっている → 担当している」。種類なしなので数えない）。
+    # 3.2.0 で limiter（範囲を絞る語の消え。数える）が1件出た。05_comparison_sonnet_casual の「ホーム画面だけは → ホーム画面は」
+    # （どちらとも言えない。同じ段落の次の文に「この画面に限って」が残る）。06_spec_draft_sonnet_casual_bl の「保存だけを同期で
+    # 行い → 保存するところまでを同期で実行し」（範囲は保たれている）は、後の文の「ところまで」を範囲を絞る言い方に数えるので
+    # 出ない。01_tech_arch_sonnet_formal_bl の「キューを導入するだけでは耐障害性は確保されず」（誤検知）は、「だけでは」「だけで」の
+    # あとの同じ節に打ち消しがある形（それだけでは足りないという意味）を数えないので出ない。
+    # 3.2.0 の直しで、sentence_type/marks（04_slack_announce_sonnet_default の「お願いしたいことは3点あります → 次の3点を
+    # お願いします」）が1件減った（上限は据え置く）。
+    # 3.2.0 で boundary（境目の言い方の変化。数える）が3件出た。どれも境目が変わった組で当たり。strict_to_inclusive 2
+    # （02_incident_report_sonnet_casual_bl の「2秒を超え → 2秒以上かかり」、03_pr_description_sonnet_formal の「上限回数を
+    # 超えた場合は → 再試行回数が上限に達したら」）、inclusive_to_strict 1（02_incident_report_sonnet_casual の
+    # 「30秒タイムアウトに達して → 30秒のタイムアウトを超えたものから」）。3.2.0 で足したほかの kind（obligation、quantifier、
+    # deadline、condition、dropped_sentence と、choice の one_to_all）は0件。
     MEASURED = {"claim/evaluation": 5, "negation": 1, "number/added": 4, "number/lost": 1, "number/replaced": 1, "sentence_type/marks": 5,
-                "promise/guarantee": 1, "modality_review/ability_lost": 1}
+                "promise/guarantee": 1, "modality_review/ability_lost": 1, "limiter": 1,
+                "boundary/strict_to_inclusive": 2, "boundary/inclusive_to_strict": 1}
 
     def test_corpus_48_pairs_kind_counts_do_not_exceed_the_measured_values(self):
         self.need_v2_diff()
