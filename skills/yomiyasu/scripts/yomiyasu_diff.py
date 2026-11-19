@@ -9244,11 +9244,20 @@ _ADD_PREVENT_NOT_ACT = _lazy_compile(r"済|不要|求め|要請|指摘|依頼さ
 # （「担保されます」「引き続きご利用いただけます」「費用は発生いたしません」「ことは一切」）。原文の本文に同じ言い方の句が
 # 推敲後と同じ数以上あるときも、原文にある保証にする（_AdditionDocument.wording_kept。3.2.1。再発防止の誓いも同じ）。
 
-# 保証と再発防止の誓いの句の前の語（_addition_promise_wording）。句のすぐ前の助詞と、その前の語。
+# 保証と再発防止の誓いの句の前の語（_addition_promise_wording）。句のすぐ前の空白・読点・コロン・閉じかっこ・強調の記号と助詞を
+# 外したあとの語。「クーポンは、」「トランザクションにより」「**旧プラン**は」「旧プラン（月額）は」「v1.2 は」も、その前の語を取る。
 
-_ADD_WORDING_PARTICLE = _lazy_compile(r"(?:では|でも|には|とは|が|は|を|も|の|に|で|と)$")
+_ADD_WORDING_TRAIL = _lazy_compile(r"[\s、，,:：*＊）)」』】\]]+$")
 
-_ADD_WORDING_WORD = _lazy_compile(r"[" + _ADD_K + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ]{1,8}$")
+_ADD_WORDING_PARTICLE = _lazy_compile(r"(?:によって|により|において(?:は|も)?|における|について(?:は|も)?|に対して(?:は|も)?|に関して(?:は|も)?"
+                                      r"|にとって(?:は|も)?|としては|として|からは|までは|では|でも|には|とは|へは|から|まで"
+                                      r"|が|は|を|も|の|に|で|と|へ)$")
+
+_ADD_WORDING_CLASS = r"[" + _ADD_K + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ._\-]{1,16}"
+
+# 「と」「や」「・」「及び」でつないだ語は、つないだまま1つの語にする（B は → A と B は を、同じ前の語にしない）。
+
+_ADD_WORDING_WORD = _lazy_compile(r"(?:" + _ADD_WORDING_CLASS + r"[ 　]*(?:と|や|・|及び|および|並びに)[ 　]*)*" + _ADD_WORDING_CLASS + r"$")
 
 _ADD_GUARANTEE_FAM = {"ことはない": r"ことは(?:ありません|ございません|ない)",
                  "費用はかからない": r"(?:費用|料金|料(?=は|が|を|も)|負担|手数料)(?:は|が|も)?[^。]{0,8}?(?:かから|かかりません|発生し(?:ない|ません)|いただき?ません|不要|なし|ゼロ|[0０〇]円)|無料|無償|[0０〇]円",
@@ -9379,17 +9388,28 @@ def _addition_promise_clauses(text: str) -> list:
     return found
 
 
-def _addition_promise_wording(text: str, pos: int, key: str) -> tuple[str, str]:
+def _addition_promise_wording(text: str, pos: int, key: str, name: str) -> tuple[str, str]:
     """保証と再発防止の誓いの句の言い方（3.2.1）。(句の前の語, 句の頭（pos）から句の語（key）のあとの最初の「。」か「、」の前まで)。
     句の語のあとの形も比べるので、「〜いただけるかを確認しています」「〜いただけますと幸いです」「発生いたしませんでした」
     「〜ことは一切できません」は、「〜いただけます」「発生いたしません」「〜ことは一切ございません」と別の言い方になる。
-    句の前の語は、句のすぐ前の助詞（_ADD_WORDING_PARTICLE）と空白を外したあとの、漢字・カタカナ・英数字の続き（8字まで）。
-    「品質は担保されます」と「性能は担保されます」は別の言い方になる。"""
+    句の前の語は、句のすぐ前の空白・読点・記号（_ADD_WORDING_TRAIL）と助詞（_ADD_WORDING_PARTICLE）を外したあとの、漢字・カタカナ・
+    英数字の続き（16字まで）。「品質は担保されます」と「性能は担保されます」は別の言い方になる。「〜ことはない」の句は動詞の最後の
+    かなから始まるので、句の前の「、」か「。」から句の頭までを句の前の語にする（データが消えることは、と、サービスが止まることは）。"""
     end = pos + len(key)
     stops = [k for k in (text.find('。', end), text.find('、', end)) if k >= 0]
-    before = _ADD_WORDING_PARTICLE.sub('', text[:pos].rstrip()).rstrip()
+    wording = text[pos:min(stops)] if stops else text[pos:]
+    before = text[:pos]
+    if name == 'ことはない':
+        return (before[max(before.rfind('、'), before.rfind('。')) + 1:].strip(), wording)
+    before = _ADD_WORDING_TRAIL.sub('', _ADD_WORDING_PARTICLE.sub('', _ADD_WORDING_TRAIL.sub('', before)))
     word = _ADD_WORDING_WORD.search(before)
-    return (word.group(0) if word else '', text[pos:min(stops)] if stops else text[pos:])
+    return (word.group(0) if word else '', wording)
+
+
+def _addition_in_quote(text: str, pos: int) -> bool:
+    """text の pos より前に、閉じていないかぎかっこ（「、『）があるか（3.2.1。原文のかぎかっこの中の句を、原文の保証に数えない）。"""
+    head = text[:pos]
+    return max(head.rfind('「'), head.rfind('『')) > max(head.rfind('」'), head.rfind('』'))
 
 
 def _addition_key_head(key: str) -> str:
@@ -9559,17 +9579,19 @@ class _AdditionDocument:
 
     def wording_counts(self, side: int) -> Counter:
         """本文の保証と再発防止の誓いの句を、(subkind, 名前, 言い方) ごとに数える（言い方は _addition_promise_wording）。
-        原文と推敲後を、推敲後の句を見つけるのと同じ関数（_addition_promise_clauses）で数える。初めて要るときに作る。"""
+        原文と推敲後を、推敲後の句を見つけるのと同じ関数（_addition_promise_clauses）で数える。原文の側では、かぎかっこ（「」『』）の
+        中の句を数えない（引用を書き手の言い切りにした推敲を、原文と同じ句にしない）。初めて要るときに作る。"""
         if self._wordings is None:
-            self._wordings = [Counter((sub, name, _addition_promise_wording(body.text, pos, key))
+            self._wordings = [Counter((sub, name, _addition_promise_wording(body.text, pos, key, name))
                                       for body in bodies for sub, name, key, pos, _ in self.find('promise', body.text)
-                                      if sub in ('guarantee', 'prevention')) for bodies in self.bodies]
+                                      if sub in ('guarantee', 'prevention') and not (number == 0 and _addition_in_quote(body.text, pos)))
+                              for number, bodies in enumerate(self.bodies)]
         return self._wordings[side]
 
     def wording_kept(self, sub: str, name: str, text: str, pos: int, key: str) -> bool:
         """推敲後の文 text の保証か再発防止の誓いの句（pos、key）と同じ言い方の句が、原文の本文に推敲後と同じ数以上あるか（3.2.1）。
         推敲後のほうが多いときは、足した句があるので偽にする。"""
-        unit = (sub, name, _addition_promise_wording(text, pos, key))
+        unit = (sub, name, _addition_promise_wording(text, pos, key, name))
         old = self.wording_counts(0)[unit]
         return bool(old) and self.wording_counts(1)[unit] <= old
 
