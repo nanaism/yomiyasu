@@ -9249,9 +9249,17 @@ _ADD_PREVENT_NOT_ACT = _lazy_compile(r"済|不要|求め|要請|指摘|依頼さ
 
 _ADD_WORDING_TRAIL = _lazy_compile(r"[\s、，,:：*＊）)」』】\]]+$")
 
-_ADD_WORDING_PARTICLE = _lazy_compile(r"(?:によって|により|において(?:は|も)?|における|について(?:は|も)?|に対して(?:は|も)?|に関して(?:は|も)?"
+_ADD_WORDING_PARTICLE = _lazy_compile(r"(?:につきまして(?:は|も)?|におきまして(?:は|も)?|に関しまして(?:は|も)?|に対しまして(?:は|も)?"
+                                      r"|におかれましては|によりまして|を通じて|を通して|にて|にも"
+                                      r"|によって|により|において(?:は|も)?|における|について(?:は|も)?|に対して(?:は|も)?|に関して(?:は|も)?"
                                       r"|にとって(?:は|も)?|としては|として|からは|までは|では|でも|には|とは|へは|から|まで"
                                       r"|が|は|を|も|の|に|で|と|へ)$")
+
+# 原文の句を数える前に、漢字で書いた補助動詞・形式名詞・謙譲の形を、句の型の形にそろえる（ご利用頂けます、ご利用出来ます、
+# 送信される事は、発生致しません。SKILL.md がひらがなに直す形なので、直した推敲を原文と同じ句にする）。
+
+_ADD_KANA_FORMS = ((_lazy_compile(r"頂(?=[けきく])"), "いただ"), (_lazy_compile(r"出来(?=[まるなず])"), "でき"),
+                   (_lazy_compile(r"(?<=[るうくすつぬぶむぐい])事(?=[はがもを])"), "こと"), (_lazy_compile(r"致(?=し)"), "いた"))
 
 _ADD_WORDING_CLASS = r"[" + _ADD_K + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ._\-]{1,16}"
 
@@ -9398,12 +9406,20 @@ def _addition_promise_wording(text: str, pos: int, key: str, name: str) -> tuple
     end = pos + len(key)
     stops = [k for k in (text.find('。', end), text.find('、', end)) if k >= 0]
     wording = text[pos:min(stops)] if stops else text[pos:]
-    before = text[:pos]
     if name == 'ことはない':
+        before = text[:pos]
         return (before[max(before.rfind('、'), before.rfind('。')) + 1:].strip(), wording)
-    before = _ADD_WORDING_TRAIL.sub('', _ADD_WORDING_PARTICLE.sub('', _ADD_WORDING_TRAIL.sub('', before)))
+    # 句の前の200字だけを見る（つないだ語が長く続く1文で、正規表現の時間が延びないため）。
+    before = _ADD_WORDING_TRAIL.sub('', _ADD_WORDING_PARTICLE.sub('', _ADD_WORDING_TRAIL.sub('', text[max(0, pos - 200):pos])))
     word = _ADD_WORDING_WORD.search(before)
     return (word.group(0) if word else '', wording)
+
+
+def _addition_kana_forms(text: str) -> str:
+    """原文の句を数える前に、漢字で書いた補助動詞などを句の型の形にそろえる（_ADD_KANA_FORMS。3.2.1）。"""
+    for rx, kana in _ADD_KANA_FORMS:
+        text = rx.sub(kana, text)
+    return text
 
 
 def _addition_in_quote(text: str, pos: int) -> bool:
@@ -9579,13 +9595,15 @@ class _AdditionDocument:
 
     def wording_counts(self, side: int) -> Counter:
         """本文の保証と再発防止の誓いの句を、(subkind, 名前, 言い方) ごとに数える（言い方は _addition_promise_wording）。
-        原文と推敲後を、推敲後の句を見つけるのと同じ関数（_addition_promise_clauses）で数える。原文の側では、かぎかっこ（「」『』）の
-        中の句を数えない（引用を書き手の言い切りにした推敲を、原文と同じ句にしない）。初めて要るときに作る。"""
+        原文と推敲後を、推敲後の句を見つけるのと同じ関数（_addition_promise_clauses）で数える。原文の側では、漢字で書いた補助動詞などを
+        句の型の形にそろえてから数え（_addition_kana_forms）、かぎかっこ（「」『』）の中の句は数えない（引用を書き手の言い切りにした
+        推敲を、原文と同じ句にしない）。初めて要るときに作る。"""
         if self._wordings is None:
-            self._wordings = [Counter((sub, name, _addition_promise_wording(body.text, pos, key, name))
-                                      for body in bodies for sub, name, key, pos, _ in self.find('promise', body.text)
-                                      if sub in ('guarantee', 'prevention') and not (number == 0 and _addition_in_quote(body.text, pos)))
-                              for number, bodies in enumerate(self.bodies)]
+            old = [_addition_kana_forms(body.text) for body in self.bodies[0]]
+            self._wordings = [Counter((sub, name, _addition_promise_wording(text, pos, key, name))
+                                      for text in texts for sub, name, key, pos, _ in self.find('promise', text)
+                                      if sub in ('guarantee', 'prevention') and not (number == 0 and _addition_in_quote(text, pos)))
+                              for number, texts in enumerate((old, [body.text for body in self.bodies[1]]))]
         return self._wordings[side]
 
     def wording_kept(self, sub: str, name: str, text: str, pos: int, key: str) -> bool:
