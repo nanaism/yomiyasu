@@ -27,7 +27,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
 """
 
 from __future__ import annotations
-__version__ = "3.2.0"
+__version__ = "3.2.1"
 
 import os
 import errno
@@ -9240,6 +9240,33 @@ _ADD_PREVENT_ACT = _lazy_compile(r"(?:ます|する(?=[。、]|$)|[るうくす�
 
 _ADD_PREVENT_NOT_ACT = _lazy_compile(r"済|不要|求め|要請|指摘|依頼され|ません|ない(?=[。、]|$)|(?<!こととし)(?<!ことにし)(?:でした|ました|だった|た(?=[。]|$))")
 
+# 原文にある保証の根拠の語。原文の全体（表や見出しを含む）で探す。この語は、推敲後の保証の句の言い方を全部は含まない
+# （「担保されます」「引き続きご利用いただけます」「費用は発生いたしません」「ことは一切」）。原文の本文に同じ言い方の句が
+# 推敲後と同じ数以上あるときも、原文にある保証にする（_AdditionDocument.wording_kept。3.2.1。再発防止の誓いも同じ）。
+
+# 保証と再発防止の誓いの句の前の語（_addition_promise_wording）。句のすぐ前の空白・読点・コロン・閉じかっこ・強調の記号と助詞を
+# 外したあとの語。「クーポンは、」「トランザクションにより」「**旧プラン**は」「旧プラン（月額）は」「v1.2 は」も、その前の語を取る。
+
+_ADD_WORDING_TRAIL = _lazy_compile(r"[\s、，,:：*＊）)」』】\]]+$")
+
+_ADD_WORDING_PARTICLE = _lazy_compile(r"(?:につきまして(?:は|も)?|におきまして(?:は|も)?|に関しまして(?:は|も)?|に対しまして(?:は|も)?"
+                                      r"|におかれましては|によりまして|を通じて|を通して|にて|にも"
+                                      r"|によって|により|において(?:は|も)?|における|について(?:は|も)?|に対して(?:は|も)?|に関して(?:は|も)?"
+                                      r"|にとって(?:は|も)?|としては|として|からは|までは|では|でも|には|とは|へは|から|まで"
+                                      r"|が|は|を|も|の|に|で|と|へ)$")
+
+# 原文の句を数える前に、漢字で書いた補助動詞・形式名詞・謙譲の形を、句の型の形にそろえる（ご利用頂けます、ご利用出来ます、
+# 送信される事は、発生致しません。SKILL.md がひらがなに直す形なので、直した推敲を原文と同じ句にする）。
+
+_ADD_KANA_FORMS = ((_lazy_compile(r"頂(?=[けきく])"), "いただ"), (_lazy_compile(r"出来(?=[まるなず])"), "でき"),
+                   (_lazy_compile(r"(?<=[るうくすつぬぶむぐい])事(?=[はがもを])"), "こと"), (_lazy_compile(r"致(?=し)"), "いた"))
+
+_ADD_WORDING_CLASS = r"[" + _ADD_K + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ._\-]{1,16}"
+
+# 「と」「や」「・」「及び」でつないだ語は、つないだまま1つの語にする（B は → A と B は を、同じ前の語にしない）。
+
+_ADD_WORDING_WORD = _lazy_compile(r"(?:" + _ADD_WORDING_CLASS + r"[ 　]*(?:と|や|・|及び|および|並びに)[ 　]*)*" + _ADD_WORDING_CLASS + r"$")
+
 _ADD_GUARANTEE_FAM = {"ことはない": r"ことは(?:ありません|ございません|ない)",
                  "費用はかからない": r"(?:費用|料金|料(?=は|が|を|も)|負担|手数料)(?:は|が|も)?[^。]{0,8}?(?:かから|かかりません|発生し(?:ない|ません)|いただき?ません|不要|なし|ゼロ|[0０〇]円)|無料|無償|[0０〇]円",
                  "まま使える": r"まま|問題なく|支障なく|これまでどおり|これまで通り|安心",
@@ -9367,6 +9394,38 @@ def _addition_promise_clauses(text: str) -> list:
                     continue
             found.append((sub, name, key, m.start(), strong or sub != "promise"))
     return found
+
+
+def _addition_promise_wording(text: str, pos: int, key: str, name: str) -> tuple[str, str]:
+    """保証と再発防止の誓いの句の言い方（3.2.1）。(句の前の語, 句の頭（pos）から句の語（key）のあとの最初の「。」か「、」の前まで)。
+    句の語のあとの形も比べるので、「〜いただけるかを確認しています」「〜いただけますと幸いです」「発生いたしませんでした」
+    「〜ことは一切できません」は、「〜いただけます」「発生いたしません」「〜ことは一切ございません」と別の言い方になる。
+    句の前の語は、句のすぐ前の空白・読点・記号（_ADD_WORDING_TRAIL）と助詞（_ADD_WORDING_PARTICLE）を外したあとの、漢字・カタカナ・
+    英数字の続き（16字まで）。「品質は担保されます」と「性能は担保されます」は別の言い方になる。「〜ことはない」の句は動詞の最後の
+    かなから始まるので、句の前の「、」か「。」から句の頭までを句の前の語にする（データが消えることは、と、サービスが止まることは）。"""
+    end = pos + len(key)
+    stops = [k for k in (text.find('。', end), text.find('、', end)) if k >= 0]
+    wording = text[pos:min(stops)] if stops else text[pos:]
+    if name == 'ことはない':
+        before = text[:pos]
+        return (before[max(before.rfind('、'), before.rfind('。')) + 1:].strip(), wording)
+    # 句の前の200字だけを見る（つないだ語が長く続く1文で、正規表現の時間が延びないため）。
+    before = _ADD_WORDING_TRAIL.sub('', _ADD_WORDING_PARTICLE.sub('', _ADD_WORDING_TRAIL.sub('', text[max(0, pos - 200):pos])))
+    word = _ADD_WORDING_WORD.search(before)
+    return (word.group(0) if word else '', wording)
+
+
+def _addition_kana_forms(text: str) -> str:
+    """原文の句を数える前に、漢字で書いた補助動詞などを句の型の形にそろえる（_ADD_KANA_FORMS。3.2.1）。"""
+    for rx, kana in _ADD_KANA_FORMS:
+        text = rx.sub(kana, text)
+    return text
+
+
+def _addition_in_quote(text: str, pos: int) -> bool:
+    """text の pos より前に、閉じていないかぎかっこ（「、『）があるか（3.2.1。原文のかぎかっこの中の句を、原文の保証に数えない）。"""
+    head = text[:pos]
+    return max(head.rfind('「'), head.rfind('『')) > max(head.rfind('」'), head.rfind('』'))
 
 
 def _addition_key_head(key: str) -> str:
@@ -9521,6 +9580,7 @@ class _AdditionDocument:
         self.prevent = any(not _ADD_PREVENT_UNSETTLED.match(self.raw, m.end()) for m in _ADD_PREVENT_ANY.finditer(self.raw))
         self.states, self.kept, self.heads, self.matches = {}, {}, {}, {}
         self._old_bigrams = None
+        self._wordings = None
         self.counts = [Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
         self.by_kind = {}
         for risk in risks:
@@ -9532,6 +9592,26 @@ class _AdditionDocument:
             text = self.old_text
             self._old_bigrams = {text[k:k + 2] for k in range(len(text) - 1)}
         return self._old_bigrams
+
+    def wording_counts(self, side: int) -> Counter:
+        """本文の保証と再発防止の誓いの句を、(subkind, 名前, 言い方) ごとに数える（言い方は _addition_promise_wording）。
+        原文と推敲後を、推敲後の句を見つけるのと同じ関数（_addition_promise_clauses）で数える。原文の側では、漢字で書いた補助動詞などを
+        句の型の形にそろえてから数え（_addition_kana_forms）、かぎかっこ（「」『』）の中の句は数えない（引用を書き手の言い切りにした
+        推敲を、原文と同じ句にしない）。初めて要るときに作る。"""
+        if self._wordings is None:
+            old = [_addition_kana_forms(body.text) for body in self.bodies[0]]
+            self._wordings = [Counter((sub, name, _addition_promise_wording(text, pos, key, name))
+                                      for text in texts for sub, name, key, pos, _ in self.find('promise', text)
+                                      if sub in ('guarantee', 'prevention') and not (number == 0 and _addition_in_quote(text, pos)))
+                              for number, texts in enumerate((old, [body.text for body in self.bodies[1]]))]
+        return self._wordings[side]
+
+    def wording_kept(self, sub: str, name: str, text: str, pos: int, key: str) -> bool:
+        """推敲後の文 text の保証か再発防止の誓いの句（pos、key）と同じ言い方の句が、原文の本文に推敲後と同じ数以上あるか（3.2.1）。
+        推敲後のほうが多いときは、足した句があるので偽にする。"""
+        unit = (sub, name, _addition_promise_wording(text, pos, key, name))
+        old = self.wording_counts(0)[unit]
+        return bool(old) and self.wording_counts(1)[unit] <= old
 
     def find(self, name: str, text: str) -> list:
         key = (name, text)
@@ -9684,12 +9764,17 @@ def _addition_promise_risk(doc: _AdditionDocument, group: _AdditionGroup, i: int
     old_text = group.text(0, i)
     kept = []
     for sub, name, key, pos, strong in clauses:
+        # 原文の本文に同じ言い方の句が推敲後と同じ数以上あれば、残した句として候補にしない（3.2.1）。述語で打ち消す句も、
+        # 組の原文の述語は 3.2.0 と同じく使う（同じ文のほかの約束の句の打ち消しを変えない）。
+        in_original = False
         if sub == 'prevention':
             if doc.prevent:
                 continue
+            in_original = doc.wording_kept(sub, name, body.text, pos, key)
         elif sub == 'guarantee':
             if re.search(_ADD_GUARANTEE_FAM[name], doc.raw):
                 continue
+            in_original = doc.wording_kept(sub, name, body.text, pos, key)
         else:
             head = _addition_key_head(key)
             if doc.has_head(head) or (head and i is not None and re.search(
@@ -9706,9 +9791,9 @@ def _addition_promise_risk(doc: _AdditionDocument, group: _AdditionGroup, i: int
             if (name == 'ことはない' and i is not None
                     and len(_negation_marks(body.text)) > len(_negation_marks(group.bodies[0][i].text))):
                 paired = None
-            if not _addition_cancel(group, context, sub, part, paired):
+            if not _addition_cancel(group, context, sub, part, paired) and not in_original:
                 kept.append((sub, name, key, pos, strong))
-        else:
+        elif not in_original:
             kept.append((sub, name, key, pos, strong))
     if i is not None and doc.same_sentence('certainty', group.bodies[0][i]):
         kept = [c for c in kept if c[0] != 'promise']
