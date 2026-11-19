@@ -9241,8 +9241,14 @@ _ADD_PREVENT_ACT = _lazy_compile(r"(?:ます|する(?=[。、]|$)|[るうくす�
 _ADD_PREVENT_NOT_ACT = _lazy_compile(r"済|不要|求め|要請|指摘|依頼され|ません|ない(?=[。、]|$)|(?<!こととし)(?<!ことにし)(?:でした|ました|だった|た(?=[。]|$))")
 
 # 原文にある保証の根拠の語。原文の全体（表や見出しを含む）で探す。この語は、推敲後の保証の句の言い方を全部は含まない
-# （「担保されます」「引き続きご利用いただけます」「費用は発生いたしません」「ことは一切」）。原文の本文に同じ名前の保証の句が
-# 推敲後と同じ数以上あるときも、原文にある保証にする（_AdditionDocument.guarantee_counts。3.2.1）。
+# （「担保されます」「引き続きご利用いただけます」「費用は発生いたしません」「ことは一切」）。原文の本文に同じ言い方の句が
+# 推敲後と同じ数以上あるときも、原文にある保証にする（_AdditionDocument.wording_kept。3.2.1。再発防止の誓いも同じ）。
+
+# 保証と再発防止の誓いの句の前の語（_addition_promise_wording）。句のすぐ前の助詞と、その前の語。
+
+_ADD_WORDING_PARTICLE = _lazy_compile(r"(?:では|でも|には|とは|が|は|を|も|の|に|で|と)$")
+
+_ADD_WORDING_WORD = _lazy_compile(r"[" + _ADD_K + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ]{1,8}$")
 
 _ADD_GUARANTEE_FAM = {"ことはない": r"ことは(?:ありません|ございません|ない)",
                  "費用はかからない": r"(?:費用|料金|料(?=は|が|を|も)|負担|手数料)(?:は|が|も)?[^。]{0,8}?(?:かから|かかりません|発生し(?:ない|ません)|いただき?ません|不要|なし|ゼロ|[0０〇]円)|無料|無償|[0０〇]円",
@@ -9371,6 +9377,19 @@ def _addition_promise_clauses(text: str) -> list:
                     continue
             found.append((sub, name, key, m.start(), strong or sub != "promise"))
     return found
+
+
+def _addition_promise_wording(text: str, pos: int, key: str) -> tuple[str, str]:
+    """保証と再発防止の誓いの句の言い方（3.2.1）。(句の前の語, 句の頭（pos）から句の語（key）のあとの最初の「。」か「、」の前まで)。
+    句の語のあとの形も比べるので、「〜いただけるかを確認しています」「〜いただけますと幸いです」「発生いたしませんでした」
+    「〜ことは一切できません」は、「〜いただけます」「発生いたしません」「〜ことは一切ございません」と別の言い方になる。
+    句の前の語は、句のすぐ前の助詞（_ADD_WORDING_PARTICLE）と空白を外したあとの、漢字・カタカナ・英数字の続き（8字まで）。
+    「品質は担保されます」と「性能は担保されます」は別の言い方になる。"""
+    end = pos + len(key)
+    stops = [k for k in (text.find('。', end), text.find('、', end)) if k >= 0]
+    before = _ADD_WORDING_PARTICLE.sub('', text[:pos].rstrip()).rstrip()
+    word = _ADD_WORDING_WORD.search(before)
+    return (word.group(0) if word else '', text[pos:min(stops)] if stops else text[pos:])
 
 
 def _addition_key_head(key: str) -> str:
@@ -9525,8 +9544,8 @@ class _AdditionDocument:
         self.prevent = any(not _ADD_PREVENT_UNSETTLED.match(self.raw, m.end()) for m in _ADD_PREVENT_ANY.finditer(self.raw))
         self.states, self.kept, self.heads, self.matches = {}, {}, {}, {}
         self._old_bigrams = None
-        self._guarantees = None
-        self.counts = [Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
+        self._wordings = None
+        self.counts =[Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
         self.by_kind = {}
         for risk in risks:
             self.by_kind.setdefault(risk['kind'], []).append(risk)
@@ -9538,13 +9557,21 @@ class _AdditionDocument:
             self._old_bigrams = {text[k:k + 2] for k in range(len(text) - 1)}
         return self._old_bigrams
 
-    def guarantee_counts(self, side: int) -> Counter:
-        """本文の保証の句の数を、名前（_ADD_PROMISE の guarantee の名前）ごとに数える。原文と推敲後を、推敲後の句を見つけるのと
-        同じ関数（_addition_promise_clauses）で数える。初めて要るときに作る。"""
-        if self._guarantees is None:
-            self._guarantees = [Counter(clause[1] for body in bodies for clause in self.find('promise', body.text)
-                                        if clause[0] == 'guarantee') for bodies in self.bodies]
-        return self._guarantees[side]
+    def wording_counts(self, side: int) -> Counter:
+        """本文の保証と再発防止の誓いの句を、(subkind, 名前, 言い方) ごとに数える（言い方は _addition_promise_wording）。
+        原文と推敲後を、推敲後の句を見つけるのと同じ関数（_addition_promise_clauses）で数える。初めて要るときに作る。"""
+        if self._wordings is None:
+            self._wordings = [Counter((sub, name, _addition_promise_wording(body.text, pos, key))
+                                      for body in bodies for sub, name, key, pos, _ in self.find('promise', body.text)
+                                      if sub in ('guarantee', 'prevention')) for bodies in self.bodies]
+        return self._wordings[side]
+
+    def wording_kept(self, sub: str, name: str, text: str, pos: int, key: str) -> bool:
+        """推敲後の文 text の保証か再発防止の誓いの句（pos、key）と同じ言い方の句が、原文の本文に推敲後と同じ数以上あるか（3.2.1）。
+        推敲後のほうが多いときは、足した句があるので偽にする。"""
+        unit = (sub, name, _addition_promise_wording(text, pos, key))
+        old = self.wording_counts(0)[unit]
+        return bool(old) and self.wording_counts(1)[unit] <= old
 
     def find(self, name: str, text: str) -> list:
         key = (name, text)
@@ -9697,17 +9724,17 @@ def _addition_promise_risk(doc: _AdditionDocument, group: _AdditionGroup, i: int
     old_text = group.text(0, i)
     kept = []
     for sub, name, key, pos, strong in clauses:
+        # 原文の本文に同じ言い方の句が推敲後と同じ数以上あれば、残した句として候補にしない（3.2.1）。述語で打ち消す句も、
+        # 組の原文の述語は 3.2.0 と同じく使う（同じ文のほかの約束の句の打ち消しを変えない）。
+        in_original = False
         if sub == 'prevention':
             if doc.prevent:
                 continue
+            in_original = doc.wording_kept(sub, name, body.text, pos, key)
         elif sub == 'guarantee':
             if re.search(_ADD_GUARANTEE_FAM[name], doc.raw):
                 continue
-            # 原文の本文に同じ名前の保証の句が推敲後と同じ数以上あれば、残したか言い換えた句なので打ち消す（推敲後のほうが
-            # 多いときは、足した句があるので打ち消さない）。
-            old_count = doc.guarantee_counts(0)[name]
-            if old_count and doc.guarantee_counts(1)[name] <= old_count:
-                continue
+            in_original = doc.wording_kept(sub, name, body.text, pos, key)
         else:
             head = _addition_key_head(key)
             if doc.has_head(head) or (head and i is not None and re.search(
@@ -9724,9 +9751,9 @@ def _addition_promise_risk(doc: _AdditionDocument, group: _AdditionGroup, i: int
             if (name == 'ことはない' and i is not None
                     and len(_negation_marks(body.text)) > len(_negation_marks(group.bodies[0][i].text))):
                 paired = None
-            if not _addition_cancel(group, context, sub, part, paired):
+            if not _addition_cancel(group, context, sub, part, paired) and not in_original:
                 kept.append((sub, name, key, pos, strong))
-        else:
+        elif not in_original:
             kept.append((sub, name, key, pos, strong))
     if i is not None and doc.same_sentence('certainty', group.bodies[0][i]):
         kept = [c for c in kept if c[0] != 'promise']
