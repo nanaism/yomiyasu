@@ -27,7 +27,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
 """
 
 from __future__ import annotations
-__version__ = "3.2.1"
+__version__ = "3.2.2"
 
 import os
 import errno
@@ -9246,6 +9246,8 @@ _ADD_PREVENT_NOT_ACT = _lazy_compile(r"済|不要|求め|要請|指摘|依頼さ
 
 # 保証と再発防止の誓いの句の前の語（_addition_promise_wording）。句のすぐ前の空白・読点・コロン・閉じかっこ・強調の記号と助詞を
 # 外したあとの語。「クーポンは、」「トランザクションにより」「**旧プラン**は」「旧プラン（月額）は」「v1.2 は」も、その前の語を取る。
+# 範囲や条件を決める語（_ADD_WORDING_LIMITER）も外すが、その種類を語のあとに付けて残す。この語の前とあとに付いた助詞（品質だけは、
+# 旧プランでのみ、旧プランでさえも）も外す（3.2.2）。
 
 _ADD_WORDING_TRAIL = _lazy_compile(r"[\s、，,:：*＊）)」』】\]]+$")
 
@@ -9255,11 +9257,40 @@ _ADD_WORDING_PARTICLE = _lazy_compile(r"(?:につきまして(?:は|も)?|にお
                                       r"|にとって(?:は|も)?|としては|として|からは|までは|では|でも|には|とは|へは|から|まで"
                                       r"|が|は|を|も|の|に|で|と|へ)$")
 
-# 原文の句を数える前に、漢字で書いた補助動詞・形式名詞・謙譲の形を、句の型の形にそろえる（ご利用頂けます、ご利用出来ます、
-# 送信される事は、発生致しません。SKILL.md がひらがなに直す形なので、直した推敲を原文と同じ句にする）。
+# 句の前の語のすぐあとの、範囲や条件を決める語（のみ、だけ、に限り、を除き、以外、なら、であれば、今回限り の 限り など）。外して
+# 句の前の語を取り、語の種類（グループの名前を _ADD_WORDING_LIMITER_KIND で読み替えた値）を句の前の語のあとに付ける（3.2.2）。
+# 旧プランのみ と 新プランのみ、旧プランのみ と 旧プランも、法人会員を除き と 法人会員は、法人会員を除き と 法人会員に限り は別の
+# 言い方になり、同じ種類の語の言い換え（のみ と だけ と 今回限り、以外 と を除き と をのぞき、なら と であれば）は同じ言い方になる。
+# 3.2.1 はこの語を外さなかったので、ひらがなで終わる語（のみ、だけ、に限り、を除き、なら など）のあとでは句の前の語が空になり、
+# 保証の相手を替えた推敲を同じ言い方にしていた。この取り方で比べるのは、原文と推敲後の両方の句で語が取れたときだけ
+# （_AdditionDocument.wording_kept）。程度や話の運びの言い方（できるだけ、なぜなら、先ほど、このほど、だからこそ、したばかり、
+# 押さえ）は、この語に数えない。条件の形（〜ない限り、〜なければ、〜れば、〜たら）は、前に語が来ないので数えない。
 
-_ADD_KANA_FORMS = ((_lazy_compile(r"頂(?=[けきく])"), "いただ"), (_lazy_compile(r"出来(?=[まるなず])"), "でき"),
-                   (_lazy_compile(r"(?<=[るうくすつぬぶむぐい])事(?=[はがもを])"), "こと"), (_lazy_compile(r"致(?=し)"), "いた"))
+_ADD_WORDING_LIMITER = _lazy_compile(
+    r"(?:(?P<only>に限り|にかぎり|に限って|にかぎって|に限定して|に限定し|(?<!できる)だけ|のみ|(?<![ただ])ばかり"
+    r"|(?<=[" + _ADD_K + r"ァ-ヴー0-9０-９])(?:限り|かぎり))"
+    r"|(?P<except>を除き|をのぞき|を除いて|をのぞいて|を除けば|をのぞけば|以外)"
+    r"|(?P<broad>に限らず|にかぎらず)|(?P<emph>(?<!から)こそ)|(?P<even>(?<![お押抑])さえ|すら)|(?P<etc>など)"
+    r"|(?P<cond>であれば|(?<!なぜ)(?<!何故)ならば|(?<!なぜ)(?<!何故)(?<!言う)(?<!換える)なら)"
+    r"|(?P<degree>(?<![先後今])(?<!さき)(?<!のち)(?<!なる)(?<!この)(?<!いま)ほど|くらい|ぐらい))$")
+
+_ADD_WORDING_LIMITER_KIND = {"only": "のみ", "except": "以外", "broad": "に限らず", "emph": "こそ", "even": "さえ", "etc": "など", "cond": "なら",
+                             "degree": "ほど"}
+
+# 原文と推敲後の句を数える前に、漢字で書いた補助動詞・形式名詞・謙譲の形を、句の型の形にそろえる（ご利用頂けます、頂いた、
+# ご利用出来ます、出来れば、送信される事は、発生致しません、移行の為、ご確認下さい、試して見る。SKILL.md がひらがなに直す形）。
+# 3.2.2 から両方の側を同じ形でそろえるので、「一致し」の「致」も両方で同じにそろう。「為」は「為替」を除いて、動詞や「の」の
+# あとのものをそろえる（次の字によってそろえ方を変えない）。
+
+_ADD_KANA_FORM = _lazy_compile(r"頂(?=[いかきくけこ])|出来(?=[たてれまるなずよ])|(?<=[るうくすつぬぶむぐいた])事(?=[はがもをにでの])"
+                               r"|致(?=し)|(?<=[のたいうくすつぬむるぐぶ])為(?!替)|下(?=さ[いるっ])|(?<=て)見(?=[るたてれまよ])")
+
+_ADD_KANA_REPLACE = {"頂": "いただ", "出来": "でき", "事": "こと", "致": "いた", "為": "ため", "下": "くだ", "見": "み"}
+
+# 3.2.1 が原文の側だけで使っていたそろえ方（原文の句を探す文の1つ。_AdditionDocument.wording_units）。
+
+_ADD_KANA_FORMS_321 = ((_lazy_compile(r"頂(?=[けきく])"), "いただ"), (_lazy_compile(r"出来(?=[まるなず])"), "でき"),
+                       (_lazy_compile(r"(?<=[るうくすつぬぶむぐい])事(?=[はがもを])"), "こと"), (_lazy_compile(r"致(?=し)"), "いた"))
 
 _ADD_WORDING_CLASS = r"[" + _ADD_K + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ._\-]{1,16}"
 
@@ -9396,30 +9427,79 @@ def _addition_promise_clauses(text: str) -> list:
     return found
 
 
+def _addition_wording_strip(before: str) -> str:
+    """句の前の字の並びから、すぐ前の空白・読点・記号と、助詞を1つ外す（_addition_promise_wording。3.2.1 の外し方）。"""
+    return _ADD_WORDING_TRAIL.sub('', _ADD_WORDING_PARTICLE.sub('', _ADD_WORDING_TRAIL.sub('', before)))
+
+
 def _addition_promise_wording(text: str, pos: int, key: str, name: str) -> tuple[str, str]:
+    """保証と再発防止の誓いの句の言い方（3.2.2 の取り方。_addition_promise_wordings の1つ目）。"""
+    return _addition_promise_wordings(text, pos, key, name)[0]
+
+
+def _addition_promise_wordings(text: str, pos: int, key: str, name: str) -> tuple[tuple[str, str], tuple[str, str], bool]:
     """保証と再発防止の誓いの句の言い方（3.2.1）。(句の前の語, 句の頭（pos）から句の語（key）のあとの最初の「。」か「、」の前まで)。
     句の語のあとの形も比べるので、「〜いただけるかを確認しています」「〜いただけますと幸いです」「発生いたしませんでした」
     「〜ことは一切できません」は、「〜いただけます」「発生いたしません」「〜ことは一切ございません」と別の言い方になる。
     句の前の語は、句のすぐ前の空白・読点・記号（_ADD_WORDING_TRAIL）と助詞（_ADD_WORDING_PARTICLE）を外したあとの、漢字・カタカナ・
-    英数字の続き（16字まで）。「品質は担保されます」と「性能は担保されます」は別の言い方になる。「〜ことはない」の句は動詞の最後の
-    かなから始まるので、句の前の「、」か「。」から句の頭までを句の前の語にする（データが消えることは、と、サービスが止まることは）。"""
+    英数字の続き（16字まで）。「品質は担保されます」と「性能は担保されます」は別の言い方になる。
+    返すのは (3.2.2 の取り方の言い方, 3.2.1 の取り方の言い方, 3.2.2 の取り方で語が取れたか) の3つ。3.2.2 の取り方では、範囲や条件を
+    決める語（_ADD_WORDING_LIMITER）も外し、その種類を語のあとに付ける（品質だけは → 品質のみ）。語が取れないときは種類だけになる。
+    「〜ことはない」の句は動詞の最後のかなから始まるので、句の前の「、」か「。」から句の頭までを句の前の語にする
+    （データが消えることは、と、サービスが止まることは。2つの取り方で同じ）。"""
     end = pos + len(key)
     stops = [k for k in (text.find('。', end), text.find('、', end)) if k >= 0]
     wording = text[pos:min(stops)] if stops else text[pos:]
     if name == 'ことはない':
         before = text[:pos]
-        return (before[max(before.rfind('、'), before.rfind('。')) + 1:].strip(), wording)
-    # 句の前の200字だけを見る（つないだ語が長く続く1文で、正規表現の時間が延びないため）。
-    before = _ADD_WORDING_TRAIL.sub('', _ADD_WORDING_PARTICLE.sub('', _ADD_WORDING_TRAIL.sub('', text[max(0, pos - 200):pos])))
+        same = (before[max(before.rfind('、'), before.rfind('。')) + 1:].strip(), wording)
+        return same, same, True
+    # 句の前の200字だけを見る（つないだ語が長く続く1文で、正規表現の時間が延びないため）。助詞を外したあとに範囲や条件を決める語が
+    # あれば、その種類を残して外し、その前の助詞をもう一度外す（品質だけは、旧プランでのみ、旧プランでさえも。3.2.2）。
+    # この語がないときの外し方は 3.2.1 と同じ1回だけ。
+    before = _addition_wording_strip(text[max(0, pos - 200):pos])
+    first = _ADD_WORDING_WORD.search(before)
+    old = (first.group(0) if first else '', wording)
+    kinds = []
+    for _ in range(4):
+        limiter = _ADD_WORDING_LIMITER.search(before)
+        if not limiter:
+            break
+        kind = _ADD_WORDING_LIMITER_KIND.get(limiter.lastgroup or '', '')
+        # 同じ意味の重ねた言い方（のみに限り、などなど、だけに限らず）は1つにする。以外を除き（二重の否定）は重ねたまま残す。
+        if not (kinds and ((kind in ('のみ', 'など') and kinds[-1] == kind) or (kind == 'のみ' and kinds[-1] == 'に限らず'))):
+            kinds.append(kind)
+        before = _addition_wording_strip(before[:limiter.start()])
+    mark = ''.join(reversed(kinds))
     word = _ADD_WORDING_WORD.search(before)
-    return (word.group(0) if word else '', wording)
+    # 語が取れないとき（一覧にない言い方のあと。旧プランを含めて）は、語を空にする（範囲や条件を決める語の種類は残す）。
+    return ((word.group(0) if word else '') + mark, wording), old, bool(word)
 
 
-def _addition_kana_forms(text: str) -> str:
-    """原文の句を数える前に、漢字で書いた補助動詞などを句の型の形にそろえる（_ADD_KANA_FORMS。3.2.1）。"""
-    for rx, kana in _ADD_KANA_FORMS:
+def _addition_kana_forms_321(text: str) -> str:
+    """3.2.1 が原文の側で使っていたそろえ方（_ADD_KANA_FORMS_321）でそろえた文。"""
+    for rx, kana in _ADD_KANA_FORMS_321:
         text = rx.sub(kana, text)
     return text
+
+
+def _addition_kana_map(text: str) -> tuple[str, list[int]]:
+    """漢字で書いた補助動詞などを句の型の形にそろえた文と、元の文の位置からそろえた文の位置への対応（3.2.2）。
+    対応の長さは len(text) + 1 で、最後の要素はそろえた文の長さ。"""
+    parts, mapping, last, size = [], [], 0, 0
+    for m in _ADD_KANA_FORM.finditer(text):
+        plain = text[last:m.start()]
+        mapping.extend(range(size, size + len(plain)))
+        size += len(plain)
+        kana = _ADD_KANA_REPLACE[m.group(0)]
+        mapping.extend([size] * len(m.group(0)))
+        size += len(kana)
+        parts += [plain, kana]
+        last = m.end()
+    plain = text[last:]
+    mapping.extend(range(size, size + len(plain) + 1))
+    parts.append(plain)
+    return ''.join(parts), mapping
 
 
 def _addition_in_quote(text: str, pos: int) -> bool:
@@ -9581,6 +9661,7 @@ class _AdditionDocument:
         self.states, self.kept, self.heads, self.matches = {}, {}, {}, {}
         self._old_bigrams = None
         self._wordings = None
+        self._kana = {}
         self.counts = [Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
         self.by_kind = {}
         for risk in risks:
@@ -9593,25 +9674,73 @@ class _AdditionDocument:
             self._old_bigrams = {text[k:k + 2] for k in range(len(text) - 1)}
         return self._old_bigrams
 
+    def kana_map(self, text: str) -> tuple[str, list[int]]:
+        """_addition_kana_map の結果を本文ごとに覚えておく（推敲後の句ごとに同じ本文をそろえ直さないため）。"""
+        if text not in self._kana:
+            self._kana[text] = _addition_kana_map(text)
+        return self._kana[text]
+
     def wording_counts(self, side: int) -> Counter:
-        """本文の保証と再発防止の誓いの句を、(subkind, 名前, 言い方) ごとに数える（言い方は _addition_promise_wording）。
-        原文と推敲後を、推敲後の句を見つけるのと同じ関数（_addition_promise_clauses）で数える。原文の側では、漢字で書いた補助動詞などを
-        句の型の形にそろえてから数え（_addition_kana_forms）、かぎかっこ（「」『』）の中の句は数えない（引用を書き手の言い切りにした
-        推敲を、原文と同じ句にしない）。初めて要るときに作る。"""
+        """本文の保証と再発防止の誓いの句を、(subkind, 名前, 言い方) ごとに数える（言い方は _addition_promise_wording。wording_units）。"""
+        return self.wording_tables(side)[0]
+
+    def wording_tables(self, side: int) -> tuple[Counter, Counter, Counter]:
+        """本文の保証と再発防止の誓いの句を、言い方ごとに数える（wording_units）。3.2.2 の取り方の言い方の数、3.2.1 の取り方の
+        言い方の数、3.2.2 の取り方で句の前の語が取れなかった句の 3.2.1 の取り方の言い方の数、の3つ。初めて要るときに作る。"""
         if self._wordings is None:
-            old = [_addition_kana_forms(body.text) for body in self.bodies[0]]
-            self._wordings = [Counter((sub, name, _addition_promise_wording(text, pos, key, name))
-                                      for text in texts for sub, name, key, pos, _ in self.find('promise', text)
-                                      if sub in ('guarantee', 'prevention') and not (number == 0 and _addition_in_quote(text, pos)))
-                              for number, texts in enumerate((old, [body.text for body in self.bodies[1]]))]
+            self._wordings = []
+            for number, bodies in enumerate(self.bodies):
+                new, old, loose = Counter(), Counter(), Counter()
+                for body in bodies:
+                    for sub, name, wording, wording_321, has_word in self.wording_units(number, body.text):
+                        new[(sub, name, wording)] += 1
+                        old[(sub, name, wording_321)] += 1
+                        if not has_word:
+                            loose[(sub, name, wording_321)] += 1
+                self._wordings.append((new, old, loose))
         return self._wordings[side]
+
+    def wording_units(self, number: int, text: str) -> list:
+        """本文 text の保証と再発防止の誓いの句ごとの (subkind, 名前, 3.2.2 の言い方, 3.2.1 の言い方, 句の前の語が取れたか)。
+        言い方はどちらも、漢字で書いた補助動詞などを句の型の形にそろえた文（_addition_kana_map）の上で取る（3.2.2 から推敲後の側も）。
+        推敲後の側（number 1）の句は、推敲後の句の候補を見つけるのと同じく、元の文で探す（3.2.1 と同じ）。原文の側の句は、元の文と
+        3.2.1 のそろえ方の文の2つで探し、同じ位置の句は1つに数える（3.2.2。3.2.1 が見つけていた句と、句の語も漢字の形の句
+        （引き続き〜頂いた〜頂けます）を数える）。句を探すのにそろえた文を使わないのは、そろえると字数が増えて、句の語のあいだの
+        字数の窓（引き続き〜いただけます の16字、再発防止の句のあとの24字）がずれるため。原文の側では、かぎかっこ（「」『』）の中の句は数えない
+        （引用を書き手の言い切りにした推敲を、原文と同じ句にしない）。"""
+        kana, mapping = self.kana_map(text)
+        sources = [(text, mapping)]
+        if number == 0:
+            old = _addition_kana_forms_321(text)
+            if old != text:
+                kana_old, mapping_old = _addition_kana_map(old)
+                if kana_old == kana:
+                    # 同じ頭の句は 3.2.1 のそろえ方の文の読み（3.2.1 が原文の句に使った読み）を先に取る
+                    sources.insert(0, (old, mapping_old))
+        units = {}
+        for source, source_map in sources:
+            for sub, name, key, pos, _ in self.find('promise', source):
+                if sub not in ('guarantee', 'prevention') or (number == 0 and _addition_in_quote(source, pos)):
+                    continue
+                start, end = (pos, pos + len(key)) if source_map is None else (source_map[pos], source_map[pos + len(key)])
+                units.setdefault((sub, name, start), (sub, name) + _addition_promise_wordings(kana, start, kana[start:end], name))
+        return list(units.values())
 
     def wording_kept(self, sub: str, name: str, text: str, pos: int, key: str) -> bool:
         """推敲後の文 text の保証か再発防止の誓いの句（pos、key）と同じ言い方の句が、原文の本文に推敲後と同じ数以上あるか（3.2.1）。
-        推敲後のほうが多いときは、足した句があるので偽にする。"""
-        unit = (sub, name, _addition_promise_wording(text, pos, key, name))
-        old = self.wording_counts(0)[unit]
-        return bool(old) and self.wording_counts(1)[unit] <= old
+        推敲後のほうが多いときは、足した句があるので偽にする。言い方は、漢字の形をそろえた文の上で取る（3.2.2）。
+        3.2.2 の取り方（範囲や条件を決める語を外して種類を残す）で比べるのは、推敲後の句と原文の句の両方で句の前の語が取れたときだけ。
+        どちらかで取れないときは、3.2.1 の取り方の言い方で比べる（一覧にない言い方との言い換えを、3.2.1 と同じく同じ言い方にする）。"""
+        kana, mapping = self.kana_map(text)
+        start, end = mapping[pos], mapping[pos + len(key)]
+        wording, wording_321, has_word = _addition_promise_wordings(kana, start, kana[start:end], name)
+        new0, old0, loose0 = self.wording_tables(0)
+        new1, old1, _ = self.wording_tables(1)
+        unit, unit_321 = (sub, name, wording), (sub, name, wording_321)
+        kept_321 = bool(old0[unit_321]) and old1[unit_321] <= old0[unit_321]
+        if not has_word:
+            return kept_321
+        return (bool(new0[unit]) and new1[unit] <= new0[unit]) or (kept_321 and bool(loose0[unit_321]))
 
     def find(self, name: str, text: str) -> list:
         key = (name, text)
