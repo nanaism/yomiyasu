@@ -9265,6 +9265,8 @@ _ADD_WORDING_PARTICLE = _lazy_compile(r"(?:につきまして(?:は|も)?|にお
 # 保証の相手を替えた推敲を同じ言い方にしていた。この取り方で比べるのは、原文と推敲後の両方の句で語が取れたときだけ
 # （_AdditionDocument.wording_kept）。程度や話の運びの言い方（できるだけ、なぜなら、先ほど、このほど、だからこそ、したばかり、
 # 押さえ）は、この語に数えない。条件の形（〜ない限り、〜なければ、〜れば、〜たら）は、前に語が来ないので数えない。
+# 以外 のすぐあとに も・でも・にも が付いた形（法人会員以外も）は、範囲を広げる言い方なので、以外は・を除き と別の種類（以外も）にする
+# （3.2.3。3.2.2 は外す助詞として先に外してから種類を読んだので、法人会員を除き と 法人会員以外も を同じ言い方にしていた）。
 
 _ADD_WORDING_LIMITER = _lazy_compile(
     r"(?:(?P<only>に限り|にかぎり|に限って|にかぎって|に限定して|に限定し|(?<!できる)だけ|のみ|(?<![ただ])ばかり"
@@ -9273,6 +9275,9 @@ _ADD_WORDING_LIMITER = _lazy_compile(
     r"|(?P<broad>に限らず|にかぎらず)|(?P<emph>(?<!から)こそ)|(?P<even>(?<![お押抑])さえ|すら)|(?P<etc>など)"
     r"|(?P<cond>であれば|(?<!なぜ)(?<!何故)ならば|(?<!なぜ)(?<!何故)(?<!言う)(?<!換える)なら)"
     r"|(?P<degree>(?<![先後今])(?<!さき)(?<!のち)(?<!なる)(?<!この)(?<!いま)ほど|くらい|ぐらい))$")
+
+# 以外 のすぐあとに付いた も・でも・にも と、そのあとの空白・読点・記号（外す前の文で、以外 の終わりから句の前まで）。3.2.3
+_ADD_WORDING_INCLUSIVE = _lazy_compile(r"^(?:も|でも|にも)[\s、，,:：*＊）)」』】\]]*$")
 
 _ADD_WORDING_LIMITER_KIND = {"only": "のみ", "except": "以外", "broad": "に限らず", "emph": "こそ", "even": "さえ", "etc": "など", "cond": "なら",
                              "degree": "ほど"}
@@ -9457,7 +9462,8 @@ def _addition_promise_wordings(text: str, pos: int, key: str, name: str) -> tupl
     # 句の前の200字だけを見る（つないだ語が長く続く1文で、正規表現の時間が延びないため）。助詞を外したあとに範囲や条件を決める語が
     # あれば、その種類を残して外し、その前の助詞をもう一度外す（品質だけは、旧プランでのみ、旧プランでさえも。3.2.2）。
     # この語がないときの外し方は 3.2.1 と同じ1回だけ。
-    before = _addition_wording_strip(text[max(0, pos - 200):pos])
+    raw = text[max(0, pos - 200):pos]
+    before = _addition_wording_strip(raw)
     first = _ADD_WORDING_WORD.search(before)
     old = (first.group(0) if first else '', wording)
     kinds = []
@@ -9466,10 +9472,14 @@ def _addition_promise_wordings(text: str, pos: int, key: str, name: str) -> tupl
         if not limiter:
             break
         kind = _ADD_WORDING_LIMITER_KIND.get(limiter.lastgroup or '', '')
+        # 以外 のすぐあとの も・でも・にも は、外す前の文（raw）で見る。before は raw の頭の部分なので、limiter の終わりから先が外した字（3.2.3）
+        if limiter.group() == '以外' and _ADD_WORDING_INCLUSIVE.match(raw[limiter.end():]):
+            kind = '以外も'
         # 同じ意味の重ねた言い方（のみに限り、などなど、だけに限らず）は1つにする。以外を除き（二重の否定）は重ねたまま残す。
         if not (kinds and ((kind in ('のみ', 'など') and kinds[-1] == kind) or (kind == 'のみ' and kinds[-1] == 'に限らず'))):
             kinds.append(kind)
-        before = _addition_wording_strip(before[:limiter.start()])
+        raw = before[:limiter.start()]
+        before = _addition_wording_strip(raw)
     mark = ''.join(reversed(kinds))
     word = _ADD_WORDING_WORD.search(before)
     # 語が取れないとき（一覧にない言い方のあと。旧プランを含めて）は、語を空にする（範囲や条件を決める語の種類は残す）。
