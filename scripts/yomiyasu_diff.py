@@ -9715,7 +9715,8 @@ class _AdditionDocument:
             if old != text:
                 kana_old, mapping_old = _addition_kana_map(old)
                 if kana_old == kana:
-                    sources.append((old, mapping_old))
+                    # 同じ頭の句は 3.2.1 のそろえ方の文の読み（3.2.1 が原文の句に使った読み）を先に取る
+                    sources.insert(0, (old, mapping_old))
         units = {}
         for source, source_map in sources:
             for sub, name, key, pos, _ in self.find('promise', source):
