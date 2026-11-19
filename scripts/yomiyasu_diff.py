@@ -9581,7 +9581,7 @@ class _AdditionDocument:
         self.states, self.kept, self.heads, self.matches = {}, {}, {}, {}
         self._old_bigrams = None
         self._wordings = None
-        self.counts =[Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
+        self.counts = [Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
         self.by_kind = {}
         for risk in risks:
             self.by_kind.setdefault(risk['kind'], []).append(risk)
