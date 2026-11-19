@@ -27,7 +27,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
 """
 
 from __future__ import annotations
-__version__ = "3.2.2"
+__version__ = "3.2.3"
 
 import os
 import errno

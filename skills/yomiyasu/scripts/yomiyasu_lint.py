@@ -10,7 +10,7 @@ paper は慎重表現をぼかしとして削る規則がないので、外す�
 """
 
 from __future__ import annotations
-__version__ = "3.2.2"
+__version__ = "3.2.3"
 
 import os
 from pathlib import Path
