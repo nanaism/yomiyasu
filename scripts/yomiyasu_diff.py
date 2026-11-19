@@ -9465,7 +9465,10 @@ def _addition_promise_wordings(text: str, pos: int, key: str, name: str) -> tupl
         limiter = _ADD_WORDING_LIMITER.search(before)
         if not limiter:
             break
-        kinds.append(_ADD_WORDING_LIMITER_KIND.get(limiter.lastgroup or '', ''))
+        kind = _ADD_WORDING_LIMITER_KIND.get(limiter.lastgroup or '', '')
+        # 同じ意味の重ねた言い方（のみに限り、などなど、だけに限らず）は1つにする。以外を除き（二重の否定）は重ねたまま残す。
+        if not (kinds and ((kind in ('のみ', 'など') and kinds[-1] == kind) or (kind == 'のみ' and kinds[-1] == 'に限らず'))):
+            kinds.append(kind)
         before = _addition_wording_strip(before[:limiter.start()])
     mark = ''.join(reversed(kinds))
     word = _ADD_WORDING_WORD.search(before)
@@ -9700,16 +9703,16 @@ class _AdditionDocument:
     def wording_units(self, number: int, text: str) -> list:
         """本文 text の保証と再発防止の誓いの句ごとの (subkind, 名前, 3.2.2 の言い方, 3.2.1 の言い方, 句の前の語が取れたか)。
         言い方はどちらも、漢字で書いた補助動詞などを句の型の形にそろえた文（_addition_kana_map）の上で取る（3.2.2 から推敲後の側も）。
-        推敲後の側（number 1）の句は、推敲後の句の候補を見つけるのと同じく、元の文で探す（3.2.1 と同じ）。原文の側の句は、そろえた文、
-        元の文、3.2.1 のそろえ方の文の3つで探し、同じ位置の句は1つに数える（3.2.2。そろえると字数が増えて句と読まなくなる形
-        （引き続き〜頂いた〜いただけます）も、3.2.1 が見つけていた句も数える）。原文の側では、かぎかっこ（「」『』）の中の句は数えない
+        推敲後の側（number 1）の句は、推敲後の句の候補を見つけるのと同じく、元の文で探す（3.2.1 と同じ）。原文の側の句は、元の文と
+        3.2.1 のそろえ方の文の2つで探し、同じ位置の句は1つに数える（3.2.2。3.2.1 が見つけていた句と、句の語も漢字の形の句
+        （引き続き〜頂いた〜頂けます）を数える）。句を探すのにそろえた文を使わないのは、そろえると字数が増えて、句の語のあいだの
+        字数の窓（引き続き〜いただけます の16字、再発防止の句のあとの24字）がずれるため。原文の側では、かぎかっこ（「」『』）の中の句は数えない
         （引用を書き手の言い切りにした推敲を、原文と同じ句にしない）。"""
         kana, mapping = self.kana_map(text)
         sources = [(text, mapping)]
         if number == 0:
-            sources = [(kana, None)] + (sources if kana != text else [])
             old = _addition_kana_forms_321(text)
-            if old not in (text, kana):
+            if old != text:
                 kana_old, mapping_old = _addition_kana_map(old)
                 if kana_old == kana:
                     sources.append((old, mapping_old))
