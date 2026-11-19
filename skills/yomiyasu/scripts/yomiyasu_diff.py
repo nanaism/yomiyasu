@@ -9240,6 +9240,10 @@ _ADD_PREVENT_ACT = _lazy_compile(r"(?:ます|する(?=[。、]|$)|[るうくす�
 
 _ADD_PREVENT_NOT_ACT = _lazy_compile(r"済|不要|求め|要請|指摘|依頼され|ません|ない(?=[。、]|$)|(?<!こととし)(?<!ことにし)(?:でした|ました|だった|た(?=[。]|$))")
 
+# 原文にある保証の根拠の語。原文の全体（表や見出しを含む）で探す。この語は、推敲後の保証の句の言い方を全部は含まない
+# （「担保されます」「引き続きご利用いただけます」「費用は発生いたしません」「ことは一切」）。原文の本文に同じ名前の保証の句が
+# 推敲後と同じ数以上あるときも、原文にある保証にする（_AdditionDocument.guarantee_counts。3.2.1）。
+
 _ADD_GUARANTEE_FAM = {"ことはない": r"ことは(?:ありません|ございません|ない)",
                  "費用はかからない": r"(?:費用|料金|料(?=は|が|を|も)|負担|手数料)(?:は|が|も)?[^。]{0,8}?(?:かから|かかりません|発生し(?:ない|ません)|いただき?ません|不要|なし|ゼロ|[0０〇]円)|無料|無償|[0０〇]円",
                  "まま使える": r"まま|問題なく|支障なく|これまでどおり|これまで通り|安心",
@@ -9521,6 +9525,7 @@ class _AdditionDocument:
         self.prevent = any(not _ADD_PREVENT_UNSETTLED.match(self.raw, m.end()) for m in _ADD_PREVENT_ANY.finditer(self.raw))
         self.states, self.kept, self.heads, self.matches = {}, {}, {}, {}
         self._old_bigrams = None
+        self._guarantees = None
         self.counts = [Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
         self.by_kind = {}
         for risk in risks:
@@ -9532,6 +9537,14 @@ class _AdditionDocument:
             text = self.old_text
             self._old_bigrams = {text[k:k + 2] for k in range(len(text) - 1)}
         return self._old_bigrams
+
+    def guarantee_counts(self, side: int) -> Counter:
+        """本文の保証の句の数を、名前（_ADD_PROMISE の guarantee の名前）ごとに数える。原文と推敲後を、推敲後の句を見つけるのと
+        同じ関数（_addition_promise_clauses）で数える。初めて要るときに作る。"""
+        if self._guarantees is None:
+            self._guarantees = [Counter(clause[1] for body in bodies for clause in self.find('promise', body.text)
+                                        if clause[0] == 'guarantee') for bodies in self.bodies]
+        return self._guarantees[side]
 
     def find(self, name: str, text: str) -> list:
         key = (name, text)
@@ -9689,6 +9702,11 @@ def _addition_promise_risk(doc: _AdditionDocument, group: _AdditionGroup, i: int
                 continue
         elif sub == 'guarantee':
             if re.search(_ADD_GUARANTEE_FAM[name], doc.raw):
+                continue
+            # 原文の本文に同じ名前の保証の句が推敲後と同じ数以上あれば、残したか言い換えた句なので打ち消す（推敲後のほうが
+            # 多いときは、足した句があるので打ち消さない）。
+            old_count = doc.guarantee_counts(0)[name]
+            if old_count and doc.guarantee_counts(1)[name] <= old_count:
                 continue
         else:
             head = _addition_key_head(key)
