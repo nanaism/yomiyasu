@@ -297,9 +297,13 @@ class CommonTest(unittest.TestCase):
     def test_score_and_exit_code_do_not_change(self):
         text = "".join(sentence + "\n\n" for sentence, _ in OWNER_SEEDS)
         result = yomiyasu_lint.lint_text(text)
-        self.assertEqual(sorted(finding["rule"] for finding in result["findings"]), sorted(rule for _, rule in OWNER_SEEDS))
-        self.assertEqual(result["counts"], {"error": 0, "warn": 0, "info": 3})
-        self.assertEqual(result["rule_penalty_score"], 100)
+        # 3.3.0: pause_comma を種類なしでも当てるので、「この結果は、」の候補が1件足される。pause_comma は点数に入り、
+        # 地の文1,000字未満の info 1件で98（2.2.0 の3つの規則は点数に入らないので、その3件があっても98のまま）
+        self.assertEqual(sorted(finding["rule"] for finding in result["findings"]),
+                         sorted([rule for _, rule in OWNER_SEEDS] + ["pause_comma"]))
+        self.assertEqual(result["counts"], {"error": 0, "warn": 0, "info": 4})
+        self.assertEqual(result["rule_penalty_score"], 98)
+        self.assertEqual(yomiyasu_lint.lint_text(text, doc_type="promo")["rule_penalty_score"], 100)
         with tempfile.TemporaryDirectory() as folder, working_folder(folder):
             path = Path(folder) / "seed.md"
             path.write_bytes(text.encode("utf-8"))

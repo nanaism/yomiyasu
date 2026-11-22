@@ -334,7 +334,8 @@ class ProjectTermTest(FolderCase):
 
     def test_one_finding_per_line_with_the_words(self):
         text = ("# スプリントの決め方\n\n"
-                "次のスプリントでは、締め日の名前とスプリントの日付を決めます。\n\n"
+                # 3.3.0: pause_comma を種類なしでも当てるので、この行の「次のスプリントでは、」の読点を外した
+                "次のスプリントでは締め日の名前とスプリントの日付を決めます。\n\n"
                 "| 項目 | 期日 |\n|---|---|\n| スプリント | 月末 |\n\n"
                 "- 締め日を一つにまとめる\n")
         result = self.lint_with(text, "スプリント\n締め日\n")
@@ -343,7 +344,7 @@ class ProjectTermTest(FolderCase):
         finding = [f for f in result["findings"] if f["line"] == 3][0]
         self.assertEqual(finding["message"],
                          "語の一覧（flag.txt）の語（スプリント、締め日）の候補です。文脈を見て、誰が何をどうするかを書き直すか確かめてください。")
-        self.assertEqual(finding["snippet"], "次のスプリントでは、締め日の名前とスプリントの日付を決めます。")
+        self.assertEqual(finding["snippet"], "次のスプリントでは締め日の名前とスプリントの日付を決めます。")
         self.assertEqual(sorted(finding), ["line", "message", "rule", "severity", "snippet"])
         # 点数に入れない
         self.assertEqual(result["rule_penalty_score"], 100)

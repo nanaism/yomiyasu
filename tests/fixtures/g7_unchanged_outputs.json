@@ -1,12 +1,12 @@
 {
-  "description": "指定しない（--doc-type と --reader を付けない）ときの lint、diff、check の出力の要約。tests/test_v200_doc_type.py の UnchangedOutputTest が今の出力と照らす（種類と読者を指定しない利用者の出力を、知らないうちに変えないための見張り）。行ごとに出どころが違う。lint の行は種類と読者のオプション（--doc-type と --reader）を入れる前の作業ツリー（45a5885 に check の固めを入れたもの）の出力で、作り直していない（指定しないときの lint の出力が、そのオプションを入れる前と1字も違わないことを見る）。diff と check の行は、diff の詰め（文体の硬化、勢い、否定対比の逆転、気持ちの語の検査と、意味が変わる恐れの判定の詰め）とその直し（反証で見つけた例の直しを3回と、そのあとの数値と否定対比の判定の直し）のあとの作業ツリーの出力で作り直した。オプションを入れる前の出力とは違い、そのあとの変更で出力が変わらないことを見る（オプションを入れる前からの変化と、終了コードが変わった組は updates）。行ごとの出どころは generated_by、source_commit、source_sha256 の lint、diff、check。値は、終了コード、標準出力、標準エラー（check は一時の状態フォルダと実行IDを伏せたもの、JSON は context を除いたもの）をつないだ SHA-256 の先頭16字。今の版の文字列が tool_version の値と違うときは、tool_version の値に読み替えてから数える。",
+  "description": "指定しない（--doc-type と --reader を付けない）ときの lint、diff、check の出力の要約。tests/test_v200_doc_type.py の UnchangedOutputTest が今の出力と照らす（種類と読者を指定しない利用者の出力を、知らないうちに変えないための見張り）。行ごとに出どころが違う。lint の行は種類と読者のオプション（--doc-type と --reader）を入れる前の作業ツリー（45a5885 に check の固めを入れたもの）の出力で、作り直していない（指定しないときの lint の出力が、そのオプションを入れる前と1字も違わないことを見る）。diff と check の行は、diff の詰め（文体の硬化、勢い、否定対比の逆転、気持ちの語の検査と、意味が変わる恐れの判定の詰め）とその直し（反証で見つけた例の直しを3回と、そのあとの数値と否定対比の判定の直し）のあとの作業ツリーの出力で作り直した。オプションを入れる前の出力とは違い、そのあとの変更で出力が変わらないことを見る（オプションを入れる前からの変化と、終了コードが変わった組は updates）。行ごとの出どころは generated_by、source_commit、source_sha256 の lint、diff、check。値は、終了コード、標準出力、標準エラー（check は一時の状態フォルダと実行IDを伏せたもの、JSON は context を除いたもの）をつないだ SHA-256 の先頭16字。今の版の文字列が tool_version の値と違うときは、tool_version の値に読み替えてから数える。3.3.0 で lint の pause_comma を種類を指定しないときも当てるようにしたので、候補が変わる70本の lint の行を作り直した（updates）。",
   "generated_by": {
-    "lint": "種類と読者のオプション（--doc-type と --reader）を入れる前に tests/test_v200_doc_type.py の unchanged_lint() で作った値。作り直していない（作り直すたびに、今の unchanged_lint() と1字も違わないことを確かめる）。ただし 2.2.0 で、新しい info の規則（直訳語の calque）の候補が出る raw_ai/01_tech_arch_sonnet_casual.md の1本だけは、その5通り（plain、strict、fail_error、json、stdin）を unchanged_lint() で作り直した（updates）",
+    "lint": "種類と読者のオプション（--doc-type と --reader）を入れる前に tests/test_v200_doc_type.py の unchanged_lint() で作った値。作り直していない（作り直すたびに、今の unchanged_lint() と1字も違わないことを確かめる）。ただし 2.2.0 で、新しい info の規則（直訳語の calque）の候補が出る raw_ai/01_tech_arch_sonnet_casual.md の1本だけは、その5通り（plain、strict、fail_error、json、stdin）を unchanged_lint() で作り直した（updates）。3.3.0 で pause_comma を種類なしでも当てるようにしたので、候補が変わる70本の5通り（plain、strict、fail_error、json、stdin）を unchanged_lint() で作り直した（updates）",
     "diff": "tests/test_v200_doc_type.py の unchanged_diff()。状態の語の消えと約束・因果の検出追加に合わせて再計測（評価と一般化の足しの検出は外した）。lint の要約は旧版のまま。",
     "check": "tests/test_v200_doc_type.py の unchanged_check()。状態の語の消えと約束・因果の検出追加に合わせて再計測（評価と一般化の足しの検出は外した）。lint の要約は旧版のまま。"
   },
   "source_commit": {
-    "lint": "45a5885（scripts に未コミットの変更あり: check の固め）。raw_ai/01_tech_arch_sonnet_casual.md の行だけは 2.2.0 の規則を入れた作業ツリー",
+    "lint": "45a5885（scripts に未コミットの変更あり: check の固め）。raw_ai/01_tech_arch_sonnet_casual.md の行だけは 2.2.0 の規則を入れた作業ツリー。3.3.0 で作り直した70本の行は、pause_comma を種類なしでも当てるようにした作業ツリー",
     "diff": "状態の語の消えと書き足しの検出を追加し、そのあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにし、推量の印が同じ強さの慎重な言い方に替わっただけの文を意味が変わる恐れの候補から外した作業ツリー（既存9キーと既存候補は変更なし）。",
     "check": "状態の語の消えと書き足しの検出、見直し候補の行と直した箇所の節を追加し、lint の rule_penalty_score の式を直したあとに事実の復元の道具（照合の該当行、確度の注意、--fact-gaps、区切りの出典）を入れ、run --stdin の1行目で返す直前の verify を案内するようにし、推量の印が同じ強さの慎重な言い方に替わっただけの文を意味が変わる恐れの候補から外した作業ツリー（既存9キーと既存候補は変更なし）。"
   },
@@ -49,11 +49,11 @@
       "diff_endings": "4b1b0e01655a821c"
     },
     "blacklist_ai/01_tech_arch_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "85b66b6945769e07",
-      "stdin": "10fa74b964043101",
+      "plain": "0cc70603b38fa6e9",
+      "strict": "0cc70603b38fa6e9",
+      "fail_error": "0cc70603b38fa6e9",
+      "json": "1ce99816c9cfe32e",
+      "stdin": "0cc70603b38fa6e9",
       "diff_endings": "d169d4b1e9d56db3"
     },
     "blacklist_ai/02_incident_report_sonnet_casual.md": {
@@ -73,35 +73,35 @@
       "diff_endings": "e6dd887f36647083"
     },
     "blacklist_ai/02_incident_report_sonnet_formal.md": {
-      "plain": "5a872a02911b399b",
-      "strict": "6ded706f52161ae3",
-      "fail_error": "5a872a02911b399b",
-      "json": "64f867d8f361ad34",
-      "stdin": "5a872a02911b399b",
+      "plain": "17c3e837697af9d2",
+      "strict": "76f204abfaed0122",
+      "fail_error": "17c3e837697af9d2",
+      "json": "29794fe6bfa309cd",
+      "stdin": "17c3e837697af9d2",
       "diff_endings": "631bef8c695e66a1"
     },
     "blacklist_ai/03_pr_description_sonnet_casual.md": {
-      "plain": "bff67ed41431bcf8",
-      "strict": "ef2c428e631b009c",
-      "fail_error": "bff67ed41431bcf8",
-      "json": "2f1e36925c0c82c2",
-      "stdin": "bff67ed41431bcf8",
+      "plain": "141da9100ffa3865",
+      "strict": "c51fab338aad4f45",
+      "fail_error": "141da9100ffa3865",
+      "json": "2732581c509836e4",
+      "stdin": "141da9100ffa3865",
       "diff_endings": "acedcfe6d6dc3b8e"
     },
     "blacklist_ai/03_pr_description_sonnet_default.md": {
-      "plain": "141be463502a9579",
-      "strict": "f09feefee0c655b5",
-      "fail_error": "141be463502a9579",
-      "json": "4f269f5c1e108609",
-      "stdin": "141be463502a9579",
+      "plain": "7b158decef334dca",
+      "strict": "0517ce18f12ae850",
+      "fail_error": "7b158decef334dca",
+      "json": "aa6482c4d5f4bd12",
+      "stdin": "7b158decef334dca",
       "diff_endings": "3ca0b03286e8f1d2"
     },
     "blacklist_ai/03_pr_description_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "c6352f93d63d373b",
-      "stdin": "10fa74b964043101",
+      "plain": "585153d94cd3a719",
+      "strict": "585153d94cd3a719",
+      "fail_error": "585153d94cd3a719",
+      "json": "bdcb8db7327cb3e1",
+      "stdin": "585153d94cd3a719",
       "diff_endings": "76a69326cc15f3b8"
     },
     "blacklist_ai/04_slack_announce_sonnet_casual.md": {
@@ -113,27 +113,27 @@
       "diff_endings": "cefb3004f31b3f4b"
     },
     "blacklist_ai/04_slack_announce_sonnet_default.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "cb48939f537441bb",
-      "stdin": "10fa74b964043101",
+      "plain": "69ff647e0148a899",
+      "strict": "69ff647e0148a899",
+      "fail_error": "69ff647e0148a899",
+      "json": "77ddb457a0fde1ed",
+      "stdin": "69ff647e0148a899",
       "diff_endings": "95d0c318cd8f32d4"
     },
     "blacklist_ai/04_slack_announce_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "ebd4a87a2f2bd02c",
-      "stdin": "10fa74b964043101",
+      "plain": "8fe3615b2393f4de",
+      "strict": "8fe3615b2393f4de",
+      "fail_error": "8fe3615b2393f4de",
+      "json": "43c7c779dd6ff1d7",
+      "stdin": "8fe3615b2393f4de",
       "diff_endings": "02d2336eba567b28"
     },
     "blacklist_ai/05_comparison_sonnet_casual.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "01813d8cb38b2842",
-      "stdin": "10fa74b964043101",
+      "plain": "a4548308fdf38d93",
+      "strict": "a4548308fdf38d93",
+      "fail_error": "a4548308fdf38d93",
+      "json": "896ab13dab7f2e51",
+      "stdin": "a4548308fdf38d93",
       "diff_endings": "ccaee2c4fa382a63"
     },
     "blacklist_ai/05_comparison_sonnet_default.md": {
@@ -161,19 +161,19 @@
       "diff_endings": "4b1b0e01655a821c"
     },
     "blacklist_ai/06_spec_draft_sonnet_default.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "083426d9dc73e70f",
-      "stdin": "10fa74b964043101",
+      "plain": "6b1dafa5e033fb37",
+      "strict": "6b1dafa5e033fb37",
+      "fail_error": "6b1dafa5e033fb37",
+      "json": "f31c73ab8497b427",
+      "stdin": "6b1dafa5e033fb37",
       "diff_endings": "3df79699e33dea7d"
     },
     "blacklist_ai/06_spec_draft_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "96331064cbdc9229",
-      "stdin": "10fa74b964043101",
+      "plain": "cbc0f38d3ca53e3a",
+      "strict": "cbc0f38d3ca53e3a",
+      "fail_error": "cbc0f38d3ca53e3a",
+      "json": "5433836686a62b76",
+      "stdin": "cbc0f38d3ca53e3a",
       "diff_endings": "4b1b0e01655a821c"
     },
     "blacklist_ai/07_code_review_sonnet_casual.md": {
@@ -185,43 +185,43 @@
       "diff_endings": "e144dd3b10d746dd"
     },
     "blacklist_ai/07_code_review_sonnet_default.md": {
-      "plain": "f3a4da10474745fc",
-      "strict": "66bb6a5212ac3a68",
-      "fail_error": "f3a4da10474745fc",
-      "json": "f247a246834e9c1e",
-      "stdin": "f3a4da10474745fc",
+      "plain": "1b682ce16a287445",
+      "strict": "19507e00c4f0b36e",
+      "fail_error": "1b682ce16a287445",
+      "json": "17b59ccfc5a6b7cc",
+      "stdin": "1b682ce16a287445",
       "diff_endings": "683c5592fb6aece5"
     },
     "blacklist_ai/07_code_review_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "943716898782d608",
-      "stdin": "10fa74b964043101",
+      "plain": "fde291dd8fcac9b5",
+      "strict": "fde291dd8fcac9b5",
+      "fail_error": "fde291dd8fcac9b5",
+      "json": "1e32ae2430cd7fe6",
+      "stdin": "fde291dd8fcac9b5",
       "diff_endings": "786737bcae4a65d7"
     },
     "blacklist_ai/08_essay_retrospective_sonnet_casual.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "40e12b0298211e7a",
-      "stdin": "10fa74b964043101",
+      "plain": "1fa312b7ef3af637",
+      "strict": "1fa312b7ef3af637",
+      "fail_error": "1fa312b7ef3af637",
+      "json": "67f0ed6edccc585d",
+      "stdin": "1fa312b7ef3af637",
       "diff_endings": "d169d4b1e9d56db3"
     },
     "blacklist_ai/08_essay_retrospective_sonnet_default.md": {
-      "plain": "8b375fb285084fb6",
-      "strict": "8b375fb285084fb6",
-      "fail_error": "8b375fb285084fb6",
-      "json": "88d8110e12f733fb",
-      "stdin": "8b375fb285084fb6",
+      "plain": "42481055755e2680",
+      "strict": "42481055755e2680",
+      "fail_error": "42481055755e2680",
+      "json": "9ade08e3bc727239",
+      "stdin": "42481055755e2680",
       "diff_endings": "0f5bcdb6235c3984"
     },
     "blacklist_ai/08_essay_retrospective_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "a19ba34f3fa84a03",
-      "stdin": "10fa74b964043101",
+      "plain": "1bf93ce509fb30ad",
+      "strict": "1bf93ce509fb30ad",
+      "fail_error": "1bf93ce509fb30ad",
+      "json": "a55088fb359d0d3d",
+      "stdin": "1bf93ce509fb30ad",
       "diff_endings": "ccaee2c4fa382a63"
     },
     "edge_cases/edge_hitei_49.md": {
@@ -385,11 +385,11 @@
       "diff_endings": "22cfa09644caa366"
     },
     "edge_cases/edge_nigiru_05.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "2dd003b32f3b1287",
-      "stdin": "10fa74b964043101",
+      "plain": "2a783dbb5af7893e",
+      "strict": "2a783dbb5af7893e",
+      "fail_error": "2a783dbb5af7893e",
+      "json": "8055585ede31b565",
+      "stdin": "2a783dbb5af7893e",
       "diff_endings": "1aa6297e28d84d4e"
     },
     "edge_cases/edge_nigiru_06.md": {
@@ -465,11 +465,11 @@
       "diff_endings": "22cfa09644caa366"
     },
     "edge_cases/edge_taosu_15.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "ab302a5dc2083e58",
-      "stdin": "10fa74b964043101",
+      "plain": "79abe3487f3ce48a",
+      "strict": "79abe3487f3ce48a",
+      "fail_error": "79abe3487f3ce48a",
+      "json": "b7b8c5f6788da47d",
+      "stdin": "79abe3487f3ce48a",
       "diff_endings": "1aa6297e28d84d4e"
     },
     "edge_cases/edge_taosu_16.md": {
@@ -537,11 +537,11 @@
       "diff_endings": "22cfa09644caa366"
     },
     "edge_cases/edge_tokasu_24.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "ab302a5dc2083e58",
-      "stdin": "10fa74b964043101",
+      "plain": "9bc7efc14b796d44",
+      "strict": "9bc7efc14b796d44",
+      "fail_error": "9bc7efc14b796d44",
+      "json": "808915a74c742856",
+      "stdin": "9bc7efc14b796d44",
       "diff_endings": "1aa6297e28d84d4e"
     },
     "edge_cases/edge_tokasu_25.md": {
@@ -729,19 +729,19 @@
       "diff_endings": "22cfa09644caa366"
     },
     "edge_cases/edge_yakugo_63.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "eaa11f5584dc540a",
-      "stdin": "10fa74b964043101",
+      "plain": "3bd342521d572270",
+      "strict": "3bd342521d572270",
+      "fail_error": "3bd342521d572270",
+      "json": "b0678c1a3039d9db",
+      "stdin": "3bd342521d572270",
       "diff_endings": "22cfa09644caa366"
     },
     "edge_cases/edge_yakugo_64.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "eff43b014f7927e2",
-      "stdin": "10fa74b964043101",
+      "plain": "7565f077ac3339e3",
+      "strict": "7565f077ac3339e3",
+      "fail_error": "7565f077ac3339e3",
+      "json": "567951ce9bb41bd9",
+      "stdin": "7565f077ac3339e3",
       "diff_endings": "88e0552ab142a488"
     },
     "edge_cases/edge_yakugo_65.md": {
@@ -865,11 +865,11 @@
       "diff_endings": "fd4f8177d8f3636e"
     },
     "human/human_oga_06.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "9813d6407165ba43",
-      "stdin": "10fa74b964043101",
+      "plain": "a0fb91dc88b6b99c",
+      "strict": "a0fb91dc88b6b99c",
+      "fail_error": "a0fb91dc88b6b99c",
+      "json": "30f9e1cc1444e275",
+      "stdin": "a0fb91dc88b6b99c",
       "diff_endings": "f2b4ed675b0a4ebc"
     },
     "human/human_oga_07.md": {
@@ -881,11 +881,11 @@
       "diff_endings": "3c6667462c5e18f6"
     },
     "human/human_oga_08.md": {
-      "plain": "f7c8935e94b33865",
-      "strict": "f7c8935e94b33865",
-      "fail_error": "f7c8935e94b33865",
-      "json": "a043c3becc40a6df",
-      "stdin": "f7c8935e94b33865",
+      "plain": "13969c3f6eef844e",
+      "strict": "13969c3f6eef844e",
+      "fail_error": "13969c3f6eef844e",
+      "json": "dd1a7292954d49ca",
+      "stdin": "13969c3f6eef844e",
       "diff_endings": "74d4f4a04b52389a"
     },
     "raw_ai/01_tech_arch_sonnet_casual.md": {
@@ -897,19 +897,19 @@
       "diff_endings": "058c7f30e832ec16"
     },
     "raw_ai/01_tech_arch_sonnet_default.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "ab1ce518ed6bcea8",
-      "stdin": "10fa74b964043101",
+      "plain": "592ff137bba7c526",
+      "strict": "592ff137bba7c526",
+      "fail_error": "592ff137bba7c526",
+      "json": "6e58420235cd820d",
+      "stdin": "592ff137bba7c526",
       "diff_endings": "4b1b0e01655a821c"
     },
     "raw_ai/01_tech_arch_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "fa483be6e508f582",
-      "stdin": "10fa74b964043101",
+      "plain": "60cc39d915ff07eb",
+      "strict": "60cc39d915ff07eb",
+      "fail_error": "60cc39d915ff07eb",
+      "json": "ce1847993e8767b5",
+      "stdin": "60cc39d915ff07eb",
       "diff_endings": "ccaee2c4fa382a63"
     },
     "raw_ai/02_incident_report_sonnet_casual.md": {
@@ -945,19 +945,19 @@
       "diff_endings": "76a69326cc15f3b8"
     },
     "raw_ai/03_pr_description_sonnet_default.md": {
-      "plain": "04a4bb4838edadd9",
-      "strict": "adf90a0997abd8bd",
-      "fail_error": "04a4bb4838edadd9",
-      "json": "25e35fcc256bdb19",
-      "stdin": "04a4bb4838edadd9",
+      "plain": "526284d84550dd52",
+      "strict": "3287436f800c113b",
+      "fail_error": "526284d84550dd52",
+      "json": "a01b90f0c6958621",
+      "stdin": "526284d84550dd52",
       "diff_endings": "2ff8305344a0b72b"
     },
     "raw_ai/03_pr_description_sonnet_formal.md": {
-      "plain": "8d42ec66a1fe5489",
-      "strict": "5ec93ab047546017",
-      "fail_error": "8d42ec66a1fe5489",
-      "json": "127c4f0fc26a8638",
-      "stdin": "8d42ec66a1fe5489",
+      "plain": "0755fb9efef369d1",
+      "strict": "ca38a31e8fdeb967",
+      "fail_error": "0755fb9efef369d1",
+      "json": "cdef519a93660a26",
+      "stdin": "0755fb9efef369d1",
       "diff_endings": "2077ad401ec85f5f"
     },
     "raw_ai/04_slack_announce_sonnet_casual.md": {
@@ -969,27 +969,27 @@
       "diff_endings": "05973c9f50097479"
     },
     "raw_ai/04_slack_announce_sonnet_default.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "9fcc1bd0d56c9619",
-      "stdin": "10fa74b964043101",
+      "plain": "0bddf23934af5ddf",
+      "strict": "0bddf23934af5ddf",
+      "fail_error": "0bddf23934af5ddf",
+      "json": "a9502b27441b1f37",
+      "stdin": "0bddf23934af5ddf",
       "diff_endings": "037588126c73393e"
     },
     "raw_ai/04_slack_announce_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "f81da8e67425bb9d",
-      "stdin": "10fa74b964043101",
+      "plain": "008519870076051e",
+      "strict": "008519870076051e",
+      "fail_error": "008519870076051e",
+      "json": "24c4a7027dd400c7",
+      "stdin": "008519870076051e",
       "diff_endings": "af5d9da2b0233217"
     },
     "raw_ai/05_comparison_sonnet_casual.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "f0c1318f06c518aa",
-      "stdin": "10fa74b964043101",
+      "plain": "c870c1447d8b6be9",
+      "strict": "c870c1447d8b6be9",
+      "fail_error": "c870c1447d8b6be9",
+      "json": "ae49b4555571fa59",
+      "stdin": "c870c1447d8b6be9",
       "diff_endings": "23c34dc645d053ff"
     },
     "raw_ai/05_comparison_sonnet_default.md": {
@@ -1001,19 +1001,19 @@
       "diff_endings": "6658f97de333aba6"
     },
     "raw_ai/05_comparison_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "364e4d2b80804171",
-      "stdin": "10fa74b964043101",
+      "plain": "cad4d5a6f85c5948",
+      "strict": "cad4d5a6f85c5948",
+      "fail_error": "cad4d5a6f85c5948",
+      "json": "c427df5421f1406b",
+      "stdin": "cad4d5a6f85c5948",
       "diff_endings": "76a69326cc15f3b8"
     },
     "raw_ai/06_spec_draft_sonnet_casual.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "7202abd8746cbb66",
-      "stdin": "10fa74b964043101",
+      "plain": "0a70bec418d70c51",
+      "strict": "0a70bec418d70c51",
+      "fail_error": "0a70bec418d70c51",
+      "json": "100a2274b201b724",
+      "stdin": "0a70bec418d70c51",
       "diff_endings": "5ac1897bdf47fb48"
     },
     "raw_ai/06_spec_draft_sonnet_default.md": {
@@ -1025,11 +1025,11 @@
       "diff_endings": "d169d4b1e9d56db3"
     },
     "raw_ai/06_spec_draft_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "7a1d3366d47ccf6b",
-      "stdin": "10fa74b964043101",
+      "plain": "d2d2c278253d47cc",
+      "strict": "d2d2c278253d47cc",
+      "fail_error": "d2d2c278253d47cc",
+      "json": "afe1cba065c4b912",
+      "stdin": "d2d2c278253d47cc",
       "diff_endings": "5ac1897bdf47fb48"
     },
     "raw_ai/07_code_review_sonnet_casual.md": {
@@ -1041,19 +1041,19 @@
       "diff_endings": "2fce17b5c1c1151b"
     },
     "raw_ai/07_code_review_sonnet_default.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "30c494ecf106ce83",
-      "stdin": "10fa74b964043101",
+      "plain": "197773196c36ee52",
+      "strict": "197773196c36ee52",
+      "fail_error": "197773196c36ee52",
+      "json": "61db4b9c24a48efb",
+      "stdin": "197773196c36ee52",
       "diff_endings": "075c686ce5d6c4f0"
     },
     "raw_ai/07_code_review_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "84cb58c18e117abf",
-      "stdin": "10fa74b964043101",
+      "plain": "ca0a2302d8d1bef1",
+      "strict": "ca0a2302d8d1bef1",
+      "fail_error": "ca0a2302d8d1bef1",
+      "json": "65aee1efe94e1eee",
+      "stdin": "ca0a2302d8d1bef1",
       "diff_endings": "7f322623f9e55a58"
     },
     "raw_ai/08_essay_retrospective_sonnet_casual.md": {
@@ -1105,35 +1105,35 @@
       "diff_endings": "058c7f30e832ec16"
     },
     "yomiyasu_rewritten/01_tech_arch_sonnet_casual_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "3eb4296c9430c2b8",
-      "stdin": "10fa74b964043101",
+      "plain": "2cced89f1f740d41",
+      "strict": "2cced89f1f740d41",
+      "fail_error": "2cced89f1f740d41",
+      "json": "9003a8a66bb0d4a0",
+      "stdin": "2cced89f1f740d41",
       "diff_endings": "62cdc9ce70f47b82"
     },
     "yomiyasu_rewritten/01_tech_arch_sonnet_default.md": {
-      "plain": "bed631333e76ca48",
-      "strict": "96a3fd5305ab3af7",
-      "fail_error": "bed631333e76ca48",
-      "json": "54a4237bec8b8cea",
-      "stdin": "bed631333e76ca48",
+      "plain": "828e66a3f30e4e48",
+      "strict": "cf94876f99e4ae2d",
+      "fail_error": "828e66a3f30e4e48",
+      "json": "c472ef541feb8c87",
+      "stdin": "828e66a3f30e4e48",
       "diff_endings": "06b0a217db792e64"
     },
     "yomiyasu_rewritten/01_tech_arch_sonnet_default_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "175341f3db5b753b",
-      "stdin": "10fa74b964043101",
+      "plain": "f480575481aa12d5",
+      "strict": "f480575481aa12d5",
+      "fail_error": "f480575481aa12d5",
+      "json": "35546afceead782b",
+      "stdin": "f480575481aa12d5",
       "diff_endings": "23c34dc645d053ff"
     },
     "yomiyasu_rewritten/01_tech_arch_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "8d918547b4095b02",
-      "stdin": "10fa74b964043101",
+      "plain": "db33644d4eb61edd",
+      "strict": "db33644d4eb61edd",
+      "fail_error": "db33644d4eb61edd",
+      "json": "79042c71c767f5a7",
+      "stdin": "db33644d4eb61edd",
       "diff_endings": "6658f97de333aba6"
     },
     "yomiyasu_rewritten/01_tech_arch_sonnet_formal_bl.md": {
@@ -1145,11 +1145,11 @@
       "diff_endings": "4b1b0e01655a821c"
     },
     "yomiyasu_rewritten/02_incident_report_sonnet_casual.md": {
-      "plain": "7a29f019fc320bec",
-      "strict": "99dd0a5ebc9fe06a",
-      "fail_error": "7a29f019fc320bec",
-      "json": "781845c6245b3c54",
-      "stdin": "7a29f019fc320bec",
+      "plain": "486bdba18c511d99",
+      "strict": "f14f8714ca5c4817",
+      "fail_error": "486bdba18c511d99",
+      "json": "44f27bb4808dda29",
+      "stdin": "486bdba18c511d99",
       "diff_endings": "888582bbaf9dc9be"
     },
     "yomiyasu_rewritten/02_incident_report_sonnet_casual_bl.md": {
@@ -1169,27 +1169,27 @@
       "diff_endings": "8ffcb14b0e9503cf"
     },
     "yomiyasu_rewritten/02_incident_report_sonnet_default_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "b0859cb597a85f9b",
-      "stdin": "10fa74b964043101",
+      "plain": "f0c80aa8c100161f",
+      "strict": "f0c80aa8c100161f",
+      "fail_error": "f0c80aa8c100161f",
+      "json": "c170fb4f24c8e2ab",
+      "stdin": "f0c80aa8c100161f",
       "diff_endings": "608673bc9645d6e1"
     },
     "yomiyasu_rewritten/02_incident_report_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "80643db67d2886d8",
-      "stdin": "10fa74b964043101",
+      "plain": "ff2464127b34aeb4",
+      "strict": "ff2464127b34aeb4",
+      "fail_error": "ff2464127b34aeb4",
+      "json": "ae0cd30fa352e641",
+      "stdin": "ff2464127b34aeb4",
       "diff_endings": "5ac1897bdf47fb48"
     },
     "yomiyasu_rewritten/02_incident_report_sonnet_formal_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "5324e8f6b87bdbfe",
-      "stdin": "10fa74b964043101",
+      "plain": "2760983f13b90099",
+      "strict": "2760983f13b90099",
+      "fail_error": "2760983f13b90099",
+      "json": "9e6d2f765c88dc45",
+      "stdin": "2760983f13b90099",
       "diff_endings": "608673bc9645d6e1"
     },
     "yomiyasu_rewritten/03_pr_description_sonnet_casual.md": {
@@ -1201,107 +1201,107 @@
       "diff_endings": "76a69326cc15f3b8"
     },
     "yomiyasu_rewritten/03_pr_description_sonnet_casual_bl.md": {
-      "plain": "054a256b190889b8",
-      "strict": "9f14a321347a75b1",
-      "fail_error": "054a256b190889b8",
-      "json": "c00c03133aaf62ae",
-      "stdin": "054a256b190889b8",
+      "plain": "eead37b4fcbc75a4",
+      "strict": "acf3aa4b9b372203",
+      "fail_error": "eead37b4fcbc75a4",
+      "json": "4ea8075973f14c59",
+      "stdin": "eead37b4fcbc75a4",
       "diff_endings": "5816b1cf682cc2ed"
     },
     "yomiyasu_rewritten/03_pr_description_sonnet_default.md": {
-      "plain": "5dceb5defbe2f9a2",
-      "strict": "9d1db0d4988c6e71",
-      "fail_error": "5dceb5defbe2f9a2",
-      "json": "760b0c543b7c68fa",
-      "stdin": "5dceb5defbe2f9a2",
+      "plain": "15f5903650ca7532",
+      "strict": "02525ec0ad0c41ef",
+      "fail_error": "15f5903650ca7532",
+      "json": "c622179769d2263c",
+      "stdin": "15f5903650ca7532",
       "diff_endings": "2ff8305344a0b72b"
     },
     "yomiyasu_rewritten/03_pr_description_sonnet_default_bl.md": {
-      "plain": "53a5f60e77f060f8",
-      "strict": "1740679fa575fdcb",
-      "fail_error": "53a5f60e77f060f8",
-      "json": "3887078c06d06f99",
-      "stdin": "53a5f60e77f060f8",
+      "plain": "c6a1baa2aa53bd65",
+      "strict": "e0d3eeb8d119c160",
+      "fail_error": "c6a1baa2aa53bd65",
+      "json": "646d3ff5df50e410",
+      "stdin": "c6a1baa2aa53bd65",
       "diff_endings": "ebacceec125e31fd"
     },
     "yomiyasu_rewritten/03_pr_description_sonnet_formal.md": {
-      "plain": "4ddb96bbf1e8f999",
-      "strict": "16e9533de44a656d",
-      "fail_error": "4ddb96bbf1e8f999",
-      "json": "74b0f5804e36eb8e",
-      "stdin": "4ddb96bbf1e8f999",
+      "plain": "ab9e32746547d759",
+      "strict": "ce6db15c28ba2d9e",
+      "fail_error": "ab9e32746547d759",
+      "json": "a52fc256dd0b2933",
+      "stdin": "ab9e32746547d759",
       "diff_endings": "3b72c1b82b68a5e8"
     },
     "yomiyasu_rewritten/03_pr_description_sonnet_formal_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "a32e66d7e89747de",
-      "stdin": "10fa74b964043101",
+      "plain": "2383d03601ff1497",
+      "strict": "2383d03601ff1497",
+      "fail_error": "2383d03601ff1497",
+      "json": "d9a6815b872227fa",
+      "stdin": "2383d03601ff1497",
       "diff_endings": "ccaee2c4fa382a63"
     },
     "yomiyasu_rewritten/04_slack_announce_sonnet_casual.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "2cabde5648de3f86",
-      "stdin": "10fa74b964043101",
+      "plain": "4a8d26ccd78c16be",
+      "strict": "4a8d26ccd78c16be",
+      "fail_error": "4a8d26ccd78c16be",
+      "json": "50f33aa31b7b30ad",
+      "stdin": "4a8d26ccd78c16be",
       "diff_endings": "622f72cc99e47b6b"
     },
     "yomiyasu_rewritten/04_slack_announce_sonnet_casual_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "75b4e65b95c45c9d",
-      "stdin": "10fa74b964043101",
+      "plain": "23e5691a0449c5ef",
+      "strict": "23e5691a0449c5ef",
+      "fail_error": "23e5691a0449c5ef",
+      "json": "31feac35525bdf1b",
+      "stdin": "23e5691a0449c5ef",
       "diff_endings": "62a98f2aeac144b2"
     },
     "yomiyasu_rewritten/04_slack_announce_sonnet_default.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "e6e113bb17d9d1cb",
-      "stdin": "10fa74b964043101",
+      "plain": "4d277023682fea13",
+      "strict": "4d277023682fea13",
+      "fail_error": "4d277023682fea13",
+      "json": "b93b883cf11c1742",
+      "stdin": "4d277023682fea13",
       "diff_endings": "6c3fe725e0b94a03"
     },
     "yomiyasu_rewritten/04_slack_announce_sonnet_default_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "f65e4fb5e2656696",
-      "stdin": "10fa74b964043101",
+      "plain": "92024a4f6402f9a6",
+      "strict": "92024a4f6402f9a6",
+      "fail_error": "92024a4f6402f9a6",
+      "json": "56e427610f3cbbbf",
+      "stdin": "92024a4f6402f9a6",
       "diff_endings": "41eab253437a3b00"
     },
     "yomiyasu_rewritten/04_slack_announce_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "4aed679f6f99b328",
-      "stdin": "10fa74b964043101",
+      "plain": "844d4eaab6ef25a6",
+      "strict": "844d4eaab6ef25a6",
+      "fail_error": "844d4eaab6ef25a6",
+      "json": "0cebb8907fdd7e56",
+      "stdin": "844d4eaab6ef25a6",
       "diff_endings": "22c0f9db6474446f"
     },
     "yomiyasu_rewritten/04_slack_announce_sonnet_formal_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "6637eaf7bddee842",
-      "stdin": "10fa74b964043101",
+      "plain": "65b0e4fafe589ffe",
+      "strict": "65b0e4fafe589ffe",
+      "fail_error": "65b0e4fafe589ffe",
+      "json": "d09b0c576396c86f",
+      "stdin": "65b0e4fafe589ffe",
       "diff_endings": "be9cc68d91c43f36"
     },
     "yomiyasu_rewritten/05_comparison_sonnet_casual.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "fada643cd28dda5d",
-      "stdin": "10fa74b964043101",
+      "plain": "daf6fe72591b8b68",
+      "strict": "daf6fe72591b8b68",
+      "fail_error": "daf6fe72591b8b68",
+      "json": "5ca79c05561aea41",
+      "stdin": "daf6fe72591b8b68",
       "diff_endings": "23c34dc645d053ff"
     },
     "yomiyasu_rewritten/05_comparison_sonnet_casual_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "2c36de2031a8e571",
-      "stdin": "10fa74b964043101",
+      "plain": "d82273749b9749c8",
+      "strict": "d82273749b9749c8",
+      "fail_error": "d82273749b9749c8",
+      "json": "7688742a164cb577",
+      "stdin": "d82273749b9749c8",
       "diff_endings": "ccaee2c4fa382a63"
     },
     "yomiyasu_rewritten/05_comparison_sonnet_default.md": {
@@ -1313,19 +1313,19 @@
       "diff_endings": "6658f97de333aba6"
     },
     "yomiyasu_rewritten/05_comparison_sonnet_default_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "7d81b83a41111551",
-      "stdin": "10fa74b964043101",
+      "plain": "58a5b5bded36a9b3",
+      "strict": "58a5b5bded36a9b3",
+      "fail_error": "58a5b5bded36a9b3",
+      "json": "a2aa259f8e7162ab",
+      "stdin": "58a5b5bded36a9b3",
       "diff_endings": "dbbaf58feb05b824"
     },
     "yomiyasu_rewritten/05_comparison_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "6437bf55b5a6c6d5",
-      "stdin": "10fa74b964043101",
+      "plain": "ac9138a6d941c301",
+      "strict": "ac9138a6d941c301",
+      "fail_error": "ac9138a6d941c301",
+      "json": "25fbbc62aa070bef",
+      "stdin": "ac9138a6d941c301",
       "diff_endings": "5ac1897bdf47fb48"
     },
     "yomiyasu_rewritten/05_comparison_sonnet_formal_bl.md": {
@@ -1337,35 +1337,35 @@
       "diff_endings": "31a86d590cad80f6"
     },
     "yomiyasu_rewritten/06_spec_draft_sonnet_casual.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "41b4623076576ea6",
-      "stdin": "10fa74b964043101",
+      "plain": "0f546d2837612ee8",
+      "strict": "0f546d2837612ee8",
+      "fail_error": "0f546d2837612ee8",
+      "json": "8a57c5b17fcb80aa",
+      "stdin": "0f546d2837612ee8",
       "diff_endings": "5ac1897bdf47fb48"
     },
     "yomiyasu_rewritten/06_spec_draft_sonnet_casual_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "8575b53c12f7c208",
-      "stdin": "10fa74b964043101",
+      "plain": "4cf15f47d70cbbcd",
+      "strict": "4cf15f47d70cbbcd",
+      "fail_error": "4cf15f47d70cbbcd",
+      "json": "8f6d7d6fc8515f9f",
+      "stdin": "4cf15f47d70cbbcd",
       "diff_endings": "23c34dc645d053ff"
     },
     "yomiyasu_rewritten/06_spec_draft_sonnet_default.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "b0d76b63b26c8dd8",
-      "stdin": "10fa74b964043101",
+      "plain": "5ff9c0a75465998c",
+      "strict": "5ff9c0a75465998c",
+      "fail_error": "5ff9c0a75465998c",
+      "json": "868dcea11372a6f7",
+      "stdin": "5ff9c0a75465998c",
       "diff_endings": "23c34dc645d053ff"
     },
     "yomiyasu_rewritten/06_spec_draft_sonnet_default_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "f871367d474fd075",
-      "stdin": "10fa74b964043101",
+      "plain": "58f944c5a1ac4ab8",
+      "strict": "58f944c5a1ac4ab8",
+      "fail_error": "58f944c5a1ac4ab8",
+      "json": "06a5b3888b9b1582",
+      "stdin": "58f944c5a1ac4ab8",
       "diff_endings": "3df79699e33dea7d"
     },
     "yomiyasu_rewritten/06_spec_draft_sonnet_formal.md": {
@@ -1377,19 +1377,19 @@
       "diff_endings": "5ac1897bdf47fb48"
     },
     "yomiyasu_rewritten/06_spec_draft_sonnet_formal_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "efee5a06c46f639e",
-      "stdin": "10fa74b964043101",
+      "plain": "02eed0e2fa3e1733",
+      "strict": "02eed0e2fa3e1733",
+      "fail_error": "02eed0e2fa3e1733",
+      "json": "2853b5af1de173d8",
+      "stdin": "02eed0e2fa3e1733",
       "diff_endings": "4b1b0e01655a821c"
     },
     "yomiyasu_rewritten/07_code_review_sonnet_casual.md": {
-      "plain": "cc07d5081a6f2f34",
-      "strict": "49f48c529d34573c",
-      "fail_error": "cc07d5081a6f2f34",
-      "json": "55215cec38a9d866",
-      "stdin": "cc07d5081a6f2f34",
+      "plain": "0e01c6fa47aff8e4",
+      "strict": "2c41614e26aa4a2c",
+      "fail_error": "0e01c6fa47aff8e4",
+      "json": "3904015720a2ed89",
+      "stdin": "0e01c6fa47aff8e4",
       "diff_endings": "e1206597aafabb1b"
     },
     "yomiyasu_rewritten/07_code_review_sonnet_casual_bl.md": {
@@ -1401,35 +1401,35 @@
       "diff_endings": "50f682c18f0b63a5"
     },
     "yomiyasu_rewritten/07_code_review_sonnet_default.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "7bfa7e701e0e0aa8",
-      "stdin": "10fa74b964043101",
+      "plain": "e7a6392820e312d5",
+      "strict": "e7a6392820e312d5",
+      "fail_error": "e7a6392820e312d5",
+      "json": "b615831c03c43a45",
+      "stdin": "e7a6392820e312d5",
       "diff_endings": "f5fe7a3517814ec7"
     },
     "yomiyasu_rewritten/07_code_review_sonnet_default_bl.md": {
-      "plain": "87d896c37807b4cd",
-      "strict": "81d6e7a62470cb3b",
-      "fail_error": "87d896c37807b4cd",
-      "json": "dd9a2d9dab3c84bd",
-      "stdin": "87d896c37807b4cd",
+      "plain": "eee2c2e4e8857f98",
+      "strict": "df10bd1661be4d48",
+      "fail_error": "eee2c2e4e8857f98",
+      "json": "1c902f8aab140d4d",
+      "stdin": "eee2c2e4e8857f98",
       "diff_endings": "1b2c51be62bef521"
     },
     "yomiyasu_rewritten/07_code_review_sonnet_formal.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "7b7e0bf49d83afd7",
-      "stdin": "10fa74b964043101",
+      "plain": "f1d7f3e8458b868c",
+      "strict": "f1d7f3e8458b868c",
+      "fail_error": "f1d7f3e8458b868c",
+      "json": "96f7e49fda12feeb",
+      "stdin": "f1d7f3e8458b868c",
       "diff_endings": "d344edb8a0f192bb"
     },
     "yomiyasu_rewritten/07_code_review_sonnet_formal_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "dd50cf007aa455e1",
-      "stdin": "10fa74b964043101",
+      "plain": "27ba0d42e7a2ad12",
+      "strict": "27ba0d42e7a2ad12",
+      "fail_error": "27ba0d42e7a2ad12",
+      "json": "67f4460f433ba6da",
+      "stdin": "27ba0d42e7a2ad12",
       "diff_endings": "40ca5cec2e79ec81"
     },
     "yomiyasu_rewritten/08_essay_retrospective_sonnet_casual.md": {
@@ -1449,19 +1449,19 @@
       "diff_endings": "5ac1897bdf47fb48"
     },
     "yomiyasu_rewritten/08_essay_retrospective_sonnet_default.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "fada643cd28dda5d",
-      "stdin": "10fa74b964043101",
+      "plain": "0bff38993ca89f3e",
+      "strict": "0bff38993ca89f3e",
+      "fail_error": "0bff38993ca89f3e",
+      "json": "469b9020b5ab3d7b",
+      "stdin": "0bff38993ca89f3e",
       "diff_endings": "ccaee2c4fa382a63"
     },
     "yomiyasu_rewritten/08_essay_retrospective_sonnet_default_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "626c2905d0e32f29",
-      "stdin": "10fa74b964043101",
+      "plain": "48412b2dba2a9721",
+      "strict": "48412b2dba2a9721",
+      "fail_error": "48412b2dba2a9721",
+      "json": "4bb2cf2ed0128c2e",
+      "stdin": "48412b2dba2a9721",
       "diff_endings": "0f5bcdb6235c3984"
     },
     "yomiyasu_rewritten/08_essay_retrospective_sonnet_formal.md": {
@@ -1473,11 +1473,11 @@
       "diff_endings": "5ac1897bdf47fb48"
     },
     "yomiyasu_rewritten/08_essay_retrospective_sonnet_formal_bl.md": {
-      "plain": "10fa74b964043101",
-      "strict": "10fa74b964043101",
-      "fail_error": "10fa74b964043101",
-      "json": "0e99649db62d009a",
-      "stdin": "10fa74b964043101",
+      "plain": "0fcd5c36df2944b8",
+      "strict": "0fcd5c36df2944b8",
+      "fail_error": "0fcd5c36df2944b8",
+      "json": "ecdc9cb933a1542d",
+      "stdin": "0fcd5c36df2944b8",
       "diff_endings": "ccaee2c4fa382a63"
     }
   },
@@ -2574,70 +2574,70 @@
       "json": "4ae2e456a9226c7f"
     },
     "blacklist_ai/01_tech_arch_sonnet_casual.md|yomiyasu_rewritten/01_tech_arch_sonnet_casual_bl.md": {
-      "run": "787825acf38bdc49",
-      "verify": "cd177b97cc6f1df8",
-      "replay": "a83c2f4beb8f19c0",
-      "rerun": "4ab1d33c32dcd0dd",
-      "compose": "2176d23e2c76c0f4",
-      "stdin": "463bf45fc53958a4",
-      "fail_on": "4e0c1c9f4694b870",
-      "no_record": "645f380a1fa87128",
-      "json": "861934e3214c4e0d"
+      "run": "6b4954b477099a1f",
+      "verify": "c409a90687461c11",
+      "replay": "1a3112dff6cdd5f3",
+      "rerun": "fd61cfdcfc5038d3",
+      "compose": "5112436a3472ba45",
+      "stdin": "006a96d66a7b03b7",
+      "fail_on": "02e482348fb0cc9c",
+      "no_record": "61c28abd5e4b6bf9",
+      "json": "e76946f89b7c5baf"
     },
     "raw_ai/01_tech_arch_sonnet_default.md|yomiyasu_rewritten/01_tech_arch_sonnet_default.md": {
-      "run": "d9b0b7b6d953acf6",
-      "verify": "eeb5a7003463c918",
-      "replay": "ff7b15ddf3fe3783",
-      "rerun": "9ba084267ccc19a3",
-      "compose": "fa93a680cad1c564",
-      "stdin": "4e6e42ba79e4acf4",
-      "fail_on": "342fe786a97b4ae1",
-      "no_record": "6158722d188ef27d",
-      "json": "b58c5f6dcaab88cb"
+      "run": "6c6ed7f5c79d3586",
+      "verify": "6a1201713d8c5d7a",
+      "replay": "9eef50ebd4bb2315",
+      "rerun": "717b2035da7fe64d",
+      "compose": "addeda918502e8c7",
+      "stdin": "9f945ae86e8946f0",
+      "fail_on": "ae2e000a66fd96ec",
+      "no_record": "002be566ba562c1b",
+      "json": "cdd1fafaff0878a9"
     },
     "blacklist_ai/01_tech_arch_sonnet_default.md|yomiyasu_rewritten/01_tech_arch_sonnet_default_bl.md": {
-      "run": "428b4ed22bfc86e0",
-      "verify": "d9e2c6e34631dd04",
-      "replay": "c29424cd98a7e1d2",
-      "rerun": "970f1b9ccf593e2c",
-      "compose": "8fd2f5b052819fe8",
-      "stdin": "c2d20ab6979c9fc2",
-      "fail_on": "428b4ed22bfc86e0",
-      "no_record": "b7a3759680c6fb87",
-      "json": "2b793d29e6d65949"
+      "run": "f0ce95f8d49490c9",
+      "verify": "ffc1e74431ffd7cd",
+      "replay": "4fc6cf307a446090",
+      "rerun": "e363f2eba9e4296b",
+      "compose": "a16ec7aa22c1830f",
+      "stdin": "a9c01900da8b88d0",
+      "fail_on": "f0ce95f8d49490c9",
+      "no_record": "d5e1ebac350bc009",
+      "json": "b4c4ae2500a11ab9"
     },
     "raw_ai/01_tech_arch_sonnet_formal.md|yomiyasu_rewritten/01_tech_arch_sonnet_formal.md": {
-      "run": "76bdc548c8f171f6",
-      "verify": "8d47a7dc0ce3842b",
-      "replay": "8b00a1de81574b1f",
-      "rerun": "366e56192e280b92",
-      "compose": "901b205b5ecabad3",
-      "stdin": "d64c47ef5c9f63fd",
-      "fail_on": "914dc48654db0380",
-      "no_record": "31385661174395f6",
-      "json": "e8f5d02dabe590b1"
+      "run": "74e395ef79b3ce34",
+      "verify": "9aac7e3a2b089e4e",
+      "replay": "c05af46c80d4286b",
+      "rerun": "49ab40be0e76bcb3",
+      "compose": "599cb6b388b789a0",
+      "stdin": "aede8bc4b15077d9",
+      "fail_on": "73385326293ef06b",
+      "no_record": "4c0db9b9d68ed49b",
+      "json": "3b1ba64db6bfa256"
     },
     "blacklist_ai/01_tech_arch_sonnet_formal.md|yomiyasu_rewritten/01_tech_arch_sonnet_formal_bl.md": {
-      "run": "f9c2bb04b110f4e7",
+      "run": "bc9e2851a0ce352d",
       "verify": "a44e29481c143f1b",
       "replay": "36d5a0de04b5d377",
-      "rerun": "f0983e446dde906f",
-      "compose": "5b0f0212c5cd99ee",
-      "stdin": "f03b589d26baf644",
-      "fail_on": "f9c2bb04b110f4e7",
-      "no_record": "008e203debee32d5",
-      "json": "b6d044280e655830"
+      "rerun": "40bc2bb517c3b0fb",
+      "compose": "eedc9f48347c076d",
+      "stdin": "2f4b517547bc08e7",
+      "fail_on": "bc9e2851a0ce352d",
+      "no_record": "e7873fda1f2bcbe8",
+      "json": "1fa0ca343eaee709"
     },
     "raw_ai/02_incident_report_sonnet_casual.md|yomiyasu_rewritten/02_incident_report_sonnet_casual.md": {
-      "run": "d392f79ffb8be118",
-      "verify": "0f8da66cd5dcc665",
-      "replay": "180d30812e64ef2a",
-      "rerun": "a7f817ee8c6f7dfd",
-      "compose": "6954c558b373d0aa",
-      "stdin": "c4093d230bd5553b",
-      "fail_on": "5ab5c31d82690406",
-      "no_record": "fb38a2e53d2ab554",
-      "json": "dbe1bd468c6cc8c6"
+      "run": "65573744031ed4b9",
+      "verify": "847fe70549ed4c7e",
+      "replay": "acf8cf104a35aebe",
+      "rerun": "99d048379763576b",
+      "compose": "31a62dafcba28ae5",
+      "stdin": "5cd0cabd1e149628",
+      "fail_on": "59999a401fa1f672",
+      "no_record": "6b8f56b5203c581e",
+      "json": "f098fe89a4447844"
     },
     "blacklist_ai/02_incident_report_sonnet_casual.md|yomiyasu_rewritten/02_incident_report_sonnet_casual_bl.md": {
       "run": "760e6f662c5b7f9e",
@@ -2662,37 +2662,37 @@
       "json": "fe17b48e8c4520bc"
     },
     "blacklist_ai/02_incident_report_sonnet_default.md|yomiyasu_rewritten/02_incident_report_sonnet_default_bl.md": {
-      "run": "d71052159f65031a",
-      "verify": "d3931d9102246e29",
-      "replay": "de7da5c81a9414b1",
-      "rerun": "1df186c3a6db1613",
-      "compose": "5433b51d65ae907b",
-      "stdin": "da1056845c4fa90b",
-      "fail_on": "d71052159f65031a",
-      "no_record": "ad60c539947becfc",
-      "json": "6375252ea2fbbc5f"
+      "run": "8caaa2886675a059",
+      "verify": "fb7a41536580ff80",
+      "replay": "c826543f3c137082",
+      "rerun": "5e97abb857f68eb8",
+      "compose": "b1ee1f4694a559cf",
+      "stdin": "617589ddec7d8d5d",
+      "fail_on": "8caaa2886675a059",
+      "no_record": "de1a532c5a06742d",
+      "json": "66b4674a98c96f82"
     },
     "raw_ai/02_incident_report_sonnet_formal.md|yomiyasu_rewritten/02_incident_report_sonnet_formal.md": {
-      "run": "9705a4f1a499f02b",
-      "verify": "2efc5bc98336793c",
-      "replay": "dda8244985d61816",
-      "rerun": "7101e1c4019b9d80",
-      "compose": "8a7c7cab7aaf0619",
-      "stdin": "d3a824a86e4b0780",
-      "fail_on": "9705a4f1a499f02b",
-      "no_record": "2773b2d73da66fa5",
-      "json": "1158e64b943b82c8"
+      "run": "8cafcab6d7fafb2d",
+      "verify": "102143cdb4f82f56",
+      "replay": "e7c0f1d1d29a63a8",
+      "rerun": "f4b3c996afadea82",
+      "compose": "66f82889a06ea29c",
+      "stdin": "e3a8bd1ee9f6d1c3",
+      "fail_on": "8cafcab6d7fafb2d",
+      "no_record": "0ebf5ffa1bf2c410",
+      "json": "261d12ef01836b86"
     },
     "blacklist_ai/02_incident_report_sonnet_formal.md|yomiyasu_rewritten/02_incident_report_sonnet_formal_bl.md": {
-      "run": "6b11563511e6a73a",
-      "verify": "aabb1300ed5a4120",
-      "replay": "d37165da605f77b7",
-      "rerun": "fc0dc5ae7d9bedee",
-      "compose": "c82eed092b7b7c6d",
-      "stdin": "cd98c76b631a57f6",
-      "fail_on": "6b11563511e6a73a",
-      "no_record": "69729c3e33ef86b7",
-      "json": "f048748c777d2bb7"
+      "run": "7f77737e01d4cb7e",
+      "verify": "03152aa9c70600ed",
+      "replay": "9ea3b548762d03bb",
+      "rerun": "2948fd77ba1c7063",
+      "compose": "26ddf01f6c0609fa",
+      "stdin": "f19a4088ed30b8cb",
+      "fail_on": "7f77737e01d4cb7e",
+      "no_record": "f971f0fdde04eadc",
+      "json": "4ab7e22c634056eb"
     },
     "raw_ai/03_pr_description_sonnet_casual.md|yomiyasu_rewritten/03_pr_description_sonnet_casual.md": {
       "run": "83b130f7007240b5",
@@ -2706,147 +2706,147 @@
       "json": "fca87dff2b28c8c1"
     },
     "blacklist_ai/03_pr_description_sonnet_casual.md|yomiyasu_rewritten/03_pr_description_sonnet_casual_bl.md": {
-      "run": "2d1f64a2968218d2",
-      "verify": "c737dd83d34d169a",
-      "replay": "1ed55de45bc3369f",
-      "rerun": "3d877236bb17d523",
-      "compose": "abb268b19f756ee4",
-      "stdin": "3411941702c49d4c",
-      "fail_on": "acd109b830493a53",
-      "no_record": "f9342cb4e00839b3",
-      "json": "0b48f21b19f7d9dd"
+      "run": "7c7d9923b02384d8",
+      "verify": "92af5c8df6438260",
+      "replay": "0973ee353762e133",
+      "rerun": "26697210b08d3f4a",
+      "compose": "367b372f829c601e",
+      "stdin": "acf1893663e05f3c",
+      "fail_on": "402085ee3695795f",
+      "no_record": "a989116446021a00",
+      "json": "c1bcf9b849ea4bbc"
     },
     "raw_ai/03_pr_description_sonnet_default.md|yomiyasu_rewritten/03_pr_description_sonnet_default.md": {
-      "run": "8376403785f9f205",
-      "verify": "514732ffa928c262",
-      "replay": "80860eb1b0e4f4a7",
-      "rerun": "bf50b018ff8e501d",
-      "compose": "bceb96d5b15fe248",
-      "stdin": "bed67af2d8d117f9",
-      "fail_on": "87e5d563a2919042",
-      "no_record": "bf73a85397329215",
-      "json": "6444bd191967b3f7"
+      "run": "759e51da052e1bd4",
+      "verify": "a0e1f66e79568361",
+      "replay": "976679ca9827752f",
+      "rerun": "6deb56f194277fdc",
+      "compose": "650a6e2dcd123a19",
+      "stdin": "e7ad3743cb034ee5",
+      "fail_on": "655c35d579a6dea8",
+      "no_record": "31b5233a755b7e66",
+      "json": "68070a11108646a7"
     },
     "blacklist_ai/03_pr_description_sonnet_default.md|yomiyasu_rewritten/03_pr_description_sonnet_default_bl.md": {
-      "run": "9e8d39758cd2f891",
-      "verify": "b30c4bff38b44492",
-      "replay": "9c03ee50d5aa4d85",
-      "rerun": "e90ac6553dee0c8e",
-      "compose": "4e8cd93d575147fb",
-      "stdin": "2292272ae8d1437a",
-      "fail_on": "22af46cfa5bf4afe",
-      "no_record": "f5320068fc3c40ca",
-      "json": "8a42a37ab6d7efc1"
+      "run": "2fc50437ab873ef3",
+      "verify": "8d8b49db2c797bd5",
+      "replay": "6d404b2041482d2d",
+      "rerun": "4b6bacdbb577f76c",
+      "compose": "5b1bfc23b81bef0f",
+      "stdin": "0722203b3e232c3c",
+      "fail_on": "07eeea7632c05a8e",
+      "no_record": "93786c2063cfb207",
+      "json": "5886a67252b66fd1"
     },
     "raw_ai/03_pr_description_sonnet_formal.md|yomiyasu_rewritten/03_pr_description_sonnet_formal.md": {
-      "run": "ac656cbda006e439",
-      "verify": "133b7027f0790a0b",
-      "replay": "80d0b4d15719bed2",
-      "rerun": "acfacc0f4462e54a",
-      "compose": "418436864f3293a3",
-      "stdin": "6d2db6faf862c9da",
-      "fail_on": "ce4525f9141fdc6c",
-      "no_record": "6f4ebbd0fb4a32f9",
-      "json": "3a73b46ae0cf662c"
+      "run": "472c1e24a3b8c43b",
+      "verify": "9f5328f58ee3cde7",
+      "replay": "18e70721c112e913",
+      "rerun": "2fcf4fa6c3fe36bb",
+      "compose": "00382b66f016af84",
+      "stdin": "ddd923e3d87508f3",
+      "fail_on": "4bf762f6e9937d8d",
+      "no_record": "3993d52027982bb2",
+      "json": "3fb8abbc1bcf3a62"
     },
     "blacklist_ai/03_pr_description_sonnet_formal.md|yomiyasu_rewritten/03_pr_description_sonnet_formal_bl.md": {
-      "run": "28bf85d5f25b5276",
-      "verify": "e790e182204b8398",
-      "replay": "299bdc21615eb4f6",
-      "rerun": "0499b0b2202a9715",
-      "compose": "38c01bb8af9960d7",
-      "stdin": "cc98a2beed6affe4",
-      "fail_on": "28bf85d5f25b5276",
-      "no_record": "f4a8d851096d0b44",
-      "json": "4c4375739a7c478d"
+      "run": "610afa6b082b3674",
+      "verify": "a2505e749ac316f4",
+      "replay": "88f4fb08aff10e98",
+      "rerun": "bb40b830f511187f",
+      "compose": "3b99d99d0775136f",
+      "stdin": "cdf882379ca744bd",
+      "fail_on": "610afa6b082b3674",
+      "no_record": "71876bf8582d9f29",
+      "json": "9e17792024ce0ce4"
     },
     "raw_ai/04_slack_announce_sonnet_casual.md|yomiyasu_rewritten/04_slack_announce_sonnet_casual.md": {
-      "run": "d63fd90a400722e5",
-      "verify": "a5e1fa221d4cf81f",
-      "replay": "3a46d323c91eff91",
-      "rerun": "b3c4a6945bf51fe1",
-      "compose": "71d628d41f892fc2",
-      "stdin": "a28237b379fdbf03",
-      "fail_on": "d63fd90a400722e5",
-      "no_record": "780d15ac7419204b",
-      "json": "c4c3110ebaf25a26"
+      "run": "0c1cc86578ca71ad",
+      "verify": "57bbba1626441d1d",
+      "replay": "2de55a6eda7b1291",
+      "rerun": "10261a033ddd6697",
+      "compose": "3644839ba6b52d7e",
+      "stdin": "c8bddca07f6c7ddf",
+      "fail_on": "0c1cc86578ca71ad",
+      "no_record": "5660baa852722be7",
+      "json": "97ea5ba2518af587"
     },
     "blacklist_ai/04_slack_announce_sonnet_casual.md|yomiyasu_rewritten/04_slack_announce_sonnet_casual_bl.md": {
-      "run": "7973235ae35aabdc",
-      "verify": "00805cf8a99cf628",
-      "replay": "d9119f450c0d631b",
-      "rerun": "573dc2b116909770",
-      "compose": "dde75b961b0091e9",
-      "stdin": "c3692f5edcb12dbe",
-      "fail_on": "7973235ae35aabdc",
-      "no_record": "0afc4b17a8137c57",
-      "json": "c4c72b30725b0b06"
+      "run": "1c2482cfea5689f4",
+      "verify": "33a6ef30a3ea933d",
+      "replay": "5bf392523284f322",
+      "rerun": "b7e6dd35871a7d65",
+      "compose": "726c7247c7510ae3",
+      "stdin": "b15199e333560820",
+      "fail_on": "1c2482cfea5689f4",
+      "no_record": "7d2dc33951abef96",
+      "json": "ae217f6d0cda2558"
     },
     "raw_ai/04_slack_announce_sonnet_default.md|yomiyasu_rewritten/04_slack_announce_sonnet_default.md": {
-      "run": "9fa0e089d0d2dcb2",
-      "verify": "0493af643f7eb264",
-      "replay": "dd020d803997b9f3",
-      "rerun": "1c64416f2c3145f8",
-      "compose": "a6648c92f2ba3894",
-      "stdin": "223896d8b173f991",
-      "fail_on": "9fa0e089d0d2dcb2",
-      "no_record": "d8a11b05f208d8df",
-      "json": "67fce29c5e5007cd"
+      "run": "b821ad30b7c7c3bd",
+      "verify": "8715db349b13df78",
+      "replay": "8d6e2f5b21055669",
+      "rerun": "86554582a46dae50",
+      "compose": "4ab21314f4d81298",
+      "stdin": "f886048dab884846",
+      "fail_on": "b821ad30b7c7c3bd",
+      "no_record": "447d2816ab954794",
+      "json": "c9c500c630823aa2"
     },
     "blacklist_ai/04_slack_announce_sonnet_default.md|yomiyasu_rewritten/04_slack_announce_sonnet_default_bl.md": {
-      "run": "4ca8b535c2b86bcd",
-      "verify": "17f266199c301c63",
-      "replay": "59efc96b16cf6359",
-      "rerun": "c07130a5c28280dd",
-      "compose": "c29e5bd577d4f175",
-      "stdin": "20f071e13af01265",
-      "fail_on": "4ca8b535c2b86bcd",
-      "no_record": "0ac2485fd8ec8308",
-      "json": "f3ea77dde00cf402"
+      "run": "92f23f11266ec128",
+      "verify": "ac87abb934e08bc8",
+      "replay": "3da2a1ee38fe81cf",
+      "rerun": "3644caf099d5ad7c",
+      "compose": "4c3b70a4fc46d8a0",
+      "stdin": "93734cd96b316e3c",
+      "fail_on": "92f23f11266ec128",
+      "no_record": "c3ba367e1cceae64",
+      "json": "aa21548a4083e0f8"
     },
     "raw_ai/04_slack_announce_sonnet_formal.md|yomiyasu_rewritten/04_slack_announce_sonnet_formal.md": {
-      "run": "cb8d947ceac76d7f",
-      "verify": "9943ee192a758514",
-      "replay": "86d43a31afce4202",
-      "rerun": "f6f5a31d61458710",
-      "compose": "9a0992d45c4f4065",
-      "stdin": "737a45066c4ffe18",
-      "fail_on": "cb8d947ceac76d7f",
-      "no_record": "109e84fa53f3fb1d",
-      "json": "498d1f3947d560e1"
+      "run": "645a6e8d50a7cab8",
+      "verify": "ad8f267d5a01a6b1",
+      "replay": "54975dba769979f9",
+      "rerun": "b5fd525235bfad15",
+      "compose": "454b7c89ab1acec3",
+      "stdin": "f209a1d4d748fadf",
+      "fail_on": "645a6e8d50a7cab8",
+      "no_record": "e8a5cdcef1acc16f",
+      "json": "3d4dc3d8b825ef28"
     },
     "blacklist_ai/04_slack_announce_sonnet_formal.md|yomiyasu_rewritten/04_slack_announce_sonnet_formal_bl.md": {
-      "run": "d4627730299f5732",
-      "verify": "775d4c8b342a82fb",
-      "replay": "36e3f58577c27bbb",
-      "rerun": "de7b45c4c9d58c72",
-      "compose": "2e78c4a0540a5c0f",
-      "stdin": "030331b953c7e639",
-      "fail_on": "d4627730299f5732",
-      "no_record": "912fcf57df344830",
-      "json": "47959ba9ea1f046d"
+      "run": "e8f15a1c5c441261",
+      "verify": "468a4c70c36a51cb",
+      "replay": "91724eae7c238899",
+      "rerun": "e61ed82cef1d8307",
+      "compose": "cfef863fadbc743c",
+      "stdin": "030c51a7ef38986d",
+      "fail_on": "e8f15a1c5c441261",
+      "no_record": "4d7411a7b1ea764c",
+      "json": "68cbf8d9182b553a"
     },
     "raw_ai/05_comparison_sonnet_casual.md|yomiyasu_rewritten/05_comparison_sonnet_casual.md": {
-      "run": "d78d74744c73bc7f",
-      "verify": "dd4e9f256cd839ce",
-      "replay": "4edb603592441d2f",
-      "rerun": "928cfa550c387d50",
-      "compose": "76f117fe77c65335",
-      "stdin": "435357b73aa99715",
-      "fail_on": "4d7241ae4d920c82",
-      "no_record": "c97043c541294b88",
-      "json": "a922c21ea2a13ce2"
+      "run": "65b1ea760f965e2a",
+      "verify": "6c938daca50210bb",
+      "replay": "089a6106021e85a0",
+      "rerun": "35a9acb860c8d3e1",
+      "compose": "38ac15d273854b62",
+      "stdin": "ee7bcebc334cd1bc",
+      "fail_on": "acace35ba75e9650",
+      "no_record": "8fe682653fe7813e",
+      "json": "4a1f1b5286733dfb"
     },
     "blacklist_ai/05_comparison_sonnet_casual.md|yomiyasu_rewritten/05_comparison_sonnet_casual_bl.md": {
-      "run": "1ee4baecfcdef9e8",
-      "verify": "0bba0afa1c60d5f8",
-      "replay": "52f8cb5f86955e40",
-      "rerun": "60c8220f7f3e449b",
-      "compose": "442bf87fe1b3be61",
-      "stdin": "43076567cc90689a",
-      "fail_on": "1626d8dafe41fbf5",
-      "no_record": "d96305d39363b005",
-      "json": "cfa90bf9a9aba3a3"
+      "run": "a4171caae941fbca",
+      "verify": "a88fedba27021aa1",
+      "replay": "b787d52e7534e5b0",
+      "rerun": "d16dd47166cd6f39",
+      "compose": "f07bc13ab90a68d2",
+      "stdin": "d42b788b17859b3d",
+      "fail_on": "c5dc90a856b3de1e",
+      "no_record": "f379caef538dab59",
+      "json": "ea5d9992be30f118"
     },
     "raw_ai/05_comparison_sonnet_default.md|yomiyasu_rewritten/05_comparison_sonnet_default.md": {
       "run": "419573c3b65d2e61",
@@ -2860,26 +2860,26 @@
       "json": "0bc3ce415d1ea5f0"
     },
     "blacklist_ai/05_comparison_sonnet_default.md|yomiyasu_rewritten/05_comparison_sonnet_default_bl.md": {
-      "run": "4ba4963a686ab29b",
-      "verify": "4baa9f90e31c7b09",
-      "replay": "a58950672af6054d",
-      "rerun": "16b8661a7a6bae72",
-      "compose": "633be51cc155ca13",
-      "stdin": "fb22ec8eec1d1904",
-      "fail_on": "4ba4963a686ab29b",
-      "no_record": "ab040125b3e6b1b5",
-      "json": "b862f82267a2e919"
+      "run": "d14e1190c4a53068",
+      "verify": "20a0cebb9d0a0f82",
+      "replay": "8e18ebbd59b572b4",
+      "rerun": "afb62137dc28e36f",
+      "compose": "8fd6f67d259a309e",
+      "stdin": "8ec2a0705646e3bc",
+      "fail_on": "d14e1190c4a53068",
+      "no_record": "f2dfa3c865878539",
+      "json": "797fd55d8d4ddcec"
     },
     "raw_ai/05_comparison_sonnet_formal.md|yomiyasu_rewritten/05_comparison_sonnet_formal.md": {
-      "run": "63a7cf79d8b3a4fc",
-      "verify": "29cb5de9c7f00024",
-      "replay": "2da66f6885a8e197",
-      "rerun": "fe41afffa0f05301",
-      "compose": "f1e5a613b5cf52b8",
-      "stdin": "f6428f4d256f7c03",
-      "fail_on": "63a7cf79d8b3a4fc",
-      "no_record": "dbcb7d7bee9a3c7b",
-      "json": "592a9fe2b28b4ba9"
+      "run": "06244701ab5cf0a8",
+      "verify": "3bd71d1011b53203",
+      "replay": "a6ee0e4eb42c0f7f",
+      "rerun": "14c52e38375d25d4",
+      "compose": "8949211535575160",
+      "stdin": "ae7d90cb6b35a801",
+      "fail_on": "06244701ab5cf0a8",
+      "no_record": "70f66f0501963c80",
+      "json": "04a30a7a89b92761"
     },
     "blacklist_ai/05_comparison_sonnet_formal.md|yomiyasu_rewritten/05_comparison_sonnet_formal_bl.md": {
       "run": "255b4daf01f76532",
@@ -2893,81 +2893,81 @@
       "json": "91aeb62b435c6421"
     },
     "raw_ai/06_spec_draft_sonnet_casual.md|yomiyasu_rewritten/06_spec_draft_sonnet_casual.md": {
-      "run": "1e78b1fcefd2f70a",
-      "verify": "9f3a0a55f1b2faf2",
-      "replay": "4077cd7c053c37fa",
-      "rerun": "466a82550644beb2",
-      "compose": "e5ca648ee892e0d4",
-      "stdin": "5c77b032e4219c96",
-      "fail_on": "d988107214bea879",
-      "no_record": "af81f4cce9743f60",
-      "json": "60cdbee87d9c6cbf"
+      "run": "201eb1576a3592ab",
+      "verify": "88ce801798d12746",
+      "replay": "e6440b1666d07075",
+      "rerun": "555b4e41012a5140",
+      "compose": "a4e3a3e278e9ac38",
+      "stdin": "3c50e551a700f2ac",
+      "fail_on": "53f998f6279ddc13",
+      "no_record": "67b7f0293fed96d3",
+      "json": "cd2268be02b085e4"
     },
     "blacklist_ai/06_spec_draft_sonnet_casual.md|yomiyasu_rewritten/06_spec_draft_sonnet_casual_bl.md": {
-      "run": "3323f7fcec4ce5dc",
-      "verify": "79e577e45a1883b3",
-      "replay": "72cedb5f74be84cf",
-      "rerun": "88c5ab9d180c561b",
-      "compose": "d3a58a283e5296de",
-      "stdin": "e9c1762c20372b4c",
-      "fail_on": "3323f7fcec4ce5dc",
-      "no_record": "f1fe8eb84cd0ebe4",
-      "json": "8a97ed39a2134f98"
+      "run": "358c2a8b8b62b8bd",
+      "verify": "22dc7ddca5d8ef64",
+      "replay": "c820dc2f6ece1901",
+      "rerun": "558eb15bbb0ee656",
+      "compose": "2f9c30330965881f",
+      "stdin": "e26c2cd5f86f81e8",
+      "fail_on": "358c2a8b8b62b8bd",
+      "no_record": "b4ca94dab109ae91",
+      "json": "b451a7ae39d3cea8"
     },
     "raw_ai/06_spec_draft_sonnet_default.md|yomiyasu_rewritten/06_spec_draft_sonnet_default.md": {
-      "run": "79cf589534799742",
-      "verify": "91560a83d0daf584",
-      "replay": "dc4f4fb9c9d865ac",
-      "rerun": "7ce245c6965074f5",
-      "compose": "f9fa03febb748ea2",
-      "stdin": "7f659285a7d83de4",
-      "fail_on": "79cf589534799742",
-      "no_record": "6ac8875549d54b5b",
-      "json": "4e45ac194033c358"
+      "run": "e0a4462445f2eca1",
+      "verify": "d12790d1e7373747",
+      "replay": "d9a49777c9d2540f",
+      "rerun": "f4550fb2f4ae47f0",
+      "compose": "d7748ffe9cf3150b",
+      "stdin": "6a092bf32f6003f4",
+      "fail_on": "e0a4462445f2eca1",
+      "no_record": "334f1ee5643a941d",
+      "json": "c16956ed0558ecbf"
     },
     "blacklist_ai/06_spec_draft_sonnet_default.md|yomiyasu_rewritten/06_spec_draft_sonnet_default_bl.md": {
-      "run": "b942fbeca408f77d",
-      "verify": "d2449cae2859a9f9",
-      "replay": "b10c553c735ca636",
-      "rerun": "cdae2655b9d06fac",
-      "compose": "991ab55cff4e3214",
-      "stdin": "4634f35699c3f68c",
-      "fail_on": "b942fbeca408f77d",
-      "no_record": "ff608604cb593683",
-      "json": "cd9311c51c28e29b"
+      "run": "e08e91758c4d2610",
+      "verify": "bd0526b33ff3ab0d",
+      "replay": "47ea16978ac7e223",
+      "rerun": "e2c50ab9cc4f0e23",
+      "compose": "a71e1c09d84d9f02",
+      "stdin": "2803301af37fd3d7",
+      "fail_on": "e08e91758c4d2610",
+      "no_record": "0a63ed5ffb5487f5",
+      "json": "90fddd00382bbdfb"
     },
     "raw_ai/06_spec_draft_sonnet_formal.md|yomiyasu_rewritten/06_spec_draft_sonnet_formal.md": {
-      "run": "3fbdd9df9378f8bc",
+      "run": "3fb530bdfc514d48",
       "verify": "b3519c8ec11ee903",
       "replay": "733b2b8b43d96386",
-      "rerun": "3aa0f98316036fd4",
-      "compose": "d51c2cb3915e1644",
-      "stdin": "97fb32dd9bf656e6",
-      "fail_on": "3fbdd9df9378f8bc",
-      "no_record": "d1c2e29ee86b49fa",
-      "json": "edd91bbbfe4cfeb9"
+      "rerun": "60b6efe51648493d",
+      "compose": "fee979e3e27f5fb0",
+      "stdin": "89f74b91aee85dd4",
+      "fail_on": "3fb530bdfc514d48",
+      "no_record": "d59c56d40d6cf2fa",
+      "json": "fcdfb4257102b0dc"
     },
     "blacklist_ai/06_spec_draft_sonnet_formal.md|yomiyasu_rewritten/06_spec_draft_sonnet_formal_bl.md": {
-      "run": "2f099953c63b2f6d",
-      "verify": "65ff72515efa4b2e",
-      "replay": "1b276317fb04d19d",
-      "rerun": "ef872cadebd59f85",
-      "compose": "67bb49a2c294247e",
-      "stdin": "066d7fc5d6ffe939",
-      "fail_on": "2f099953c63b2f6d",
-      "no_record": "bf7b8c531ee95930",
-      "json": "664bf4a8f8274b38"
+      "run": "9ddcdc0ac77c5343",
+      "verify": "3b521cde4a76a441",
+      "replay": "2a2b3432e6509d70",
+      "rerun": "35855bee9578c5d8",
+      "compose": "91d23f6df23c3db6",
+      "stdin": "7402d5f9c960a9a5",
+      "fail_on": "9ddcdc0ac77c5343",
+      "no_record": "652488e9a9d6a64c",
+      "json": "4de4798e6275960e"
     },
     "raw_ai/07_code_review_sonnet_casual.md|yomiyasu_rewritten/07_code_review_sonnet_casual.md": {
-      "run": "1f75de4fa496a9f7",
-      "verify": "6be554b0237adc7e",
-      "replay": "29991298db6c529f",
-      "rerun": "32ccdee86480ef9f",
-      "compose": "a9d65ba1453ccfc0",
-      "stdin": "a4bfcc78443b0ffe",
-      "fail_on": "7e43717a03af2475",
-      "no_record": "fb59fcaab5347de6",
-      "json": "98f507ae260e9e99"
+      "run": "db801a94a6eb2c0f",
+      "verify": "99b1957874164f9b",
+      "replay": "e09119ffe086d149",
+      "rerun": "d44d237c7b453fa7",
+      "compose": "0b36808e8413588a",
+      "stdin": "c1b38395cb6188b0",
+      "fail_on": "c452a3767308f421",
+      "no_record": "e222483a86dd745d",
+      "json": "5af63478bf0c1740"
     },
     "blacklist_ai/07_code_review_sonnet_casual.md|yomiyasu_rewritten/07_code_review_sonnet_casual_bl.md": {
       "run": "70ba3b0d69c5d89f",
@@ -2981,48 +2981,48 @@
       "json": "626c7db2e898836e"
     },
     "raw_ai/07_code_review_sonnet_default.md|yomiyasu_rewritten/07_code_review_sonnet_default.md": {
-      "run": "b5f4cd3455a7cfe1",
-      "verify": "9bffcdc30ad239ae",
-      "replay": "550c889f7ad5f6ad",
-      "rerun": "e470e380b92416ab",
-      "compose": "20df0b23a26506a0",
-      "stdin": "81046949c2af8b46",
-      "fail_on": "49bd6449b25fd45a",
-      "no_record": "5993faa423868ff5",
-      "json": "2b3ec30a626f5b12"
+      "run": "7720be4de859275b",
+      "verify": "38d5fc39d65486a3",
+      "replay": "4729cc529d8bee16",
+      "rerun": "5ee19075207284f0",
+      "compose": "9bf02b74e39136d3",
+      "stdin": "a60acf166dc4e309",
+      "fail_on": "98b6f1600f574b92",
+      "no_record": "0facb545d4c539c4",
+      "json": "fa6aeb272f1f92c6"
     },
     "blacklist_ai/07_code_review_sonnet_default.md|yomiyasu_rewritten/07_code_review_sonnet_default_bl.md": {
-      "run": "cd02cf11dc1336f5",
-      "verify": "c7496f254e7106b5",
-      "replay": "0219765a1c008072",
-      "rerun": "412c1cc548a67b3a",
-      "compose": "1b1c6070cf8a2281",
-      "stdin": "a48e2ddbe5d7b124",
-      "fail_on": "32116516bf5d1477",
-      "no_record": "d8e2431b294282ec",
-      "json": "5bb1aee261810d08"
+      "run": "13b4e0fab269971d",
+      "verify": "6f74cb185f429566",
+      "replay": "84229df66a61244d",
+      "rerun": "048a2a02afa09d54",
+      "compose": "ff289ede9c49fa7c",
+      "stdin": "8058026f2bbca7ac",
+      "fail_on": "35846bac82b5ee3f",
+      "no_record": "7e104ef89de94f67",
+      "json": "9798b502add22eb5"
     },
     "raw_ai/07_code_review_sonnet_formal.md|yomiyasu_rewritten/07_code_review_sonnet_formal.md": {
-      "run": "854e3fb0d7cee41b",
-      "verify": "4d1f487b9c094142",
-      "replay": "9fabedc36a7da6f4",
-      "rerun": "b80cc7adfd1ce90b",
-      "compose": "adc5e798670c55cc",
-      "stdin": "d2448f865bad6dd0",
-      "fail_on": "854e3fb0d7cee41b",
-      "no_record": "9ea162875a11e375",
-      "json": "fa1bdb62330659f8"
+      "run": "9ca28cd8a2bfe0dc",
+      "verify": "31734a7d2f09abb5",
+      "replay": "d29acf3e7a0fb3df",
+      "rerun": "a1f867a9dda6f488",
+      "compose": "46b2b0ccae1449c6",
+      "stdin": "64d2a5e945bb58f1",
+      "fail_on": "9ca28cd8a2bfe0dc",
+      "no_record": "c5c460de960aaf5d",
+      "json": "27b40937a42275ad"
     },
     "blacklist_ai/07_code_review_sonnet_formal.md|yomiyasu_rewritten/07_code_review_sonnet_formal_bl.md": {
-      "run": "3375b302e2ff4632",
-      "verify": "f37621888a798af7",
-      "replay": "a0a739ca2aafe455",
-      "rerun": "917a158525a8afeb",
-      "compose": "723b99f62f7ee221",
-      "stdin": "86a9b9b32e6c414e",
-      "fail_on": "7ee948aef17704f4",
-      "no_record": "7386e8b9a4b15c1c",
-      "json": "0e9123fb95677331"
+      "run": "9959d3af1f805a1b",
+      "verify": "ffc88b7d82e4a5fd",
+      "replay": "5fc486d6a2260366",
+      "rerun": "b95e1c2f67affa2f",
+      "compose": "8ef8afc42bdb079d",
+      "stdin": "1fd2ef52d925fba1",
+      "fail_on": "4dc60bb49633560a",
+      "no_record": "257e5d4856d07b50",
+      "json": "de37a4b7b39afe6b"
     },
     "raw_ai/08_essay_retrospective_sonnet_casual.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_casual.md": {
       "run": "82368d07e3969d1f",
@@ -3036,37 +3036,37 @@
       "json": "b7be89f6ee2ac0a8"
     },
     "blacklist_ai/08_essay_retrospective_sonnet_casual.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_casual_bl.md": {
-      "run": "19298bb1ab3d7960",
+      "run": "846af54651ff438e",
       "verify": "f161c8d04915bca8",
       "replay": "e2f290d5506c5ac7",
-      "rerun": "649a9ebb14fbd4fd",
-      "compose": "022336d66e560ad9",
-      "stdin": "6193efbb2264e675",
-      "fail_on": "19298bb1ab3d7960",
-      "no_record": "e033e587a608de31",
-      "json": "05b375ccf00297f5"
+      "rerun": "eb7451ef30ff60d2",
+      "compose": "7a7dbc32b06bc214",
+      "stdin": "43d3406169324136",
+      "fail_on": "846af54651ff438e",
+      "no_record": "0b14bfec6a1fb5a0",
+      "json": "c317bb688af3c3cf"
     },
     "raw_ai/08_essay_retrospective_sonnet_default.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_default.md": {
-      "run": "79a45faa6061d55b",
-      "verify": "56adbb71b18e865b",
-      "replay": "112a77be669d3eac",
-      "rerun": "3d043f44d6a2620e",
-      "compose": "1e5a52a7f0f02e82",
-      "stdin": "a510775de45c3425",
-      "fail_on": "79a45faa6061d55b",
-      "no_record": "096b88d3a5cfe2f0",
-      "json": "e594f9c8d303fb52"
+      "run": "22c04dde68cb4045",
+      "verify": "a5b7075465b30454",
+      "replay": "8cf07c3de9d288c9",
+      "rerun": "1708b387c1f89fc2",
+      "compose": "7cc16366c7252ad5",
+      "stdin": "32d42db0d1d01ebd",
+      "fail_on": "22c04dde68cb4045",
+      "no_record": "3af38fbdd80ae1d5",
+      "json": "17a483856f82c943"
     },
     "blacklist_ai/08_essay_retrospective_sonnet_default.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_default_bl.md": {
-      "run": "02418ae96cd2849d",
-      "verify": "12d1a7631d446030",
-      "replay": "32e79da406713eea",
-      "rerun": "957f37727a86f9a7",
-      "compose": "f4f4dbf197d0c9b4",
-      "stdin": "2b0c95c53f89a0be",
-      "fail_on": "02418ae96cd2849d",
-      "no_record": "5b7c4de569ad8d75",
-      "json": "306cbea2a6723e9b"
+      "run": "be56888a0f0b8d7e",
+      "verify": "af3bd2c05aa98be6",
+      "replay": "86ef451366380c8c",
+      "rerun": "6bcb572656b66329",
+      "compose": "03a3b548f4a6c6ef",
+      "stdin": "d5bc568de8eb6d8b",
+      "fail_on": "be56888a0f0b8d7e",
+      "no_record": "82e4e3f31108aa39",
+      "json": "ecaed98f96cccd96"
     },
     "raw_ai/08_essay_retrospective_sonnet_formal.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_formal.md": {
       "run": "0fff57cd7d4f4f6c",
@@ -3080,15 +3080,15 @@
       "json": "47d088281c0ed06c"
     },
     "blacklist_ai/08_essay_retrospective_sonnet_formal.md|yomiyasu_rewritten/08_essay_retrospective_sonnet_formal_bl.md": {
-      "run": "553905ffb6afb841",
-      "verify": "133a00a3ecd403fb",
-      "replay": "cc0fac90ab9ffce5",
-      "rerun": "7abaab4c522b6b51",
-      "compose": "b3445ade2bc81a5a",
-      "stdin": "460ef63a7afef296",
-      "fail_on": "553905ffb6afb841",
-      "no_record": "7d7f884e0ddb64cd",
-      "json": "7a037f6dd9a45532"
+      "run": "53713b216782a9e0",
+      "verify": "d7f919ec5b7c74be",
+      "replay": "aed0e4aa2946ec6e",
+      "rerun": "a72e173de3d1cb0f",
+      "compose": "16f4ce6ac29cd079",
+      "stdin": "da5c72e632d14ffe",
+      "fail_on": "53713b216782a9e0",
+      "no_record": "9b7001c76a1109a0",
+      "json": "c7e95e325492770d"
     },
     "edge_cases/edge_hitei_49.md|edge_cases/edge_hitei_50.md": {
       "run": "ef093591038748cd",
@@ -3167,11 +3167,11 @@
       "verify": "b7b49353b3f017f7"
     },
     "edge_cases/edge_nigiru_04.md|edge_cases/edge_nigiru_05.md": {
-      "run": "4e2e179c77d894be",
-      "verify": "a21c0e21cab99d56"
+      "run": "aed4b1c517f3a419",
+      "verify": "710578b5c0f6e500"
     },
     "edge_cases/edge_nigiru_05.md|edge_cases/edge_nigiru_06.md": {
-      "run": "103f161687e644b8",
+      "run": "9a59030f04f924d5",
       "verify": "580a5d2a4dfba59e"
     },
     "edge_cases/edge_nigiru_06.md|edge_cases/edge_nigiru_07.md": {
@@ -3207,11 +3207,11 @@
       "verify": "1490520d34a37e4d"
     },
     "edge_cases/edge_taosu_14.md|edge_cases/edge_taosu_15.md": {
-      "run": "0d02d53eeb214ce4",
-      "verify": "9a64fb8aa9b6712a"
+      "run": "2a05a9f6bd03dc4a",
+      "verify": "2b475710fdf79aba"
     },
     "edge_cases/edge_taosu_15.md|edge_cases/edge_taosu_16.md": {
-      "run": "544e5c6f5481aa02",
+      "run": "064acfbc9ebca342",
       "verify": "a603ccfa7758aea7"
     },
     "edge_cases/edge_taosu_16.md|edge_cases/edge_taosu_17.md": {
@@ -3243,11 +3243,11 @@
       "verify": "3f95767b1d1f048f"
     },
     "edge_cases/edge_tokasu_23.md|edge_cases/edge_tokasu_24.md": {
-      "run": "2fff9b0bbc8bb4d9",
-      "verify": "a79b09f6c8148158"
+      "run": "cc2fcc5d9d89d96c",
+      "verify": "9dfa2cfa14dd0b31"
     },
     "edge_cases/edge_tokasu_24.md|edge_cases/edge_tokasu_25.md": {
-      "run": "d1ba6a3cbb146925",
+      "run": "aef759124e09da17",
       "verify": "78d2eb37458e49f6"
     },
     "edge_cases/edge_tokasu_25.md|edge_cases/edge_tokasu_26.md": {
@@ -3339,15 +3339,15 @@
       "verify": "ca1b3a95265ef2ae"
     },
     "edge_cases/edge_yakugo_62.md|edge_cases/edge_yakugo_63.md": {
-      "run": "618942e4e5336fa9",
-      "verify": "b3c563dbe31b3174"
+      "run": "165cb5e980372308",
+      "verify": "e3ed5fe1a5b97062"
     },
     "edge_cases/edge_yakugo_63.md|edge_cases/edge_yakugo_64.md": {
-      "run": "21dc373ded8f4531",
-      "verify": "3fffc7a7df60ce8c"
+      "run": "9dcc78a5c3e4edd3",
+      "verify": "52382a05f447fd2a"
     },
     "edge_cases/edge_yakugo_64.md|edge_cases/edge_yakugo_65.md": {
-      "run": "dbd2283af1130210",
+      "run": "409004c6a1decfa6",
       "verify": "631bcaa49ac5de63"
     },
     "edge_cases/edge_yakugo_65.md|edge_cases/edge_yakugo_66.md": {
@@ -3403,27 +3403,27 @@
       "verify": "258fc3a9cd2e4e08"
     },
     "human/human_oga_05.md|human/human_oga_06.md": {
-      "run": "25239c7e1fd65e6a",
-      "verify": "2c6ff4ba3009096b"
+      "run": "1304759573b1250e",
+      "verify": "8b6616265727fe78"
     },
     "human/human_oga_06.md|human/human_oga_07.md": {
-      "run": "82f57ca652110407",
+      "run": "1759a6ea38733cf5",
       "verify": "686c0083496a5718"
     },
     "human/human_oga_07.md|human/human_oga_08.md": {
-      "run": "43bf40e932dad24d",
-      "verify": "d471249a0f04b517"
+      "run": "4a883d383750e0ab",
+      "verify": "16ba5998676b6d86"
     },
     "raw_ai/01_tech_arch_sonnet_casual.md|raw_ai/01_tech_arch_sonnet_default.md": {
-      "run": "6d8ea951dd1c418b",
-      "verify": "6c06e8d8ab046366"
+      "run": "573ce1812ea3125a",
+      "verify": "1ba397df512626bb"
     },
     "raw_ai/01_tech_arch_sonnet_default.md|raw_ai/01_tech_arch_sonnet_formal.md": {
-      "run": "79526b42d24c3312",
-      "verify": "b3583be54e35cbac"
+      "run": "81108b174940b5ea",
+      "verify": "e0145f0b18a46a44"
     },
     "raw_ai/01_tech_arch_sonnet_formal.md|raw_ai/02_incident_report_sonnet_casual.md": {
-      "run": "1d004e2ab535847a",
+      "run": "025ee7a23d96dc01",
       "verify": "b1de0824c58ff114"
     },
     "raw_ai/02_incident_report_sonnet_casual.md|raw_ai/02_incident_report_sonnet_default.md": {
@@ -3439,63 +3439,63 @@
       "verify": "57c2bf0e41f0b14e"
     },
     "raw_ai/03_pr_description_sonnet_casual.md|raw_ai/03_pr_description_sonnet_default.md": {
-      "run": "398970ab4093794d",
-      "verify": "889334d9062d81c6"
+      "run": "f77bb0bb9e0ff642",
+      "verify": "7eaf2df4c99326e8"
     },
     "raw_ai/03_pr_description_sonnet_default.md|raw_ai/03_pr_description_sonnet_formal.md": {
-      "run": "d8a49bf82463803c",
-      "verify": "df0454a3d87a367e"
+      "run": "9b873dbb80d93140",
+      "verify": "5e7486210b9eea9d"
     },
     "raw_ai/03_pr_description_sonnet_formal.md|raw_ai/04_slack_announce_sonnet_casual.md": {
-      "run": "eebdae47bd4152be",
+      "run": "30bc2657b8a499ee",
       "verify": "7b509f1b129c38da"
     },
     "raw_ai/04_slack_announce_sonnet_casual.md|raw_ai/04_slack_announce_sonnet_default.md": {
-      "run": "4427aea997d44409",
-      "verify": "325700e6e000dadb"
+      "run": "a76587d5d47180cb",
+      "verify": "e30111aa3c565bc6"
     },
     "raw_ai/04_slack_announce_sonnet_default.md|raw_ai/04_slack_announce_sonnet_formal.md": {
-      "run": "61616a3f795a465f",
-      "verify": "ee056f7b278e9377"
+      "run": "1d300ce0f925786a",
+      "verify": "f2142caa0db3b068"
     },
     "raw_ai/04_slack_announce_sonnet_formal.md|raw_ai/05_comparison_sonnet_casual.md": {
-      "run": "d00418e16671b323",
-      "verify": "593e25bbfaed23d5"
+      "run": "b00b49fbc304ebf8",
+      "verify": "c57ec5d6ba22a92c"
     },
     "raw_ai/05_comparison_sonnet_casual.md|raw_ai/05_comparison_sonnet_default.md": {
-      "run": "6fd1f520069ab830",
+      "run": "b091194c63caceb7",
       "verify": "61760de9ce3ac41a"
     },
     "raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md": {
-      "run": "e8d589708a390692",
-      "verify": "62fea99927c157c9"
+      "run": "7e2877dbf2217a91",
+      "verify": "7c419ec53b85cb63"
     },
     "raw_ai/05_comparison_sonnet_formal.md|raw_ai/06_spec_draft_sonnet_casual.md": {
-      "run": "40fa41d3255eec84",
-      "verify": "79554696bc165ce6"
+      "run": "7e6ee6c1f7a3a1f0",
+      "verify": "d46643ea2fff8719"
     },
     "raw_ai/06_spec_draft_sonnet_casual.md|raw_ai/06_spec_draft_sonnet_default.md": {
-      "run": "8ddf58dcf61a2e32",
+      "run": "09086347638e65b8",
       "verify": "8ebaab395934846c"
     },
     "raw_ai/06_spec_draft_sonnet_default.md|raw_ai/06_spec_draft_sonnet_formal.md": {
-      "run": "dddf627f45837f4d",
-      "verify": "b912d9191d4dc4c4"
+      "run": "0e34e30f724f6b9b",
+      "verify": "ccaae8feb4a3fac5"
     },
     "raw_ai/06_spec_draft_sonnet_formal.md|raw_ai/07_code_review_sonnet_casual.md": {
-      "run": "bef4301380589804",
+      "run": "7f8a26e6277c7218",
       "verify": "f8eeb3aaf6a25a60"
     },
     "raw_ai/07_code_review_sonnet_casual.md|raw_ai/07_code_review_sonnet_default.md": {
-      "run": "2c2ade0881aec2be",
-      "verify": "37b1f061d32d044f"
+      "run": "6fadf955889fc4e3",
+      "verify": "6543999063822163"
     },
     "raw_ai/07_code_review_sonnet_default.md|raw_ai/07_code_review_sonnet_formal.md": {
-      "run": "62f1adda732f7a09",
-      "verify": "94ed4c39ee72dd31"
+      "run": "e687073c8469f0a3",
+      "verify": "7bf9a3f9f17bf43c"
     },
     "raw_ai/07_code_review_sonnet_formal.md|raw_ai/08_essay_retrospective_sonnet_casual.md": {
-      "run": "93141d29a0ea7847",
+      "run": "3d6e6aec0f656af5",
       "verify": "935e0b0a04e450ed"
     },
     "raw_ai/08_essay_retrospective_sonnet_casual.md|raw_ai/08_essay_retrospective_sonnet_default.md": {
@@ -3570,6 +3570,7 @@
     "2026-10-29 v2.5.0 で、diff に見出しの形の変化（JSON の heading_shapes と「■ 見出しの形が変わった」の節）と、読点が増えた候補（JSON の comma_increase と「■ 読点が増えた」の節）を足し、「見出しの数が変わった」の文に消えた見出しの文字を足したときの作り直し: unchanged_diff() と unchanged_check() を作って前からある136組と比べ、値が変わったのは、diff の --json の136組（キーが2つ増えた）と、81 組の plain、stance、fail_on、stdin（新しい節か、消えた見出しの文字）、check の run 81 組、推敲の48組の run --json（子の diff の JSON のキー）、推敲の組の rerun、compose、stdin、fail_on、no_record だった（diff 460行、check 214行）。2.4.0 の diff と check を同じ組で動かして比べ、diff の状態の行と --fail-on の数、check run の終了コード、1行目、状態の行（meaning_risk=）は、どの組も変わらなかった。lint の前からある行は作り直していない。",
     "2026-10-29 v2.5.0 で tests/corpus に例文を足したときの行の追加: edge_cases に6章の例文6本（否定で終わる定義文の edge_hitei_49〜51 と、漢語の名詞で動作を省いた文の edge_kango_52〜54。どれも種類なしの lint の候補は0件）を足した。5a の例（見出しの形とまとめを依頼したスライドと、まとめの節がある記事の、元と後と依頼の文）は、新しいフォルダ requests に .txt で置いた（.md の数え方と組に入れない。2,000字未満の文書だけに出る短いまとめの見出しの候補があり、つなぐと点数が変わるので、フォルダごとの点数の試験に入れない）。lint の行は足した6本の分だけを今の出力で作り、edge_cases の並びで増えた6組（edge_hitei_49|edge_hitei_50 から edge_kango_54|edge_kiku_45 まで）の diff と check の行を今の出力で作った。名前が edge_kiku_45 より前に並ぶので、前からある組は1つも変わらない。",
     "2026-11-05 3.0.0 で tests/corpus に例文を足したときの行の追加: edge_cases に直訳語の型4と型5の字と語を文字どおりに使った文12本（edge_yakugo_55〜66。どれも種類なしの lint の候補は0件、点数100）を足した。lint の行は足した12本の分だけを今の出力で作り、edge_cases の並びで増えた12組（edge_watasu_48|edge_yakugo_55 から edge_yakugo_65|edge_yakugo_66 まで）の diff と check の行を今の出力で作った。名前が edge_watasu_48 よりあとに並ぶので、前からある組は1つも変わらない。",
-    "2026-11-18 v3.2.0 で diff の意味が変わる恐れを見直したとき（範囲を絞る語の limiter、義務の強さの obligation、範囲の語の quantifier、期限の語の deadline、条件の句の condition、段落から消えた文の dropped_sentence、境目の言い方の boundary を足し、「お願いしたい」と「いただけますと幸い」を依頼の印にして、問いの形の依頼を依頼の文に言い直した組を外し、「事例がある」を「ことがある」と同じ強さに数えた）の作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、lint の行は1字も変わらなかった。値が変わったのは diff の12組（plain、stance、fail_on、json、stdin の60行）と、check の66行（同じ12組の run と verify、そのうち推敲の6組の rerun、replay、compose、stdin、fail_on、json、no_record）だけだった。limiter は raw_ai/05_comparison_sonnet_casual.md → yomiyasu_rewritten/05_comparison_sonnet_casual.md と raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md、依頼の言い直しは raw_ai/04_slack_announce_sonnet_default.md → yomiyasu_rewritten/04_slack_announce_sonnet_default.md、「事例がある」は blacklist_ai/03_pr_description_sonnet_default.md → yomiyasu_rewritten/03_pr_description_sonnet_default_bl.md、boundary は 02_incident_report_sonnet_casual の2組（raw_ai と blacklist_ai から）と raw_ai/03_pr_description_sonnet_formal.md → yomiyasu_rewritten/03_pr_description_sonnet_formal.md、quantifier は edge_hitei_51|edge_kango_52 と edge_waru_30|edge_waru_31、condition は edge_nigiru_03|edge_nigiru_04、dropped_sentence は edge_nigiru_01|edge_nigiru_02 と human_oga_07|human_oga_08。--fail-on meaning-risk の終了コードが変わったのは、yomiyasu_rewritten/02_incident_report_sonnet_casual_bl.md の組（0 → 1、boundary）、yomiyasu_rewritten/05_comparison_sonnet_casual.md の組（0 → 1、limiter）、raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md（diff だけ。0 → 1、limiter）、yomiyasu_rewritten/04_slack_announce_sonnet_default.md の組（1 → 0、依頼の言い直し）で、check run --fail-on meaning-risk,warn も推敲の3組で同じ向きに変わった。source_commit と source_sha256 は作り直していない。"
+    "2026-11-18 v3.2.0 で diff の意味が変わる恐れを見直したとき（範囲を絞る語の limiter、義務の強さの obligation、範囲の語の quantifier、期限の語の deadline、条件の句の condition、段落から消えた文の dropped_sentence、境目の言い方の boundary を足し、「お願いしたい」と「いただけますと幸い」を依頼の印にして、問いの形の依頼を依頼の文に言い直した組を外し、「事例がある」を「ことがある」と同じ強さに数えた）の作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、lint の行は1字も変わらなかった。値が変わったのは diff の12組（plain、stance、fail_on、json、stdin の60行）と、check の66行（同じ12組の run と verify、そのうち推敲の6組の rerun、replay、compose、stdin、fail_on、json、no_record）だけだった。limiter は raw_ai/05_comparison_sonnet_casual.md → yomiyasu_rewritten/05_comparison_sonnet_casual.md と raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md、依頼の言い直しは raw_ai/04_slack_announce_sonnet_default.md → yomiyasu_rewritten/04_slack_announce_sonnet_default.md、「事例がある」は blacklist_ai/03_pr_description_sonnet_default.md → yomiyasu_rewritten/03_pr_description_sonnet_default_bl.md、boundary は 02_incident_report_sonnet_casual の2組（raw_ai と blacklist_ai から）と raw_ai/03_pr_description_sonnet_formal.md → yomiyasu_rewritten/03_pr_description_sonnet_formal.md、quantifier は edge_hitei_51|edge_kango_52 と edge_waru_30|edge_waru_31、condition は edge_nigiru_03|edge_nigiru_04、dropped_sentence は edge_nigiru_01|edge_nigiru_02 と human_oga_07|human_oga_08。--fail-on meaning-risk の終了コードが変わったのは、yomiyasu_rewritten/02_incident_report_sonnet_casual_bl.md の組（0 → 1、boundary）、yomiyasu_rewritten/05_comparison_sonnet_casual.md の組（0 → 1、limiter）、raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md（diff だけ。0 → 1、limiter）、yomiyasu_rewritten/04_slack_announce_sonnet_default.md の組（1 → 0、依頼の言い直し）で、check run --fail-on meaning-risk,warn も推敲の3組で同じ向きに変わった。source_commit と source_sha256 は作り直していない。",
+    "2026-11-23 v3.3.0 で lint の pause_comma を種類を指定しないときも当て（promo と script では今までどおり出さない）、読点を残す形を狭めた（読点のあとの別の主語と主題は12字の中だけ、節を含む主題は14字を超えるときだけ、条件や場面の枠は7字を超えるときだけ外し、並べの最後の項目と20字までの句を拾い、ところが、あるいは などの接続の語と挨拶を外す）ときの作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、diff の行は1字も変わらなかった。lint の行は、種類なしで pause_comma の候補が出る70本（yomiyasu_rewritten 36本、blacklist_ai 15本、raw_ai 12本、edge_cases 5本、human の human_oga_06 と human_oga_08）の5通り（plain、strict、fail_error、json、stdin）が変わった（diff_endings は変わらない）。check の行は、最終稿に同じ候補が出る69組の run と、そのうち55組の verify、推敲の39組の rerun、compose、stdin、fail_on、no_record、json、そのうち36組の replay が変わった。pause_comma は info なので、lint の --strict と --fail-on、check のどの使い方でも、終了コードが変わった組はない（3.2.3 のスクリプトで同じ使い方を動かして比べた）。ほかの行は今の出力と1字も変わらないことを確かめた。"
   ]
 }

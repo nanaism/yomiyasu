@@ -144,7 +144,8 @@ class FrameNoteTest(unittest.TestCase):
     """4章: 文頭の句に続く「では、」「には、」のあと、次の読点か文末までが20字以上ある行では、指摘を続けたうえで、
     残してよい場合を message の最後に1文足す。ほかの行の message は 3.1.0 と1字も変えない。"""
 
-    NOTE = "文頭の場面の枠（「この記事では、」など）のあとで文が長く、外すと区切りが見えにくくなるときは、残してかまいません。"
+    # 3.3.0: 文を言い換えた（残してよいのは、枠のあとの句が長く、外すと区切りが見えにくくなるとき。3.2.0 と同じ）
+    NOTE = "文頭の場面の枠（「この記事では、」など）のあとの句が長く、読点を外すと区切りが見えにくくなるなら残してかまいません。"
     WITH_NOTE = (
         ("この記事では、新しい表計算アプリを毎日の集計作業に取り入れる手順を紹介します。", ["この記事では"], [1]),
         ("この画面には、先月から受け付けた申込みを日付の順に並べて表示します。", ["この画面には"], [1]),
@@ -217,9 +218,14 @@ class FrameNoteTest(unittest.TestCase):
                 self.assertEqual(with_note["rule_penalty_score"], without["rule_penalty_score"])
 
     def test_without_a_type_nothing_is_found(self):
-        """pause_comma は種類を指定したときだけ出る（種類なしの出力は変わらない）。"""
+        """3.3.0 から pause_comma は種類を指定しないときも出て、1文を足した message も article と同じ。promo では出ない
+        （名前は 3.2.3 までのまま）。"""
         text = self.WITH_NOTE[0][0]
-        self.assertEqual(pauses(text, doc_type=None), [])
+        found = pauses(text, doc_type=None)
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0]["message"].endswith(self.NOTE))
+        self.assertEqual(found, pauses(text, doc_type="article"))
+        self.assertEqual(pauses(text, doc_type="promo"), [])
 
 
 def ai(text, **options):

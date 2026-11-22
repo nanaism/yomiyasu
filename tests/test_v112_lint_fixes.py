@@ -12,6 +12,13 @@ sys.path.insert(0, str(ROOT / "scripts"))
 import yomiyasu_lint  # noqa: E402
 
 
+def candidates(path):
+    """pause_comma のほかの候補の数。3.3.0 から pause_comma を種類なしでも当てる（edge_cases の5本の文頭の
+    「〜では、」などに出る）。ここで見るのは語と見出しの規則なので、読点の規則は数えない。"""
+    result = yomiyasu_lint.lint_text(path.read_text(encoding="utf-8"))
+    return result["candidate_count"] - sum(1 for finding in result["findings"] if finding["rule"] == "pause_comma")
+
+
 def rules(text):
     return [finding["rule"] for finding in yomiyasu_lint.lint_text(text)["findings"]]
 
@@ -45,7 +52,7 @@ class TestMeltingTimeConjugations(unittest.TestCase):
         for number in range(21, 29):
             path = ROOT / "tests" / "corpus" / "edge_cases" / f"edge_tokasu_{number}.md"
             with self.subTest(path=path.name):
-                self.assertEqual(yomiyasu_lint.lint_text(path.read_text(encoding="utf-8"))["candidate_count"], 0)
+                self.assertEqual(candidates(path), 0)
 
 
 class TestHeadingVocabulary(unittest.TestCase):
@@ -59,7 +66,7 @@ class TestHeadingVocabulary(unittest.TestCase):
     def test_edge_case_headings_stay_clean(self):
         for path in sorted((ROOT / "tests" / "corpus" / "edge_cases").glob("*.md")):
             with self.subTest(path=path.name):
-                self.assertEqual(yomiyasu_lint.lint_text(path.read_text(encoding="utf-8"))["candidate_count"], 0)
+                self.assertEqual(candidates(path), 0)
 
 
 class TestLiteralHints(unittest.TestCase):

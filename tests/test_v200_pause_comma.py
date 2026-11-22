@@ -36,7 +36,9 @@ REMOVE = [('回覧板は、木曜の朝に回します。', ['回覧板は']),
  ('操作画面の『旗』は、まだオンにしません。', ['操作画面の『旗』は']),
  ('当店としては、年内に改装を終えたいと考えています。', ['当店としては']),
  ('今は、紙の帳簿で数えています。', ['今は']),
- ('朝の打ち合わせは、電話で行います。', ['朝の打ち合わせは'])]
+ ('朝の打ち合わせは、電話で行います。', ['朝の打ち合わせは']),
+ # 3.3.0: 7字以下の短い条件や場面の枠は拾う（仕様の変更。3.2.3 までは KEEP）
+ ('設定を戻すには、管理画面の「初期化」を押します。', ['設定を戻すには'])]
 
 KEEP = ['夜のうちに届いた荷物や手紙は、朝の便でまとめて配ります。',
  '最初に手をつけたのは、古い帳簿の整理でした。',
@@ -48,7 +50,6 @@ KEEP = ['夜のうちに届いた荷物や手紙は、朝の便でまとめて�
  '集合に遅れそうな場合は、電話で知らせてください。',
  'それでも開かないときは、窓口に電話してください。',
  '申請を出したあとは、画面で状況を確かめられます。',
- '設定を戻すには、管理画面の「初期化」を押します。',
  'では、次の手順に進みます。',
  'このたびは、遠いところをお越しいただきありがとうございました。',
  '具体的には、申請の画面を二つに分けます。',
@@ -74,24 +75,18 @@ KEEP = ['夜のうちに届いた荷物や手紙は、朝の便でまとめて�
  'uv とは、Python のパッケージを管理する道具です。',
  'ブランチとは、作業の流れを分けて記録する仕組みです。']
 
-# 見落としやすい形。名詞化した主語、並べの最後の項目、ひらがなの前の「と」、読点のない2つ目の「も」、
-# かっこや半角カナを挟む節、常体の逆接、時の枠の語、時候の挨拶、かっこの中の主語。
+# 見落としやすい形。名詞化した主語、ひらがなの前の「と」、読点のない2つ目の「も」、常体の逆接、時候の挨拶、
+# かっこの中の主語。並べの最後の項目、14字以下のかっこや半角カナを挟む節、7字以下の時の枠の語は、3.3.0 から拾う
+# （仕様の変更。REMOVE_REVIEW の終わりに移した）。
 # 拾う側は、語の頭の「と」、10字以下の問いの節、お客様、逆接の「が、」とかっこの中の助詞を並べに数えない所、
 # 「を」を含む述語の句を並べの項目にしない所。
 KEEP_REVIEW = ['本研究では、測定を続けることが欠かせない。',
  '細かい誤りよりも、笑われるのが怖かった。',
- '遅刻の回数、欠席の日数、提出物の数は、学期末にまとめて確かめる。',
- '壊れた椅子や机、汚れた床の広さは、来週の点検で数えます。',
  '大きさと形式は、受け取る側でも確かめます。',
  '誤字の直しも、図の追加もあった。',
- '先月返品になっていた【〇】冊は、担当と相談して戻します。',
- '先月注文したﾌﾟﾘﾝﾀｰは、明日届けます。',
  '急ぐが、間に合わない。',
  '頼むが、先に帰ってくれ。',
  'すまぬが、先に帰る。',
- '雨の降るあいだは、外に出ません。',
- '署名したのちには、控えを渡してください。',
- '薬を飲む直前には、水を用意してください。',
  '皆様には、ますますご健勝のこととお慶び申し上げます。',
  '連絡は、「当番表」の担当者がします。']
 REMOVE_REVIEW = [('とりまとめは、明日届けます。', ['とりまとめは']),
@@ -99,7 +94,17 @@ REMOVE_REVIEW = [('とりまとめは、明日届けます。', ['とりまと�
  ('お客様には、メールでお知らせします。', ['お客様には']),
  ('名簿が、届きましたが、まだ開けていません。', ['名簿が']),
  ('返事は、後で『準備は、まだ』と送ります。', ['返事は']),
- ('新しい手順では、名簿を紙から画面に移し、印刷は必要なときだけにします。', ['新しい手順では'])]
+ ('新しい手順では、名簿を紙から画面に移し、印刷は必要なときだけにします。', ['新しい手順では']),
+ # 3.3.0: 並べの最後の項目（3.2.3 までは並べの1つとして外していた）
+ ('遅刻の回数、欠席の日数、提出物の数は、学期末にまとめて確かめる。', ['提出物の数は']),
+ ('壊れた椅子や机、汚れた床の広さは、来週の点検で数えます。', ['汚れた床の広さは']),
+ # 3.3.0: 句の中の節を外すのは句が14字を超えるときだけ
+ ('先月返品になっていた【〇】冊は、担当と相談して戻します。', ['先月返品になっていた【〇】冊は']),
+ ('先月注文したﾌﾟﾘﾝﾀｰは、明日届けます。', ['先月注文したﾌﾟﾘﾝﾀｰは']),
+ # 3.3.0: 7字以下の時の枠の語
+ ('雨の降るあいだは、外に出ません。', ['雨の降るあいだは']),
+ ('署名したのちには、控えを渡してください。', ['署名したのちには']),
+ ('薬を飲む直前には、水を用意してください。', ['薬を飲む直前には'])]
 
 MARKDOWN_KEEP = ['# 応答は、JSON で返す\n',
  '| 項目 | 説明 |\n|---|---|\n| 応答は、 | JSON で返す |\n',
@@ -107,20 +112,22 @@ MARKDOWN_KEEP = ['# 応答は、JSON で返す\n',
  '```\n応答は、JSON の形で返します。\n```\n',
  '設定は `x は、y` の形で書きます。\n']
 
-# 本記事では（既存規則との重複）と長い並べ（15字超）は検出対象外。
+# 本記事では（既存規則との重複）と長い並べ（20字超。3.2.3 までは15字超）は検出対象外。
+# 3.3.0 で True にした10文（末尾に 3.3.0 と書いた行）は、読点のあと12字の中に別の主語や主題がない文、句が15字から20字の文、
+# 7字以下の場面の枠の文。
 PUBLIC = [('第二に、永続化の仕様変更や外部APIのバージョン更新が、ビジネスロジックの修正に直接波及します。', 26, False),
  ('文書は成果物ではなく、チームの記憶を維持する仕組みであるという認識が共有されたことが、最大の成果であったと考える。', 41, False),
- ('このサービス層では、DBアクセス、外部API呼び出し、ビジネスロジックが1つのメソッドに混在しています。', 8, False),
+ ('このサービス層では、DBアクセス、外部API呼び出し、ビジネスロジックが1つのメソッドに混在しています。', 8, True),  # 3.3.0
  ('モバイルとWebで画面ごとにデータ要件が異なる現状では、過剰取得と複数回のリクエストを減らせる。', 26, False),
  ('それでも、質問の行き先が一人に固定される状態は抜け出せたと思っている。', 3, False),
- ('この構造には、責務の分離の観点から三つの問題があります。', 5, False),
+ ('この構造には、責務の分離の観点から三つの問題があります。', 5, True),  # 3.3.0
  ('現在は、新任メンバーが着任後二週間で単独のリリースを担当できるまでになっている。', 2, False),
  ('外部APIがタイムアウトしたときのリトライも、クライアント側に集約できます。', 21, False),
  ('最初は「全員が設計書を書く」というルールを敷いたが、三週間で誰も更新しなくなった。', 24, False),
  ('アプリケーションのコネクションプール上限は20に設定していましたが、一部のクエリにインデックスがなく、1件あたりの処理時間が長引きました。', 32, False),
  ('第二に、外部APIの仕様変更やDBスキーマの変更が、そのままサービス層の修正につながります。', 24, False),
  ('本記事では、uvの使い方をご紹介します。', 4, False),
- ('本サービス層では、DBアクセスと外部API呼び出しがビジネスロジックと同一のメソッド内に記述されています。', 7, False),
+ ('本サービス層では、DBアクセスと外部API呼び出しがビジネスロジックと同一のメソッド内に記述されています。', 7, True),  # 3.3.0
  ('具体的には、永続化をRepositoryに、外部API呼び出しをGatewayまたはClientに切り出してください。', 4, False),
  ('最初に取り組んだのは、文書を書く負担の軽減である。', 9, False),
  ('GraphQLは、クライアントが必要な項目を指定できるため通信量を抑えられる。', 7, False),
@@ -129,12 +136,12 @@ PUBLIC = [('第二に、永続化の仕様変更や外部APIのバージョン�
  ('もう一つ効いたのは、レビューで「これ、新人が読んで分かる？', 8, False),
  ('一度に全部を直すのが重い場合は、まず外部API呼び出しの切り出しから始めてください。', 14, False),
  ('一方、取得項目がエンドポイントごとに固定されるため、画面ごとにデータ要件が異なる場合は、過剰取得や複数回の通信が生じやすい。', 42, False),
- ('ただしモバイルのホーム画面だけは、複数APIを束ねる呼び出しが多く、通信回数が問題になっている。', 15, False),
- ('REST APIは、HTTP標準機能によるキャッシュ制御、認可設計、監視が容易である。', 8, False),
+ ('ただしモバイルのホーム画面だけは、複数APIを束ねる呼び出しが多く、通信回数が問題になっている。', 15, True),  # 3.3.0
+ ('REST APIは、HTTP標準機能によるキャッシュ制御、認可設計、監視が容易である。', 8, True),  # 3.3.0
  ('GraphQLは、クライアントが必要なフィールドだけを指定して取得できる。', 7, False),
  ('また、外部APIの仕様変更やスキーマ変更が、業務ロジックの修正を伴う点も保守上の課題です。', 20, False),
- ('この構成では、業務ロジックの検証にDBや外部サービスの起動が必要となり、単体テストが困難です。', 5, False),
- ('このサービス層では、DBアクセス、外部API呼び出し、ビジネスルールの判断が1つのメソッドに混在しています。', 8, False),
+ ('この構成では、業務ロジックの検証にDBや外部サービスの起動が必要となり、単体テストが困難です。', 5, True),  # 3.3.0
+ ('このサービス層では、DBアクセス、外部API呼び出し、ビジネスルールの判断が1つのメソッドに混在しています。', 8, True),  # 3.3.0
  ('バックエンドが4人のチームでは、その保守を背負う余裕がない。', 14, False),
  ('画面要件の変動が大きい社内アプリケーションでは、GraphQLの柔軟性を評価できる。', 22, False),
  ('サービス層には、割引の適用条件や状態遷移といったビジネスルールの判断だけを残す', 6, True),
@@ -145,19 +152,23 @@ PUBLIC = [('第二に、永続化の仕様変更や外部APIのバージョン�
  ('ドキュメントの更新を業務として評価対象に含めたことも、継続の支えとなった。', 25, False),
  ('今は動いていても、決済プロバイダを差し替えるときや割引ルールを変えるときに、全部このメソッドを触ることになります。', 7, False),
  ('GraphQLでは、クエリ単位のコスト制限やN+1対策を自前で作り込む必要がある。', 8, True),
- ('ただしパートナー向けAPIでは、HTTPキャッシュ、レート制限、OpenAPIによる仕様共有がそのまま使えるRESTのほうが運用しやすい。', 14, False),
+ ('ただしパートナー向けAPIでは、HTTPキャッシュ、レート制限、OpenAPIによる仕様共有がそのまま使えるRESTのほうが運用しやすい。', 14, True),  # 3.3.0
  ('最初にやったのは、大きなドキュメントを書くことではない。', 7, False),
  ('READMEを直す習慣は、新人が遠慮なく質問するきっかけにもなった。', 11, False),
  ('また、外部APIの仕様変更やテーブル構造の変更が、そのままサービス層の修正につながります。', 23, False),
- ('本サービスクラスでは、業務ルールの判定、SQLの発行、外部APIの呼び出しが同一メソッド内に記述されています。', 9, False),
+ ('本サービスクラスでは、業務ルールの判定、SQLの発行、外部APIの呼び出しが同一メソッド内に記述されています。', 9, True),  # 3.3.0
  ('【判断根拠】取引先への提供を伴う公開APIでは、互換性維持と運用統制を優先する。', 22, False),
  ('属人化の解消は、記録を書く行為を個人の善意に任せず、チームの手順として固定することで進んだと総括している。', 6, True),
- ('直接原因は、コネクションプールの最大接続数が想定ピーク負荷に対して不足していたことである。', 4, False),
+ ('直接原因は、コネクションプールの最大接続数が想定ピーク負荷に対して不足していたことである。', 4, True),  # 3.3.0
  ('一つ目は、PRのテンプレートに「なぜこの実装にしたか」の記入欄を加えること。', 3, True)]
 
 BASE_OUTPUT = '表現・書式の検査を実行しました。\n見直し候補: 0件\nこの検査では、意味の保持と読者にとっての分かりやすさは判定していません。\n'
 
-MESSAGE = "短い主語や主題のすぐあとに読点があります（{phrases}）。間を作るだけの読点は、AIの文章らしく見えます。読点のあとに別の主語が来る、条件や場面の枠を示す、並べている、外すと語がつながったり掛かり先が変わったりする、のどれにも当たらなければ、読点だけを外してください（語順と述語は変えません）。小説や随筆で書き手が間として置いた読点は残してかまいません。"
+# 3.3.0: 文を短くし、残すときの条件を先に並べた（残す条件と、読点だけを外して語順と述語を変えないことは 3.2.3 と同じ）
+MESSAGE = ("短い主語や主題のすぐあとに読点があります（{phrases}）。間を作るだけの読点はAIの文章らしく見えます。"
+           "次のときは読点を残してください。読点のすぐあとに別の主語や主題が来るとき、長い条件や場面の枠を区切るとき、"
+           "語を並べているとき、外すと語がつながったり掛かり先が変わったりするときです。"
+           "小説や随筆で書き手が間として置いた読点も残してかまいません。それ以外は読点だけを外し、語順と述語は変えないでください。")
 
 
 def call(main, args, text=""):
@@ -250,23 +261,30 @@ class PauseCommaTest(unittest.TestCase):
 
     def test_t5_types_and_detection_gate(self):
         # 2.2.0 で dialogue_period（script だけ）と narrative_density（essay だけ）を、2.4.0 で slide_comma（slides だけ）を足した。
-        # pause_comma の組は変えない
+        # 3.3.0 で pause_comma を種類を指定しないときも当て、promo と script でだけ出さない表（DOC_TYPE_OFF_RULES）に移した
         self.assertEqual(lint.DOC_TYPE_ONLY_RULES,
-                         {"pause_comma": TYPES, "dialogue_period": ("script",), "narrative_density": ("essay",),
-                          "slide_comma": ("slides",)})
+                         {"dialogue_period": ("script",), "narrative_density": ("essay",), "slide_comma": ("slides",)})
+        self.assertEqual(lint.DOC_TYPE_OFF_RULES, {"pause_comma": ("promo", "script")})
         text = REMOVE[3][0]
         with mock.patch.object(lint, "_pause_comma_hits", side_effect=AssertionError("検出を呼ばない")):
-            for options in ({}, {"doc_type": "promo"}, {"reader": "general"}):
-                self.assertEqual(pauses(text, **options), [])
-        for value in TYPES:
-            result = lint.lint_text(text, doc_type=value)
-            self.assertEqual(len([f for f in result["findings"] if f["rule"] == "pause_comma"]), 1)
-            self.assertNotIn("pause_comma", result["context"]["skipped_by_doc_type"])
-        # 表から外すだけで種類なしでも呼ばれる。規則名を固定した分岐にしない。
-        with mock.patch.object(lint, "DOC_TYPE_ONLY_RULES", {}):
-            self.assertEqual(len(pauses(text)), 1)
+            for options in ({"doc_type": "promo"}, {"doc_type": "script"}, {"doc_type": "promo", "reader": "general"}):
+                result = lint.lint_text(text, **options)
+                self.assertEqual([f for f in result["findings"] if f["rule"] == "pause_comma"], [])
+                self.assertNotIn("pause_comma", result["context"]["skipped_by_doc_type"])
+        for options in [{}, {"reader": "general"}] + [{"doc_type": value} for value in TYPES]:
+            result = lint.lint_text(text, **options)
+            self.assertEqual(len([f for f in result["findings"] if f["rule"] == "pause_comma"]), 1, options)
+            self.assertNotIn("pause_comma", result["context"].get("skipped_by_doc_type", {}))
+        # 表から外すだけで promo でも呼ばれる。規則名を固定した分岐にしない。
+        with mock.patch.object(lint, "DOC_TYPE_OFF_RULES", {}):
+            self.assertEqual(len(pauses(text, doc_type="promo")), 1)
+        # 表に種類なし（None）を足すと、種類なしでは呼ばない。
+        with mock.patch.object(lint, "DOC_TYPE_OFF_RULES", {"pause_comma": (None, "promo", "script")}), \
+                mock.patch.object(lint, "_pause_comma_hits", side_effect=AssertionError("検出を呼ばない")):
+            self.assertEqual(pauses(text), [])
 
     def test_t6_untyped_corpus_and_fixtures(self):
+        # 3.3.0: 種類を指定しないときも当てる（3.2.3 までは候補なし）。種類なしの候補は article と同じで、promo と script では出ない
         paths = corpus() + sorted((ROOT / "tests" / "fixtures").rglob("*.md"))
         texts = [p.read_text(encoding="utf-8") for p in paths]
         for name in ("bold_regressions.json", "rule9_examples.json"):
@@ -275,9 +293,19 @@ class PauseCommaTest(unittest.TestCase):
         fixtures = ROOT / "tests" / "fixtures" / "diff_v112_existing_keys.json"
         for case in json.loads(fixtures.read_text(encoding="utf-8"))["cases"]:
             texts.extend((case["orig"], case["rewrite"]))
+        found = 0
         for text in texts:
-            self.assertEqual(pauses(text), [])
-        self.assertEqual(call(lint.main, ["-"], REMOVE[3][0] + "\n"), (0, BASE_OUTPUT, ""))
+            untyped = pauses(text)
+            self.assertEqual(untyped, pauses(text, doc_type="article"))
+            for value in ("promo", "script"):
+                self.assertEqual(pauses(text, doc_type=value), [])
+            found += len(untyped)
+        self.assertGreater(found, 0)
+        code, out, err = call(lint.main, ["-"], REMOVE[3][0] + "\n")
+        self.assertEqual((code, err), (0, ""))
+        self.assertIn("L1 [INFO] pause_comma: ", out)
+        self.assertEqual(call(lint.main, ["-", "--doc-type", "promo"], REMOVE[3][0] + "\n")[1].split("\n")[:3],
+                         BASE_OUTPUT.split("\n")[:3])
 
     def test_t7_severity_score_and_exit_codes(self):
         for count in (1, 2):
@@ -364,16 +392,25 @@ class PauseCommaTest(unittest.TestCase):
         self.assertIn("## 9. 間を作るだけの読点", (ROOT / "references/slop-catalog.md").read_text(encoding="utf-8"))
 
     def test_t14_help_is_table_driven(self):
-        # 2.2.0 で script を足したので、promo と script を除く11種類
-        expected = "種類を指定したときだけ当てる規則: pause_comma（promo、script を除く11種類。種類を指定しないときは出しません）"
-        self.assertIn(expected, call(lint.main, ["--help"])[1])
-        with mock.patch.object(lint, "DOC_TYPE_ONLY_RULES", {"pause_comma": TYPES, "sample": ("article",)}):
+        # 2.2.0 で script を足したので、promo と script を除く11種類。3.3.0 から種類を指定しないときも当てる
+        expected = "種類によって出さない規則: pause_comma（promo、script では出しません。種類を指定しないときとほかの11種類では当てます）"
+        help_text = call(lint.main, ["--help"])[1]
+        self.assertIn(expected, help_text)
+        self.assertNotIn("種類を指定したときだけ当てる規則: pause_comma", help_text)
+        with mock.patch.object(lint, "DOC_TYPE_ONLY_RULES", {"pause_comma": TYPES, "sample": ("article",)}), \
+                mock.patch.object(lint, "DOC_TYPE_OFF_RULES", {}):
             help_text = lint._doc_type_table()
-            self.assertIn("sample（", help_text)
+            self.assertIn("種類を指定したときだけ当てる規則: pause_comma（promo、script を除く11種類。種類を指定しないときは出しません）",
+                          help_text)
             # 2.2.0: 当てる種類が外す種類より少ないときは、当てる種類を並べる（dialogue_period の「script だけ」と同じ形）
             self.assertIn("sample（article だけ。種類を指定しないときは出しません）", help_text)
-        with mock.patch.object(lint, "DOC_TYPE_ONLY_RULES", {}):
+            self.assertNotIn("種類によって出さない規則", help_text)
+        with mock.patch.object(lint, "DOC_TYPE_OFF_RULES", {"sample": ("promo",)}):
+            self.assertIn("種類によって出さない規則: sample（promo では出しません。種類を指定しないときとほかの12種類では当てます）",
+                          lint._doc_type_table())
+        with mock.patch.object(lint, "DOC_TYPE_ONLY_RULES", {}), mock.patch.object(lint, "DOC_TYPE_OFF_RULES", {}):
             self.assertNotIn("種類を指定したときだけ当てる規則", lint._doc_type_table())
+            self.assertNotIn("種類によって出さない規則", lint._doc_type_table())
 
 
 if __name__ == "__main__":

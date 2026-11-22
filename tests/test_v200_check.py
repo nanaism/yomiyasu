@@ -997,8 +997,9 @@ class TestRunThenVerify(CheckCase):
         self.assertEqual((result["message"], result["next"]), (RUN_NO_CHANGE + self.finalize_file(), "finalize"))
 
     def test_first_rewrite_without_candidates(self):
-        """3.5 の表の「推敲の1回目、候補なし」。読点を1つ足しただけの組（6.1 と同じ）。"""
-        a, b, lines = self.run_pair("会議は3時に始まります。\n", "会議は、3時に始まります。\n")
+        """3.5 の表の「推敲の1回目、候補なし」。読点を1つ足しただけの組（6.1 と同じ）。
+        3.3.0 から lint の pause_comma を種類なしでも当てるので、「会議は、3時に」（拾う読点）を、すぐあとに主語が来る読点に替えた。"""
+        a, b, lines = self.run_pair("会議では担当者が説明します。\n", "会議では、担当者が説明します。\n")
         self.assertEqual(lines[0], RUN_REWRITE_FIRST_NO_CANDIDATES + self.finalize_file())
         self.assertEqual(self.status(lines[1])[1]["meaning_risk"], "0")
         self.assertEqual(lines[2], "実行した検査: lint（最終稿）候補0件、diff（原文→最終稿）変更あり 候補0件（うち意味が変わる恐れ0件）")

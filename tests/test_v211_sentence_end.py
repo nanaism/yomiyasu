@@ -27,8 +27,11 @@ def rules(text):
 
 
 def without_emoji(text):
-    """emoji_prohibited を除いた候補（規則、行、重さ、警告文）。snippet は飾りを含むので比べない。"""
-    return [(f["rule"], f["line"], f["severity"], f["message"]) for f in lint(text) if f["rule"] != "emoji_prohibited"]
+    """emoji_prohibited を除いた候補（規則、行、重さ、警告文）。snippet は飾りを含むので比べない。
+    3.3.0 から pause_comma を種類なしでも当てる。pause_comma は句点のない段落の終わりを文末の飾りと別に見る
+    （かなで終わる段落は拾わず、飾りで終わる段落は拾う）ので、文末の規則を比べるこの関数では除く。"""
+    return [(f["rule"], f["line"], f["severity"], f["message"]) for f in lint(text)
+            if f["rule"] not in ("emoji_prohibited", "pause_comma")]
 
 
 def messages(text, rule):

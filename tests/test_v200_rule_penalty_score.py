@@ -110,6 +110,10 @@ class RulePenaltyScoreTest(unittest.TestCase):
                 self.assertGreater(b, 0, group)
                 self.assertLessEqual(abs(a - b), 1, (group, mode))
                 if mode is None and group in ("human_doc", "edge_cases"):
+                    # 3.3.0: pause_comma を種類なしでも当てるので、その候補を除いたときに100（3.2.3 までは種類なしで100）
+                    with mock.patch.object(_lint, "DOC_TYPE_OFF_RULES", {"pause_comma": (None, "promo", "script")}):
+                        a = self._assert_reference(short, mode)["rule_penalty_score"]
+                        b = self._assert_reference(long, mode)["rule_penalty_score"]
                     self.assertEqual((a, b), (100, 100))
 
     def test_03_monotonicity(self):
@@ -251,14 +255,16 @@ class RulePenaltyScoreTest(unittest.TestCase):
         self.assertEqual(self._assert_reference(text)["rule_penalty_score"], 63)
 
     def test_11_doc_type(self):
+        # 3.3.0: pause_comma を種類なしでも当てるので、種類なしは article と同じで、promo だけが候補なし
         text = "回覧板は、木曜の朝に回します。"
         plain = self._assert_reference(text)
         promo = self._assert_reference(text, "promo")
-        self.assertEqual(plain["findings"], promo["findings"])
-        self.assertEqual(plain["rule_penalty_score"], promo["rule_penalty_score"])
+        self.assertEqual(promo["findings"], [])
         article = self._assert_reference(text, "article")
         self.assertEqual([f["rule"] for f in article["findings"]], ["pause_comma"])
-        self.assertLess(article["rule_penalty_score"], plain["rule_penalty_score"])
+        self.assertEqual(plain["findings"], article["findings"])
+        self.assertEqual(plain["rule_penalty_score"], article["rule_penalty_score"])
+        self.assertLess(article["rule_penalty_score"], promo["rule_penalty_score"])
         emoji = _WARN + "\n\n新作です😀"
         self.assertEqual(self._assert_reference(emoji, "promo")["rule_penalty_score"], 95)
         self.assertEqual(self._assert_reference(emoji)["rule_penalty_score"], 91)
