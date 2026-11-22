@@ -4025,7 +4025,7 @@ _V220_TRIGGER_LITERALS = tuple((
     # 2.5.0 の型3の句（ここで効くのが は型1の動詞の頭で拾う）
     "レベルの テーブルにあ テーブルの上に "
     # 型4（2.4.0）の漢字1字の名詞と、3.0.0 で足した字
-    "版 印 頭 枝 題 罫 "
+    "版 印 頭 枝 題 罫 段 門 "
     # 型5（3.0.0）の2字以上の名詞（上罫、下罫などは、型4の罫の形が前の漢字で外すので、型5で拾う）
     "背景 基準線 時間窓 上罫 下罫 左罫 右罫 偽緑 根因 生成器 検査器 飛行中 見張り 台本 "
 ).split())
@@ -4531,8 +4531,28 @@ _CALQUE_STYLE_CONTEXT_PATTERN = r"(?<![A-Za-z])(?:CSS|border|px|HTML)(?![A-Za-z]
 _CALQUE_STYLE_CONTEXT = _lazy_compile(_CALQUE_STYLE_CONTEXT_PATTERN)
 
 
+# 段: 処理の流れの stage に当てた段。名前の段（段A、段1）、第2段、各段、次の段、英語の語に付く段（refine 段）、「抽出の段で」の形で、
+#     同じ文に処理の流れの語（_CALQUE_STAGE_CONTEXT）があるとき。前後に漢字のある段（段落、段階、手段、値段、段位、段数、階段）と、
+#     数の後の段（2 段の LSTM、棚の2段目）は外す。囲碁や将棋の段（段3から）は、処理の流れの語が無いので当たらない。
+# 門: CI やレビューの gate に当てた門。「レビューの門」「CI の門」の形で、同じ文に検査の語（_CALQUE_GATE_CONTEXT）があるとき。
+#     前後に漢字のある門（正門、校門、関門、門番）と、建物の門（お寺の門をくぐる）は、検査の語が無いので当たらない。
+_CALQUE_STAGE = _lazy_compile(
+    r"第\s?[0-9０-９]+\s?段(?![一-龥々〆ヵヶ])"
+    r"|(?<![一-龥々〆ヵヶ])各段(?![一-龥々〆ヵヶ])"
+    r"|(?<![一-龥々〆ヵヶァ-ヴー0-9０-９A-Za-z])段(?=[A-ZＡ-Ｚ0-9０-９])"
+    r"|(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]+ ?段(?![一-龥々〆ヵヶ])"
+    r"|(?:次|前|後|最初|最後|この|その)の?段(?=[でにをはがのへも、。])"
+    r"|の段(?=[でにをはがへも、。])")
+_CALQUE_STAGE_CONTEXT = _lazy_compile(
+    r"(?<![A-Za-z])(?:CI|pipeline|stage|job|build|lint|LLM|GPU|CPU|ETL)(?![A-Za-z])"
+    r"|パイプライン|ジョブ|ビルド|デプロイ|ワークフロー|前処理|後処理|推論|学習|抽出|検査|レビュー|スクリプト|エージェント")
+_CALQUE_GATE = _lazy_compile(r"(?:の|(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]*\s?)門(?![一-龥々〆ヵヶ])")
+_CALQUE_GATE_CONTEXT = _lazy_compile(
+    r"(?<![A-Za-z])(?:CI|PR|lint|hook|review|merge)(?![A-Za-z])|レビュー|検査|フック|マージ|コミット|テスト")
+
+
 def _calque_type4(sentence: str, words: list[str], skip_version: bool = False) -> bool:
-    """型4（英語の短い術語に当てた漢字1字の名詞）。当たった字（版、印、頭、枝、題、罫）を words に足す。"""
+    """型4（英語の短い術語に当てた漢字1字の名詞）。当たった字（版、印、頭、枝、題、罫、段、門）を words に足す。"""
     found = False
     if not skip_version and "版" in sentence and not _CALQUE_VERSION_PUB.search(sentence) \
             and any(pattern.search(sentence) for pattern in _CALQUE_VERSION):
@@ -4552,6 +4572,12 @@ def _calque_type4(sentence: str, words: list[str], skip_version: bool = False) -
         found = True
     if "罫" in sentence and _CALQUE_RULE.search(sentence) and _CALQUE_STYLE_CONTEXT.search(sentence):
         words.append("罫")
+        found = True
+    if "段" in sentence and _CALQUE_STAGE.search(sentence) and _CALQUE_STAGE_CONTEXT.search(sentence):
+        words.append("段")
+        found = True
+    if "門" in sentence and _CALQUE_GATE.search(sentence) and _CALQUE_GATE_CONTEXT.search(sentence):
+        words.append("門")
         found = True
     return found
 
