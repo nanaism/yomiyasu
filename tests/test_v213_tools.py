@@ -597,11 +597,12 @@ class RecordReadTests(_StateCase):
                     raise PermissionError(errno.EACCES, "Permission denied", str(file))
             return real_open(file, mode)
 
-        def transient_stat(file: Path) -> os.stat_result:
+        # Python 3.13 の Path.is_dir は self.stat(follow_symlinks=...) を呼ぶ（3.14 は os.path.isdir、3.12 までは引数なし）
+        def transient_stat(file: Path, **kwargs: bool) -> os.stat_result:
             if str(file) == str(path):
                 probed.append(file)
                 raise PermissionError(errno.EACCES, "Permission denied", str(file))
-            return real_stat(file)
+            return real_stat(file, **kwargs)
 
         def transient_os_stat(file: Path, *, follow_symlinks: bool = True) -> os.stat_result:
             if str(file) == str(path):
