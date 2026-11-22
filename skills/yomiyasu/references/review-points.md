@@ -104,7 +104,7 @@ SKILL.md の Step 2 の1で lint の指摘を見るときと、Step 4 で `yomiy
   - renyo_noun（2.3.0。他動詞を1語だけ名詞にした語を「の」で受ける形。message に当たった言い方）: SKILL.md「直訳語、漢語の詰まり、連用形名詞」。目的語と動詞の文に戻すか、定着した漢語の名詞にする。ほかの和語の連用形名詞に替えるだけで済ませない。指示語で受ける形（「その確かめは」）にも指摘が出る。一覧は `references/lists/renyo-nouns.txt`。点数（rule_penalty_score）には入らない。
   - dialogue_period（`--doc-type script` のときだけ、文書に1件）: `references/doc-types/script.md`。narrative_density（`--doc-type essay` のときだけ、文書に1件）: `references/doc-types/essay.md`。
   - ai_phrase（2.5.0。AI の文章によく出る言い回し。1行に1件で、message に当たった言い方）: `references/slop-catalog.md` 10章の問いで、判断した人、潜むものの中身、何が起きるかのように、何が足りない文かを確かめる。足りないものが原文や資料になければ本文を残して尋ねる。点数（rule_penalty_score）には入らない。allow.txt の語（見立てです、潜む など、message の当たった言い方）で外せる。
-  - pause_comma（短い主語や主題、目的語のあとの読点。`--doc-type` を指定したときだけ）: 2.5.0 から、6字以内の短い目的語の「を、」も候補に出る（並べ、長い目的語、essay には出ない）。「店長は、慌てて逃げた客を追いかけた」のように、外すと掛かり先が変わる読点は候補に出ない。
+  - pause_comma（短い主語や主題、目的語のあとの読点。3.3.0 から種類を指定しなくても出る）: 2.5.0 から、6字以内の短い目的語の「を、」も候補に出る（並べ、長い目的語、essay には出ない）。「店長は、慌てて逃げた客を追いかけた」のように、外すと掛かり先が変わる読点は候補に出ない。候補は残す読点（SKILL.md「文長と読点の調整」）に当たらなければ外し、候補に出なかった同じ形の読点も同じ決まりで見る。
   - slide_comma（2.4.0。`--doc-type slides` のときだけ。見出しと1行の箇条の、間を作るだけの読点。1行に1件で、message に当たった言い方）: `references/doc-types/slides.md` 2章。外すのは間を作るだけの読点で、逆接、条件、理由、名詞の並び、短い時の句、外すと読み違える読点は残す。点数（rule_penalty_score）には入らない。
   - 語の一覧（`.yomiyasu-words/`）を使ったときは、allow.txt の語で外した件数が出る。外れた候補の語は、そのプロジェクトで定着した言い方として直さない。
 
