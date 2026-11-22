@@ -4540,13 +4540,13 @@ _CALQUE_STAGE = _lazy_compile(
     r"第\s?[0-9０-９]+\s?段(?![一-龥々〆ヵヶ])"
     r"|(?<![一-龥々〆ヵヶ])各段(?![一-龥々〆ヵヶ])"
     r"|(?<![一-龥々〆ヵヶァ-ヴー0-9０-９A-Za-z])段(?=[A-ZＡ-Ｚ0-9０-９])"
-    r"|(?<![A-Za-z])[A-Za-z][A-Za-z0-9_-]+ ?段(?![一-龥々〆ヵヶ])"
+    r"|(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]+ ?段(?![一-龥々〆ヵヶ])"
     r"|(?:次|前|後|最初|最後|この|その)の?段(?=[でにをはがのへも、。])"
     r"|の段(?=[でにをはがへも、。])")
 _CALQUE_STAGE_CONTEXT = _lazy_compile(
     r"(?<![A-Za-z])(?:CI|pipeline|stage|job|build|lint|LLM|GPU|CPU|ETL)(?![A-Za-z])"
     r"|パイプライン|ジョブ|ビルド|デプロイ|ワークフロー|前処理|後処理|推論|学習|抽出|検査|レビュー|スクリプト|エージェント")
-_CALQUE_GATE = _lazy_compile(r"(?:の|(?<![A-Za-z])[A-Za-z][A-Za-z0-9_-]*\s?)門(?![一-龥々〆ヵヶ])")
+_CALQUE_GATE = _lazy_compile(r"(?:の|(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]*\s?)門(?![一-龥々〆ヵヶ])")
 _CALQUE_GATE_CONTEXT = _lazy_compile(
     r"(?<![A-Za-z])(?:CI|PR|lint|hook|review|merge)(?![A-Za-z])|レビュー|検査|フック|マージ|コミット|テスト")
 

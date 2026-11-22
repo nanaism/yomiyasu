@@ -126,8 +126,11 @@ class CalqueStageGateTest(unittest.TestCase):
                 self.assertEqual([f["line"] for f in new_marks(path.read_text(encoding="utf-8"))], [])
 
     def test_long_lines_finish_quickly(self):
+        # 当たらない英数字の並び（a1a1…）は、並びの途中から検索を始め直すと入力の長さの二乗で遅くなる
         texts = ["段" * 100000 + "\n", "門" * 100000 + "\n", "a" * 100000 + " 段\n", "CI の門と" * 20000 + "\n",
-                 "パイプラインの第" + "2" * 100000 + "段\n"]
+                 "パイプラインの第" + "2" * 100000 + "段\n",
+                 "CI 学習 " + "a1" * 50000 + " 段落。\n", "CI 学習 " + "a1" * 50000 + " 門番。\n",
+                 "CI 学習 " + "a_" * 50000 + " 段落。\n", "CI 学習 " + "a-" * 50000 + " 門番。\n"]
         for text in texts:
             with self.subTest(head=text[:6]):
                 clock = timing_clock()
