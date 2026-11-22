@@ -4531,24 +4531,32 @@ _CALQUE_STYLE_CONTEXT_PATTERN = r"(?<![A-Za-z])(?:CSS|border|px|HTML)(?![A-Za-z]
 _CALQUE_STYLE_CONTEXT = _lazy_compile(_CALQUE_STYLE_CONTEXT_PATTERN)
 
 
-# 段: 処理の流れの stage に当てた段。名前の段（段A、段1）、第2段、各段、次の段、英語の語に付く段（refine 段）、「抽出の段で」の形で、
-#     同じ文に処理の流れの語（_CALQUE_STAGE_CONTEXT）があるとき。前後に漢字のある段（段落、段階、手段、値段、段位、段数、階段）と、
-#     数の後の段（2 段の LSTM、棚の2段目）は外す。囲碁や将棋の段（段3から）は、処理の流れの語が無いので当たらない。
+# 段: 処理の流れの stage に当てた段。第2段、各段、次の段、英語の語に付く段（refine 段）、「抽出の段で」の形で、
+#     同じ文に処理の流れの語（_CALQUE_STAGE_CONTEXT）があるとき。前後に漢字のある段（段落、段階、手段、値段、段位、段数、階段、
+#     前段、後段、次段）、数の後の段（2 段の LSTM、棚の2段目）、「この段」「その段」（その段はご容赦ください）は外す。
+#     名前の段（段A、段1。段のあとに大文字か数字）は、処理の流れの語がなくても当てる（人の文になく、AI が書く stage の
+#     大半がこの形）。どの形も、同じ文に段位の語（_CALQUE_STAGE_RANK。囲碁、将棋、昇段、柔道 など）があれば当てない。
 # 門: CI やレビューの gate に当てた門。「レビューの門」「CI の門」の形で、同じ文に検査の語（_CALQUE_GATE_CONTEXT）があるとき。
 #     前後に漢字のある門（正門、校門、関門、門番）と、建物の門（お寺の門をくぐる）は、検査の語が無いので当たらない。
+#     英語の語のあとの門は2字以上の英字を含む語だけに当てる（東京ドームのA門 は外す）。
+# 文脈の語は 枝 と同じく、人の文の別の語に入る形を外す（マージン、コミットメント、学習塾）。
 _CALQUE_STAGE = _lazy_compile(
     r"第\s?[0-9０-９]+\s?段(?![一-龥々〆ヵヶ])"
     r"|(?<![一-龥々〆ヵヶ])各段(?![一-龥々〆ヵヶ])"
     r"|(?<![一-龥々〆ヵヶァ-ヴー0-9０-９A-Za-z])段(?=[A-ZＡ-Ｚ0-9０-９])"
     r"|(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]+ ?段(?![一-龥々〆ヵヶ])"
-    r"|(?:次|前|後|最初|最後|この|その)の?段(?=[でにをはがのへも、。])"
-    r"|の段(?=[でにをはがへも、。])")
+    r"|(?:次|前|後|最初|最後)の段(?=[でにをはがのへも、。])"
+    r"|(?<![こそあ])の段(?=[でにをはがへも、。])")
 _CALQUE_STAGE_CONTEXT = _lazy_compile(
     r"(?<![A-Za-z])(?:CI|pipeline|stage|job|build|lint|LLM|GPU|CPU|ETL)(?![A-Za-z])"
-    r"|パイプライン|ジョブ|ビルド|デプロイ|ワークフロー|前処理|後処理|推論|学習|抽出|検査|レビュー|スクリプト|エージェント")
-_CALQUE_GATE = _lazy_compile(r"(?:の|(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]*\s?)門(?![一-龥々〆ヵヶ])")
+    r"|パイプライン|ジョブ|ビルド|デプロイ|ワークフロー|前処理|後処理|推論|学習(?!塾)|抽出|検査|レビュー|スクリプト|エージェント")
+_CALQUE_STAGE_LABEL = _lazy_compile(
+    r"(?<![一-龥々〆ヵヶァ-ヴー0-9０-９A-Za-zＡ-Ｚａ-ｚ])段(?:[A-ZＡ-Ｚ]|[0-9０-９]+)(?![A-Za-zＡ-Ｚａ-ｚ])")
+_CALQUE_STAGE_RANK = _lazy_compile(
+    r"碁|棋|段位|昇段|初段|有段|段級|級|柔道|剣道|空手|合気道|弓道|居合|薙刀|なぎなた|書道|茶道|華道|珠算|そろばん|師範|黒帯")
+_CALQUE_GATE = _lazy_compile(r"(?:の|(?<![A-Za-z0-9_-])[A-Za-z][0-9_-]*[A-Za-z][A-Za-z0-9_-]*\s?)門(?![一-龥々〆ヵヶ])")
 _CALQUE_GATE_CONTEXT = _lazy_compile(
-    r"(?<![A-Za-z])(?:CI|PR|lint|hook|review|merge)(?![A-Za-z])|レビュー|検査|フック|マージ|コミット|テスト")
+    r"(?<![A-Za-z])(?:CI|PR|lint|hook|review|merge)(?![A-Za-z])|レビュー|検査|フック|マージ(?!ン)|コミット(?!メント)|テスト")
 
 
 def _calque_type4(sentence: str, words: list[str], skip_version: bool = False) -> bool:
@@ -4573,7 +4581,9 @@ def _calque_type4(sentence: str, words: list[str], skip_version: bool = False) -
     if "罫" in sentence and _CALQUE_RULE.search(sentence) and _CALQUE_STYLE_CONTEXT.search(sentence):
         words.append("罫")
         found = True
-    if "段" in sentence and _CALQUE_STAGE.search(sentence) and _CALQUE_STAGE_CONTEXT.search(sentence):
+    if "段" in sentence and not _CALQUE_STAGE_RANK.search(sentence) \
+            and (_CALQUE_STAGE_LABEL.search(sentence)
+                 or (_CALQUE_STAGE.search(sentence) and _CALQUE_STAGE_CONTEXT.search(sentence))):
         words.append("段")
         found = True
     if "門" in sentence and _CALQUE_GATE.search(sentence) and _CALQUE_GATE_CONTEXT.search(sentence):
