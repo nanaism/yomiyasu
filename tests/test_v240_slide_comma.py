@@ -140,8 +140,10 @@ class SlideCommaTest(unittest.TestCase):
 
     def test_hit_is_shown_from_the_last_punctuation(self):
         # 当たった言い方は、句読点のあとから読点までを語の途中で切らずに出す（20字より長いときだけ、頭に「…」を付けて終わりの20字）
-        found = slide("- 夜間に起きた集計の失敗は、翌朝の朝会で共有する\n")
-        self.assertIn("「夜間に起きた集計の失敗は、」", found[0]["message"])
+        # 3.3.0: 「夜間に起きた集計の失敗は、」（節を含む11字の主題）は pause_comma に出るようになったので、
+        # 節を含む15字の主題（pause_comma が外す長さ）の文に替えた
+        found = slide("- 夜間のバッチで起きた集計の失敗は、翌朝の朝会で共有する\n")
+        self.assertIn("「夜間のバッチで起きた集計の失敗は、」", found[0]["message"])
         found = slide("- 今年の春に始めた新しいプロジェクトの資料を、全員に配る\n")
         self.assertIn("「…の春に始めた新しいプロジェクトの資料を、」", found[0]["message"])
 

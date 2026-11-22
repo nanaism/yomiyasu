@@ -10,7 +10,7 @@ paper は慎重表現をぼかしとして削る規則がないので、外す�
 """
 
 from __future__ import annotations
-__version__ = "3.2.3"
+__version__ = "3.3.0"
 
 import os
 from pathlib import Path
@@ -154,7 +154,7 @@ LINT_FORMAT_VERSION = 2
 
 # 文書の種類ごとに外す規則（種類ごとに決めた組。formal と promo はあとから足した）。
 # その種類で普通な書き方を候補にしてしまう規則のうち、根拠のある組だけ。規則ID の順に並べる。検出はそのまま行い、
-# 件数と点数を数える前に候補から除く（種類を限って当てる規則を除けば、種類なしの候補からこの規則を除いたものと同じ）。
+# 件数と点数を数える前に候補から除く（種類を限って当てる規則と種類によって出さない規則を除けば、種類なしの候補からこの規則を除いたものと同じ）。
 # 公開の名前として読むだけにし、書き換えて使う使い方は約束しない。
 DOC_TYPE_SKIP_RULES = {
     "pr": ("excess_list",),
@@ -191,13 +191,25 @@ DOC_TYPE_SKIP_PATTERNS = {"mail": {"meta_filler": (
 # paper: 慎重表現そのものを削る規則はない。誇張の「過言ではない」や文末反復まで一括で外さない。
 # 種類を限って当てる規則（規則ID から、当てる種類のタプルへ）。種類を指定しないときと、ほかの種類では除く。
 DOC_TYPE_ONLY_RULES = {
-    "pause_comma": ("pr", "article", "incident", "proposal", "minutes", "manual", "slides", "essay", "formal", "mail", "paper"),
     # 2.2.0: 台詞の句点は script だけ、読み物の一人称と数字は essay だけ
     "dialogue_period": ("script",),
     "narrative_density": ("essay",),
     # 2.4.0: スライドの見出しと1行の箇条の読点は slides だけ
     "slide_comma": ("slides",),
 }
+# 3.3.0: 種類を指定しないときも当て、ここに並べた種類でだけ出さない規則（規則ID から、出さない種類のタプルへ）。
+# 種類を限って当てる規則と同じく、出さない種類では検出を行わず、外した候補にも数えない。
+# pause_comma は 3.2.3 まで種類を指定したときだけ当てていた（promo と script では出さないのは前から同じ）。
+DOC_TYPE_OFF_RULES = {
+    "pause_comma": ("promo", "script"),
+}
+
+
+def _rule_applies(rule: str, doc_type: str | None) -> bool:
+    """種類を限って当てる規則と、種類によって出さない規則の表から、doc_type でその規則を当てるか。"""
+    if rule in DOC_TYPE_ONLY_RULES and doc_type not in DOC_TYPE_ONLY_RULES[rule]:
+        return False
+    return doc_type not in DOC_TYPE_OFF_RULES.get(rule, ())
 
 
 # Emoji facts are pinned to Unicode 18.0, not broad Unicode block membership.
@@ -2996,6 +3008,8 @@ _PAUSE_CONNECTIVE = {
     "このたびは", "この度は", "平素は", "日頃は", "日ごろは", "先日は", "昨日は", "本日は", "今回も",
     # 3.2.0: 副詞の「実は」「要は」は主題ではない（句全体がこの語のときだけ。「事実は、」「概要は、」は今までどおり拾う）
     "実は", "要は",
+    # 3.3.0: は・が・も で終わる接続の語、副詞、挨拶
+    "ところが", "あるいは", "または", "もしくは", "というのも", "じつは", "ときには", "時には", "こんにちは", "こんばんは",
 }
 _PAUSE_CONNECTIVE_END = _lazy_compile(r"的には$|的にも$")
 # ほかの規則（meta_intro、meta_filler）がすでに拾う文頭の句。1つの読点に2つの候補を出さない。
@@ -3036,8 +3050,6 @@ _PAUSE_NOMINAL_END = _lazy_compile(r"(?:こと|もの)$|" + _PAUSE_VERB_ATTR + r
 # 手紙の時候の挨拶「皆様には、ますます〜」（お客様は除く）
 _PAUSE_LETTER_ADDRESS = _lazy_compile(r"(?<!客)(?:様|さま|各位)$")
 _PAUSE_LETTER_GREETING = _lazy_compile(r"(?:ますます|益々|いよいよ|一層)")
-# 並べの項目の前の句（名詞で終わる）。今回、現在のような副詞の名詞は1つだけでは並べにしない
-_PAUSE_ADVERBIAL_NOUN = _lazy_compile(r"(?:結果|ため|上|うえ|際|場合|とき|ところ|一方|今回|現在|今後|以前|当日|通常|実際|最初|最後|当初|従来)$")
 _PAUSE_ITEM_START = _lazy_compile(r"^\s*(?:[-*+•]|\d+[.)．])\s")
 _PAUSE_LABEL_LINE = _lazy_compile(r"^[^、，,]{0,12}$(?<![ぁ-ん。！？!?」』）)])")
 # 「て」「で」で終わっても動詞のて形でない語（助詞の「について」「として」、つなぎの「そして」、副詞の「すべて」「改めて」）。
@@ -3078,9 +3090,16 @@ _PAUSE_OBJECT_COMMA = _lazy_compile(r"(?=を[、，,])")
 _PAUSE_OBJECT_NOUN = _lazy_compile(r"(?:この|その|あの|どの)?[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ・]+"
                                    r"(?:の[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ]+)?")
 
-_PAUSE_MAX_LEN = 15
+# 3.3.0: 拾う句の長さを15字から20字にした
+_PAUSE_MAX_LEN = 20
 _PAUSE_LIST_ITEM_MAX = 18
 _PAUSE_SHORT_CLAUSE = 10
+# 3.3.0: 句の中に節がある主題（_PAUSE_CLAUSE_IN）を外すのは、句が14字を超えるときだけ（問いの節の「か」は10字のまま）
+_PAUSE_CLAUSE_TOPIC = 14
+# 3.3.0: 条件や場面の枠（_PAUSE_FRAME）を外すのは、句が7字を超えるときだけ（そのときは、この利点を得るには、は拾う）
+_PAUSE_SHORT_FRAME = 7
+# 3.3.0: 主題と主語の読点を残すのは、読点のあと12字の中に別の主語か主題があるときだけ（3.2.3 までは60字）
+_PAUSE_NEAR_SUBJECT = 12
 
 
 def _pause_comma_chunk(t: str, i: int) -> tuple[str, int]:
@@ -3097,7 +3116,9 @@ def _pause_comma_chunk(t: str, i: int) -> tuple[str, int]:
             return comp, st
     return t[i], i
 
-def _pause_comma_next_subject(after: str) -> bool:
+def _pause_comma_next_subject(after: str, window: int = 60) -> bool:
+    """読点のあとの after に、別の主語「Xが」か主題「Xは」があるか。助詞が after の初めの window 字にあるときだけ数える。
+    3.3.0: 主題と主語の読点（_pause_comma_hits）は _PAUSE_NEAR_SUBJECT 字に狭めた。目的語の読点は60字のまま。"""
     parts = re.split(r"(、|。)", after)
     text = ""
     for k in range(0, len(parts), 2):
@@ -3109,7 +3130,7 @@ def _pause_comma_next_subject(after: str) -> bool:
         if not is_list_item:
             break
         text += "、"
-    for m in re.finditer(r"(が|は)", text[:60]):
+    for m in re.finditer(r"(が|は)", text[:window]):
         before = text[:m.start()]
         if not before or before[-1] in "、":
             continue
@@ -3176,7 +3197,6 @@ def _pause_comma_context(text: str) -> tuple[list[int], list[int], list[int], li
 _PAUSE_PARTICLE_COMMA = _lazy_compile(r"(?=(は|が|も)、)")
 # 「Aも、Bも〜」のあとの「も」（「最も」「もの」は除く）
 _PAUSE_LATER_MO = _lazy_compile(r"(?<!最)[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9）」』]も(?!の)")
-_PAUSE_LIST_AND = _lazy_compile(r"[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9さみ](?:と|や)[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9]")
 
 
 def _pause_comma_phrase_end(t: str, k: int, depth: list[int]) -> int:
@@ -3193,17 +3213,6 @@ def _pause_comma_prev_segment(t: str, j: int, starts: list[int]) -> tuple[str | 
         return None, 0
     k = starts[j - 2]
     return t[k:j - 1].lstrip(_PAUSE_LEAD_SYMBOLS), k
-
-
-def _pause_comma_list_before(t: str, j: int, starts: list[int]) -> bool:
-    """句が、並んだ名詞の最後の項目か（「A、B、Cは、」「AやB、Cは、」）。"""
-    prev, k = _pause_comma_prev_segment(t, j, starts)
-    if not prev or not _PAUSE_NOUNISH_END.search(prev) or _PAUSE_ADVERBIAL_NOUN.search(prev):
-        return False
-    if _PAUSE_LIST_AND.search(prev):
-        return True
-    prev2, _ = _pause_comma_prev_segment(t, k, starts)
-    return bool(prev2 and _PAUSE_NOUNISH_END.search(prev2) and not _PAUSE_ADVERBIAL_NOUN.search(prev2))
 
 
 def _pause_comma_hits(plain_text: str) -> list[tuple[int, str, str]]:
@@ -3262,7 +3271,7 @@ def _pause_comma_hits(plain_text: str) -> list[tuple[int, str, str]]:
             continue
         if chunk == "には" and _PAUSE_LETTER_ADDRESS.search(phrase) and _PAUSE_LETTER_GREETING.match(t, i + 2):
             continue
-        # j: 引用を含む主語。k: 空白を除いて15字を超える句。
+        # j: 引用を含む主語。k: 空白を除いて20字を超える句。
         if re.search(r"[」』”）)]と", phrase):
             continue
         if any(re.search(r"[、。！？!?]", inner) or len(inner) > 12
@@ -3271,35 +3280,33 @@ def _pause_comma_hits(plain_text: str) -> list[tuple[int, str, str]]:
         plen = len(re.sub(r"\s", "", phrase))
         if plen > _PAUSE_MAX_LEN:
             continue
-        # l: 分裂文。m: 条件・場面。n: 問いの節。
+        # l: 分裂文。m: 7字を超える条件・場面。n: 問いの節。
         if chunk in ("は", "が") and _PAUSE_CLEFT.search(phrase):
             continue
-        if chunk in _PAUSE_FRAME_CHUNKS and _PAUSE_FRAME.search(phrase):
+        if chunk in _PAUSE_FRAME_CHUNKS and _PAUSE_FRAME.search(phrase) and plen > _PAUSE_SHORT_FRAME:
             continue
         if phrase.endswith("か") and plen > _PAUSE_SHORT_CLAUSE:
             continue
-        # o: 句の中の主語。p: 送り仮名の名詞を伏せて節を調べる。
+        # o: 句の中の主語。p: 送り仮名の名詞を伏せて節を調べる（14字を超える句だけ）。
         if len(phrase) > 1 and re.search(r"[^、]が(?!、)|[^でにとて]は(?!、)", phrase[:-1]):
             continue
         masked = _PAUSE_OKURI_NOUN.sub(lambda m: "名" * len(m.group(0)), phrase)
-        if plen > _PAUSE_SHORT_CLAUSE and _PAUSE_CLAUSE_IN.search(masked):
+        if plen > _PAUSE_CLAUSE_TOPIC and _PAUSE_CLAUSE_IN.search(masked):
             continue
-        # q: あとの主語。先頭60字と、その直後の定型を判定できれば足りる。
+        # q: あとの主語と主題（読点のあと12字の中）。並べの項目を読み飛ばすので、先頭60字と、その直後の定型を判定できれば足りる。
         # 並んだ語句の1項目（18字まで）の終わりを見分ける余裕も含め84字に限り、長い接尾辞をコピーしない。
         # かっこの中（引用や題名）の助詞と読点は、あとの主語や並べに数えない。
         if unquoted is None:
             unquoted = "".join("〇" if d else ch for ch, d in zip(t, depth))
         after = unquoted[i + 2:min(send + 1, i + 2 + 84)]
-        if _pause_comma_next_subject(after) or _PAUSE_TE_ATTR_OBJECT.match(after):
+        if _pause_comma_next_subject(after, _PAUSE_NEAR_SUBJECT) or _PAUSE_TE_ATTR_OBJECT.match(after):
             continue
-        # r: 同じ文で並んだ句、句の中で並んだ語、直前の「と、」「や、」。
+        # r: 同じ文で並んだ句、句の中で並んだ語、直前の「と、」「や、」。3.3.0 から、並んだ名詞の最後の項目（A、B、Cは、）は拾う。
         if counts[sentence_ids[i]].get(chunk, 0) > 1:
             continue
         if re.search(r"[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9さみ](と|や)[" + _PAUSE_KANJI + r"ァ-ヴーA-Za-z0-9]", phrase):
             continue
         if j >= 2 and t[j - 2] in "とや" and t[j - 1] == "、":
-            continue
-        if _pause_comma_list_before(t, j, starts):
             continue
         if chunk.endswith("も") and _PAUSE_LATER_MO.search(t[i + 2:_pause_comma_phrase_end(t, i + 2, depth)]):
             continue
@@ -3347,7 +3354,13 @@ def _pause_comma_object_hits(plain_text: str) -> list[tuple[int, str, str]]:
 # 3.2.0: 文頭の場面の枠（この記事では、この画面には、）のあとで文が長いとき、pause_comma の message の最後に足す1文。
 # 指摘はそのまま出し（件数、行、severity、snippet は変えない）、残してよい場合だけを書き添える。当てるのは、拾った読点の
 # どれかが文頭の句に続く「では、」「には、」で、その読点のあと、次の読点か文末までが空白を除いて20字以上ある行
-_PAUSE_FRAME_NOTE = "文頭の場面の枠（「この記事では、」など）のあとで文が長く、外すと区切りが見えにくくなるときは、残してかまいません。"
+_PAUSE_FRAME_NOTE = "文頭の場面の枠（「この記事では、」など）のあとの句が長く、読点を外すと区切りが見えにくくなるなら残してかまいません。"
+# 3.3.0: pause_comma の message の、当たった言い方のあとに続く文
+_PAUSE_MESSAGE = ("間を作るだけの読点はAIの文章らしく見えます。次のときは読点を残してください。"
+                  "読点のすぐあとに別の主語や主題が来るとき、長い条件や場面の枠を区切るとき、語を並べているとき、"
+                  "外すと語がつながったり掛かり先が変わったりするときです。"
+                  "小説や随筆で書き手が間として置いた読点も残してかまいません。"
+                  "それ以外は読点だけを外し、語順と述語は変えないでください。")
 _PAUSE_FRAME_NOTE_CHUNKS = ("では", "には")
 _PAUSE_FRAME_NOTE_MIN = 20
 
@@ -4531,24 +4544,32 @@ _CALQUE_STYLE_CONTEXT_PATTERN = r"(?<![A-Za-z])(?:CSS|border|px|HTML)(?![A-Za-z]
 _CALQUE_STYLE_CONTEXT = _lazy_compile(_CALQUE_STYLE_CONTEXT_PATTERN)
 
 
-# 段: 処理の流れの stage に当てた段。名前の段（段A、段1）、第2段、各段、次の段、英語の語に付く段（refine 段）、「抽出の段で」の形で、
-#     同じ文に処理の流れの語（_CALQUE_STAGE_CONTEXT）があるとき。前後に漢字のある段（段落、段階、手段、値段、段位、段数、階段）と、
-#     数の後の段（2 段の LSTM、棚の2段目）は外す。囲碁や将棋の段（段3から）は、処理の流れの語が無いので当たらない。
+# 段: 処理の流れの stage に当てた段。第2段、各段、次の段、英語の語に付く段（refine 段）、「抽出の段で」の形で、
+#     同じ文に処理の流れの語（_CALQUE_STAGE_CONTEXT）があるとき。前後に漢字のある段（段落、段階、手段、値段、段位、段数、階段、
+#     前段、後段、次段）、数の後の段（2 段の LSTM、棚の2段目）、「この段」「その段」（その段はご容赦ください）は外す。
+#     名前の段（段A、段1。段のあとに大文字か数字）は、処理の流れの語がなくても当てる（人の文になく、AI が書く stage の
+#     大半がこの形）。どの形も、同じ文に段位の語（_CALQUE_STAGE_RANK。囲碁、将棋、昇段、柔道 など）があれば当てない。
 # 門: CI やレビューの gate に当てた門。「レビューの門」「CI の門」の形で、同じ文に検査の語（_CALQUE_GATE_CONTEXT）があるとき。
 #     前後に漢字のある門（正門、校門、関門、門番）と、建物の門（お寺の門をくぐる）は、検査の語が無いので当たらない。
+#     英語の語のあとの門は2字以上の英字を含む語だけに当てる（東京ドームのA門 は外す）。
+# 文脈の語は 枝 と同じく、人の文の別の語に入る形を外す（マージン、コミットメント、学習塾）。
 _CALQUE_STAGE = _lazy_compile(
     r"第\s?[0-9０-９]+\s?段(?![一-龥々〆ヵヶ])"
     r"|(?<![一-龥々〆ヵヶ])各段(?![一-龥々〆ヵヶ])"
     r"|(?<![一-龥々〆ヵヶァ-ヴー0-9０-９A-Za-z])段(?=[A-ZＡ-Ｚ0-9０-９])"
     r"|(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]+ ?段(?![一-龥々〆ヵヶ])"
-    r"|(?:次|前|後|最初|最後|この|その)の?段(?=[でにをはがのへも、。])"
-    r"|の段(?=[でにをはがへも、。])")
+    r"|(?:次|前|後|最初|最後)の段(?=[でにをはがのへも、。])"
+    r"|(?<![こそあ])の段(?=[でにをはがへも、。])")
 _CALQUE_STAGE_CONTEXT = _lazy_compile(
     r"(?<![A-Za-z])(?:CI|pipeline|stage|job|build|lint|LLM|GPU|CPU|ETL)(?![A-Za-z])"
-    r"|パイプライン|ジョブ|ビルド|デプロイ|ワークフロー|前処理|後処理|推論|学習|抽出|検査|レビュー|スクリプト|エージェント")
-_CALQUE_GATE = _lazy_compile(r"(?:の|(?<![A-Za-z0-9_-])[A-Za-z][A-Za-z0-9_-]*\s?)門(?![一-龥々〆ヵヶ])")
+    r"|パイプライン|ジョブ|ビルド|デプロイ|ワークフロー|前処理|後処理|推論|学習(?!塾)|抽出|検査|レビュー|スクリプト|エージェント")
+_CALQUE_STAGE_LABEL = _lazy_compile(
+    r"(?<![一-龥々〆ヵヶァ-ヴー0-9０-９A-Za-zＡ-Ｚａ-ｚ])段(?:[A-ZＡ-Ｚ]|[0-9０-９]+)(?![A-Za-zＡ-Ｚａ-ｚ])")
+_CALQUE_STAGE_RANK = _lazy_compile(
+    r"碁|棋|段位|昇段|初段|有段|段級|級|柔道|剣道|空手|合気道|弓道|居合|薙刀|なぎなた|書道|茶道|華道|珠算|そろばん|師範|黒帯")
+_CALQUE_GATE = _lazy_compile(r"(?:の|(?<![A-Za-z0-9_-])[A-Za-z][0-9_-]*[A-Za-z][A-Za-z0-9_-]*\s?)門(?![一-龥々〆ヵヶ])")
 _CALQUE_GATE_CONTEXT = _lazy_compile(
-    r"(?<![A-Za-z])(?:CI|PR|lint|hook|review|merge)(?![A-Za-z])|レビュー|検査|フック|マージ|コミット|テスト")
+    r"(?<![A-Za-z])(?:CI|PR|lint|hook|review|merge)(?![A-Za-z])|レビュー|検査|フック|マージ(?!ン)|コミット(?!メント)|テスト")
 
 
 def _calque_type4(sentence: str, words: list[str], skip_version: bool = False) -> bool:
@@ -4573,7 +4594,9 @@ def _calque_type4(sentence: str, words: list[str], skip_version: bool = False) -
     if "罫" in sentence and _CALQUE_RULE.search(sentence) and _CALQUE_STYLE_CONTEXT.search(sentence):
         words.append("罫")
         found = True
-    if "段" in sentence and _CALQUE_STAGE.search(sentence) and _CALQUE_STAGE_CONTEXT.search(sentence):
+    if "段" in sentence and not _CALQUE_STAGE_RANK.search(sentence) \
+            and (_CALQUE_STAGE_LABEL.search(sentence)
+                 or (_CALQUE_STAGE.search(sentence) and _CALQUE_STAGE_CONTEXT.search(sentence))):
         words.append("段")
         found = True
     if "門" in sentence and _CALQUE_GATE.search(sentence) and _CALQUE_GATE_CONTEXT.search(sentence):
@@ -5978,9 +6001,10 @@ def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = No
                 "snippet": line.strip()
             })
 
-        # 表にない規則は当て、表にある規則は指定した種類が含まれるときだけ検出する。
-        if "pause_comma" not in DOC_TYPE_ONLY_RULES or doc_type in DOC_TYPE_ONLY_RULES["pause_comma"]:
+        # 種類を限って当てる規則と種類によって出さない規則の表を見て、当てる種類のときだけ検出する。
+        if _rule_applies("pause_comma", doc_type):
             if pause_lines is None:
+                # 目的語の「を、」は essay のときだけ拾わない（3.3.0 から、種類なしでも article と同じく拾う）
                 pause_lines = _pause_comma_line_hits(analysis, objects=doc_type != "essay", notes=pause_notes)
             if line_no in pause_lines:
                 pause_hits = pause_lines[line_no]
@@ -6002,7 +6026,8 @@ def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = No
                     "rule": "pause_comma",
                     "line": line_no,
                     "severity": "info",
-                    "message": f"{where}のすぐあとに読点があります（{phrases}）。間を作るだけの読点は、AIの文章らしく見えます。読点のあとに別の主語が来る、条件や場面の枠を示す、並べている、外すと語がつながったり掛かり先が変わったりする、のどれにも当たらなければ、読点だけを外してください（語順と述語は変えません）。小説や随筆で書き手が間として置いた読点は残してかまいません。"
+                    # 3.3.0: 文を短くし、残すときの条件を先に並べる。message が自分の読点の形に当たらないようにした
+                    "message": f"{where}のすぐあとに読点があります（{phrases}）。" + _PAUSE_MESSAGE
                                # 3.2.0: 文頭の場面の枠のあとで文が長い行だけ（ほかの行の message は 3.1.0 と同じ）
                                + (_PAUSE_FRAME_NOTE if frame_note else ""),
                     "snippet": line.strip(),
@@ -6039,18 +6064,19 @@ def lint_text(text: str, *, doc_type: str | None = None, reader: str | None = No
     findings.extend(_project_term_findings(analysis, words))
 
     # 文書の種類で外す規則。検出が終わったあと、件数と点数を数える前に、前から順に
-    # 除いて規則ごとに数える。残った候補の順は変えない。種類を指定しないときは、種類を限って当てる規則だけを除く
+    # 除いて規則ごとに数える。残った候補の順は変えない。種類を指定しないときは、種類を限って当てる規則だけを除く。
+    # 種類によって出さない規則（DOC_TYPE_OFF_RULES）は、出さない種類のときに除き、外した候補には数えない
     skipped = dict((rule, 0) for rule in DOC_TYPE_SKIP_RULES[doc_type]) if doc_type is not None else {}
     partial = DOC_TYPE_SKIP_PATTERNS.get(doc_type, {})
     skipped.update((rule, 0) for rule in partial)
-    if skipped or DOC_TYPE_ONLY_RULES:
+    if skipped or DOC_TYPE_ONLY_RULES or DOC_TYPE_OFF_RULES:
         kept = []
         for finding in findings:
             rule = finding["rule"]
             if (rule in DOC_TYPE_SKIP_RULES.get(doc_type, ())
                     or finding["message"].startswith(partial.get(rule, ()))):
                 skipped[rule] += 1
-            elif rule not in DOC_TYPE_ONLY_RULES or doc_type in DOC_TYPE_ONLY_RULES[rule]:
+            elif _rule_applies(rule, doc_type):
                 kept.append(finding)
         findings = kept
     # 語の一覧の allow.txt の語で外す候補。件数と点数を数える前に除く
@@ -6182,7 +6208,7 @@ _EXIT_CODES = """終了コード:
 
 
 def _doc_type_table() -> str:
-    """ヘルプの終了コードの表の前に置く、種類ごとの規則の一覧（SKIP と ONLY の表から作る）。"""
+    """ヘルプの終了コードの表の前に置く、種類ごとの規則の一覧（SKIP、ONLY、OFF の表から作る）。"""
     lines = ["文書の種類ごとに外す規則（--doc-type）:"]
     for value, rules in DOC_TYPE_SKIP_RULES.items():
         lines.append("  {:<10}{}".format(value, "、".join(rules) if rules else "なし"))
@@ -6195,6 +6221,11 @@ def _doc_type_table() -> str:
         else:
             scope = "{} を除く{}種類".format("、".join(excluded), len(allowed)) if excluded else "全{}種類".format(len(allowed))
         lines.append("種類を指定したときだけ当てる規則: {}（{}。種類を指定しないときは出しません）".format(rule, scope))
+    for rule, off in DOC_TYPE_OFF_RULES.items():
+        # 3.3.0: 種類を指定しないときも当て、表に並べた種類でだけ出さない規則（pause_comma）
+        others = len([row for row in DOC_TYPES if row[0] not in off])
+        lines.append("種類によって出さない規則: {}（{} では出しません。種類を指定しないときとほかの{}種類では当てます）".format(
+            rule, "、".join(off), others))
     lines.append("外した候補は、見直し候補の件数と --strict、--fail-on の判定に入れません。")
     return "\n".join(lines)
 

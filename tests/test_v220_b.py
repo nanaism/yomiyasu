@@ -231,8 +231,12 @@ class TableTest(unittest.TestCase):
         only = yomiyasu_lint.DOC_TYPE_ONLY_RULES
         self.assertEqual(only["dialogue_period"], ("script",))
         self.assertEqual(only["narrative_density"], ("essay",))
-        self.assertNotIn("script", only["pause_comma"])
-        self.assertEqual(len(only["pause_comma"]), 11)
+        # 3.3.0: pause_comma は種類を指定しないときも当て、promo と script でだけ出さない（当てる種類は11のまま）
+        self.assertNotIn("pause_comma", only)
+        self.assertEqual(yomiyasu_lint.DOC_TYPE_OFF_RULES["pause_comma"], ("promo", "script"))
+        self.assertEqual(len([row for row in yomiyasu_lint.DOC_TYPES
+                              if yomiyasu_lint._rule_applies("pause_comma", row[0])]), 11)
+        self.assertTrue(yomiyasu_lint._rule_applies("pause_comma", None))
 
     def test_script_skips_fragment_and_ending_rules(self):
         text = "安い。うまい。早い。\n\n記録を確認します。手順を確認します。結果を確認します。\n"
@@ -273,7 +277,8 @@ class TableTest(unittest.TestCase):
     def test_lint_help(self):
         help_text = yomiyasu_lint._build_parser().format_help()
         self.assertIn("  script    bare_verb_chain、fragment_run、metaphor_label、sentence_end_repetition\n", help_text)
-        self.assertIn("種類を指定したときだけ当てる規則: pause_comma（promo、script を除く11種類。", help_text)
+        self.assertIn("種類によって出さない規則: pause_comma（promo、script では出しません。種類を指定しないときとほかの11種類では当てます）",
+                      help_text)
         self.assertIn("種類を指定したときだけ当てる規則: dialogue_period（script だけ。種類を指定しないときは出しません）", help_text)
         self.assertIn("種類を指定したときだけ当てる規則: narrative_density（essay だけ。種類を指定しないときは出しません）", help_text)
 

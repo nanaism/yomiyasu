@@ -20,7 +20,8 @@ sys.path.insert(0, str(SCRIPTS))
 import yomiyasu_diff  # noqa: E402
 import yomiyasu_lint  # noqa: E402
 
-# 指示書の再現の表の12文と、article のときの pause_comma の当たった言い方（なければ空）。種類なしではどれも候補なし
+# 指示書の再現の表の12文と、article のときの pause_comma の当たった言い方（なければ空）。3.2.3 までは種類なしではどれも候補なし。
+# 3.3.0 から種類なしでも article と同じ候補が出る
 TABLE = (
     ("まず、この機能は、ユーザーが、設定を、変更したときに、動きます。", ["ユーザーが", "設定を"]),
     ("このとき、システムは、受け取ったデータを、順番に、処理します。", ["システムは"]),
@@ -51,7 +52,7 @@ class PauseCommaTableTest(unittest.TestCase):
             with self.subTest(text=text):
                 found = pause(text)
                 self.assertEqual([phrases(f) for f in found], [expected] if expected else [])
-                self.assertEqual(yomiyasu_lint.lint_text(text + "\n")["findings"], [])
+                self.assertEqual(yomiyasu_lint.lint_text(text + "\n")["findings"], found)
 
     def test_object_message_only_when_there_is_an_object(self):
         """「を、」があるときだけ message の初めが「短い主語や主題、目的語」になる。ないときは 2.4.0 と同じ文。"""
@@ -154,8 +155,9 @@ class ShortObjectTest(unittest.TestCase):
                 self.assertEqual(pause(text), [])
 
     def test_essay_and_no_type_do_not_get_objects(self):
+        """essay では目的語の「を、」を拾わない。3.3.0 から種類なしでは拾う（名前は 3.2.3 までのまま。種類なしは article と同じ）。"""
         self.assertEqual(pause("設定を、変更したときに確かめます。", doc_type="essay"), [])
-        self.assertEqual(pause("設定を、変更したときに確かめます。", doc_type=None), [])
+        self.assertEqual([phrases(f) for f in pause("設定を、変更したときに確かめます。", doc_type=None)], [["設定を"]])
 
     def test_hits_function_keeps_its_signature(self):
         """_pause_comma_hits は今までどおり「は」「が」「も」だけを返す（「を、」は別の関数）。"""

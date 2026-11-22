@@ -27,7 +27,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
 """
 
 from __future__ import annotations
-__version__ = "3.2.3"
+__version__ = "3.3.0"
 
 import os
 import errno
@@ -5525,6 +5525,83 @@ def _swap_risks(sides: _Sides, groups: list) -> list:
     return out
 
 
+# ---- 入れ子の主語の入れ替え（3.3.0） ----
+
+# 名詞化の語と、そのあとの助詞。「の」と「よう」は動詞や形容詞の終わりのあとだけ。「よう」は助詞なしでもよく、「ようだ」「ようです」「ような」などは外す
+_NEST_NOMINAL = _lazy_compile(r"(?:こと|(?<=[るたいうくすつぬむぶぐ])の)(?:を|に|が|は|も)|(?<=[るたいうくすつぬむぶぐ])よう(?:に|、)?(?!だ|で|な|す|見|思)")
+_NEST_PARTICLE = _lazy_compile(r"(?:が|は|に(?!つ|よ|関|対|と|お|向|応|伴|基|な|も))")
+
+
+def _nest_mentions(text: str, start: int, end: int) -> list:
+    """text[start:end] の中の「語と助詞」（が、は、に）。(位置, 語, 助詞) の並び。語は _case_map と同じ取り方。"""
+    found = []
+    for match in _CASE_WORD.finditer(text, start, end):
+        word, stop = match.group(0), match.end()
+        honorific = _HONORIFIC.match(text, stop, stop + 3)
+        if honorific:
+            stop += len(honorific.group(0))
+        elif len(word) > 2 and word[-1] in "様氏":
+            word = word[:-1]
+        particle = _NEST_PARTICLE.match(text, stop, min(stop + 2, end))
+        if particle:
+            found.append((match.start(), word, particle.group(0)))
+    return found
+
+
+def _nest_roles(text: str) -> dict | None:
+    """名詞化の語が1つだけの文で、語ごとの役（outer: 外の文の主語、inner: 名詞化した節の主語か、させる相手）。
+    名詞化の語のあとの が、は は outer。前の語は、あとに outer があれば全部 inner。なければ、前の が、は のうち最初の語は、
+    そのあとに が、に の語があるときだけ outer で、ほかは inner。同じ語が2度出る文と、役が1つもない文は None。"""
+    nominals = list(_NEST_NOMINAL.finditer(text))
+    if len(nominals) != 1:
+        return None
+    nominal = nominals[0]
+    before = _nest_mentions(text, 0, nominal.start())
+    after = [m for m in _nest_mentions(text, nominal.end(), len(text)) if m[2] in ("が", "は")]
+    words = [m[1] for m in before] + [m[1] for m in after]
+    if len(words) != len(set(words)) or not before:
+        return None
+    roles = {}
+    for m in after:
+        roles[m[1]] = "outer"
+    if after:
+        for m in before:
+            roles[m[1]] = "inner"
+    else:
+        first = next((x for x, m in enumerate(before) if m[2] in ("が", "は")), None)
+        for m in before:
+            roles[m[1]] = "inner"
+        if first is not None and any(m[2] in ("が", "に") for m in before[first + 1:]):
+            roles[before[first][1]] = "outer"
+    roles["\0passive"] = bool(_PASSIVE.search(text, nominal.end()))
+    return roles
+
+
+def _nested_swap_risks(sides: _Sides, groups: list, skip: set) -> list:
+    """入れ子の主語の入れ替え（kind swap、subkind nested。3.3.0）。「部長が新人が発言することをやめさせた」を「部長が発言する
+    ことを新人がやめさせた」にしたように、両方の文にある語で、outer から inner になった語と inner から outer になった語が
+    どちらもあれば出す。片向きだけの変化（主語を足した、させる相手にした）は出さない。外の文が受け身かどうかが元と後で
+    違う組と、swap がもう出た組（skip。_swap_risks と同じ行と文の組）は見ない。--fail-on には swap として数える。"""
+    out = []
+    order = 0
+    for group in groups:
+        for i, j in group["pairs"]:
+            old, new = group["old"][i], group["new"][j]
+            if old.text == new.text or (old.line, new.line, old.text, new.text) in skip:
+                continue
+            before, after = _nest_roles(old.text), _nest_roles(new.text)
+            if before is None or after is None or before.pop("\0passive") != after.pop("\0passive"):
+                continue
+            common = [word for word in before if word in after]
+            changed = [word for word in common if before[word] != after[word]]
+            if any(before[w] == "outer" for w in changed) and any(before[w] == "inner" for w in changed):
+                pairs = [{"word": word, "old": before[word], "new": after[word]} for word in changed]
+                out.append((_group_index(group, new), order, _risk("swap", "nested", old.line, new.line, old.text, new.text,
+                                                                 {"pairs": pairs})))
+                order += 1
+    return out
+
+
 # ---- 問い ----
 
 _QUESTION = _lazy_compile(r"(?:[？?]|か[。？?])[」』）)]*$")
@@ -6633,7 +6710,9 @@ def _meaning_risks(sides: _Sides, full: dict, type_changes: Sequence | None, gro
     _logic_changes の戻り値（diff() と meaning_risks() が渡す）。"""
     if groups is None:
         groups = _sentence_pairs(sides, full)
-    found = (_number_risks(sides, full, groups) + _negation_risks(sides, groups) + _swap_risks(sides, groups)
+    swaps = _swap_risks(sides, groups)
+    swaps += _nested_swap_risks(sides, groups, {(r["old_line"], r["new_line"], r["old"], r["new"]) for _, _, r in swaps})
+    found = (_number_risks(sides, full, groups) + _negation_risks(sides, groups) + swaps
              + _question_risks(sides, groups) + _protected_risks(sides, full) + _contrast_risks(sides, groups)
              + _feeling_risks(sides, groups))
     found.sort(key=lambda item: (item[0], _RISK_ORDER.get(item[2]["kind"], 9), item[1]))
@@ -11623,6 +11702,10 @@ def _risk_line(risk: dict) -> str:
                                               "、".join(detail.get("added", [])) or "なし")
     if kind == "negation":
         return "否定の有無が変わった{}: {} → {}".format(where, detail.get("old", ""), detail.get("new", ""))
+    if kind == "swap" and subkind == "nested":
+        names = {"outer": "外の文の主語", "inner": "中の節の主語"}
+        return "主語の役が入れ替わった{}: {}".format(
+            where, "、".join("{} {}→{}".format(pair["word"], names[pair["old"]], names[pair["new"]]) for pair in detail.get("pairs", [])))
     if kind == "swap":
         return "「が」「を」などが入れ替わった{}: {}".format(
             where, "、".join("{} {}→{}".format(pair["word"], pair["old"], pair["new"]) for pair in detail.get("pairs", [])))

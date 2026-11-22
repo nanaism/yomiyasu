@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
@@ -212,7 +213,9 @@ class CalqueTermsTest(unittest.TestCase):
     def test_score_unaffected(self):
         for text, _, _ in TARGETS:
             with self.subTest(text=text):
-                result = yomiyasu_lint.lint_text(text)
+                # 3.3.0: pause_comma を種類なしでも当てる。pause_comma は点数に入るので、その候補を出さずに比べる
+                with mock.patch.object(yomiyasu_lint, "DOC_TYPE_OFF_RULES", {"pause_comma": (None, "promo", "script")}):
+                    result = yomiyasu_lint.lint_text(text)
                 self.assertEqual(result["rule_penalty_score"], 100)
                 self.assertEqual(result["counts"]["warn"], 0)
 

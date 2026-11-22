@@ -156,7 +156,9 @@ class Kanji1CalqueTest(unittest.TestCase):
         self.assertEqual([f["line"] for f in type4(text)], [1, 3, 7])
 
     def test_score_is_not_affected(self):
-        result = yomiyasu_lint.lint_text("一覧の頭には、最新の5件を固定で出します。")
+        # 3.3.0: pause_comma を種類なしでも当てるので、「一覧の頭には、」の読点を外した（pause_comma は点数に入る）
+        result = yomiyasu_lint.lint_text("一覧の頭には最新の5件を固定で出します。")
+        self.assertEqual([f["rule"] for f in result["findings"]], ["calque"])
         self.assertEqual(result["rule_penalty_score"], 100)
 
     def test_allow_removes_the_kanji(self):

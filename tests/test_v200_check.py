@@ -570,7 +570,7 @@ class TestK1RecordAndOutput(CheckCase):
                                                                        "katakana-terms", "thin-evaluation", "renyo-nouns")]
         self.assertEqual(set(record["tools"]), set(TOOL_NAMES) | set(list_keys))
         for name in TOOL_NAMES:
-            self.assertEqual(record["tools"][name], {"version": "3.2.3", "sha256": sha256_file(SCRIPTS / name)})
+            self.assertEqual(record["tools"][name], {"version": "3.3.0", "sha256": sha256_file(SCRIPTS / name)})
         for key in list_keys:
             self.assertEqual(record["tools"][key], {"version": None, "sha256": sha256_file(ROOT / key)})
         # unicode_version は check の固め（反証レビュー compat 4）で足した。似かたを求めた Unicode の版
@@ -677,7 +677,7 @@ class TestK1RecordAndOutput(CheckCase):
             self.assertIn(key, result)
         self.assertEqual(list(result)[:3], ["format", "format_version", "tool_version"])
         self.assertEqual((result["format"], result["format_version"], result["tool_version"], result["command"]),
-                         ("yomiyasu-check-result", 1, "3.2.3", "run"))
+                         ("yomiyasu-check-result", 1, "3.3.0", "run"))
         self.assertEqual(result["status"], "executed")
         self.assertRegex(result["status_line"], K1_STATUS)
         self.assertEqual(result["message"], RUN_REWRITE_FIRST + self.finalize_file())
@@ -741,7 +741,7 @@ class TestRunThenVerify(CheckCase):
             self.assertIn(key, result)
         self.assertEqual(list(result)[:3], ["format", "format_version", "tool_version"])
         self.assertEqual((result["format"], result["format_version"], result["tool_version"], result["command"]),
-                         ("yomiyasu-check-result", 1, "3.2.3", "verify"))
+                         ("yomiyasu-check-result", 1, "3.3.0", "verify"))
         self.assertEqual(result["status"], "executed")
         self.assertEqual(self.status(result["status_line"])[0], "executed")
         self.assertEqual(result["message"], VERIFY_LINE1["executed"].format(checks="lint、diff"))
@@ -997,8 +997,9 @@ class TestRunThenVerify(CheckCase):
         self.assertEqual((result["message"], result["next"]), (RUN_NO_CHANGE + self.finalize_file(), "finalize"))
 
     def test_first_rewrite_without_candidates(self):
-        """3.5 の表の「推敲の1回目、候補なし」。読点を1つ足しただけの組（6.1 と同じ）。"""
-        a, b, lines = self.run_pair("会議は3時に始まります。\n", "会議は、3時に始まります。\n")
+        """3.5 の表の「推敲の1回目、候補なし」。読点を1つ足しただけの組（6.1 と同じ）。
+        3.3.0 から lint の pause_comma を種類なしでも当てるので、「会議は、3時に」（拾う読点）を、すぐあとに主語が来る読点に替えた。"""
+        a, b, lines = self.run_pair("会議では担当者が説明します。\n", "会議では、担当者が説明します。\n")
         self.assertEqual(lines[0], RUN_REWRITE_FIRST_NO_CANDIDATES + self.finalize_file())
         self.assertEqual(self.status(lines[1])[1]["meaning_risk"], "0")
         self.assertEqual(lines[2], "実行した検査: lint（最終稿）候補0件、diff（原文→最終稿）変更あり 候補0件（うち意味が変わる恐れ0件）")
@@ -2494,7 +2495,7 @@ class TestReviewFixes(CheckCase):
         diff の形式の版（MATERIALS_FORMAT_VERSION）はファイルの行から読む。diff が壊れていても版の行を出す（spec F5）。"""
         scripts = self.copy_scripts("skill-version")
         script = scripts / "yomiyasu_check.py"
-        expected = "yomiyasu_check.py 3.2.3 (record format 1, result format 1, materials format 1)\n"
+        expected = "yomiyasu_check.py 3.3.0 (record format 1, result format 1, materials format 1)\n"
         process = subprocess.run([sys.executable, "-B", "-c", LOAD_WORKER, str(scripts), str(script), "--version"],
                                  cwd=str(self.root), env=self.env(), capture_output=True, encoding="utf-8", timeout=30)
         self.assertEqual(process.returncode, 0, process.stderr)

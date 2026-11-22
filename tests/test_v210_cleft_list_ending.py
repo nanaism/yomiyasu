@@ -111,7 +111,8 @@ PREMISE_DRAFT = ("# 新しい推敲の手順を試した\n\n"
 NO_PREMISE_DRAFT = ("# 新しい推敲の手順を試した\n\n"
                     "先週から、チームの記事の推敲に新しい手順を使い始めた。最初の1週間で5本の記事を通した。\n\n"
                     "書き換えの中で変動したのは、画面、帳票、通知。\n\n"
-                    "来週からは、手順の結果を編集の担当にも見てもらう。\n")
+                    # 3.3.0: pause_comma を種類なしでも当てるので、この行の「来週からは、」の読点を外した
+                    "来週からは手順の結果を編集の担当にも見てもらう。\n")
 # 直前の文が問いか、「のは」の前の動詞の漢字を含む（前提がある）
 WITH_PREMISE = (
     "何が変わったのか。変わったのは、画面、帳票、通知。\n",
@@ -166,7 +167,9 @@ class CleftListEndingTest(unittest.TestCase):
     def test_hits(self):
         for sentence in HITS:
             with self.subTest(sentence=sentence):
-                found = findings(sentence + "\n")
+                # 3.3.0: pause_comma を種類なしでも当てる。「急いだのは、」は article でも 3.2.3 から pause_comma に出ていた
+                # （分裂文の形に「〜いだ」がない）ので、この規則の試験では除く
+                found = [finding for finding in findings(sentence + "\n") if finding["rule"] != "pause_comma"]
                 self.assertEqual([finding["rule"] for finding in found], [RULE])
                 self.assertEqual((found[0]["severity"], found[0]["line"], found[0]["snippet"]), ("info", 1, sentence))
 
