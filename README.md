@@ -178,6 +178,8 @@ gh skill update yomiyasu
 
 導入先のエージェントを指定する場合は、`--agent codex` や `--agent claude-code` を追加してください。
 
+3.0.1 までに入れたものを新しいバージョンに上げるときは、入れた先の `yomiyasu` フォルダを消してから、`gh skill install` で入れ直してください。フォルダを消さずに上から入れ直すと、前のバージョンにしかないファイルは消えずに残ります。3.1.0 で外した `.codex-plugin` フォルダが残っていると、Codex の一覧に出る名前が `yomiyasu` にならず `yomiyasu:yomiyasu` のままになります。
+
 ### 3. `npx openskills install`
 
 ```bash

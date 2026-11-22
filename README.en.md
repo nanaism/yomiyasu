@@ -44,6 +44,8 @@ npx openskills install nanaism/yomiyasu
 npx openskills sync
 ```
 
+If you installed 3.0.1 or earlier with the GitHub CLI, delete the installed `yomiyasu` folder before you install a newer version with `gh skill install`. Installing over the old folder keeps files that only the old version had. If the `.codex-plugin` folder removed in 3.1.0 stays, Codex keeps listing the skill as `yomiyasu:yomiyasu` instead of `yomiyasu`.
+
 To install it as a Claude Code plugin, run these two commands in Claude Code.
 
 ```text
