@@ -1539,11 +1539,11 @@
       "stdin": "df6895abe6c6001c"
     },
     "raw_ai/02_incident_report_sonnet_default.md|yomiyasu_rewritten/02_incident_report_sonnet_default.md": {
-      "plain": "09849bcb366f4628",
-      "stance": "09849bcb366f4628",
-      "fail_on": "09849bcb366f4628",
-      "json": "7c7df1faebbd1bd8",
-      "stdin": "09849bcb366f4628"
+      "plain": "6ec734e65266d722",
+      "stance": "6ec734e65266d722",
+      "fail_on": "6ec734e65266d722",
+      "json": "51d4c60a250242d1",
+      "stdin": "6ec734e65266d722"
     },
     "blacklist_ai/02_incident_report_sonnet_default.md|yomiyasu_rewritten/02_incident_report_sonnet_default_bl.md": {
       "plain": "21f1f03c58e64395",
@@ -2365,18 +2365,18 @@
       "stdin": "29100756445d02e2"
     },
     "human/human_oga_05.md|human/human_oga_06.md": {
-      "plain": "23a8ae06a0e421ce",
-      "stance": "23a8ae06a0e421ce",
-      "fail_on": "89ae5d6f7f31e473",
-      "json": "e3c447839e14c92d",
-      "stdin": "23a8ae06a0e421ce"
+      "plain": "46d5edbfe051be09",
+      "stance": "46d5edbfe051be09",
+      "fail_on": "e28b2b00297bf038",
+      "json": "c1457f09a95db925",
+      "stdin": "46d5edbfe051be09"
     },
     "human/human_oga_06.md|human/human_oga_07.md": {
-      "plain": "2daf67422c4742b1",
-      "stance": "de48c598585e473e",
-      "fail_on": "3d0c0170c145692b",
-      "json": "110557ae037596fe",
-      "stdin": "2daf67422c4742b1"
+      "plain": "25f2ec259097ef56",
+      "stance": "fb276c19d5cc2291",
+      "fail_on": "ac382eeea73b4718",
+      "json": "9b51b1b24ca7b98d",
+      "stdin": "25f2ec259097ef56"
     },
     "human/human_oga_07.md|human/human_oga_08.md": {
       "plain": "7010484c3728bc9f",
@@ -2651,15 +2651,15 @@
       "json": "7125674858fae1ff"
     },
     "raw_ai/02_incident_report_sonnet_default.md|yomiyasu_rewritten/02_incident_report_sonnet_default.md": {
-      "run": "232e02dc027aa69f",
+      "run": "ab6a9cb81d7d97b9",
       "verify": "9dafbeefbb1613b6",
       "replay": "3ff27f7b4e0e997b",
-      "rerun": "a46fb82eb3027ae2",
-      "compose": "bf04b0f01d817705",
-      "stdin": "e81a06a2fad82f50",
-      "fail_on": "58ef100c0b9e569b",
-      "no_record": "e9625f69051d727f",
-      "json": "fe17b48e8c4520bc"
+      "rerun": "3c798b73767d74d0",
+      "compose": "c4298301c61e767e",
+      "stdin": "5b3764c9be7e968a",
+      "fail_on": "6837fd4a53609bea",
+      "no_record": "fb62c572019b9795",
+      "json": "4c231f001acac55c"
     },
     "blacklist_ai/02_incident_report_sonnet_default.md|yomiyasu_rewritten/02_incident_report_sonnet_default_bl.md": {
       "run": "8caaa2886675a059",
@@ -3403,11 +3403,11 @@
       "verify": "258fc3a9cd2e4e08"
     },
     "human/human_oga_05.md|human/human_oga_06.md": {
-      "run": "1304759573b1250e",
+      "run": "429a18d0a383f1d7",
       "verify": "8b6616265727fe78"
     },
     "human/human_oga_06.md|human/human_oga_07.md": {
-      "run": "1759a6ea38733cf5",
+      "run": "6db0272aa4161718",
       "verify": "686c0083496a5718"
     },
     "human/human_oga_07.md|human/human_oga_08.md": {
@@ -3571,6 +3571,7 @@
     "2026-10-29 v2.5.0 で tests/corpus に例文を足したときの行の追加: edge_cases に6章の例文6本（否定で終わる定義文の edge_hitei_49〜51 と、漢語の名詞で動作を省いた文の edge_kango_52〜54。どれも種類なしの lint の候補は0件）を足した。5a の例（見出しの形とまとめを依頼したスライドと、まとめの節がある記事の、元と後と依頼の文）は、新しいフォルダ requests に .txt で置いた（.md の数え方と組に入れない。2,000字未満の文書だけに出る短いまとめの見出しの候補があり、つなぐと点数が変わるので、フォルダごとの点数の試験に入れない）。lint の行は足した6本の分だけを今の出力で作り、edge_cases の並びで増えた6組（edge_hitei_49|edge_hitei_50 から edge_kango_54|edge_kiku_45 まで）の diff と check の行を今の出力で作った。名前が edge_kiku_45 より前に並ぶので、前からある組は1つも変わらない。",
     "2026-11-05 3.0.0 で tests/corpus に例文を足したときの行の追加: edge_cases に直訳語の型4と型5の字と語を文字どおりに使った文12本（edge_yakugo_55〜66。どれも種類なしの lint の候補は0件、点数100）を足した。lint の行は足した12本の分だけを今の出力で作り、edge_cases の並びで増えた12組（edge_watasu_48|edge_yakugo_55 から edge_yakugo_65|edge_yakugo_66 まで）の diff と check の行を今の出力で作った。名前が edge_watasu_48 よりあとに並ぶので、前からある組は1つも変わらない。",
     "2026-11-18 v3.2.0 で diff の意味が変わる恐れを見直したとき（範囲を絞る語の limiter、義務の強さの obligation、範囲の語の quantifier、期限の語の deadline、条件の句の condition、段落から消えた文の dropped_sentence、境目の言い方の boundary を足し、「お願いしたい」と「いただけますと幸い」を依頼の印にして、問いの形の依頼を依頼の文に言い直した組を外し、「事例がある」を「ことがある」と同じ強さに数えた）の作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、lint の行は1字も変わらなかった。値が変わったのは diff の12組（plain、stance、fail_on、json、stdin の60行）と、check の66行（同じ12組の run と verify、そのうち推敲の6組の rerun、replay、compose、stdin、fail_on、json、no_record）だけだった。limiter は raw_ai/05_comparison_sonnet_casual.md → yomiyasu_rewritten/05_comparison_sonnet_casual.md と raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md、依頼の言い直しは raw_ai/04_slack_announce_sonnet_default.md → yomiyasu_rewritten/04_slack_announce_sonnet_default.md、「事例がある」は blacklist_ai/03_pr_description_sonnet_default.md → yomiyasu_rewritten/03_pr_description_sonnet_default_bl.md、boundary は 02_incident_report_sonnet_casual の2組（raw_ai と blacklist_ai から）と raw_ai/03_pr_description_sonnet_formal.md → yomiyasu_rewritten/03_pr_description_sonnet_formal.md、quantifier は edge_hitei_51|edge_kango_52 と edge_waru_30|edge_waru_31、condition は edge_nigiru_03|edge_nigiru_04、dropped_sentence は edge_nigiru_01|edge_nigiru_02 と human_oga_07|human_oga_08。--fail-on meaning-risk の終了コードが変わったのは、yomiyasu_rewritten/02_incident_report_sonnet_casual_bl.md の組（0 → 1、boundary）、yomiyasu_rewritten/05_comparison_sonnet_casual.md の組（0 → 1、limiter）、raw_ai/05_comparison_sonnet_default.md|raw_ai/05_comparison_sonnet_formal.md（diff だけ。0 → 1、limiter）、yomiyasu_rewritten/04_slack_announce_sonnet_default.md の組（1 → 0、依頼の言い直し）で、check run --fail-on meaning-risk,warn も推敲の3組で同じ向きに変わった。source_commit と source_sha256 は作り直していない。",
-    "2026-11-23 v3.3.0 で lint の pause_comma を種類を指定しないときも当て（promo と script では今までどおり出さない）、読点を残す形を狭めた（読点のあとの別の主語と主題は12字の中だけ、節を含む主題は14字を超えるときだけ、条件や場面の枠は7字を超えるときだけ外し、並べの最後の項目と20字までの句を拾い、ところが、あるいは などの接続の語と挨拶を外す）ときの作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、diff の行は1字も変わらなかった。lint の行は、種類なしで pause_comma の候補が出る70本（yomiyasu_rewritten 36本、blacklist_ai 15本、raw_ai 12本、edge_cases 5本、human の human_oga_06 と human_oga_08）の5通り（plain、strict、fail_error、json、stdin）が変わった（diff_endings は変わらない）。check の行は、最終稿に同じ候補が出る69組の run と、そのうち55組の verify、推敲の39組の rerun、compose、stdin、fail_on、no_record、json、そのうち36組の replay が変わった。pause_comma は info なので、lint の --strict と --fail-on、check のどの使い方でも、終了コードが変わった組はない（3.2.3 のスクリプトで同じ使い方を動かして比べた）。ほかの行は今の出力と1字も変わらないことを確かめた。"
+    "2026-11-23 v3.3.0 で lint の pause_comma を種類を指定しないときも当て（promo と script では今までどおり出さない）、読点を残す形を狭めた（読点のあとの別の主語と主題は12字の中だけ、節を含む主題は14字を超えるときだけ、条件や場面の枠は7字を超えるときだけ外し、並べの最後の項目と20字までの句を拾い、ところが、あるいは などの接続の語と挨拶を外す）ときの作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、diff の行は1字も変わらなかった。lint の行は、種類なしで pause_comma の候補が出る70本（yomiyasu_rewritten 36本、blacklist_ai 15本、raw_ai 12本、edge_cases 5本、human の human_oga_06 と human_oga_08）の5通り（plain、strict、fail_error、json、stdin）が変わった（diff_endings は変わらない）。check の行は、最終稿に同じ候補が出る69組の run と、そのうち55組の verify、推敲の39組の rerun、compose、stdin、fail_on、no_record、json、そのうち36組の replay が変わった。pause_comma は info なので、lint の --strict と --fail-on、check のどの使い方でも、終了コードが変わった組はない（3.2.3 のスクリプトで同じ使い方を動かして比べた）。ほかの行は今の出力と1字も変わらないことを確かめた。",
+    "2026-11-23 v3.4.0 で diff の念押しの印の「常に」を、漢字のすぐあと（非常に、正常に、異常に など熟語の終わり）では数えないようにしたときの作り直し: unchanged_lint()、unchanged_diff()、unchanged_check() を作って比べ、lint の行は1字も変わらなかった。値が変わったのは diff の3組（plain、stance、fail_on、json、stdin の15行）と、check の9行（3組の run と、そのうち推敲の1組の rerun、compose、stdin、fail_on、json、no_record）だけだった。raw_ai/02_incident_report_sonnet_default.md → yomiyasu_rewritten/02_incident_report_sonnet_default.md は、推敲後の「正常に」を念押しに数えなくなった（念押し 0 → 2 が 0 → 1。まわりの足した範囲も念押しにしない）。human の2組（05 と 06、06 と 07 を並べた組）は、06 の「非常に」を念押しに数えなくなった。念押しは言い回しの増減の節なので、diff の --fail-on meaning-risk と check の --fail-on meaning-risk,warn の終了コードが変わった組はない（3.3.0 のスクリプトで同じ使い方を動かして比べた）。ほかの行は今の出力と1字も変わらないことを確かめた。"
   ]
 }
