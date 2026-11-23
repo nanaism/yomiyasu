@@ -5254,7 +5254,7 @@ def _meridiem_numbers(text: str, sentence: _Sentence, numbers: Sequence[_Number]
             if word is not None:
                 head = hour if word == "午後" and hour is not None and 0 <= hour <= 11 else None
                 if head is not None:
-                    values[index] = str(hour + 12)
+                    values[index] = str(head + 12)
                 last = index
                 continue
             inherit = False
@@ -5266,7 +5266,7 @@ def _meridiem_numbers(text: str, sentence: _Sentence, numbers: Sequence[_Number]
                 begin = previous.end + (1 if _half_after(text, previous) else 0)
                 inherit = (_MERIDIEM_RANGE.fullmatch(text, begin, number.start) is not None
                            or _MERIDIEM_LIST.fullmatch(text, begin, number.start) is not None)
-            if inherit:
+            if inherit and hour is not None:
                 values[index] = str(hour + 12)
                 head = hour
             else:
@@ -6449,7 +6449,8 @@ def _topic_cycle(moved: dict) -> list:
     if first is None:
         return []
     before, after = moved[first]
-    parents, frontier = {after: None}, [after]
+    parents: dict = {after: None}
+    frontier = [after]
     while frontier:
         following = []
         for topic in frontier:
@@ -11754,7 +11755,8 @@ def _decrease_context(text: str, start: int, end: int) -> bool:
     """text の start から end の数（符号のない数）が、負の向きの言い方で書いてあれば真（_DECREASE の前の注記）。"""
     if text.endswith(_DECREASE_BEFORE, max(0, start - 4), start):
         return True
-    rest = _NUMBER_REST.match(text, end).end()
+    found = _NUMBER_REST.match(text, end)
+    rest = found.end() if found is not None else end
     window = text[rest:rest + _DECREASE_AFTER_REACH]
     stop = _DECREASE_AFTER_STOP.search(window)
     if stop is not None:
@@ -12054,7 +12056,7 @@ def _value_places(sides: _Sides, groups: list) -> tuple[dict, dict]:
     return places
 
 
-def _sentence_at(ranges: Sequence, position: int, starts_of: dict) -> _Sentence | None:
+def _sentence_at(ranges: Sequence, position: int, starts_of: dict) -> int | None:
     """ranges（(始まり, 終わり, 文の番号) の並び）のうち、position を含む最初の範囲の文の番号。なければ None。
     範囲が始まりの順に重ならずに並ぶときは二分探索で引く（1行に文が数千ある文書で、値ごとに行の文をすべて見ると
     文の数の2乗になる）。並びが崩れているときは前から順に見る（どちらも同じ答え）。starts_of は並びごとの始まりの表。"""
