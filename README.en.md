@@ -97,6 +97,8 @@ Do not edit files inside the installed skill folder. Some install methods replac
 
 ## Usage
 
+yomiyasu polishes text that has already been written and keeps its meaning. It does not build a document's structure or check whether the argument holds. It can write a new text from material you give it, but it has no structure templates. We recommend that you write the text first, then name yomiyasu in a request to polish it.
+
 Name yomiyasu in the request and paste the draft. A request in Japanese looks like the example below.
 
 ```text
