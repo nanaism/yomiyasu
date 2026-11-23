@@ -67,6 +67,20 @@ class EmphasisClosingRunTest(unittest.TestCase):
             with self.subTest(old=old, new=new):
                 self.assertEqual(sign_and_lost(old, new)[0], expected)
 
+    def test_counted_candidates_drop_by_the_masked_numbers(self):
+        """--fail-on に数える候補は、伏せ字のすぐあとの「-」を符号と読んだ候補の数だけ減る（伏せた番号ごとに1つ。3.3.0 は
+        1つの番号で2、同じ文の2つの番号で3、2行の2つの番号で4、カードの番号で2）。伏せた数の「消えた数値」は今までどおり数える。"""
+        for old, new, lost, count in (("電話番号は090-1234-5678です。", "電話番号は090-****-5678です。", [["1234"]], 1),
+                                      ("電話は090-1234-5678、FAXは03-1111-2222です。", "電話は090-****-5678、FAXは03-****-2222です。",
+                                       [["1234", "1111"]], 1),
+                                      ("電話は090-1234-5678です。\nFAXは03-1111-2222です。", "電話は090-****-5678です。\nFAXは03-****-2222です。",
+                                       [["1234"], ["1111"]], 2),
+                                      ("カード番号は1234-5678-9012-3456です。", "カード番号は****-****-****-3456です。",
+                                       [["1234", "5678", "9012"]], 1)):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(sign_and_lost(old, new), ([], lost))
+                self.assertEqual(yomiyasu_diff.diff(old + "\n", new + "\n")["fail_on_meaning_risk_count"], count)
+
     def test_runs_that_stay_masks(self):
         for old, new in (("電話番号は090-12-1234です。", "電話番号は090-**-1234です。"),
                          ("番号は12-34-5678です。", "番号は12**-5678です。"),

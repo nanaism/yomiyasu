@@ -127,7 +127,7 @@ class TopicSwapSetTest(unittest.TestCase):
         """数えない出すべき組。拾える形（1つの塊で最初の1組だけを出す。L02、V09）と、拾えない形（docs/limitations.md に書いた形）を、
         今の動きのまま見張る。今の否定や数値の候補が拾う組（expect が existing か、covered_by のある組）は下の試験で見る。"""
         missed = {"F11", "F14", "W03", "X01", "X02", "X04", "X07", "X09", "X10", "heldout-E01", "V02", "V03", "V04", "V05", "V08",
-                  "V10", "V11", "V12", "recheck-X20", "recheck-PH11"}
+                  "V10", "V11", "V12", "V13", "V14", "recheck-X20", "recheck-PH11"}
         for case in group("report_extra"):
             if case["expect"] == "existing" or case.get("covered_by"):
                 continue
@@ -136,6 +136,17 @@ class TopicSwapSetTest(unittest.TestCase):
                 self.assertEqual(len(found), 0 if case["id"] in missed else 1, found)
                 if found and case.get("subkind"):
                     self.assertEqual(found[0]["subkind"], case["subkind"])
+
+    def test_hiragana_and_latin_names_are_not_people(self):
+        """人に数えるのは漢字か片仮名の1〜6字の名前に敬称を付けた語だけなので、平仮名の名前（V13）と英字の名前（V14）の入れ替わりには
+        話題の候補が出ない（限界）。行頭の句の宛名の候補は出る。"""
+        for name, removed, added in (("V13", "初日の受付はさくらさん", "初日の受付はもみじさん"),
+                                     ("V14", "初日の発表はJohnさん", "初日の発表はMaryさん")):
+            with self.subTest(case=name):
+                result = run(CASES[name])
+                self.assertEqual(topic_risks(result), [])
+                self.assertEqual([c["detail"] for c in result["immutable"]["candidates"] if c["subkind"] == "addressee"],
+                                 [{"removed": [removed], "added": [added]}])
 
     def test_existing_candidates_are_not_doubled(self):
         """今の否定と数値の候補が出る組（X05、X06、X11 と、covered_by のある heldout-R04、posthoc-H06）には、話題の候補を重ねない。"""

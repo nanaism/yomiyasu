@@ -198,6 +198,8 @@ HEADING_KEEPS = (
     "## “Done, not perfect” を合言葉に",
     "## `sort -t, -k2` で並べ替える",
     "## 準備・当日・片付け",
+    "## ‘はい、いいえ’で答える",
+    "## 速さ, 正しさ",                                              # 半角の「,」は読点に数えない
 )
 
 
@@ -230,6 +232,11 @@ class SlideHeadingCommaTest(unittest.TestCase):
         found = slide("# 今回は、すでにある設定を見直す\n")
         self.assertEqual([f["line"] for f in found], [1])
         self.assertNotIn(HEADING_MESSAGE, found[0]["message"])
+
+    def test_headings_in_quotes_are_not_counted_for_the_title(self):
+        # 引用（> の行）の中の見出しは数えないので、そのあとの「# 」がただ1つの見出しなら文書の題（2.4.0 からの型だけを見る）
+        self.assertEqual(slide("> # 前回の方針、3つの柱\n\n# 今期の方針、3つの柱\n\n## 背景\n\n- 本文\n"), [])
+        self.assertEqual([f["line"] for f in slide("# 前回の方針、3つの柱\n\n# 今期の方針、3つの柱\n\n## 背景\n\n- 本文\n")], [1, 3])
 
     def test_without_a_title_every_hash_heading_is_a_slide_heading(self):
         # Marp のように「# 」の見出しが2つ以上あれば、どれも各ページの見出し（題と、部の見出し1つでも同じ）
@@ -297,8 +304,9 @@ class SlideHeadingDocsTest(unittest.TestCase):
     def test_readme_en_on_headings_and_bullets(self):
         readme = (ROOT / "README.en.md").read_text(encoding="utf-8")
         self.assertIn("in one-line bullets the skill removes those commas and keeps commas for contrast, conditions, reasons and lists. "
-                      "Since 3.4.0, in `#` headings other than the document title, `slide_comma` marks every comma except those "
-                      "inside quotation marks and digit separators", readme)
+                      "Since 3.4.0, in `#` headings other than the document title, `slide_comma` marks every Japanese comma (、 and ，) "
+                      "except those inside quotation marks and digit separators, and the instructions tell the skill to remove them",
+                      readme)
         self.assertNotIn("the skill removes those commas and keeps commas for contrast, conditions, reasons and lists.", readme.replace(
             "in one-line bullets the skill removes those commas", ""))
         # 書いてある動き: 題でない「#」の見出しは条件の読点も候補、1行の箇条の条件の読点は残す、引用の中と数字の区切りは見ない
