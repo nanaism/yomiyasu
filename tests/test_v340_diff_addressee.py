@@ -99,6 +99,11 @@ class ReplacedTopicWordTest(unittest.TestCase):
             with self.subTest(old=old, new=new):
                 self.assertEqual(addressees(old, new), [{"removed": [removed], "added": [added]}])
 
+    def test_synonym_topic_words_are_a_known_limit(self):
+        """話題の語を同じ意味の語に言い換えた推敲も、語を替えた推敲として 3.3.0 と同じく宛名の候補にする（意味が同じかは見ない。限界）。"""
+        self.assertEqual(addressees("一日目の受付は山口さん、二日目の受付は松本さんです。", "初日の受付は山口さん、二日目の受付は松本さんです。"),
+                         [{"removed": ["一日目の受付は山口さん"], "added": ["初日の受付は山口さん"]}])
+
     def test_dropped_or_added_words_stay_quiet(self):
         for old, new in (("最初の発表は鈴木さん、次が田中さんの予定です。", "発表は鈴木さん、田中さんの順です。"),
                          ("東京の受付は田中さん、案内は鈴木さんです。", "東京会場の受付は田中さん、案内は鈴木さんです。")):
