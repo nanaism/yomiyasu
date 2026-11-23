@@ -70,7 +70,6 @@ KEEPS = (
     "- 返信は24時間以内",
     "- 会議では、担当者が説明した",
     "- 今回は、私が進める",
-    "## 移行では、チームが2つに分かれる",
     "- 書き換えの中で変わったのは、画面、帳票、通知",
     "- 問い合わせが多い日は、2人で受ける体制にした場合の費用と、1人で受けたときの待ち時間を比べて、どちらにするかを来月の会議で決める予定です。",
     # 「も」で終わる逆接、目的と条件の「には」「は」、条件の「〜ば」
@@ -168,6 +167,98 @@ class SlideCommaTest(unittest.TestCase):
         rules = [f["rule"] for f in result["findings"]]
         self.assertIn("pause_comma", rules)
         self.assertNotIn("slide_comma", rules)
+
+
+# 3.4.0: 「#」で始まる見出し（文書の題を除く）は、読点を形を問わず全部候補に出す。文はすべて自作の合成の文
+HEADING_MESSAGE = "カギ括弧や引用符の中と数字の区切りを除き、見出しには読点を残しません"
+HEADING_TARGETS = (
+    ("## 移行では、チームが2つに分かれる", ("移行では、",)),            # 主題のあとに別の主語（2.4.0 からは残す側だった）
+    ("## 道が混んだら、開始を遅らせる", ("道が混んだら、",)),          # 条件
+    ("## 予約は増えたが、来店は減った", ("予約は増えたが、",)),          # 逆接
+    ("## 部品が届かないので、出荷を1日遅らせる", ("部品が届かないので、",)),  # 理由
+    ("## 受付、展示、撤収", ("受付、", "展示、")),                      # 名詞の並び
+    ("## その夜、全員で数字を見直した", ("その夜、",)),                  # 短い時の句
+    ("## 2. 目的：事故を減らすために、手順を1枚に", ("事故を減らすために、",)),  # 番号とラベルのあと
+    ("## 今期の受注は、2,400件", ("今期の受注は、",)),                  # 数字の区切りは数えない
+    ("## 背景，課題，対策", ("背景，", "課題，")),                       # 全角の「，」も読点
+    ("## 【至急、全員】サーバーの停止", ("【至急、",)),                  # 【】の中も見る
+    ("## 2、3日で届く新しい配送", ("2、",)),                            # 数の並び（数字の区切りではない）
+    ("## 来年の春から本社と全国の支店で一斉に使い始める新しい経費精算の仕組みの導入は、"
+     "混乱を避けるために三つの段階に分けて進める", ("…い始める新しい経費精算の仕組みの導入は、",)),  # 60字を超える見出しも見る
+)
+HEADING_KEEPS = (
+    "## 「止める、知らせる、残す」を守る",
+    "## 合言葉は「小さく作って、早く見せる」",
+    "## 社内報『現場から、明日へ』",
+    "## “遅い、高い”という声への答え",
+    "## \"遅い、高い\" への答え",
+    "## 月3,200件の問い合わせ",
+    "## 会員数１２，０００人の内訳",
+    "## “Done, not perfect” を合言葉に",
+    "## `sort -t, -k2` で並べ替える",
+    "## 準備・当日・片付け",
+)
+
+
+class SlideHeadingCommaTest(unittest.TestCase):
+    def test_heading_commas_are_all_found(self):
+        for line, hits in HEADING_TARGETS:
+            with self.subTest(line=line):
+                found = slide(line + "\n\n- 本文\n")
+                self.assertEqual([f["line"] for f in found], [1])
+                self.assertIn(HEADING_MESSAGE, found[0]["message"])
+                for hit in hits:
+                    self.assertIn("「" + hit + "」", found[0]["message"])
+
+    def test_quotes_digits_and_code_are_kept(self):
+        for line in HEADING_KEEPS:
+            with self.subTest(line=line):
+                self.assertEqual(slide(line + "\n\n- 本文\n"), [])
+
+    def test_hit_starts_after_a_hidden_comma(self):
+        # 当たった言い方が引用やコードの中の読点を含むときは、そのあとから切り出して頭に「…」を付ける
+        found = slide("## 「軽い、丈夫」より、直しやすさで選ぶ\n")
+        self.assertIn("「…より、」", found[0]["message"])
+        self.assertNotIn("軽い、丈夫", found[0]["message"])
+        self.assertIn("「…の違い、」", slide("## `a、b` の違い、使い分け\n")[0]["message"])
+        self.assertIn("「「早く」、」", slide("## 「早く」、「正しく」の2つを守る\n")[0]["message"])
+
+    def test_document_title_keeps_the_v240_shapes(self):
+        # 最初の見出しが「# 」で、「# 」がそれ1つだけなら文書の題として、2.4.0 からの型だけを見る（この題は型に当たらない）
+        self.assertEqual(slide("# 2027年度の方針、3つの柱\n\n## 今期の振り返り\n\n- 本文\n"), [])
+        found = slide("# 今回は、すでにある設定を見直す\n")
+        self.assertEqual([f["line"] for f in found], [1])
+        self.assertNotIn(HEADING_MESSAGE, found[0]["message"])
+
+    def test_without_a_title_every_hash_heading_is_a_slide_heading(self):
+        # Marp のように「# 」の見出しが2つ以上あれば、どれも各ページの見出し（題と、部の見出し1つでも同じ）
+        found = slide("# 新しい検索は、前より速い\n\n- 本文\n\n---\n\n# 料金は今のまま\n\n- 本文\n")
+        self.assertEqual([f["line"] for f in found], [1])
+        self.assertIn(HEADING_MESSAGE, found[0]["message"])
+        found = slide("# 発表会、全体の流れ\n\n## 開場\n\n- 本文\n\n# 第2部、質疑\n\n- 本文\n")
+        self.assertEqual([f["line"] for f in found], [1, 7])
+        # 「# 」がただ1つでも、最初の見出しでなければ題でない（最初が「## 」や下線の見出しのとき）
+        self.assertEqual([f["line"] for f in slide("## はじめに\n\n- 本文\n\n# 本編、3つの話\n")], [5])
+        self.assertEqual([f["line"] for f in slide("展示会の記録\n===\n\n# 初日、来場の多い時間\n")], [4])
+
+    def test_limits_setext_and_link_text(self):
+        # 限界: 下線の見出しは 2.4.0 からの型で見る。リンクの文字と [ ] の中の読点は見ない
+        self.assertEqual(slide("道が混んだら、開始を遅らせる\n---\n\n- 本文\n"), [])
+        found = slide("見本市の準備は、早めに\n===\n\n- 本文\n")
+        self.assertEqual([f["line"] for f in found], [1])
+        self.assertNotIn(HEADING_MESSAGE, found[0]["message"])
+        self.assertEqual(slide("## [議事録、11月分](https://example.com/minutes)の要点\n"), [])
+        self.assertEqual(slide("## [速報、続報] 停電の状況\n"), [])
+
+    def test_list_lines_keep_the_v240_shapes(self):
+        # 1行の箇条は 2.4.0 からの型のまま。箇条のすぐ下の --- で見出しの行になった箇条も、# で始まらないので同じ
+        self.assertEqual(slide("## 連絡の決まり\n\n- 急ぎなら、電話で連絡する\n- 翌朝、全員に知らせた\n---\n"), [])
+        self.assertEqual([f["line"] for f in slide("## 連絡の決まり\n\n- だから、資料は先に配る\n")], [3])
+
+    def test_heading_rule_is_only_for_slides(self):
+        for doc_type in (None, "article", "minutes", "pr"):
+            with self.subTest(doc_type=doc_type):
+                self.assertEqual(slide("## 道が混んだら、開始を遅らせる\n", doc_type=doc_type), [])
 
 
 if __name__ == "__main__":
