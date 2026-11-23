@@ -9,6 +9,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
+import yomiyasu_diff  # noqa: E402
 import yomiyasu_lint  # noqa: E402
 
 
@@ -259,6 +260,51 @@ class SlideHeadingCommaTest(unittest.TestCase):
         for doc_type in (None, "article", "minutes", "pr"):
             with self.subTest(doc_type=doc_type):
                 self.assertEqual(slide("## 道が混んだら、開始を遅らせる\n", doc_type=doc_type), [])
+
+
+# 3.4.0: 見出しの読点の説明（docs/tools.md と README.en.md）が、今の lint と diff の動きと合う。文はすべて自作の合成の文
+def condition_changes(old, new):
+    return [(m["orig"], m["rewrite"]) for m in yomiyasu_diff.diff(old + "\n", new + "\n")["markers"] if m["kind"] == "条件"]
+
+
+class SlideHeadingDocsTest(unittest.TestCase):
+    def test_tools_md_on_the_condition_count(self):
+        # diff の条件の読点の直し（3.4.0）が入ったので、見出しの「なら、」「たら、」の読点だけを外しても条件の増減は出ない
+        tools = (ROOT / "docs" / "tools.md").read_text(encoding="utf-8")
+        self.assertIn("見出しの「なら、」「たら、」の読点だけを外した推敲では、diff は条件の増減を出しません。"
+                      "読点と一緒にすぐ前かすぐあとの語も変えたときは出ることがあります。", tools)
+        self.assertNotIn("「条件: 1 → 0」が出ます", tools)
+        for old, new in (("## 霧が出たら、ロープウェイを運休する", "## 霧が出たらロープウェイを運休する"),
+                         ("## 雨なら、屋内で集まる", "## 雨なら屋内で集まる")):
+            with self.subTest(old=old):
+                self.assertEqual(condition_changes(old, new), [])
+        # 読点と一緒に、すぐあとの語（会の）か、すぐ前の語（雨 → 雨天）も変えた推敲では出る
+        self.assertEqual(condition_changes("## 質問があるなら、会の最後に", "## 質問があるなら最後に"), [(1, 0)])
+        self.assertEqual(condition_changes("## 雨なら、中止", "## 雨天なら中止"), [(1, 0)])
+
+    def test_tools_md_limits_on_quote_marks_and_hits(self):
+        tools = (ROOT / "docs" / "tools.md").read_text(encoding="utf-8")
+        self.assertIn("〝〟と全角の＂＂は引用符に数えないので、その中の読点も候補に出ます（〝はい、いいえ〟で答える）。", tools)
+        self.assertIn("「〝はい、」", slide("## 〝はい、いいえ〟で答える\n")[0]["message"])
+        self.assertIn("「＂はい、」", slide("## ＂はい、いいえ＂で答える\n")[0]["message"])
+        # 当たった言い方の限り（見出しの行は候補に出る）
+        self.assertIn("同じ言い方の読点が2つあっても1つだけ並べます", tools)
+        self.assertEqual([f["line"] for f in slide("## 確認、確認、また確認\n")], [1])
+        self.assertEqual(slide("## 確認、確認、また確認\n")[0]["message"].count("「確認、」"), 1)
+        self.assertIn("「…、」", slide("## 「速く、正しく」、そして安く\n")[0]["message"])
+        self.assertIn("「０００件、」", slide("## １２，０００件、達成\n")[0]["message"])
+
+    def test_readme_en_on_headings_and_bullets(self):
+        readme = (ROOT / "README.en.md").read_text(encoding="utf-8")
+        self.assertIn("in one-line bullets the skill removes those commas and keeps commas for contrast, conditions, reasons and lists. "
+                      "Since 3.4.0, in `#` headings other than the document title, `slide_comma` marks every comma except those "
+                      "inside quotation marks and digit separators", readme)
+        self.assertNotIn("the skill removes those commas and keeps commas for contrast, conditions, reasons and lists.", readme.replace(
+            "in one-line bullets the skill removes those commas", ""))
+        # 書いてある動き: 題でない「#」の見出しは条件の読点も候補、1行の箇条の条件の読点は残す、引用の中と数字の区切りは見ない
+        found = slide("# 題\n\n## 道が混んだら、開始を遅らせる\n\n- 急ぎなら、電話で連絡する\n\n## 「止める、知らせる」と月3,200件\n")
+        self.assertEqual([f["line"] for f in found], [3])
+        self.assertIn(HEADING_MESSAGE, found[0]["message"])
 
 
 if __name__ == "__main__":
