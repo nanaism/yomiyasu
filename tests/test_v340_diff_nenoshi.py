@@ -1,5 +1,6 @@
-"""3.4.0（念押し）: 敬称の「さん」「ちゃん」のあとの「です」を、念押しの「んです」に数えない。漢字のすぐあとの「常に」（非常に、
-正常に、異常に、通常に、日常に、平常に、尋常に）も、熟語の終わりなので念押しの「常に」に数えない。
+"""3.4.0（念押し）: 敬称の「さん」「ちゃん」のあとの「です」を、念押しの「んです」に数えない。非・正・異・通・日・平・尋 の
+すぐあとの「常に」（非常に、正常に、異常に、通常に、日常に、平常に、尋常に）も、熟語の終わりなので念押しの「常に」に数えない。
+ほかの漢字のあとの副詞の「常に」（24時間常に、作業中常に）は 3.3.0 と同じく数える。
 
 文はすべて合成の文。
 """
@@ -54,7 +55,8 @@ class ChanTest(unittest.TestCase):
 
 
 class JouniTest(unittest.TestCase):
-    """熟語の「常に」（漢字のすぐあと）は数えず、副詞の「常に」（文頭、助詞・読点・かな・かっこのあと）は今までどおり数える。"""
+    """熟語の「常に」（非・正・異・通・日・平・尋 のすぐあと）は数えず、副詞の「常に」（文頭、助詞・読点・かな・かっこ・ほかの漢字の
+    あと）は今までどおり数える。"""
 
     def test_compounds_are_not_nenoshi(self):
         for old, new in (("この点は非常に重要です。", "この点はとても重要です。"),
@@ -84,9 +86,31 @@ class JouniTest(unittest.TestCase):
             with self.subTest(old=old, new=new):
                 self.assertEqual(nenoshi(old, new)[0], [expected])
 
-    def test_adverb_after_kanji_is_a_known_limit(self):
-        """漢字のすぐあとの副詞の「常に」（24時間常に）は熟語と見分けないので、念押しに数えない（限界）。"""
-        self.assertEqual(nenoshi("監視カメラで24時間常に見張っています。", "監視カメラで24時間見張っています。"), ([], 0))
+    def test_adverb_after_other_kanji_is_kept(self):
+        """熟語の7字のほかの漢字のすぐあとの副詞の「常に」を消した推敲は、3.3.0 と同じく念押しの 1 → 0 を出す。"""
+        for old, new in (("監視カメラで24時間常に見張っています。", "監視カメラで24時間見張っています。"),
+                         ("作業中常にヘルメットを着用してください。", "作業中はヘルメットを着用してください。"),
+                         ("運転中常にシートベルトを締めてください。", "運転中はシートベルトを締めてください。"),
+                         ("期間中常に監視員を置きます。", "期間中は監視員を置きます。"),
+                         ("当社は創業以来常に品質を第一に考えてきました。", "当社は創業以来、品質を第一に考えてきました。")):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(nenoshi(old, new)[0], [(1, 0)])
+
+    def test_particle_or_comma_before_jouni_is_not_a_change(self):
+        """漢字のあとの「常に」の前に「は」や読点を足しただけの推敲には、念押しの増減を出さない（3.3.0 と同じ）。"""
+        for old, new in (("作業中常にヘルメットを着用してください。", "作業中は常にヘルメットを着用してください。"),
+                         ("24時間常に監視しています。", "24時間、常に監視しています。"),
+                         ("当社は創業以来常に品質を第一に考えてきました。", "当社は創業以来、常に品質を第一に考えてきました。")):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(nenoshi(old, new)[0], [])
+
+    def test_jouni_added_before_a_compound_is_counted(self):
+        self.assertEqual(nenoshi("システムは正常に動いています。", "システムは常に正常に動いています。")[0], [(0, 1)])
+
+    def test_adverb_after_the_compound_kanji_is_a_known_limit(self):
+        """熟語の7字（非・正・異・通・日・平・尋）のすぐあとの副詞の「常に」（毎日常に）は熟語と見分けないので、念押しに数えない（限界）。"""
+        self.assertEqual(nenoshi("毎日常に記録を残します。", "毎日記録を残します。"), ([], 0))
+        self.assertEqual(nenoshi("毎日記録を残します。", "毎日常に記録を残します。"), ([], 0))
 
 
 if __name__ == "__main__":

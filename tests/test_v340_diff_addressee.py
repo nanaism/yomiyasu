@@ -6,7 +6,8 @@
 
 句の名前の前に語を足した・動かした形（受付は初日に田中さん、司会は引き続き佐藤さん）は、句の後ろの名前で比べる。名前の前の
 2字以上の語が反対の側の同じ順番の名前の前にないとき（総務の田中さん → 経理の田中さん、初日に田中さん → 二日目に田中さん）は
-候補にする（PrefixWordTest）。
+候補にする（PrefixWordTest）。句の頭の話題の語を別の語に替えた推敲（東京会場の受付は田中さん → 大阪会場の受付は田中さん）も
+候補にする（ReplacedTopicWordTest）。
 
 文はすべて合成の文。
 """
@@ -78,6 +79,39 @@ class PrefixWordTest(unittest.TestCase):
                          ("初日の受付は田中さん、二日目は鈴木さんです。", "受付は初日に田中様、二日目に鈴木様です。")):
             with self.subTest(old=old, new=new):
                 self.assertTrue(addressees(old, new))
+
+
+class ReplacedTopicWordTest(unittest.TestCase):
+    """句の頭の話題の語を別の語に替えた推敲（名前は同じ）は、句の形だけを変えた推敲とみなさず、3.3.0 と同じく宛名の候補にする。
+    語を外しただけ・足しただけなら候補にしない。名前の順を保って話題の語だけを入れ替えた推敲には、宛名の候補と話題の候補の両方が出る。"""
+
+    def test_replaced_topic_words_are_kept(self):
+        for old, new, removed, added in (
+                ("東京会場の受付は田中さん、案内は鈴木さんです。", "大阪会場の受付は田中さん、案内は鈴木さんです。",
+                 "東京会場の受付は田中さん", "大阪会場の受付は田中さん"),
+                ("司会は田中さん、記録は鈴木さんです。受付の場所は1階です。", "受付は田中さん、記録は鈴木さんです。受付の場所は1階です。",
+                 "司会は田中さん", "受付は田中さん"),
+                ("司会は田中さん、記録は鈴木さんです。\n\n会場の受付は佐藤さんが担当します。",
+                 "受付は田中さん、記録は鈴木さんです。\n\n会場の受付は佐藤さんが担当します。", "司会は田中さん", "受付は田中さん"),
+                ("経理部長は田中様、\n総務部長は佐藤様です。", "経理課長は田中様、\n総務部長は佐藤様です。", "経理部長は田中様", "経理課長は田中様"),
+                ("営業部の窓口は田中様、\n経理部の窓口は佐藤様です。", "人事部の窓口は田中様、\n経理部の窓口は佐藤様です。",
+                 "営業部の窓口は田中様", "人事部の窓口は田中様")):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(addressees(old, new), [{"removed": [removed], "added": [added]}])
+
+    def test_dropped_or_added_words_stay_quiet(self):
+        for old, new in (("最初の発表は鈴木さん、次が田中さんの予定です。", "発表は鈴木さん、田中さんの順です。"),
+                         ("東京の受付は田中さん、案内は鈴木さんです。", "東京会場の受付は田中さん、案内は鈴木さんです。")):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(addressees(old, new), [])
+
+    def test_swapped_topic_words_show_both_candidates(self):
+        for old, new in (("東京会場の受付は前田様、大阪会場の受付は藤田様です。", "大阪会場の受付は前田様、東京会場の受付は藤田様です。"),
+                         ("初日の受付は前田様、二日目の受付は藤田様です。", "二日目の受付は前田様、初日の受付は藤田様です。")):
+            with self.subTest(old=old, new=new):
+                result = yomiyasu_diff.diff(old + "\n", new + "\n")
+                self.assertEqual([c["subkind"] for c in result["immutable"]["candidates"]], ["addressee"])
+                self.assertEqual([(r["kind"], r["subkind"]) for r in result["meaning_risks"]], [("topic", "person")])
 
 
 class SwapNamesTest(unittest.TestCase):

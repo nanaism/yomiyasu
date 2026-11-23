@@ -1,5 +1,5 @@
 """3.4.0（▲△の符号）: ▲と△を負の符号に読む（符号の候補 number_sign。符号の消えも拾う形）。負の向きの言い方に言い換えた推敲と、
-符号に読まない形（▼のある行の続きと表、評価の印、行頭の箇条の印、年・月・/ の前、将棋の指し手）は出さない。
+符号に読まない形（▼のある行の続きと表、評価の印、○◎◯のある行の続きの△、行頭の箇条の印、年・月・/ の前、将棋の指し手）は出さない。
 
 3.3.0 が出していた ▲△ と「-」の書き方だけの違いの誤った候補（△120万円 → -120万円）も出さない。文はすべて合成の文。
 """
@@ -98,6 +98,38 @@ class TriangleSignTest(unittest.TestCase):
     def test_hyphen_rewrites_are_unchanged(self):
         """▲・△のない組は 3.3.0 のまま（「-3% → 3%減」は候補）。"""
         self.assertEqual(sign_risks("売上は-3%でした。", "売上は3%減でした。"), [(["-3"], ["3"])])
+
+
+class RatingBlockTest(unittest.TestCase):
+    """空行をはさまずに続く行に評価の○◎◯（あとが数字、空白、表の区切り、コロン、行末）があれば、その行の続きの△は評価の印として
+    符号に読まない（1行に1つの印の評価の箇条と表）。○○株式会社 のような伏せ字の○と、空行で分けた段落の△は今までどおり符号に読む。"""
+
+    def test_rating_marks_on_separate_lines_are_not_signs(self):
+        for old, new in (("結果は次のとおりです。\n\n○12件\n△3件（要確認）\n×1件",
+                          "結果は次のとおりです。\n\n対応済み12件\n一部対応3件（要確認）\n未対応1件"),
+                         ("結果:\n\n- ○12件\n- △3件\n- ×1件", "結果:\n\n- 対応済み 12件\n- 一部対応 3件\n- 未対応 1件"),
+                         ("| 機能 | 対応 |\n|---|---|\n| 検索 | ○ |\n| 出力 | △2件のみ |",
+                          "| 機能 | 対応 |\n|---|---|\n| 検索 | ○ |\n| 出力 | 一部（2件のみ） |")):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(number_risks(old, new), [])
+
+    def test_other_candidates_of_the_rating_list_are_kept(self):
+        """3.3.0 の候補（×を「不可」にした否定の変化）は残り、△の符号の候補は足さない。"""
+        result = yomiyasu_diff.diff("評価:\n○ 12件\n△3件\n× 1件\n", "評価:\n良 12件\n可 3件\n不可 1件\n")
+        self.assertEqual([(r["kind"], r["detail"]) for r in result["meaning_risks"]], [("negation", {"old": "×", "new": "不可"})])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_signs_outside_rating_blocks_are_read(self):
+        for old, new, expected in (("○○株式会社の損益は△120万円です。", "○○株式会社の損益は120万円です。", [(["△120"], ["120"])]),
+                                   ("評価:\n○ 12件\n△3件\n\n損益は△120万円です。", "評価:\n○ 12件\n△3件\n\n損益は120万円です。",
+                                    [(["△120"], ["120"])])):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(sign_risks(old, new), expected)
+
+    def test_negative_numbers_in_a_block_with_rating_marks_are_a_known_limit(self):
+        """○の欄と会計の△の負の数が同じ行の続き（表）にあると、△を評価の印と読むので、符号が消えても出ない（3.3.0 と同じ。限界）。"""
+        self.assertEqual(number_risks("| 項目 | 確認 | 損益 |\n|---|---|---|\n| A店 | ○ | △120万円 |\n| B店 | × | 80万円 |",
+                                      "| 項目 | 確認 | 損益 |\n|---|---|---|\n| A店 | ○ | 120万円 |\n| B店 | × | 80万円 |"), [])
 
 
 class TriangleNotationTest(unittest.TestCase):

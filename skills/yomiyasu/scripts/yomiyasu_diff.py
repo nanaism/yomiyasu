@@ -177,9 +177,10 @@ MARKERS = {
     "推量": r"でしょう|だろう|かもしれ|はず|と思(?:います|う)|ようです|らしい|おそれ|たいところ",
     # 3.4.0（念押し）: 敬称の「さん」のあとの「です」（担当は田中さんです、皆さんです）は、念押しの「んです」に数えない
     # 3.4.0（念押し）: 「ちゃん」のあとの「です」（妹のゆいちゃんです）も数えない。「くんです」は「行くんです」と見分けられないので数える
-    # 3.4.0（念押し）: 漢字のすぐあとの「常に」（非常に、正常に、異常に、通常に、日常に、平常に、尋常に）は熟語の終わりなので数えない。
-    # 文頭と、助詞・読点・かなのあとの副詞の「常に」は今までどおり数える（漢字のすぐあとの副詞の「24時間常に」も数えなくなる）
-    "念押し": r"のです|(?<!さ)(?<!ちゃ)んです|こそ|まさに|必ず|絶対|(?<![一-鿿])常に",
+    # 3.4.0（念押し）: 非・正・異・通・日・平・尋 のすぐあとの「常に」（非常に、正常に、異常に、通常に、日常に、平常に、尋常に）は
+    # 熟語の終わりなので数えない。ほかの漢字のあと（24時間常に、作業中常に）と、文頭、助詞・読点・かなのあとの副詞の「常に」は
+    # 今までどおり数える（この7字のすぐあとの副詞の「常に」（毎日常に）は数えない）
+    "念押し": r"のです|(?<!さ)(?<!ちゃ)んです|こそ|まさに|必ず|絶対|(?<![非正異通日平尋])常に",
     "意志": r"(?:に|ように|ことに)し(?:ます|ている|ています)",
     "条件": r"(?<!例)(?<!たと)(?:れ|え|け|せ|て|ね|め|べ)ば(?![かり])|なら(?=[、。]|$|\s)|たら(?=[、。]|$|\s)|場合",
     "説明化": r"ことが挙げられ|ということ|ことです|ことになります",
@@ -4615,7 +4616,7 @@ def _number_risks(sides: _Sides, full: dict, groups: list) -> list:
             removed, added = _cancel_notation(raw_removed, raw_added, old_numbers, new_numbers)
             # 分が0の時刻を「時」だけで書いた形（18:00 → 18時）も、表記の違いとして打ち消す（3.2.0）
             removed, added = _cancel_zero_minutes(removed, added, old_numbers, new_numbers)
-            # 3.4.0（午前・午後）: 午後の1〜11時を24時制で書いた形（午後3時 → 15時、15:00）と「半」（午後3時半 → 15時30分、15:30）も、
+            # 3.4.0（午前・午後）: 午後の0〜11時を24時制で書いた形（午後3時 → 15時、15:00）と「半」（午後3時半 → 15時30分、15:30）も、
             # 表記の違いとして打ち消す（打ち消すときだけ24時制にそろえる。_cancel_meridiem）
             # （w: 組の文の前とあとの組にならなかった文に移した値も、24時制にそろえて見る）
             removed, added = _cancel_meridiem(removed, added, sides, old, new, old_numbers, new_numbers,
@@ -5170,14 +5171,15 @@ def _take_time_pairs(mine: Counter, other: Counter, pairs: Sequence[tuple[_Numbe
 
 
 # ---- 3.4.0（午前・午後）: 午前・午後のあとの時刻 ----
-# 「午後」のすぐあとの1〜11時は、24時制にした値（午後3時 → 15時）でもう一度比べ、数値の候補が減るときだけ減らす（打ち消すときだけ
+# 「午後」のすぐあとの0〜11時は、24時制にした値（午後3時 → 15時、午後0時 → 12時）でもう一度比べ、数値の候補が減るときだけ減らす（打ち消すときだけ
 # 24時制にそろえる。値は書き換えず、候補には書いてあるとおりの形を出す）。範囲の後ろの時刻（から5時、〜5時、-5時）と、「、」「と」で
-# 並べた後ろの時刻（午後1時、4時、7時。午後2時と4時）は、前の時刻と同じか大きい1〜11時のときだけ「午後」を引き継ぐ（午後3時から
+# 並べた後ろの時刻（午後1時、4時、7時。午後2時と4時）は、前の時刻と同じか大きい11時までの時刻のときだけ「午後」を引き継ぐ（午後3時から
 # 3時15分までの3時は引き継ぎ、午後11時から1時までの1時は引き継がない）。「午前」か「午後」のある組の文（w では、組の文と続く文、
 # 同じ塊の文）では、「時」のすぐあとの「半」を30分と読む（午後3時半 → 15時30分、15:30。範囲の後ろの時刻の「半」も読む。午後1時から
 # 1時半 → 13時から13時30分。午前・午後のない文どうしの「3時半 → 3時30分」は 3.3.0 のまま）。比べ直して、打ち消せた
 # 値のほかに元の比べになかった違いが出るとき（午後3時から5時まで → 15時から5時まで の 5時）と、読んだ「半」の30分が残るとき
-# （午後3時半 → 15時）は、何も打ち消さない（片側だけをそろえて候補を作らないため）。「午前」の時刻、0時と12時、「午後は3時から」の
+# （午後3時半 → 15時）は、何も打ち消さない（片側だけをそろえて候補を作らないため）。24時制にそろえた値の並びだけが違い、値と語の
+# 結び付きも変わったとき（項目どうしの時刻の入れ替え。_meridiem_bindings）も打ち消さない。「午前」の時刻、午後12時、「午後は3時から」の
 # ように間に語のある時刻は、24時制にそろえない。同じ時刻の「午前」と「午後」の入れ替え（午後3時 → 午前3時）は数が同じなので
 # 数値の候補にならず、別の印（number の meridiem。_meridiem_swaps）で出す
 _MERIDIEM_BEFORE = _lazy_compile(r"(午前|午後)[ \t\u3000]?$")
@@ -5232,7 +5234,7 @@ def _half_after(text: str, number: _Number) -> bool:
 
 
 def _meridiem_numbers(text: str, sentence: _Sentence, numbers: Sequence[_Number], half: bool) -> tuple[list[_Number], list[int | None]] | None:
-    """文の数値のうち、午後の1〜11時（と、範囲や並びで「午後」を引き継ぐ後ろの時刻）を24時制の値にした並びと、並びの数ごとの
+    """文の数値のうち、午後の0〜11時（と、範囲や並びで「午後」を引き継ぐ後ろの時刻）を24時制の値にした並びと、並びの数ごとの
     元の番号。half が真なら、まとまりのない「時」の数と、単位つきの数だけのまとまり（1時から1時半）の最後の「時」の数のすぐあとの
     「半」を30分の数として足す（元の番号は None。まとまりの最後なら、まとまりの部品にする）。値を変えた数も足した数もなければ None。
     まとまりの印（cluster、notation の値の並び）も変えた値にそろえる（_MERIDIEM_BEFORE の前の注記）。"""
@@ -5328,9 +5330,31 @@ def _meridiem_back(counter: Counter, numbers: Sequence[_Number], converted: Sequ
     return +back
 
 
+def _meridiem_bindings(text: str, sentence: _Sentence, numbers: Sequence[_Number], origin: Sequence[int | None]) -> Counter:
+    """3.4.0（午前・午後）: 24時制にそろえた数ごとの (手がかり, 値) の多重集合（_number_contexts と同じ手がかり。数のすぐ前の「午前」
+    「午後」は飛ばし、あとの語の「午前」「午後」も外し、読んだ「半」の30分は入れない）。項目どうしの時刻の入れ替えを見分けるのに使う
+    （_cancel_meridiem）。"""
+    found = Counter()
+    for index, number in enumerate(numbers):
+        if origin[index] is None:
+            continue
+        at = number.start
+        word = _meridiem_before(text, at, sentence.start)
+        if word is not None:
+            at = text.rindex(word, sentence.start, at)
+        head = text[sentence.start:at].rstrip(" \t　")
+        head = "" if not head or head[-1] in "、，," else head[-2:]
+        end = numbers[index + 1].start if index + 1 < len(numbers) else sentence.start + len(sentence.text)
+        tail = _CLAUSE_END.split(text[number.end:max(number.end, end)], 1)[0]
+        words = [w for w in _CONTEXT_WORD.findall(tail) if w not in _MERIDIEM_WORDS]
+        found[((head, tuple(words[:2])), number.key)] += 1
+    return found
+
+
 def _cancel_meridiem(removed: Counter, added: Counter, sides: _Sides, old: _Sentence, new: _Sentence, old_numbers: Sequence[_Number], new_numbers: Sequence[_Number], moved_removed: Counter | None, moved_added: Counter | None, extra_old: Sequence | None, extra_new: Sequence | None) -> tuple[Counter, Counter]:
-    """組の文の数値を、午後の1〜11時を24時制にし、「半」を30分と読んだ値で比べ直し、消えた値と元にない値が減るときだけ、減らした
-    値を返す（_MERIDIEM_BEFORE の前の注記）。比べ直しで元の比べになかった値が残るときと、減らないときは、元の値のまま返す。
+    """組の文の数値を、午後の0〜11時を24時制にし、「半」を30分と読んだ値で比べ直し、消えた値と元にない値が減るときだけ、減らした
+    値を返す（_MERIDIEM_BEFORE の前の注記）。比べ直しで元の比べになかった値が残るときと、減らないときと、24時制にそろえた値の
+    並びだけが違って値と語の結び付きも変わったとき（_meridiem_bindings）は、元の値のまま返す。
     extra_old と extra_new（続く文。_following_unpaired）を渡すと（w）、続く文に移した値も24時制にそろえて見る（文をまとめた・
     分けた推敲の「受付は午後1時に始めます。説明会は午後2時からです。」→「受付は13時に始め、説明会は14時から行います。」）。
     渡さなければ、移した値は 3.3.0 と同じ値（moved_removed と moved_added）で除く。"""
@@ -5348,6 +5372,12 @@ def _cancel_meridiem(removed: Counter, added: Counter, sides: _Sides, old: _Sent
     olds, old_origin = old_conv if old_conv is not None else (list(old_numbers), list(range(len(old_numbers))))
     news, new_origin = new_conv if new_conv is not None else (list(new_numbers), list(range(len(new_numbers))))
     old_count, new_count = Counter(number.key for number in olds), Counter(number.key for number in news)
+    # 3.4.0（午前・午後）: 24時制にそろえた値が同じ組で並びだけが違い、値と語の結び付き（_meridiem_bindings。_number_contexts と同じ手がかりで、
+    # 数のすぐ前の「午前」「午後」は飛ばす）も変わったとき（会議は午後3時、懇親会は午後6時 → 会議は18時、懇親会は15時）は打ち消さない
+    # （値の入れ替えを隠さない。3.3.0 と同じ候補になる）。結び付きが同じ並べ替え（集合は午前8時、解散は午後8時 → 解散は20時、集合は8時）は打ち消す
+    if (old_count == new_count and [number.key for number in olds] != [number.key for number in news]
+            and _meridiem_bindings(sides.texts[0], old, olds, old_origin) != _meridiem_bindings(sides.texts[1], new, news, new_origin)):
+        return removed, added
     conv_removed, conv_added = old_count - new_count, new_count - old_count
     if extra_old is None and extra_new is None:
         if moved_removed:
@@ -5571,20 +5601,24 @@ class _MeridiemWide:
         相手の側の変わった塊の文（同じ塊にあるか、同じ語のある文。_related）の24時制にそろえた値にあるもの（_present の決まりで見る）。
         塊をまたぐ文どうしは、同じ語があるときだけ見る（段落を入れ替えた推敲は同じ語が残る。受付の文を消して懇親会の文を足した
         推敲は残らない）。"""
+        # 側ごとの値の索引（値 → 行の番号と24時制の値）を1度だけ作る（値ごとに全部の行を見直さないため）
+        index = self.__dict__.get("occurrences")
+        if index is None:
+            index = self.occurrences = ({}, {})
+            for s in (0, 1):
+                for number, (_, numbers, converted, origin, _, _) in enumerate(self.rows[s]):
+                    if number in self.bad[s]:
+                        continue
+                    for value, source in zip(converted, origin):
+                        if source is not None:
+                            index[s].setdefault(numbers[source].key, []).append((number, value))
         found = set()
-        for number, (_, numbers, converted, origin, _, _) in enumerate(self.rows[side]):
-            if number in self.bad[side]:
-                continue
-            for value, source in zip(converted, origin):
-                if source is None:
-                    continue
-                key = numbers[source].key
-                if key not in keys or key in found:
-                    continue
-                for candidate, is_converted in (((value.key, True), (key, False)) if value.key != key else ((key, False),)):
-                    if self._found(side, number, candidate, is_converted):
-                        found.add(key)
-                        break
+        for key in set(keys):
+            for number, value in index[side].get(key, ()):
+                if any(self._found(side, number, candidate, is_converted) for candidate, is_converted
+                       in (((value.key, True), (key, False)) if value.key != key else ((key, False),))):
+                    found.add(key)
+                    break
         return found
 
     def swaps(self, full: dict, swapped_at: tuple) -> list:
@@ -6102,10 +6136,10 @@ _NEST_FIXED_PRED = (
     r"|近(?:い(?!うち|[一-龥々ァ-ヶ])|かっ|く[てな])|[重異]な(?:り|っ|ら|る(?![一-龥々ァ-ヶ]))"
     r"|変わら(?:ず|な(?:い(?![一-龥々ァ-ヶ])|く|かっ))|同[等義](?![の一-龥々ァ-ヶ])"
     r"|(?:関係|関連|直結|拝察|推察|推測|推定)(?![の一-龥々ァ-ヶ]|する[一-龥々ァ-ヶ]))")
-# と のあとが _NEST_FIXED_PRED の形か、とは のあとが漢字、読点、問いの印、いえ・いう・いっ・いわ・わか・かぎ・どう・うらはら で
-# 始まる形（〜こととは思わない、〜こととは何か、〜こととはいえ）か、と が「ところ」「とき」の頭の字（駅からすぐのところ、
-# ふたつのときに）なら、その と を並べた節のつなぎに取らない（3.4.0）。とき は、あとが に・は・が・を・で・読点・句点・まで・
-# から・だ・も（きもち、きもの を除く）・の（きのう を除く）のときだけ
+# と のあとが _NEST_FIXED_PRED の形か、とは のあとが漢字、読点、全角と半角のコンマ、全角と半角の「？」「！」、いえ・いう・いっ・
+# いわ・わか・かぎ・どう・うらはら で始まる形（〜こととは思わない、〜こととは何か、〜こととはいえ）か、と が「ところ」「とき」の
+# 頭の字（駅からすぐのところ、ふたつのときに）なら、その と を並べた節のつなぎに取らない（3.4.0）。とき は、あとが に・は・が・
+# を・で・読点・全角と半角のコンマ・句点・まで・から・だ・も（きもち、きもの を除く）・の（きのう を除く）のときだけ
 _NEST_NOT_JOINT = (_NEST_FIXED_PRED + r"|は(?:[一-龥々、，,？?！!]|い[えうっわ]|わか|かぎ|どう|うらはら)|ころ"
                    r"|き(?:[にはがをで、，,。]|も(?![ちの])|の(?!う)|まで|から|だ)")
 # 名詞化の語と、そのあとの助詞。「の」と「よう」は動詞や形容詞の終わりのあとだけ。「よう」は助詞なしでもよく、「ようだ」「ようです」「ような」などは外す。
@@ -11650,11 +11684,33 @@ _SIGNED_VALUE = _lazy_compile(r"(?<![A-Za-z0-9_.])(?:(?<![一-鿿々〆ァ-ヴ�
 _TRIANGLE_SIGNS = ("▲", "△")
 _TRIANGLE_ARROWS = _lazy_compile(r"[▼▽]")
 _TRIANGLE_RATING = _lazy_compile(r"([○◎◯△×✕])[ \t　]*[0-9０-９]")
+# 3.4.0（▲△の符号）: 空行をはさまずに続く行に、評価の○◎◯（あとが数字、空白、表の区切り、コロン、行末）があれば、その行の続きの△は
+# 評価の印（1行に1つの印の評価の箇条と表）。○○株式会社 のような伏せ字の○は数えない
+_TRIANGLE_RATING_BLOCK = _lazy_compile(r"[○◎◯](?=[0-9０-９ \t　|｜:：]|$)")
 _TRIANGLE_NOT_BEFORE = frozenset("年月/／")
 _SHOGI_RANK = frozenset("一二三四五六七八九")
 _SHOGI_PIECE = frozenset("歩香桂銀金角飛玉王龍竜馬と")
 _TRIANGLE_VALUE_LINE = _lazy_compile(r"(?:[,.][0-9]+)*[ \t　]*(?:[%％]|[千万億兆百]*円|ポイント|pt|bp|[人件名社店台個本回点倍])?"
                                      r"[ \t　]*(?:[（(][^（()）\n]{0,20}[)）])?[ \t　。]*")
+
+
+def _block_ratings(sides: _Sides, side: int, line: int, facts: dict) -> bool:
+    """3.4.0（▲△の符号）: 行 line（1から）を含む、空行をはさまずに続く行に評価の○◎◯（_TRIANGLE_RATING_BLOCK）があれば真。
+    facts は側ごとの覚え（行の続きごとの印を1度だけ求める）。"""
+    flags = facts.get("rating_blocks")
+    if flags is None:
+        lines = sides.lines[side]
+        flags = [False] * len(lines)
+        start = 0
+        while start < len(lines):
+            end = start
+            while end < len(lines) and lines[end].strip():
+                end += 1
+            if end > start and any(_TRIANGLE_RATING_BLOCK.search(lines[k]) is not None for k in range(start, end)):
+                flags[start:end] = [True] * (end - start)
+            start = end + 1
+        facts["rating_blocks"] = flags
+    return flags[line - 1]
 
 
 def _block_arrows(sides: _Sides, side: int, line: int, facts: dict) -> bool:
@@ -11812,16 +11868,15 @@ def _triangle_sign_pairs(sides: _Sides, sign_pairs: list, tokens: tuple, places:
         entry = places[side].get(body.line)
         return entry[0] if entry is not None else None
 
+    # 値と塊ごとに引けるようにする（負の数を数えるたびに側の全部の値を見直さないため）
     by_value = ({}, {})
     for side in (0, 1):
         for key, body in tokens[side]:
-            by_value[side].setdefault(key.lstrip("+−-"), []).append((key, body))
+            by_value[side].setdefault((key.lstrip("+−-"), group_of(side, body)), []).append((key, body))
 
     def negative_count(side: int, value: str, region: frozenset) -> int:
         count = 0
-        for key, body in by_value[side].get(value, ()):
-            if group_of(side, body) not in region:
-                continue
+        for key, body in [item for group in region for item in by_value[side].get((value, group), ())]:
             if key.startswith(("-", "−")) or (not key.startswith("+")
                                               and _decrease_context(sides.texts[side], body.start, body.start + len(body.text))):
                 count += 1
@@ -11968,18 +12023,49 @@ def _topic_name_kept(sides: _Sides, side: int, token: tuple, places: tuple | Non
     first = index
     while first > 0 and first - 1 not in paired_mine:
         first -= 1
-    own = _with_unpaired_text(mine, index, paired_mine)
+    # つないだ文と、その中の名前の並びは、塊と側と範囲ごとに1度だけ求める（名前ごとにつなぎ直さないため。id の使い回しは塊で確かめる）
+    cache = sides.__dict__.setdefault("topic_name_cache", {})
+    last = index
+    while last + 1 < len(mine) and last + 1 not in paired_mine:
+        last += 1
+    own_key = (id(group), side, first, last)
+    if own_key not in cache or cache[own_key][0] is not group:
+        own = "".join(sentence.text for sentence in mine[first:last + 1])
+        offsets = [0]
+        for sentence in mine[first:last + 1]:
+            offsets.append(offsets[-1] + len(sentence.text))
+        cache[own_key] = (group, own, _honorific_names(own), offsets)
+    _, own, own_names, offsets = cache[own_key]
     if index in pairs:
-        other = _with_unpaired_text(others, pairs[index], paired_others)
+        other_key = (id(group), 1 - side, "pair", pairs[index])
+        if other_key not in cache or cache[other_key][0] is not group:
+            text_other = _with_unpaired_text(others, pairs[index], paired_others)
+            cache[other_key] = (group, text_other, _honorific_names(text_other))
     else:
-        other = "".join(sentence.text for number, sentence in enumerate(others) if number not in paired_others)
-    at = start + len(value) - len(honorific) - mine[index].start + sum(len(sentence.text) for sentence in mine[first:index])
-    order = next((number for number, (position, _) in enumerate(_honorific_names(own)) if position == at), None)
-    theirs = _honorific_names(other)
+        other_key = (id(group), 1 - side, "unpaired")
+        if other_key not in cache or cache[other_key][0] is not group:
+            text_other = "".join(sentence.text for number, sentence in enumerate(others) if number not in paired_others)
+            cache[other_key] = (group, text_other, _honorific_names(text_other))
+    _, other, theirs = cache[other_key]
+    at = start + len(value) - len(honorific) - mine[index].start + offsets[index - first]
+    order = next((number for number, (position, _) in enumerate(own_names) if position == at), None)
     if order is None or order >= len(theirs):
         return False
     position, word = theirs[order]
     if word != honorific:
+        return False
+    # 3.4.0（宛名）: 句の頭の話題の語を別の語に替えた推敲（東京会場の受付は田中さん → 大阪会場の受付は田中さん）は、句の形だけを
+    # 変えた推敲とみなさない。反対の側の同じ順番の名前の前の節（1つ前の「さん」「様」か読点・句点のあとから）と比べ、この側の話題の
+    # 語に反対の側にない語があり、反対の側の節にもこの句にない語があるとき（語を替えた）。語を外しただけ・足しただけなら今までどおり
+    slot = theirs[order - 1][0] + len(theirs[order - 1][1]) if order > 0 else 0
+    clause = other[slot:position]
+    cut = max(clause.rfind(mark) for mark in "、。，．！？\n")
+    clause = clause[cut + 1:]
+    their_words = _TOPIC_PREFIX_WORD.findall(clause)
+    if their_words and clause.endswith(their_words[-1]):
+        their_words = their_words[:-1]        # 名前の並び
+    missing = [w for w in _TOPIC_PREFIX_WORD.findall(value[:topic.start() + 1]) if w not in clause]
+    if missing and any(w not in value for w in their_words):
         return False
     if other.endswith(person, 0, position):
         return True
@@ -11991,7 +12077,6 @@ def _topic_name_kept(sides: _Sides, side: int, token: tuple, places: tuple | Non
     words = [w for w in _TOPIC_PREFIX_WORD.findall(person[:name.start()]) if len(w) >= 2]
     # 前の語は、反対の側の同じ順番の名前の前（1つ前の「さん」「様」のあとから）だけで探す（初日に田中さん、二日目に鈴木さん →
     # 二日目に田中さん、初日に鈴木さん は、日と人の組が変わったので候補にする）
-    slot = theirs[order - 1][0] + len(theirs[order - 1][1]) if order > 0 else 0
     return other.endswith(name.group(0), 0, position) and all(w in other[slot:position] for w in words)
 
 
@@ -12027,7 +12112,8 @@ def _value_tokens(sides: _Sides, side: int, regex: re.Pattern[str]) -> list:
         if regex is _SIGNED_VALUE and value.startswith(_TRIANGLE_SIGNS):
             # 3.4.0（▲△の符号）: ▲と△の負の数と、符号に読まない▲・△（_triangle_token）
             key, shown, at = _triangle_token(text, a, b, sides.starts[side][line - 1], raw, facts,
-                                             _block_arrows(sides, side, line, facts))
+                                             _block_arrows(sides, side, line, facts)
+                                             or (value.startswith("△") and _block_ratings(sides, side, line, facts)))
             out.append((key, _Body(shown, raw, line, at)))
             continue
         if (regex is _SIGNED_VALUE and value.startswith(("-", "−")) and a and text[a - 1] in _MASK_CHARS

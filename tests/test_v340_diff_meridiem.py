@@ -1,5 +1,6 @@
 """3.4.0（午前・午後）: 午前・午後の時刻を24時制にそろえて比べ（打ち消すときだけ）、午前と午後の入れ替えを number の meridiem で出す。
 午後0時（正午）も12時にそろえる。午前12時と午後12時は読み方が分かれるので、3.3.0 のまま 12時 と同じ数に読む。
+項目どうしの時刻の入れ替え（会議は午後3時、懇親会は午後6時 → 会議は18時、懇親会は15時）は打ち消さない（ItemSwapTest）。
 
 文はすべて合成の文。
 """
@@ -117,6 +118,56 @@ class MergedSplitReorderedTest(unittest.TestCase):
     def test_unrelated_sentences_are_not_swaps(self):
         self.assertEqual(meridiem("早朝の作業は午前3時に始めます。\n\n全員で片付けます。",
                                   "全員で片付けます。\n\n片付けの後の打ち上げは午後3時からです。"), [])
+
+
+class ItemSwapTest(unittest.TestCase):
+    """24時制にそろえた値が同じで並びだけが違い、値と語の結び付き（数の前の2字とあとの語）も変わった推敲は、項目どうしの時刻の
+    入れ替えなので打ち消さない（3.3.0 と同じ数値の候補を出し、--fail-on に数える）。結び付きが同じ並べ替えは打ち消す。"""
+
+    def test_swapped_times_between_items_are_reported(self):
+        for old, new, removed, added in (("会議は午後3時、懇親会は午後6時です。", "会議は18時、懇親会は15時です。",
+                                          ["3時", "6時"], ["18時", "15時"]),
+                                         ("受付は午後1時、閉場は午後5時です。", "受付は17時、閉場は13時です。",
+                                          ["1時", "5時"], ["17時", "13時"]),
+                                         ("説明会は午後2時、交流会は午後4時に始めます。", "説明会は16時、交流会は14時に始めます。",
+                                          ["2時", "4時"], ["16時", "14時"]),
+                                         ("会議は午後3時から、懇親会は18時からです。", "会議は18時から、懇親会は15時からです。",
+                                          ["3時"], ["15時"])):
+            with self.subTest(old=old, new=new):
+                result = yomiyasu_diff.diff(old + "\n", new + "\n")
+                found = [(r["subkind"], r["detail"]["removed"], r["detail"]["added"])
+                         for r in result["meaning_risks"] if r["kind"] == "number"]
+                self.assertEqual(found, [("replaced", removed, added)])
+                self.assertEqual(result["fail_on_meaning_risk_count"], 1)
+
+    def test_swapped_times_in_separate_sentences_are_unchanged(self):
+        """文が別なら組ごとに比べるので、3.3.0 と同じく文ごとに出る。"""
+        result = yomiyasu_diff.diff("受付は午後1時です。閉場は午後5時です。\n", "受付は17時です。閉場は13時です。\n")
+        self.assertEqual(result["fail_on_meaning_risk_count"], 2)
+
+    def test_reordered_items_with_the_same_times_are_quiet(self):
+        for old, new in (("集合は午前8時、解散は午後8時です。", "解散は20時、集合は8時です。"),
+                         ("会議は午後3時、懇親会は午後6時です。", "懇親会は18時、会議は15時です。"),
+                         ("開場は午後5時、開演は午後6時です。", "開演は18時、開場は17時です。")):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(number_risks(old, new), [])
+
+    def test_swaps_the_bindings_do_not_tell_are_known_limits(self):
+        """2つの項目で数の前の2字とあとの語が同じ入れ替え（東京会場は〜開始、大阪会場は〜開始）と、範囲ごとの入れ替えは打ち消す
+        （限界。午後のない同じ入れ替えも 3.3.0 から出ない）。"""
+        for old, new in (("東京会場は午後3時開始、大阪会場は午後5時開始です。", "東京会場は17時開始、大阪会場は15時開始です。"),
+                         ("東京会場は15時開始、大阪会場は17時開始です。", "東京会場は17時開始、大阪会場は15時開始です。"),
+                         ("1部は午後1時から3時、2部は午後4時から6時です。", "1部は16時から18時、2部は13時から15時です。"),
+                         ("1部は13時から15時、2部は16時から18時です。", "1部は16時から18時、2部は13時から15時です。")):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(number_risks(old, new), [])
+
+    def test_swap_next_to_a_converted_time_keeps_the_old_candidate(self):
+        """同じ文で午前と午後を入れ替えた時刻があると、24時制にそろえた時刻の候補（3時 → 15時）も 3.3.0 と同じく残る（限界）。"""
+        result = yomiyasu_diff.diff("会議は午後3時から、懇親会は午後6時からです。\n", "会議は15時から、懇親会は午前6時からです。\n")
+        found = [(r["subkind"], r["detail"]["removed"], r["detail"]["added"]) for r in result["meaning_risks"] if r["kind"] == "number"]
+        self.assertEqual(found, [("replaced", ["3時"], ["15時"]), ("meridiem", ["午後6時"], ["午前6時"])])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 2)
 
 
 class NoonTest(unittest.TestCase):
