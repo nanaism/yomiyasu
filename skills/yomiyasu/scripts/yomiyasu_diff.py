@@ -7,7 +7,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
 出すものは9つ。
   1. 全文差分: 変わった箇所を省略せずに出す（太字、見出しの段、空白、空行、字下げ、コード、引用、表の変化も残す）。
      変わった箇所を示すだけで、意味が同じだという証明ではない。
-  2. 意味が変わる恐れ: 数値、否定、主語と目的語の入れ替え、問いと平叙、文の種類を表す語、許可・能力の言い方（してよい、できる）、
+  2. 意味が変わる恐れ: 数値、否定、主語と目的語の入れ替え、話題ごとの人と否定の入れ替わり、問いと平叙、文の種類を表す語、許可・能力の言い方（してよい、できる）、
      コード・URL・引用など変えない箇所の変化、否定対比の主張の逆転、元の文書にない気持ちの語。
      どれも確かめる場所で、意味が変わったという判定ではない。
   3. 規則の見直し候補（v1.1.2 からの9つの点検）:
@@ -3757,7 +3757,7 @@ _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "prote
                "feeling": 6, "certainty": 7, "certainty_review": 8, "quote": 9, "state": 10, "promise": 11, "claim": 12,
                "promise_review": 13, "modality": 14, "modality_review": 15, "choice": 16, "causality": 17,
                "number_qualifier": 18, "limiter": 19, "dropped_sentence": 20, "obligation": 21, "quantifier": 22,
-               "deadline": 23, "condition": 24, "boundary": 25}
+               "deadline": 23, "condition": 24, "boundary": 25, "topic": 26}
 # 状態の語が消えた書き換え（state）と、約束を足した書き換え（promise）も数える。因果を足した書き換え（claim）と、書き手を
 # 表す語のない「〜します」を足した書き換え（promise_review。説明や手順の文かもしれない）は数えない。
 # --fail-on=meaning-risk が数える kind（数値、否定、主語と目的語の入れ替え、文の種類、引用の書き方の変化、確度の強まり）。
@@ -3770,7 +3770,7 @@ _RISK_ORDER = {"number": 0, "negation": 1, "swap": 2, "sentence_type": 3, "prote
 # 範囲を絞る語（だけ、のみ、しか〜ない、に限る）が消えた書き換え（limiter。3.2.0）も、読み手が受け取る範囲が広がるので数える。
 # 境目の言い方の変化（boundary。3.2.0。超える・未満 ↔ 以上・以下・達する）も、仕様や運用の文で数の範囲の境目が読み手の動きを
 # 変えるので数える。3.2.0 で足したほかの5つ（obligation、quantifier、deadline、condition、dropped_sentence）は見直しの候補で、
-# 数えない。
+# 数えない。話題ごとの入れ替わり（topic。3.4.0）も見直しの候補で、数えない。
 FAIL_ON_KINDS = ("number", "negation", "swap", "sentence_type", "citation", "certainty", "state", "promise", "modality",
                  "choice", "causality", "number_qualifier", "limiter", "boundary")
 
@@ -5951,15 +5951,15 @@ def _verb_stem_change(old_part: str, new_part: str) -> int:
     return 0
 
 
-def _negation_flip(old: str, new: str) -> tuple[str, str] | None:
+def _negation_flip(old: str, new: str, marks: Callable[[str], list] = _negation_marks) -> tuple[str, str] | None:
     """組になった2つの文で、否定の有無が変わった最初の箇所の (元の語, 後の語) を返す。なければ None。
 
     変わった箇所に重なる印だけを数える。重なりは文字の範囲が重なるときだけで、挿入した位置の前後の字は数えない。
     文全体の否定の印の数が元と後で同じときは、印の数が同じまま言い回しだけを変えた推敲を拾わないよう、ふつうは出さない。
     ただし、LIMIT か句点の前の規則に当たる箇所が2つ以上あり、その中に印が増えた箇所と減った箇所の両方があれば出す
     （「Aは対応しているが、Bは対応していない」→「Aは対応していないが、Bは対応している」のように、1つの文の中で
-    2つの否定を入れ替えた形。反証で見つけた例）。"""
-    old_marks, new_marks = _negation_marks(old), _negation_marks(new)
+    2つの否定を入れ替えた形。反証で見つけた例）。marks は否定の印の数え方（話題ごとの入れ替わりは、慣用の言い方を伏せて数える）。"""
+    old_marks, new_marks = marks(old), marks(new)
     same_total = len(old_marks) == len(new_marks)
     if same_total and not old_marks:
         return None
@@ -6192,6 +6192,500 @@ def _nested_swap_risks(sides: _Sides, groups: list, skip: set) -> list:
                                                                  {"pairs": pairs})))
                 order += 1
     return out
+
+
+# ---- 話題ごとの入れ替わり（3.4.0） ----
+# 「初日の受付は田中さん、二日目は鈴木さんです → 初日の受付は鈴木さん、二日目は田中さんです」のように、話題（「〜は」「〜では」など）
+# ごとの人の組み合わせが入れ替わった推敲と、「旧版は使えません。新版は使えます。→ 旧版は使えます。新版は使えません。」のように、
+# 否定が別の話題へ移った推敲を出す。同じ hunk の文（分けた・まとめた文を含む）をまとめて見る。話題の区切りは読点でなく、話題の語から
+# 次の話題の語か文の終わりまで（「この間は、」→「この間は」のような読点の直しで区切りが変わらない）。否定は今の否定の見方
+# （_negation_marks と _negation_flip）で数え、否定の形をした慣用の言い方（問わず、関係なく、むだなく など）は数えない。
+# 「なければなりません」などの義務の言い方は _NEGATION_MASKED が伏せる。候補はほかの候補の決め方に使わないよう、意味が変わる恐れの
+# 最後に足す（同じ文に今の否定・入れ替えの候補が出た組は出さない）。
+
+# 候補の kind と subkind。kind topic（subkind person は人の入れ替わり、negation は否定の移動）は見直しの候補で、--fail-on に数えない
+# （FAIL_ON_KINDS に入れず、_RISK_ORDER では既存の kind の後ろ）
+_TOPIC_KINDS = {"person": ("topic", "person"), "negation": ("topic", "negation")}
+# 話題の助詞（長いものから）。「とは」は定義や「とは限らない」が多いので入れない
+_TOPIC_PARTICLES = ("からは", "までは", "では", "には", "へは", "は")
+_TOPIC_KANJI = _lazy_compile("[一-龥々〆ヵヶ]")
+_TOPIC_NOUN_END = _lazy_compile("[一-龥々〆ヵヶァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ）)」』]")
+_TOPIC_NAME_CHAR = _lazy_compile("[一-龥々〆ヵヶァ-ヴー]")
+_TOPIC_ALNUM = _lazy_compile("[A-Za-z0-9]")
+_TOPIC_HIRAGANA = _lazy_compile("[ぁ-ゖ]")
+# 名詞の送り仮名の終わり（問い合わせ、仕組み、切り替え、書き出し、受け付け、手続き など）
+_TOPIC_OKURI_END = frozenset("いきしちみりえけせめれぎじびげ")
+# 話題の語の終わりに置ける敬称（田中さんは、山田先生は）
+_TOPIC_HONORIFICS = ("さん", "さま", "くん", "ちゃん", "様", "氏", "殿", "先生", "君")
+# 話題の助詞のあとに続くと話題にしない形（はず、はじめ、はっきり、ではない、ではありません）
+_TOPIC_NOT_AFTER = {"は": _lazy_compile(r"ず|じめ|っき"), "では": _lazy_compile(r"な[いくかけ]|ありません|ござい")}
+# 話題の語の始まり（この字のあとから助詞までを話題の語にする）
+_TOPIC_KEY_BOUNDARY = frozenset("、，,。．！？!?「『（(：:をが")
+_TOPIC_KEY_MAX = 24             # 話題の語の字数の上限（長い語は終わりの24字）
+_TOPIC_KEY_SCAN = 40            # 話題の語の始まりを探す字数の上限
+# 中身が句読点だけかを見る字（と空白）、中身の前と後ろから外す字（と空白）
+_TOPIC_BLANK_MARKS = frozenset("、，,。．")
+_TOPIC_HEAD_MARKS = frozenset("、，,")
+_TOPIC_END_MARKS = frozenset("、，,。．！？!?")
+_TOPIC_SPACE = _lazy_compile(r"[ 　]+")
+# 否定の形をした慣用の言い方（否定に数えない。同じ長さの「〇」に伏せてから数える）
+_TOPIC_IDIOMS = _lazy_compile(
+    r"問わず|(?:に)?関係なく|(?:に)?(?:かかわ|関わ|拘)らず|(?:のみ|だけ)?に限らず|むだなく|無駄なく|間もなく|まもなく|ほどなく|"
+    r"余儀なく|滞りなく|とどこおりなく|漏れなく|もれなく|隈なく|くまなく|遠慮なく|迷わず|欠かさず|残らず|相変わらず|"
+    r"取りあえず|とりあえず|取り敢えず|思わず|絶えず|少なからず|構わず|かまわず|知らず知らず|さりげなく|何気なく|なにげなく|"
+    r"問題(?:は|が|も)?なし")
+# 「なし」（特になし、制限なし、予約なしで）。今の否定の見方（_NEGATION）は数えないが、話題の中身では否定に数える（「特になし」と
+# 「特にありません」を別の話題で逆の向きに言い換えただけの推敲を、否定が移ったと見ない。3.4.0 で見つけた例）。話（はなし）、
+# おもてなし、おとなしい、なし崩し は除き、「問題なし」は「問題ない」（_NEGATION_MASKED）と同じく否定に数えない
+_TOPIC_NASHI = _lazy_compile(r"(?<![はてと])なし(?![いくかけげさと崩])")
+# 話題の中身を比べる前にそろえる文末（無効になっています → 有効です を、無効 → 有効 として見る）
+_TOPIC_TAIL = _lazy_compile(r"(?:になっています|になっている|になっております|となっています|となっている|となっております|"
+                            r"になります|となります|です|だ|である|ます)$")
+# 中身の入れ替わりを見る前に外す、節をつなぐ語（有料ですが → 有料です）
+_TOPIC_JOINER = _lazy_compile(r"(?<=[すだ])(?:が|けれども|けれど|けど|し)$")
+# 範囲を絞る「しか」（同じ節に打ち消しが続くもの。しかし、しかも、しかた などは除く）と、「だけ」「のみ」（だけど は除く）
+_TOPIC_SHIKA = _lazy_compile(r"しか(?![しもたるりられけ])(?=[^、。，．]{0,20}?(?:ない|なく|なかっ|ません|ず))")
+_TOPIC_ONLY = _lazy_compile(r"だけ(?!ど|れど)|のみ")
+# 人の語（〜さん、〜様、〜氏、〜先生 など。名前は漢字・片仮名の1〜6字）
+_TOPIC_PERSON = _lazy_compile(r"(?<![一-龥々〆ヵヶァ-ヴーA-Za-z])([一-龥々〆ヵヶァ-ヴー]{1,6}?)(さん|さま|様|氏|殿|先生|くん|君|ちゃん)"
+                              r"(?![一-龥々〆ヵヶァ-ヴー])")
+# 人名とみなさない名前（皆様、お客様、ご苦労様、諸君 など）
+_TOPIC_PERSON_BAD = frozenset(("皆", "客", "皆々", "奥", "子", "母", "父", "神", "仏", "苦労", "疲", "諸", "王", "義母", "義父",
+                               "利用者", "顧客"))
+
+
+def _topic_noun_end(text: str, end: int) -> bool:
+    """text[:end] が話題の語の終わりの形か（漢字、片仮名、英数字、閉じかっこ、漢字のあとの名詞の送り仮名、人名の敬称）。"""
+    if end <= 0:
+        return False
+    for honorific in _TOPIC_HONORIFICS:
+        begin = end - len(honorific)
+        if begin > 0 and text.startswith(honorific, begin) and _TOPIC_NAME_CHAR.match(text, begin - 1):
+            return True
+    ch = text[end - 1]
+    if _TOPIC_NOUN_END.match(ch):
+        return True
+    if ch in " 　":
+        return end >= 2 and bool(_TOPIC_ALNUM.match(text, end - 2))
+    if ch in _TOPIC_OKURI_END:
+        if end >= 2 and _TOPIC_KANJI.match(text, end - 2):
+            return True
+        return end >= 3 and bool(_TOPIC_HIRAGANA.match(text, end - 2)) and bool(_TOPIC_KANJI.match(text, end - 3))
+    return False
+
+
+def _topic_normal(text: str) -> str:
+    """話題の語の書き方にそろえた字（NFKC にして空白を除く）。"""
+    return _TOPIC_SPACE.sub("", unicodedata.normalize("NFKC", text))
+
+
+def _topic_markers(text: str) -> list:
+    """文の中の話題の印 [(語の始め, 助詞の始め, 助詞の終わり, 語)]。語は区切り（読点、句点、かっこ、「を」「が」、前の話題の助詞）の
+    あとから助詞の前まで（NFKC、空白を除く）。"""
+    out = []
+    last_end = 0
+    position = 0
+    while True:
+        found = text.find("は", position)
+        if found < 0:
+            break
+        position = found + 1
+        start = found
+        for particle in _TOPIC_PARTICLES:
+            if text.startswith(particle, found + 1 - len(particle)):
+                start = found + 1 - len(particle)
+                break
+        if start < last_end:
+            continue
+        particle = text[start:found + 1]
+        rule = _TOPIC_NOT_AFTER.get(particle)
+        if rule is not None and rule.match(text, found + 1):
+            continue
+        if not _topic_noun_end(text, start):
+            continue
+        begin = start
+        while (begin > last_end and text[begin - 1] not in _TOPIC_KEY_BOUNDARY and start - begin < _TOPIC_KEY_SCAN):
+            begin -= 1
+        key = _topic_normal(text[begin:start])
+        if not key:
+            continue
+        out.append((begin, start, found + 1, key[-_TOPIC_KEY_MAX:]))
+        last_end = found + 1
+    return out
+
+
+def _topic_blank(text: str) -> bool:
+    """中身が句読点（、，,。．）と空白だけか。"""
+    return all(ch in _TOPIC_BLANK_MARKS or ch.isspace() for ch in text)
+
+
+def _topic_trim(text: str) -> str:
+    """中身の前の読点と空白、後ろの句読点と空白を外す（読点が長く並んでも1回でたどる）。"""
+    begin, end = 0, len(text)
+    while begin < end and (text[begin] in _TOPIC_HEAD_MARKS or text[begin].isspace()):
+        begin += 1
+    while end > begin and (text[end - 1] in _TOPIC_END_MARKS or text[end - 1].isspace()):
+        end -= 1
+    return text[begin:end]
+
+
+def _topic_segments(texts: Sequence[str]) -> list:
+    """文の並びの話題の区切り [(語, 文の番号, 中身, 受けた中身か, 受けた先の語)]。中身は助詞のあとから、同じ文の次の話題の語の始めか
+    文の終わりまで。中身が句読点だけの話題（「今週は、ステージングでは〜」の「今週は、」）は、同じ文のあとで最初に中身のある話題
+    （受けた先）の終わりまでを中身にする（受けた中身）。句読点だけの話題が続くときは、受けた先のすぐ前の話題と同じ中身にする。
+    受けた先のない話題の受けた先の語は、その話題の語。文ごとに後ろから1回たどる。"""
+    out = []
+    for index, text in enumerate(texts):
+        marks = _topic_markers(text)
+        found = []
+        source_end, source_key, shared = 0, None, None
+        for x in range(len(marks) - 1, -1, -1):
+            key, particle_end = marks[x][3], marks[x][2]
+            end = marks[x + 1][0] if x + 1 < len(marks) else len(text)
+            own = text[particle_end:end]
+            if not _topic_blank(own):
+                found.append((key, index, _topic_trim(own), False, key))
+                source_end, source_key, shared = end, key, None
+            elif source_key is None:
+                found.append((key, index, _topic_trim(own), True, key))
+            else:
+                if shared is None:
+                    shared = _topic_trim(text[particle_end:source_end])
+                found.append((key, index, shared, True, source_key))
+        found.reverse()
+        out.extend(found)
+    return out
+
+
+def _topic_masked(text: str) -> str:
+    return _TOPIC_IDIOMS.sub(lambda match: "〇" * len(match.group(0)), text)
+
+
+def _topic_negation_marks(text: str) -> list:
+    """話題の中身の否定の印（慣用の言い方を伏せてから _negation_marks で数え、「なし」を足す）。"""
+    masked = _topic_masked(text)
+    marks = _negation_marks(masked)
+    extra = [(match.start(), match.end()) for match in _TOPIC_NASHI.finditer(masked)]
+    return sorted(marks + extra) if extra else marks
+
+
+def _topic_flip(old: str, new: str) -> tuple[str, str] | None:
+    """話題の中身どうしの否定の変化（_negation_flip と同じ見方）。見つからなければ、文末の言い方（です、になっています など）を
+    そろえてもう一度見る。"""
+    flip = _negation_flip(old, new, _topic_negation_marks)
+    if flip is None:
+        old_core, new_core = _TOPIC_TAIL.sub("", old), _TOPIC_TAIL.sub("", new)
+        if old_core and new_core and (old_core, new_core) != (old, new):
+            flip = _negation_flip(old_core, new_core, _topic_negation_marks)
+    return flip
+
+
+def _topic_limiter_swap(old: str, new: str) -> bool:
+    """「しか〜ない」と「だけ」「のみ」の言い換え（読むことしかできません ↔ 読むことだけができます）か。片側だけに「しか」があり、
+    もう片側だけに「だけ」か「のみ」があるとき真（範囲を絞るのは同じで、否定の印の数だけが変わる）。"""
+    old_shika, new_shika = bool(_TOPIC_SHIKA.search(old)), bool(_TOPIC_SHIKA.search(new))
+    old_only, new_only = bool(_TOPIC_ONLY.search(old)), bool(_TOPIC_ONLY.search(new))
+    return (old_shika and not new_shika and new_only and not old_only) or (new_shika and not old_shika and old_only and not new_only)
+
+
+def _topic_core(text: str) -> str:
+    """中身の入れ替わりを見るための中身（節をつなぐ語と文末の言い方を外す。有料ですが → 有料）。"""
+    return _TOPIC_TAIL.sub("", _TOPIC_JOINER.sub("", text))
+
+
+def _topic_persons(text: str) -> list:
+    """中身の人の語 [(名前, 書き方)]。「様」「氏」の前の1字の語（彼氏 など）は人にしない。"""
+    found = []
+    for match in _TOPIC_PERSON.finditer(text):
+        name, title = match.group(1), match.group(2)
+        if (name in _TOPIC_PERSON_BAD or name[-1] + title in _ACTOR_NOT_TITLE
+                or (title in ("様", "氏") and len(name) < 2)):
+            continue
+        found.append((name, match.group(0)))
+    return found
+
+
+def _topic_cycle(moved: dict) -> list:
+    """話題から話題へ移った人（{名前: (元の話題, 後の話題)}）のうち、巡り（A→B と B→A、A→B→C→A など）になる人の並び。
+    名前の順に見て、最初に巡りに入る人（元の話題と後の話題が、話題を点・人を辺とした図の同じ強く連結した成分にある人）の、
+    後の話題から元の話題へ戻る最短の道（幅優先、辺は名前の順）の人を並べる。図は1回だけたどる。"""
+    by_topic = {}
+    for name, (before, after) in moved.items():
+        by_topic.setdefault(before, []).append((name, after))
+    # 強く連結した成分（Tarjan の方法を、再帰を使わずに）
+    order, low, stack, on_stack, component = {}, {}, [], set(), {}
+    for root in list(by_topic):
+        if root in order:
+            continue
+        order[root] = low[root] = len(order)
+        stack.append(root)
+        on_stack.add(root)
+        work = [(root, iter(by_topic.get(root, ())))]
+        while work:
+            node, edges = work[-1]
+            for _, target in edges:
+                if target not in order:
+                    order[target] = low[target] = len(order)
+                    stack.append(target)
+                    on_stack.add(target)
+                    work.append((target, iter(by_topic.get(target, ()))))
+                    break
+                if target in on_stack:
+                    low[node] = min(low[node], order[target])
+            else:
+                work.pop()
+                if work:
+                    parent = work[-1][0]
+                    low[parent] = min(low[parent], low[node])
+                if low[node] == order[node]:
+                    while True:
+                        member = stack.pop()
+                        on_stack.discard(member)
+                        component[member] = node
+                        if member == node:
+                            break
+    first = next((name for name, (before, after) in moved.items()
+                  if before in component and component[before] == component.get(after)), None)
+    if first is None:
+        return []
+    before, after = moved[first]
+    parents, frontier = {after: None}, [after]
+    while frontier:
+        following = []
+        for topic in frontier:
+            for other, target in by_topic.get(topic, ()):
+                if target == before:
+                    path = [other]
+                    while topic != after:
+                        topic, name = parents[topic]
+                        path.append(name)
+                    path.append(first)
+                    return path[::-1]
+                if target not in parents:
+                    parents[target] = (topic, other)
+                    following.append(target)
+        frontier = following
+    return []
+
+
+def _topic_first_pair(lost: list, gained: list, content: Callable[[str], str]) -> tuple | None:
+    """lost と gained（どちらも並べた順）から、中身（content）の違う最初の組 (x, y) を、組を全部作らずに選ぶ（x の順、次に y の順で
+    最初の組）。"""
+    if not lost or not gained:
+        return None
+    head = content(gained[0])
+    other = next((item for item in gained if content(item) != head), None)
+    for item in lost:
+        if content(item) != head:
+            return item, gained[0]
+        if other is not None:
+            return item, other
+    return None
+
+
+def _topic_parents(segments: list) -> dict:
+    """受けた中身を持つ話題（「前半は、司会は〜、記録は〜」の「前半」）で始まる文の、あとの話題の語ごとの始めの話題の語（親）
+    {語: 親の語}。親のない文の話題の語は入れない。"""
+    parents = {}
+    sentence, parent = None, None
+    for key, index, _, took, source in segments:
+        if index != sentence:
+            sentence, parent = index, (key if took and source != key else None)
+        elif parent is not None:
+            parents[key] = parent
+    return parents
+
+
+def _topic_comparable(old: tuple, new: tuple, old_parent: str | None, new_parent: str | None) -> bool:
+    """元と後の同じ語の話題の区切り（_topic_segments）を比べるか。受けた中身は、元と後の両方で受けたときは受けた先の話題の語が
+    同じときだけ、片方だけで受けたときは受けた先の話題の語がもう片方の中身にあるときだけ比べる（「上期は、本社では認めず、支社では
+    認めます」→「上期は支社で認め、本社では認めません」の「上期」は、元で本社の節を受け、後の中身に本社がないので比べない。受けた先の
+    ない話題は、片方だけなら比べない）。親（_topic_parents）の話題で始まる文の話題は、元と後の親の語が違えば比べない（「前半は、〜」と
+    「後半は、〜」の段落を入れ替えて、親の違う文が組になったとき）。"""
+    if old[3] and new[3]:
+        if old[4] != new[4]:
+            return False
+    elif old[3] or new[3]:
+        taker, other = (old, new) if old[3] else (new, old)
+        if taker[4] == taker[0] or taker[4] not in _topic_normal(other[2]):
+            return False
+    return old_parent is None or new_parent is None or old_parent == new_parent
+
+
+def _topic_changes(old_texts: Sequence[str], new_texts: Sequence[str]) -> list:
+    """1つの組の元の文と後の文の、話題ごとの入れ替わり [(種類, detail, 元の文の番号, 後の文の番号)]（種類は person か negation）。
+    比べるのは、元と後のどちらでも1度だけ出る話題の語のうち、_topic_comparable が比べるとした話題（受けた中身と親の話題の決まり。
+    「今週は、本番では〜、検証では〜」の節の順を入れ替えただけの文や、段落の順を入れ替えただけの文で、受ける節や親が入れ替わる。
+    3.4.0 の確かめで見つけた例）。人は、元でも後でも比べる話題のうち1つの中身にだけ出る人が、別の話題へ移って巡りになったとき
+    （受けた中身の話題は、受けた先の話題も比べるときは人の比べに入れない）。否定は、元と後で否定の印の数の合計が同じで、ある話題の
+    中身から否定が消え（_topic_flip）、別の話題の中身に否定が増えたとき。「しか〜ない」と「だけ」の言い換えだけの話題は数えない。
+    2つの話題の中身がそのまま入れ替わったとき（値も一緒に動いた形）は、_topic_flip がなくても組にする。中身ごとの人の語、否定の印、
+    否定の変化は1回だけ数える。"""
+    old_segments, new_segments = _topic_segments(old_texts), _topic_segments(new_texts)
+    old_counts = Counter(segment[0] for segment in old_segments)
+    new_counts = Counter(segment[0] for segment in new_segments)
+    old_by = {segment[0]: segment for segment in old_segments if old_counts[segment[0]] == 1}
+    new_by = {segment[0]: segment for segment in new_segments if new_counts[segment[0]] == 1}
+    old_parents, new_parents = _topic_parents(old_segments), _topic_parents(new_segments)
+    common = [key for key in old_counts if key in old_by and key in new_by
+              and _topic_comparable(old_by[key], new_by[key], old_parents.get(key), new_parents.get(key))]
+    if len(common) < 2:
+        return []
+    position = {key: x for x, key in enumerate(common)}
+    out = []
+    persons = {}
+
+    def persons_of(text: str) -> list:
+        if text not in persons:
+            persons[text] = _topic_persons(text)
+        return persons[text]
+
+    # 中身ごとの話題の語（受けた中身の話題が多いとき、同じ中身の人を話題ごとに数え直さない）。受けた中身の話題は、受けた先の話題も
+    # 比べるときは入れない（受けた中身は受けた先の節をくり返すので、人を2つの話題に数えてしまう。「1月6日の週は、月曜は青木さん、
+    # 木曜は松井さん」の「1月6日の週」）
+    compared = set(common)
+    old_groups, new_groups = {}, {}
+    for key in common:
+        if (old_by[key][3] and old_by[key][4] in compared) or (new_by[key][3] and new_by[key][4] in compared):
+            continue
+        old_groups.setdefault(old_by[key][2], []).append(key)
+        new_groups.setdefault(new_by[key][2], []).append(key)
+    # 同じ人の別の書き方（向井理さんと向井さん）は1人にする（2字以上の名前で始まる名前は、その名前にまとめる）
+    names = {name for groups in (old_groups, new_groups) for content in groups for name, _ in persons_of(content)}
+    same = {name: next((name[:size] for size in range(2, len(name)) if name[:size] in names), name) for name in names}
+    shown = {}
+
+    def places_of(groups: dict, side: int) -> dict:
+        """{人: (出る話題の数, 最初の話題)}。人の書き方は、最初に出た話題のものを shown に残す。"""
+        found = {}
+        for content, keys in groups.items():
+            seen = set()
+            for name, mention in persons_of(content):
+                merged = same[name]
+                shown.setdefault((side, merged), mention)
+                if merged not in seen:
+                    seen.add(merged)
+                    count, first = found.get(merged, (0, keys[0]))
+                    found[merged] = (count + len(keys), first)
+        return found
+
+    old_places, new_places = places_of(old_groups, 0), places_of(new_groups, 1)
+    moved = {}
+    for name, (count, before) in old_places.items():
+        target = new_places.get(name)
+        if count == 1 and target is not None and target[0] == 1 and before != target[1]:
+            moved[name] = (before, target[1])
+    cycle = sorted(_topic_cycle(moved), key=lambda name: position[moved[name][0]])
+    if cycle:
+        arriving = {}
+        for name in cycle:
+            arriving.setdefault(moved[name][1], []).append(name)
+        topics = [OrderedDict((("topic", moved[name][0]), ("old", [shown[(0, name)]]),
+                               ("new", [shown[(1, other)] for other in arriving.get(moved[name][0], ())])))
+                  for name in cycle]
+        keys = [moved[name][0] for name in cycle]
+        out.append(("person", {"topics": topics}, sorted({old_by[key][1] for key in keys}),
+                    sorted({new_by[key][1] for key in keys})))
+    counts = {}
+
+    def negations_of(text: str) -> int:
+        if text not in counts:
+            counts[text] = len(_topic_negation_marks(text))
+        return counts[text]
+
+    if sum(len(_topic_negation_marks(text)) for text in old_texts) == sum(len(_topic_negation_marks(text)) for text in new_texts):
+        lost, gained, unflipped, decided, cores = [], [], [], {}, {}
+        for key in common:
+            old, new = old_by[key][2], new_by[key][2]
+            if old == new:
+                continue
+            before, after = negations_of(old), negations_of(new)
+            if before == after:
+                continue
+            if (old, new) not in decided:
+                # (「しか〜ない」と「だけ」の言い換えだけか, 否定の変化)
+                skip = abs(before - after) == 1 and _topic_limiter_swap(old, new)
+                decided[(old, new)] = (skip, None if skip else _topic_flip(old, new))
+            skip, flip = decided[(old, new)]
+            if skip:
+                continue
+            if flip is None:
+                unflipped.append(key)
+            else:
+                (lost if before > after else gained).append(key)
+
+        def core_of(text: str) -> str:
+            if text not in cores:
+                cores[text] = _topic_core(text)
+            return cores[text]
+
+        # 受けた中身の話題（「自動更新は、Windows版では〜」の「自動更新」）より、自分の中身のある話題を先に選ぶ
+        rank = lambda key: (old_by[key][3], position[key])  # noqa: E731
+        pair = _topic_first_pair(sorted(lost, key=rank), sorted(gained, key=rank), lambda key: old_by[key][2])
+        if pair is None and unflipped:
+            # 中身がそのまま入れ替わった2つの話題（会員登録は無料、利用は有料 → 会員登録は有料、利用は無料）。値も一緒に動くと
+            # _topic_flip は変化を1つの塊と見て否定に数えないので、中身の入れ替わりで組にする
+            ends = {(core_of(old_by[key][2]), core_of(new_by[key][2])): key for key in reversed(lost + gained + unflipped)}
+            for key in sorted(lost + gained + unflipped, key=rank):
+                old_core, new_core = core_of(old_by[key][2]), core_of(new_by[key][2])
+                other = ends.get((new_core, old_core))
+                if (other is not None and other != key and old_core != new_core
+                        and (negations_of(old_by[key][2]) > negations_of(new_by[key][2]))
+                        != (negations_of(old_by[other][2]) > negations_of(new_by[other][2]))):
+                    pair = (key, other)
+                    break
+        if pair is not None:
+            first, second = sorted(pair, key=lambda key: position[key])
+            topics = [OrderedDict((("topic", key), ("old", old_by[key][2]), ("new", new_by[key][2]))) for key in (first, second)]
+            out.append(("negation", {"topics": topics}, sorted({old_by[first][1], old_by[second][1]}),
+                        sorted({new_by[first][1], new_by[second][1]})))
+    return out
+
+
+def _topic_swap_risks(sides: _Sides, groups: list, covered: dict, masks: Sequence[_Masker]) -> list:
+    """話題ごとの入れ替わり（kind と subkind は _TOPIC_KINDS。3.4.0）。組（hunk）ごとに、本文の文（見出し、表、コードを除き、
+    インラインのコードや URL を伏せた文）を話題に分けて比べる。covered は今の候補が出た文（{"negation": {(0, 元の文), (1, 後の文)},
+    "swap": {...}}）で、人の入れ替わりは swap、否定の移動は negation の候補と同じ文を含めば出さない（重ねて出さない）。"""
+    out = []
+    for group in groups:
+        if not group["old"] or not group["new"]:
+            continue
+        old_bodies = [body for body in (masks[0].body(sentence) for sentence in group["old"]) if body is not None]
+        new_bodies = [body for body in (masks[1].body(sentence) for sentence in group["new"]) if body is not None]
+        if not old_bodies or not new_bodies:
+            continue
+        for change, detail, old_indexes, new_indexes in _topic_changes([body.text for body in old_bodies],
+                                                                       [body.text for body in new_bodies]):
+            old_raw = [old_bodies[i].raw for i in old_indexes]
+            new_raw = [new_bodies[j].raw for j in new_indexes]
+            seen = covered["swap" if change == "person" else "negation"]
+            if all((0, text) in seen for text in old_raw) and all((1, text) in seen for text in new_raw):
+                continue
+            kind, subkind = _TOPIC_KINDS[change]
+            out.append(_risk(kind, subkind, old_bodies[old_indexes[0]].line, new_bodies[new_indexes[0]].line,
+                             _topic_join([old_bodies[i] for i in old_indexes]), _topic_join([new_bodies[j] for j in new_indexes]),
+                             detail))
+    return out
+
+
+def _topic_join(bodies: list) -> str:
+    """候補の元と後の文をつなぐ。別の行の文で、前の文が句点などで終わらないとき（箇条書きの項目）は全角の空白を挟む。"""
+    parts = []
+    for n, body in enumerate(bodies):
+        if parts and body.line != bodies[n - 1].line and not parts[-1].endswith(("。", "．", "！", "？", "!", "?")):
+            parts.append("\u3000")
+        parts.append(body.raw)
+    return "".join(parts)
+
+
+def _topic_person_change(detail: dict) -> str:
+    """人の入れ替わりの行の中身（初日の受付 田中さん→鈴木さん、二日目 鈴木さん→田中さん）。"""
+    return "、".join("{} {}→{}".format(item["topic"], "・".join(item["old"]), "・".join(item["new"])) for item in detail.get("topics", []))
+
+
+def _topic_negation_change(detail: dict) -> str:
+    """否定の移動の行の中身（旧版「使えません」→「使えます」、新版「使えます」→「使えません」）。"""
+    return "、".join("{}「{}」→「{}」".format(item["topic"], item["old"], item["new"]) for item in detail.get("topics", []))
 
 
 # ---- 問い ----
@@ -7304,7 +7798,9 @@ def _meaning_risks(sides: _Sides, full: dict, type_changes: Sequence | None, gro
         groups = _sentence_pairs(sides, full)
     swaps = _swap_risks(sides, groups)
     swaps += _nested_swap_risks(sides, groups, {(r["old_line"], r["new_line"], r["old"], r["new"]) for _, _, r in swaps})
-    found = (_number_risks(sides, full, groups) + _negation_risks(sides, groups) + swaps
+    numbers = _number_risks(sides, full, groups)
+    negations = _negation_risks(sides, groups)
+    found = (numbers + negations + swaps
              + _question_risks(sides, groups) + _protected_risks(sides, full) + _contrast_risks(sides, groups)
              + _feeling_risks(sides, groups))
     found.sort(key=lambda item: (item[0], _RISK_ORDER.get(item[2]["kind"], 9), item[1]))
@@ -7365,7 +7861,11 @@ def _meaning_risks(sides: _Sides, full: dict, type_changes: Sequence | None, gro
     additions.sort(key=lambda r: (r['old_line'] if r['old_line'] is not None else r['new_line'] or 0,
                                   r['new_line'] if r['new_line'] is not None else 0))
     # 消えた文の候補は、同じ元の行に状態・約束などほかの候補があれば外す（3.2.0）
-    return _without_covered_drops(risks + additions)
+    risks = _without_covered_drops(risks + additions)
+    # 話題ごとの入れ替わり（3.4.0）。同じ文に否定・入れ替えの候補が出た組は出さない。ほかの候補の決め方に使わないよう、最後に足す
+    covered = {"negation": {(side, r[key]) for _, _, r in negations for side, key in ((0, "old"), (1, "new"))},
+               "swap": {(side, r[key]) for _, _, r in swaps for side, key in ((0, "old"), (1, "new"))}}
+    return risks + _topic_swap_risks(sides, groups, covered, masks)
 
 
 # ---- 一覧のファイル（diff の詰め）----
@@ -12662,6 +13162,12 @@ def _risk_line(risk: dict) -> str:
     if kind == "citation":
         return "引用の書き方が変わった{}: {} → {}".format(where, "、".join(detail.get("removed", [])) or "なし",
                                               "、".join(detail.get("added", [])) or "なし")
+    if kind == "topic" and subkind == "person":
+        return ("話題ごとの人の組み合わせが変わった{}: {}。--fail-on には数えません。原文の話題と人の組を入れ替えていないか"
+                "確かめてください。".format(where, _topic_person_change(detail)))
+    if kind == "topic":
+        return ("否定が別の話題へ移った{}: {}。--fail-on には数えません。否定を別の話題に移していないか確かめてください。".format(
+            where, _topic_negation_change(detail)))
     if kind == "negation":
         return "否定の有無が変わった{}: {} → {}".format(where, detail.get("old", ""), detail.get("new", ""))
     if kind == "swap" and subkind == "nested":
@@ -13170,7 +13676,9 @@ _FAIL_ON_HELP = ("意味が変わる恐れのうち、数値、否定、主語�
                  "言い切った書き換えと、断定に「必ず」「確実に」などを足した書き換えも数えます（ほかの種類と種類なしでは数えません）。"
                  "能力の言い方（できる、可能だ）が消えた書き換えは、どの種類でも数えません。"
                  "コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
-                 "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、"
+                 "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。"
+                 "話題（〜は、〜では など）ごとの人の組み合わせが入れ替わった書き換えと、否定が別の話題へ移った書き換えも"
+                 "数えません。確度を弱めた書き換え、"
                  "数えない語だけの確度の変化、予定の言い切り（する予定です → します）、かぎかっこの中の言葉の変化も数えません。"
                  "推量の言い方が、同じ強さの別の慎重な言い方に替わっただけの文（かもしれません → 恐れがあります、と思われます → 見込みです）も数えません。"
                  "原文にない因果のつながりを足した書き換えと、書き手の行為と読む言い方（いたします、今後・改めて、"
