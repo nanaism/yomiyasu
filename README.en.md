@@ -152,3 +152,7 @@ The rewriting was checked with Claude Code and Codex on macOS through their non-
 The code and documents in this repository are released under the [MIT License](./LICENSE). The copyright and permission notice for the bundled Unicode data is in [UNICODE-LICENSE.txt](./UNICODE-LICENSE.txt).
 
 yomiyasu is a personal project by Aiichiro Oga ([@oga_aiichiro](https://x.com/oga_aiichiro)) at ALGO ARTIS. It is not an official product of the company and does not represent its views.
+
+## Sponsoring
+
+yomiyasu is free and will stay free, and everyone gets the same skill. To help cover AI usage fees for development and testing, you can support it through GitHub Sponsors. Sponsoring is optional and changes neither the features nor how issues are handled.
