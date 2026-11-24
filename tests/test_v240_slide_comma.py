@@ -305,12 +305,14 @@ class SlideHeadingDocsTest(unittest.TestCase):
         readme = (ROOT / "README.en.md").read_text(encoding="utf-8")
         self.assertIn("in one-line bullets the skill removes those commas and keeps commas for contrast, conditions, reasons and lists. "
                       "Since 3.4.0, in `#` headings other than the document title, `slide_comma` marks every Japanese comma (、 and ，) "
-                      "except those inside quotation marks and digit separators, and the instructions tell the skill to remove them",
+                      "except those inside quotation marks, code, link text and URLs and those used as digit separators. "
+                      "Unless the request specifies the heading format, the instructions tell the skill to remove them",
                       readme)
         self.assertNotIn("the skill removes those commas and keeps commas for contrast, conditions, reasons and lists.", readme.replace(
             "in one-line bullets the skill removes those commas", ""))
-        # 書いてある動き: 題でない「#」の見出しは条件の読点も候補、1行の箇条の条件の読点は残す、引用の中と数字の区切りは見ない
-        found = slide("# 題\n\n## 道が混んだら、開始を遅らせる\n\n- 急ぎなら、電話で連絡する\n\n## 「止める、知らせる」と月3,200件\n")
+        # 書いてある動き: 題でない「#」の見出しは条件の読点も候補、1行の箇条の条件の読点は残す、引用の中と数字の区切りとコードとリンクの文字は見ない
+        found = slide("# 題\n\n## 道が混んだら、開始を遅らせる\n\n- 急ぎなら、電話で連絡する\n\n## 「止める、知らせる」と月3,200件\n\n"
+                      "## `a、b` を使う\n\n## [速く、正しく](https://example.com/a、b) を読む\n")
         self.assertEqual([f["line"] for f in found], [3])
         self.assertIn(HEADING_MESSAGE, found[0]["message"])
 
