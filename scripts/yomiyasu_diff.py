@@ -11689,7 +11689,7 @@ _SIGNED_VALUE = _lazy_compile(r"(?<![A-Za-z0-9_.])(?:(?<![一-鿿々〆ァ-ヴ�
 _TRIANGLE_SIGNS = ("▲", "△")
 _TRIANGLE_ARROWS = _lazy_compile(r"[▼▽]")
 _TRIANGLE_RATING = _lazy_compile(r"([○◎◯△×✕])[ \t　]*[0-9０-９]")
-# 3.4.0（▲△の符号）: 空行をはさまずに続く行に、評価の○◎◯（あとが数字、空白、表の区切り、コロン、行末）があれば、その行の続きの△は
+# 3.4.0（▲△の符号）: 空行をはさまずに続く行に、評価の○◎◯〇（あとが数字、空白、表の区切り、コロン、行末）があれば、その行の続きの△は
 # 評価の印（1行に1つの印の評価の箇条と表）。○○株式会社 のような伏せ字の○は数えない
 _TRIANGLE_RATING_BLOCK = _lazy_compile(r"[○◎◯〇](?=[0-9０-９ \t　|｜:：]|$)")
 _TRIANGLE_NOT_BEFORE = frozenset("年月/／")
@@ -11712,7 +11712,7 @@ def _rating_line(line: str) -> bool:
 
 
 def _block_ratings(sides: _Sides, side: int, line: int, facts: dict) -> bool:
-    """3.4.0（▲△の符号）: 行 line（1から）を含む、空行をはさまずに続く行に評価の○◎◯（_TRIANGLE_RATING_BLOCK）があれば真。
+    """3.4.0（▲△の符号）: 行 line（1から）を含む、空行をはさまずに続く行に評価の○◎◯〇（_TRIANGLE_RATING_BLOCK）があれば真。
     facts は側ごとの覚え（行の続きごとの印を1度だけ求める）。"""
     flags = facts.get("rating_blocks")
     if flags is None:
