@@ -10,7 +10,7 @@ paper は慎重表現をぼかしとして削る規則がないので、外す�
 """
 
 from __future__ import annotations
-__version__ = "3.3.0"
+__version__ = "3.4.0"
 
 import os
 from pathlib import Path
@@ -4863,6 +4863,19 @@ _SLIDE_BULLET = _lazy_compile(r"^[ \t　]*(?:[-*+]|\d+[.)])[ \t]|^[ \t　]*(?:[�
 _SLIDE_MARKER_ZONE = _lazy_compile(r"^[ \t　]*(?:(?:[-*+>]|\d+[.)])[ \t]+)*")
 _SLIDE_MESSAGE = ("スライドの見出しや1行の箇条で、間を作るだけの読点（当たった言い方: {}）の候補です。逆接、条件、理由、名詞の並びの読点と、"
                   "外すと読み違える読点は残し、ほかは外すか確かめてください。")
+# 3.4.0: 「#」で始まる見出し（文書の題を除く）は、読点を形を問わず全部候補に出す（slides だけ。1行の箇条は 2.4.0 からの型のまま）。
+# 見ないのは、_v240_slide_texts が「＿」に伏せる所（カギ括弧や引用符の中、コード、リンクの文字と URL、英数字の識別子）と、
+# 数字の区切りの全角の「，」（１２，０００）。半角の「,」は読点に数えない（1,000 も見ない）。全角の「，」は読点に数える。
+# 文書の題は、原稿の最初の見出し（引用の行の見出しを除く。下線の見出しも見出しに数える）が「# 」の見出しで、「# 」の見出しが
+# それ1つだけのときの、その見出し（Marp のように「# 」の見出しが2つ以上あれば、どれも各ページの見出しとして見る）。
+# 題と、「#」で始まらない見出しの行（下線で見出しになった行。analyze_markdown では箇条のすぐ下の --- でも見出しになる）は
+# 2.4.0 からの型で見る。60字を超える見出しも見る。1行に1件で、当たった言い方を並べる。当たった言い方が伏せた所の中の読点を
+# 含むときは、伏せた所のあとから切り出して頭に「…」を付ける（引用の中の読点まで外す候補と読み違えないように）
+_SLIDE_ATX = _lazy_compile(r"^ {0,3}(#{1,6})(?:[ \t]+|$)")
+_SLIDE_HEADING_COMMA = _lazy_compile(r"、|(?<![0-9０-９])，|，(?![0-9０-９]{3}(?![0-9０-９]))")
+_SLIDE_HEADING_MESSAGE = ("スライドの見出しの読点（当たった言い方: {}）の候補です。カギ括弧や引用符の中と数字の区切りを除き、"
+                          "見出しには読点を残しません。並べた語は「・」でつなぎ、条件や逆接、理由を表す語は残して読点だけを外すか、"
+                          "語順を変えて短くしてください。依頼で見出しの形が決まっているときと文書の題は直しません。")
 
 
 def _v240_slide_single_lines(analysis: dict) -> list[int]:
@@ -4937,10 +4950,44 @@ def _v240_slide_hit_text(raw: str, positions: list[int], begin: int, end: int) -
     return text
 
 
+def _v340_slide_title(rows: list[dict]) -> int | None:
+    """3.4.0: 文書の題の行の番号か None。原稿の最初の見出し（引用の行の見出しを除く。下線の見出しも数える）が「# 」の見出しで、
+    「# 」の見出しがそれ1つだけのとき、その行を題とする（Marp のように「# 」の見出しが2つ以上あれば題はない）。"""
+    first = None
+    level1 = []
+    for row in rows:
+        if row["kind"] != "heading" or row["quote_depth"]:
+            continue
+        if first is None:
+            first = row["line"]
+        atx = _SLIDE_ATX.match(row["content"])
+        if atx and len(atx.group(1)) == 1:
+            level1.append(row["line"])
+    return first if first is not None and level1 == [first] else None
+
+
+def _v340_heading_hit(raw: str, scan: str, positions: list[int], begin: int, end: int) -> str:
+    """3.4.0: 見出しの読点の当たった言い方（begin から読点のあとの end まで）。間に伏せた所（カギ括弧や引用符、コード、
+    リンクの文字）の中の読点があれば、その伏せた所のあとから切り出し、頭に「…」を付ける。"""
+    if len(positions) != len(scan):
+        return scan[begin:end]
+    hidden = [index for index in range(begin, end - 1) if scan[index] == "＿" and raw[positions[index]] in "、，"]
+    if hidden:
+        begin = hidden[-1] + 1
+        while begin < end - 1 and scan[begin] == "＿":
+            begin += 1
+    hit = _v240_slide_hit_text(raw, positions, begin, end)
+    if hidden and not hit.startswith("…"):
+        hit = "…" + hit
+    return hit
+
+
 def _v240_slide_comma_findings(analysis: dict, findings: list[dict], doc_type: str | None) -> list[dict]:
     """slide_comma の候補（slides のときだけ数える。ほかの種類では作らない）。同じ行に pause_comma があれば、主題と主語の読点は重ねない。
     2.5.0: pause_comma が拾った短い目的語の「を、」は、目的語の読点として重ねない（同じ行のほかの目的語の読点は出す）。
-    pause_comma が「を、」だけを拾った行では、主題と主語の読点も出す（重ねる読点がないので）。"""
+    pause_comma が「を、」だけを拾った行では、主題と主語の読点も出す（重ねる読点がないので）。
+    3.4.0: 「#」で始まる見出し（文書の題を除く）は、型を問わず読点を全部候補に出す（_SLIDE_HEADING_COMMA、
+    message は _SLIDE_HEADING_MESSAGE）。題と、「#」で始まらない見出しの行は今までの型で見る。"""
     if doc_type != "slides":
         return []
     pause_lines = set(finding["line"] for finding in findings if finding["rule"] == "pause_comma" and finding.get("_heads", True))
@@ -4948,14 +4995,30 @@ def _v240_slide_comma_findings(analysis: dict, findings: list[dict], doc_type: s
                         if finding["rule"] == "pause_comma")
     rows = analysis["lines"]
     out = []
+    title = _v340_slide_title(rows)
     for line_no in _v240_slide_single_lines(analysis):
         row = rows[line_no - 1]
-        if "、" not in row["raw"]:
+        heading = row["kind"] == "heading" and line_no != title and bool(_SLIDE_ATX.match(row["content"]))
+        if "、" not in row["raw"] and not (heading and "，" in row["raw"]):
             continue
         visible, scan, positions = _v240_slide_texts(analysis, line_no)
         marker = _SLIDE_LEAD.match(scan)
         assert marker is not None
         lead = marker.end()
+        if heading:
+            hits = []
+            for match in _SLIDE_HEADING_COMMA.finditer(scan):
+                end = match.end()
+                floor = lead if match.start() >= lead else 0
+                begin = max(floor, max(scan.rfind(mark, floor, end - 1) for mark in "、，。！？!?：:") + 1)
+                while begin < end and scan[begin] in " 　#":
+                    begin += 1
+                hits.append("「" + _v340_heading_hit(row["raw"], scan, positions, begin, end) + "」")
+            if hits:
+                out.append({"rule": "slide_comma", "line": line_no, "severity": "info",
+                            "message": _SLIDE_HEADING_MESSAGE.format("".join(dict.fromkeys(hits))),
+                            "snippet": row["raw"].strip()})
+            continue
         body = scan[lead:].rstrip()
         if not body or len(body) > _SLIDE_LINE_MAX:
             continue

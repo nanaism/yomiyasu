@@ -1437,7 +1437,9 @@ DIFF_HELP_FAIL_ON = ("意味が変わる恐れのうち、数値、否定、主�
                      "「場合がある」「ことがある」を消して言い切った書き換えと、断定に「必ず」「確実に」などを足した書き換えも数えます"
                      "（ほかの種類と種類なしでは数えません）。能力の言い方（できる、可能だ）が消えた書き換えは、どの種類でも数えません。"
                      "コード・URL・引用ブロックなど変えない箇所の変化は、意味が変わる恐れとして出しますが、"
-                     "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。確度を弱めた書き換え、"
+                     "この条件には数えません。否定対比の主張の逆転と、元にない気持ちの語も数えません。"
+                     "話題（〜は、〜では など）ごとの人の組み合わせが入れ替わった書き換えと、否定が別の話題へ移った書き換えも"
+                     "数えません。確度を弱めた書き換え、"
                      "数えない語だけの確度の変化、予定の言い切り（する予定です → します）、かぎかっこの中の言葉の変化も数えません。"
                      "推量の言い方が、同じ強さの別の慎重な言い方に替わっただけの文（かもしれません → 恐れがあります、と思われます → 見込みです）も数えません。"
                      "原文にない因果のつながりを足した書き換えと、書き手の行為と読む言い方（いたします、今後・改めて、"
@@ -1772,7 +1774,7 @@ class TestCliContract(DiffCase):
         """2.1: main(argv=None) は終了コードを返す（CLI は sys.exit(main()) の形）。"""
         self.assertTrue(callable(getattr(yomiyasu_diff, "main", None)), "main がない")
         self.assertIn("argv", inspect.signature(yomiyasu_diff.main).parameters)
-        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_diff.py 3.3.0 (JSON format 2)\n", ""))
+        self.assertEqual(self.call_main(["--version"]), (0, "yomiyasu_diff.py 3.4.0 (JSON format 2)\n", ""))
         self.assertEqual(self.call_main([str(self.a_old), str(self.a_new)]), (0, EXAMPLE_A + "\n", ""))
         self.assertEqual(self.call_main(["--fail-on=meaning-risk", str(self.a_old), str(self.a_new)]),
                          (1, EXAMPLE_A + "\n\n" + FAIL_LINE_A + "\n", ""))

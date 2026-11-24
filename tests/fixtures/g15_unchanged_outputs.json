@@ -14,7 +14,7 @@
   "json": {
    "format": "yomiyasu-lint",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "candidate_count": 0,
    "counts": {
     "error": 0,
@@ -59,7 +59,7 @@
   "json": {
    "format": "yomiyasu-diff",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "status": "has_candidates",
    "changed": true,
    "candidate_count": 1,
@@ -265,7 +265,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:d7a3c1e40be5 mode=rewrite checks=lint,diff meaning_risk=1 reason=no_record_option",
@@ -291,7 +291,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -322,7 +322,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "has_candidates",
     "changed": true,
     "candidate_count": 1,
@@ -547,7 +547,7 @@
   "json": {
    "format": "yomiyasu-lint",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "candidate_count": 0,
    "counts": {
     "error": 0,
@@ -592,7 +592,7 @@
   "json": {
    "format": "yomiyasu-diff",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "status": "changed_without_candidates",
    "changed": true,
    "candidate_count": 0,
@@ -782,7 +782,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:1ccc817925e6 mode=rewrite checks=lint,diff meaning_risk=0 reason=no_record_option",
@@ -808,7 +808,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -839,7 +839,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "changed_without_candidates",
     "changed": true,
     "candidate_count": 0,
@@ -1048,7 +1048,7 @@
   "json": {
    "format": "yomiyasu-lint",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "candidate_count": 0,
    "counts": {
     "error": 0,
@@ -1093,7 +1093,7 @@
   "json": {
    "format": "yomiyasu-diff",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "status": "no_change",
    "changed": false,
    "candidate_count": 0,
@@ -1237,7 +1237,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:065e86077d33 mode=rewrite checks=lint,diff meaning_risk=0 reason=no_record_option",
@@ -1263,7 +1263,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -1294,7 +1294,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "no_change",
     "changed": false,
     "candidate_count": 0,
@@ -1457,7 +1457,7 @@
   "json": {
    "format": "yomiyasu-lint",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "candidate_count": 0,
    "counts": {
     "error": 0,
@@ -1502,7 +1502,7 @@
   "json": {
    "format": "yomiyasu-diff",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "status": "has_candidates",
    "changed": true,
    "candidate_count": 2,
@@ -1699,7 +1699,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:daea74ec4c96 mode=rewrite checks=lint,diff meaning_risk=1 reason=no_record_option",
@@ -1725,7 +1725,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -1756,7 +1756,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "has_candidates",
     "changed": true,
     "candidate_count": 2,
@@ -1972,7 +1972,7 @@
   "json": {
    "format": "yomiyasu-lint",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "candidate_count": 0,
    "counts": {
     "error": 0,
@@ -2017,7 +2017,7 @@
   "json": {
    "format": "yomiyasu-diff",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "status": "has_candidates",
    "changed": true,
    "candidate_count": 1,
@@ -2209,7 +2209,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:f2a40aa9c007 mode=rewrite checks=lint,diff meaning_risk=0 reason=no_record_option",
@@ -2235,7 +2235,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -2266,7 +2266,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "has_candidates",
     "changed": true,
     "candidate_count": 1,
@@ -2477,7 +2477,7 @@
   "json": {
    "format": "yomiyasu-lint",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "candidate_count": 0,
    "counts": {
     "error": 0,
@@ -2522,7 +2522,7 @@
   "json": {
    "format": "yomiyasu-diff",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "status": "has_candidates",
    "changed": true,
    "candidate_count": 2,
@@ -2731,7 +2731,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:239be8c65988 mode=rewrite checks=lint,diff meaning_risk=1 reason=no_record_option",
@@ -2757,7 +2757,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -2788,7 +2788,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "has_candidates",
     "changed": true,
     "candidate_count": 2,
@@ -3016,7 +3016,7 @@
   "json": {
    "format": "yomiyasu-lint",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "candidate_count": 0,
    "counts": {
     "error": 0,
@@ -3061,7 +3061,7 @@
   "json": {
    "format": "yomiyasu-diff",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "status": "has_candidates",
    "changed": true,
    "candidate_count": 1,
@@ -3262,7 +3262,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:74d4e08ef5fa mode=rewrite checks=lint,diff meaning_risk=1 reason=no_record_option",
@@ -3288,7 +3288,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -3319,7 +3319,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "has_candidates",
     "changed": true,
     "candidate_count": 1,
@@ -3539,7 +3539,7 @@
   "json": {
    "format": "yomiyasu-lint",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "candidate_count": 0,
    "counts": {
     "error": 0,
@@ -3584,7 +3584,7 @@
   "json": {
    "format": "yomiyasu-diff",
    "format_version": 2,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "status": "has_candidates",
    "changed": true,
    "candidate_count": 2,
@@ -3799,7 +3799,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:67c3f77dc785 mode=rewrite checks=lint,diff meaning_risk=0 reason=no_record_option",
@@ -3825,7 +3825,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -3856,7 +3856,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "has_candidates",
     "changed": true,
     "candidate_count": 2,
@@ -4093,7 +4093,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:a62fb236f053 mode=rewrite checks=lint,diff,materials meaning_risk=1 reason=no_record_option",
@@ -4119,7 +4119,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -4150,7 +4150,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "has_candidates",
     "changed": true,
     "candidate_count": 3,
@@ -4358,7 +4358,7 @@
    "materials": {
     "format": "yomiyasu-materials",
     "format_version": 1,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "mode": "rewrite",
     "sources": [
      {
@@ -4443,7 +4443,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:398b661833f8 mode=rewrite checks=lint,diff,materials meaning_risk=1 reason=no_record_option",
@@ -4469,7 +4469,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -4500,7 +4500,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "has_candidates",
     "changed": true,
     "candidate_count": 3,
@@ -4699,7 +4699,7 @@
    "materials": {
     "format": "yomiyasu-materials",
     "format_version": 1,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "mode": "rewrite",
     "sources": [
      {
@@ -4792,7 +4792,7 @@
   "json": {
    "format": "yomiyasu-check-result",
    "format_version": 1,
-   "tool_version": "3.3.0",
+   "tool_version": "3.4.0",
    "command": "run",
    "status": "unrecorded",
    "status_line": "yomiyasu-check: unrecorded via=run run=- attempt=- final=text-sha256:6a6623c717a2 mode=rewrite checks=lint,diff,materials meaning_risk=1 reason=no_record_option",
@@ -4818,7 +4818,7 @@
    "lint": {
     "format": "yomiyasu-lint",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "candidate_count": 0,
     "counts": {
      "error": 0,
@@ -4849,7 +4849,7 @@
    "diff": {
     "format": "yomiyasu-diff",
     "format_version": 2,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "status": "has_candidates",
     "changed": true,
     "candidate_count": 1,
@@ -5040,7 +5040,7 @@
    "materials": {
     "format": "yomiyasu-materials",
     "format_version": 1,
-    "tool_version": "3.3.0",
+    "tool_version": "3.4.0",
     "mode": "rewrite",
     "sources": [
      {

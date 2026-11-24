@@ -4,7 +4,7 @@ description: AIが生成した日本語を推敲するスキル。利用者が y
 license: MIT
 allowed-tools: Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_lint.py *) Bash(python3 ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_check.py *) Bash(python ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_lint.py *) Bash(python ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_check.py *) Bash(py -3 ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_lint.py *) Bash(py -3 ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_check.py *)
 metadata:
-  version: "3.3.0"
+  version: "3.4.0"
 ---
 
 # yomiyasu
@@ -129,7 +129,7 @@ YOMIYASU_EOF
 - 修正は1回のみ行い、直したら Step 3 の run をもう一度実行します。そのあとは本文を変えません。
 
 ### Step 5: 提出の前の照合
-最終稿の lint に残った info の指摘に残す理由があるかを確かめます。run と verify の出力の「残した指摘の語」があれば、その文を Step 2 の問いで読み直し、「書き手に確かめたい点」で尋ねるか、残す理由を「残したAIっぽいところ」に書きます（理由だけで済ませるのは、定着した言い方と文字どおりの意味のときだけ）。原文と最終稿で地の文の読点の数を比べ、増えた読点が「文長と読点の調整」の残す読点に当たらなければ外します。最終稿の lint に残った pause_comma の読点と、候補に出なかった文頭の「〜は、」「〜を、」や見出しの読点も同じように見ます。直したら run をやり直します。原文のファイルを更新する依頼なら、最終稿をそのまま原文の場所に写します。提出の直前に、本文を変えずに1回、最終稿が検査したものと同じかを確かめます（「実行するコマンド」の節）。verify のあとに本文を1字でも変えたら、run と verify をやり直してから提出します。
+最終稿の lint に残った info の指摘に残す理由があるかを確かめます。run と verify の出力の「残した指摘の語」があれば、その文を Step 2 の問いで読み直し、「書き手に確かめたい点」で尋ねるか、残す理由を「残したAIっぽいところ」に書きます（理由だけで済ませるのは、定着した言い方と文字どおりの意味のときだけ）。原文と最終稿で地の文の読点の数を比べ、増えた読点が「文長と読点の調整」の残す読点に当たらなければ外します。最終稿の lint に残った pause_comma の読点と、候補に出なかった文頭の「〜は、」「〜を、」や見出しの読点も同じように見ます。スライド（slides）の見出しにはカギ括弧や引用符の中と数字の区切りのほかの読点を残しません（lint の slide_comma。依頼で見出しの形が決まっているときと文書の題はそのままにします）。直したら run をやり直します。原文のファイルを更新する依頼なら、最終稿をそのまま原文の場所に写します。提出の直前に、本文を変えずに1回、最終稿が検査したものと同じかを確かめます（「実行するコマンド」の節）。verify のあとに本文を1字でも変えたら、run と verify をやり直してから提出します。
 
 ```bash
 python3 ${CLAUDE_SKILL_DIR}/scripts/yomiyasu_check.py verify --final 提出するファイル

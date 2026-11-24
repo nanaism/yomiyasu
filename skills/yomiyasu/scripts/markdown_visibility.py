@@ -6,7 +6,7 @@ not a claim to implement every CommonMark or GFM construct.
 """
 
 from __future__ import annotations
-__version__ = "3.3.0"
+__version__ = "3.4.0"
 
 import os
 from pathlib import Path
