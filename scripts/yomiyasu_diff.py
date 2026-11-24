@@ -5375,9 +5375,14 @@ def _cancel_meridiem(removed: Counter, added: Counter, sides: _Sides, old: _Sent
     # 3.4.0（午前・午後）: 24時制にそろえた値が同じ組で並びだけが違い、値と語の結び付き（_meridiem_bindings。_number_contexts と同じ手がかりで、
     # 数のすぐ前の「午前」「午後」は飛ばす）も変わったとき（会議は午後3時、懇親会は午後6時 → 会議は18時、懇親会は15時）は打ち消さない
     # （値の入れ替えを隠さない。3.3.0 と同じ候補になる）。結び付きが同じ並べ替え（集合は午前8時、解散は午後8時 → 解散は20時、集合は8時）は打ち消す
-    if (old_count == new_count and [number.key for number in olds] != [number.key for number in news]
-            and _meridiem_bindings(sides.texts[0], old, olds, old_origin) != _meridiem_bindings(sides.texts[1], new, news, new_origin)):
-        return removed, added
+    if old_count == new_count:
+        old_bound = _meridiem_bindings(sides.texts[0], old, olds, old_origin)
+        new_bound = _meridiem_bindings(sides.texts[1], new, news, new_origin)
+        # 3.4.0（午前・午後）: 値の並びが同じでも、手がかりの多重集合が同じで結び付きが変わったとき（会議は午後3時、懇親会は午後6時 →
+        # 懇親会は15時、会議は18時）も、項目どうしの時刻の入れ替えとみて打ち消さない
+        if old_bound != new_bound and ([number.key for number in olds] != [number.key for number in news]
+                                       or Counter(k for k, _ in old_bound.elements()) == Counter(k for k, _ in new_bound.elements())):
+            return removed, added
     conv_removed, conv_added = old_count - new_count, new_count - old_count
     if extra_old is None and extra_new is None:
         if moved_removed:
@@ -11686,12 +11691,24 @@ _TRIANGLE_ARROWS = _lazy_compile(r"[▼▽]")
 _TRIANGLE_RATING = _lazy_compile(r"([○◎◯△×✕])[ \t　]*[0-9０-９]")
 # 3.4.0（▲△の符号）: 空行をはさまずに続く行に、評価の○◎◯（あとが数字、空白、表の区切り、コロン、行末）があれば、その行の続きの△は
 # 評価の印（1行に1つの印の評価の箇条と表）。○○株式会社 のような伏せ字の○は数えない
-_TRIANGLE_RATING_BLOCK = _lazy_compile(r"[○◎◯](?=[0-9０-９ \t　|｜:：]|$)")
+_TRIANGLE_RATING_BLOCK = _lazy_compile(r"[○◎◯〇](?=[0-9０-９ \t　|｜:：]|$)")
 _TRIANGLE_NOT_BEFORE = frozenset("年月/／")
 _SHOGI_RANK = frozenset("一二三四五六七八九")
 _SHOGI_PIECE = frozenset("歩香桂銀金角飛玉王龍竜馬と")
 _TRIANGLE_VALUE_LINE = _lazy_compile(r"(?:[,.][0-9]+)*[ \t　]*(?:[%％]|[千万億兆百]*円|ポイント|pt|bp|[人件名社店台個本回点倍])?"
                                      r"[ \t　]*(?:[（(][^（()）\n]{0,20}[)）])?[ \t　。]*")
+
+
+# 3.4.0（▲△の符号）: 行頭（箇条の印のあとも）の○◎◯〇のあとに空白と語が続く形（○ 営業利益は△12億円）は箇条の記号で、評価の印に数えない
+_TRIANGLE_BULLET = _lazy_compile(r"[ \t　]*(?:[-*+・][ \t　]+|[0-9０-９]+[.)．）][ \t　]*)?(?P<mark>[○◎◯〇])[ \t　]+(?=[^ \t　0-9０-９|｜:：])")
+
+
+def _rating_line(line: str) -> bool:
+    # 伏せ字の並び（○○ 商事）の○も評価の印に数えない
+    bullet = _TRIANGLE_BULLET.match(line)
+    skip = bullet.start("mark") if bullet is not None else -1
+    return any(found.start() != skip and (found.start() == 0 or line[found.start() - 1] not in "○◎◯〇")
+               for found in _TRIANGLE_RATING_BLOCK.finditer(line))
 
 
 def _block_ratings(sides: _Sides, side: int, line: int, facts: dict) -> bool:
@@ -11706,7 +11723,7 @@ def _block_ratings(sides: _Sides, side: int, line: int, facts: dict) -> bool:
             end = start
             while end < len(lines) and lines[end].strip():
                 end += 1
-            if end > start and any(_TRIANGLE_RATING_BLOCK.search(lines[k]) is not None for k in range(start, end)):
+            if end > start and any(_rating_line(lines[k]) for k in range(start, end)):
                 flags[start:end] = [True] * (end - start)
             start = end + 1
         facts["rating_blocks"] = flags
@@ -11975,6 +11992,7 @@ _VALUE_SKIP_KINDS = frozenset(("code", "frontmatter", "html_block", "reference_d
 _ADDRESSEE_TOPIC = _lazy_compile(r"[一-鿿々〆〇ァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９][はをがも][ \t　]*(?=[一-鿿々〆〇ァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９])")
 _TOPIC_NAME_TAIL = _lazy_compile(r"[一-鿿々〆〇ァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９]+$")
 _TOPIC_PREFIX_WORD = _lazy_compile(r"[一-鿿々〆〇ァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９]+")
+_TOPIC_KANA_WORD = _lazy_compile(r"(?<![一-鿿々〆〇ァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９ぁ-ゖ])[ぁ-ゖ]{2,}(?=[一-鿿々〆〇ァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９])")
 _HONORIFIC_AFTER_NAME = _lazy_compile(r"(?<=[一-鿿々〆〇○ぁ-ゖァ-ヴーA-Za-zＡ-Ｚａ-ｚ0-9０-９])(?:さん|様)")
 # 宛名に取らない語（_value_tokens と同じ）
 _HONORIFIC_NOT_NAMES = ("皆", "みな", "たく", "お客", "お子", "お父", "お母", "お兄", "お姉", "おじい", "おばあ",
@@ -12064,7 +12082,10 @@ def _topic_name_kept(sides: _Sides, side: int, token: tuple, places: tuple | Non
     their_words = _TOPIC_PREFIX_WORD.findall(clause)
     if their_words and clause.endswith(their_words[-1]):
         their_words = their_words[:-1]        # 名前の並び
-    missing = [w for w in _TOPIC_PREFIX_WORD.findall(value[:topic.start() + 1]) if w not in clause]
+    # 3.4.0（宛名）: 漢字・片仮名・英数字の語のすぐ前の平仮名の並び（こども向け の こども）も話題の語として比べる
+    their_words += _TOPIC_KANA_WORD.findall(clause)
+    prefix = value[:topic.start() + 1]
+    missing = [w for w in _TOPIC_PREFIX_WORD.findall(prefix) + _TOPIC_KANA_WORD.findall(prefix) if w not in clause]
     if missing and any(w not in value for w in their_words):
         return False
     if other.endswith(person, 0, position):
