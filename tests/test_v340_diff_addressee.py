@@ -7,7 +7,7 @@
 句の名前の前に語を足した・動かした形（受付は初日に田中さん、司会は引き続き佐藤さん）は、句の後ろの名前で比べる。名前の前の
 2字以上の語が反対の側の同じ順番の名前の前にないとき（総務の田中さん → 経理の田中さん、初日に田中さん → 二日目に田中さん）は
 候補にする（PrefixWordTest）。句の頭の話題の語を別の語に替えた推敲（東京会場の受付は田中さん → 大阪会場の受付は田中さん）も
-候補にする（ReplacedTopicWordTest）。
+候補にする（ReplacedTopicWordTest。漢字・片仮名・英字の語のすぐ前の平仮名の語（こども向け）も比べる）。
 
 文はすべて合成の文。
 """
@@ -99,16 +99,50 @@ class ReplacedTopicWordTest(unittest.TestCase):
             with self.subTest(old=old, new=new):
                 self.assertEqual(addressees(old, new), [{"removed": [removed], "added": [added]}])
 
+    def test_replaced_hiragana_topic_words_are_kept(self):
+        """漢字・片仮名・英字の語のすぐ前の平仮名の話題の語を替えた推敲も、3.3.0 と同じく宛名の候補にする。"""
+        for old, new, removed, added in (
+                ("こども向けの受付は田中さん、案内は鈴木さんです。", "おとな向けの受付は田中さん、案内は鈴木さんです。",
+                 "こども向けの受付は田中さん", "おとな向けの受付は田中さん"),
+                ("ひるの部の受付は田中さん、よるの部の受付は鈴木さんです。", "あさの部の受付は田中さん、よるの部の受付は鈴木さんです。",
+                 "ひるの部の受付は田中さん", "あさの部の受付は田中さん")):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(addressees(old, new), [{"removed": [removed], "added": [added]}])
+
+    def test_swapped_hiragana_topic_words_show_both_candidates(self):
+        result = yomiyasu_diff.diff("こども向けの受付は田中さん、おとな向けの受付は鈴木さんです。\n",
+                                    "おとな向けの受付は田中さん、こども向けの受付は鈴木さんです。\n")
+        self.assertEqual([(c["subkind"], c["detail"]) for c in result["immutable"]["candidates"]],
+                         [("addressee", {"removed": ["こども向けの受付は田中さん"], "added": ["おとな向けの受付は田中さん"]})])
+        self.assertEqual([(r["kind"], r["subkind"]) for r in result["meaning_risks"]], [("topic", "person")])
+
     def test_synonym_topic_words_are_a_known_limit(self):
         """話題の語を同じ意味の語に言い換えた推敲も、語を替えた推敲として 3.3.0 と同じく宛名の候補にする（意味が同じかは見ない。限界）。"""
-        self.assertEqual(addressees("一日目の受付は山口さん、二日目の受付は松本さんです。", "初日の受付は山口さん、二日目の受付は松本さんです。"),
-                         [{"removed": ["一日目の受付は山口さん"], "added": ["初日の受付は山口さん"]}])
+        for old, new, removed, added in (
+                ("一日目の受付は山口さん、二日目の受付は松本さんです。", "初日の受付は山口さん、二日目の受付は松本さんです。",
+                 "一日目の受付は山口さん", "初日の受付は山口さん"),
+                ("受付係は山口さん、案内係は松本さんです。", "受付担当は山口さん、案内係は松本さんです。", "受付係は山口さん", "受付担当は山口さん")):
+            with self.subTest(old=old, new=new):
+                self.assertEqual(addressees(old, new), [{"removed": [removed], "added": [added]}])
+        result = yomiyasu_diff.diff("受付係は山口さん、案内係は松本さんです。\n", "受付担当は山口さん、案内係は松本さんです。\n")
+        self.assertEqual(result["meaning_risks"], [])
+        self.assertEqual(result["fail_on_meaning_risk_count"], 0)
 
     def test_dropped_or_added_words_stay_quiet(self):
         for old, new in (("最初の発表は鈴木さん、次が田中さんの予定です。", "発表は鈴木さん、田中さんの順です。"),
                          ("東京の受付は田中さん、案内は鈴木さんです。", "東京会場の受付は田中さん、案内は鈴木さんです。")):
             with self.subTest(old=old, new=new):
                 self.assertEqual(addressees(old, new), [])
+
+    def test_added_or_dropped_words_that_change_the_place_are_a_known_limit(self):
+        """語を足したり外したりして指す所が変わった推敲（本社 → 本社別館、第一会議室 → 会議室）も、語を外しただけ・足しただけの推敲と
+        みなして宛名の候補にしない（限界。3.3.0 は候補にしていた）。"""
+        for old, new in (("本社の受付は田中さん、案内は鈴木さんです。", "本社別館の受付は田中さん、案内は鈴木さんです。"),
+                         ("第一会議室の予約は田中さん、第二会議室の予約は鈴木さんです。", "会議室の予約は田中さん、第二会議室の予約は鈴木さんです。")):
+            with self.subTest(old=old, new=new):
+                result = yomiyasu_diff.diff(old + "\n", new + "\n")
+                self.assertEqual(result["immutable"]["candidates"], [])
+                self.assertEqual(result["meaning_risks"], [])
 
     def test_swapped_topic_words_show_both_candidates(self):
         for old, new in (("東京会場の受付は前田様、大阪会場の受付は藤田様です。", "大阪会場の受付は前田様、東京会場の受付は藤田様です。"),
