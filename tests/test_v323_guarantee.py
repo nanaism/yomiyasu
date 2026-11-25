@@ -122,7 +122,8 @@ class WordingTest(unittest.TestCase):
         self.assertEqual(self.wording("法人会員以外は、" + C), [("法人会員以外", "引き続きご利用いただけます")])
         self.assertEqual(self.wording("法人会員以外、" + C), [("法人会員以外", "引き続きご利用いただけます")])
         self.assertEqual(self.wording("法人会員を除き、" + C), [("法人会員以外", "引き続きご利用いただけます")])
-        self.assertEqual(self.wording("法人会員以外の方も、" + C), [("方", "引き続きご利用いただけます")])
+        # 3.4.1 から、句の前の語の人を指す語（方、みなさま、各位 など）は「人」にそろえる（お持ちの方は → お持ちの皆様は を同じ相手と読む）
+        self.assertEqual(self.wording("法人会員以外の方も、" + C), [("人", "引き続きご利用いただけます")])
         # 記号が挟まる形、も で終わる長い助詞、まで も 以外も の種類。は で終わる長い助詞は 以外 のまま
         self.assertEqual(self.wording("**法人会員以外**も、" + C), [("法人会員以外も", "引き続きご利用いただけます")])
         self.assertEqual(self.wording("「法人会員以外」も、" + C), [("法人会員以外も", "引き続きご利用いただけます")])
