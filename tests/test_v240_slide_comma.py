@@ -299,7 +299,11 @@ class SlideHeadingDocsTest(unittest.TestCase):
         self.assertEqual([f["line"] for f in slide("## 確認、確認、また確認\n")], [1])
         self.assertEqual(slide("## 確認、確認、また確認\n")[0]["message"].count("「確認、」"), 1)
         self.assertIn("「…、」", slide("## 「速く、正しく」、そして安く\n")[0]["message"])
-        self.assertIn("「０００件、」", slide("## １２，０００件、達成\n")[0]["message"])
+        # 3.4.1: 数字の区切りの「，」は当たった言い方の境目にしない（3.4.0 は「０００件、」から切り出していた。issue #76）
+        self.assertIn("「１２，０００件、」", slide("## １２，０００件、達成\n")[0]["message"])
+        self.assertNotIn("「０００件、」", slide("## １２，０００件、達成\n")[0]["message"])
+        self.assertIn("時刻や比の「:」「：」のあとから切り出すことがあります", tools)
+        self.assertIn("「30、」", slide("## 会議は12:30、場所は本社\n")[0]["message"])
 
     def test_readme_en_on_headings_and_bullets(self):
         readme = (ROOT / "README.en.md").read_text(encoding="utf-8")

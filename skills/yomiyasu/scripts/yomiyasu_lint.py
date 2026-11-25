@@ -10,7 +10,7 @@ paper は慎重表現をぼかしとして削る規則がないので、外す�
 """
 
 from __future__ import annotations
-__version__ = "3.4.0"
+__version__ = "3.4.1"
 
 import os
 from pathlib import Path
@@ -5007,10 +5007,15 @@ def _v240_slide_comma_findings(analysis: dict, findings: list[dict], doc_type: s
         lead = marker.end()
         if heading:
             hits = []
+            previous = -1    # 3.4.1: すぐ前の、読点に数えた「、」か「，」の位置（数字の区切りの「，」は数えない）
             for match in _SLIDE_HEADING_COMMA.finditer(scan):
                 end = match.end()
                 floor = lead if match.start() >= lead else 0
-                begin = max(floor, max(scan.rfind(mark, floor, end - 1) for mark in "、，。！？!?：:") + 1)
+                mark_at = max(scan.rfind(mark, floor, end - 1) for mark in "、。！？!?：:")
+                if previous >= floor:
+                    mark_at = max(mark_at, previous)
+                previous = match.start()
+                begin = max(floor, mark_at + 1)
                 while begin < end and scan[begin] in " 　#":
                     begin += 1
                 hits.append("「" + _v340_heading_hit(row["raw"], scan, positions, begin, end) + "」")

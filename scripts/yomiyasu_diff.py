@@ -27,7 +27,7 @@ yomiyasu_diff.py - 元の文と書き直した文を比べ、変わった箇所�
 """
 
 from __future__ import annotations
-__version__ = "3.4.0"
+__version__ = "3.4.1"
 
 import os
 import errno
@@ -5351,6 +5351,47 @@ def _meridiem_bindings(text: str, sentence: _Sentence, numbers: Sequence[_Number
     return found
 
 
+# 3.4.1（午前・午後、issue 76）: 項目の名前（時刻の前の節の主題。小学生は、A店は、1組は、東京会場では）
+_ITEM_NAME_CHARS = "0-9A-Za-z\uff10-\uff19\uff21-\uff3a\uff41-\uff5a\u4e00-\u9fa5\u3005\u3006\u30f5\u30f6\u30a1-\u30f4\u30fc"
+_ITEM_NAME = _lazy_compile("((?:お|ご)?[" + _ITEM_NAME_CHARS + "]+(?:の[" + _ITEM_NAME_CHARS + "]+)*(?:さま|さん)?"
+                           "(?:[（(][^）)、，,]{1,12}[）)])?)(?:では|には|は|が|も)[ \t\u3000]*$")
+
+
+def _meridiem_items(text: str, sentence: _Sentence, numbers: Sequence[_Number], origin: Sequence[int | None]) -> list | None:
+    """24時制にそろえた時の数ごとの (項目の名前, 値) の並び。項目の名前は、節（文頭か読点のあと）の中で、前の時の数のあとから
+    この数（すぐ前の午前・午後は飛ばす）までの終わりにある「名前＋は・が・も・では・には」の名前。名前がなく、同じ節に前の時の数が
+    あれば、その名前を引き継ぐ（1部は午後1時から3時 の 3時）。名前の取れない時の数が1つでもあれば None。"""
+    out, item, floor = [], None, sentence.start
+    for index, number in enumerate(numbers):
+        if origin[index] is None or not _hour_like(number):
+            continue
+        at = number.start
+        word = _meridiem_before(text, at, sentence.start)
+        if word is not None:
+            at = text.rindex(word, sentence.start, at)
+        cut = max(text.rfind(mark, floor, at) for mark in "、，,")
+        if cut >= 0:
+            floor, item = cut + 1, None      # 読点のあとは新しい節（前の名前を引き継がない）
+        found = _ITEM_NAME.search(text, floor, at)
+        if found is not None and found.end() == at:
+            item = found.group(1)
+        if item is None:
+            return None
+        out.append((item, number.key))
+        floor = number.end
+    return out
+
+
+def _meridiem_items_swapped(old_items: list | None, new_items: list | None) -> bool:
+    """両方の文で項目の名前が取れ、名前の多重集合が同じ（2つ以上の名前）で、名前と値の結び付きが違えば真（項目どうしの時刻の入れ替え）。"""
+    if not old_items or not new_items:
+        return False
+    names = Counter(item for item, _ in old_items)
+    if len(names) < 2 or names != Counter(item for item, _ in new_items):
+        return False
+    return Counter(old_items) != Counter(new_items)
+
+
 def _cancel_meridiem(removed: Counter, added: Counter, sides: _Sides, old: _Sentence, new: _Sentence, old_numbers: Sequence[_Number], new_numbers: Sequence[_Number], moved_removed: Counter | None, moved_added: Counter | None, extra_old: Sequence | None, extra_new: Sequence | None) -> tuple[Counter, Counter]:
     """組の文の数値を、午後の0〜11時を24時制にし、「半」を30分と読んだ値で比べ直し、消えた値と元にない値が減るときだけ、減らした
     値を返す（_MERIDIEM_BEFORE の前の注記）。比べ直しで元の比べになかった値が残るときと、減らないときと、24時制にそろえた値の
@@ -5376,6 +5417,11 @@ def _cancel_meridiem(removed: Counter, added: Counter, sides: _Sides, old: _Sent
     # 数のすぐ前の「午前」「午後」は飛ばす）も変わったとき（会議は午後3時、懇親会は午後6時 → 会議は18時、懇親会は15時）は打ち消さない
     # （値の入れ替えを隠さない。3.3.0 と同じ候補になる）。結び付きが同じ並べ替え（集合は午前8時、解散は午後8時 → 解散は20時、集合は8時）は打ち消す
     if old_count == new_count:
+        # 3.4.1（issue 76）: 項目の名前が両方の文に残り、値だけが入れ替わった（小学生は午後3時から、中学生は午後6時から →
+        # 小学生は18時から、中学生は15時から）ときは打ち消さない
+        if _meridiem_items_swapped(_meridiem_items(sides.texts[0], old, olds, old_origin),
+                                   _meridiem_items(sides.texts[1], new, news, new_origin)):
+            return removed, added
         old_bound = _meridiem_bindings(sides.texts[0], old, olds, old_origin)
         new_bound = _meridiem_bindings(sides.texts[1], new, news, new_origin)
         # 3.4.0（午前・午後）: 値の並びが同じでも、手がかりの多重集合が同じで結び付きが変わったとき（会議は午後3時、懇親会は午後6時 →
@@ -5617,14 +5663,48 @@ class _MeridiemWide:
                     for value, source in zip(converted, origin):
                         if source is not None:
                             index[s].setdefault(numbers[source].key, []).append((number, value))
+        # 3.4.1: 24時制にそろえた単位つきの値（午後2時 の 14時）は、書いてあるとおりの値ごとに元と後の数を引いて、相手の側に残った
+        # ものがあるときだけ「ある」の手がかりにする（値の個数で見る）。会議は午後2時に始まります。資料は14時までに配ります。→
+        # 会議は始まります。資料は14時までに配ります。では、後の 14時 は元の 14時 の相手で、消えた 午後2時 を打ち消さない（issue 76）。
+        # 午後2時と午後2時 → 14時 のように、同じ書き方の値をまとめた推敲は、今までどおり打ち消す。門にかけるのは単位つきの値で、
+        # 24時制にそろえた値と書いたままの値の両方。書いたままの値は、相手の側の書き換えた文（こちらの側に同じ文のない文）にあるときも
+        # 通す（説明会は午後2時に始まります。受付も14時に始まります。→ 説明会と受付は午後2時に始まります。の 14時。_found_changed）。
+        # 変えていない文にあるだけなら通さない（会議は14時に始まります。資料は午後2時までに配ります。→ 会議は始まります。〜 の 14時）
+        spare = self.__dict__.get("spare")
+        if spare is None:
+            spare = self.spare = (Counter(), Counter())
+            written = (Counter(), Counter())
+            for s in (0, 1):
+                for number, (_, numbers, converted, origin, _, _) in enumerate(self.rows[s]):
+                    if number in self.bad[s]:
+                        continue
+                    for value, source in zip(converted, origin):
+                        if value.unit:      # 読んだ「半」の30分（source が None）は、書いてあるとおりの値なしで数える
+                            written[s][(numbers[source].key if source is not None else None, value.key)] += 1
+            for s in (0, 1):
+                for (raw, value), count in (written[s] - written[1 - s]).items():
+                    spare[s][value] += count
         found = set()
         for key in set(keys):
             for number, value in index[side].get(key, ()):
                 if any(self._found(side, number, candidate, is_converted) for candidate, is_converted
-                       in (((value.key, True), (key, False)) if value.key != key else ((key, False),))):
+                       in (((value.key, True), (key, False)) if value.key != key else ((key, False),))
+                       if not candidate[1] or spare[1 - side][candidate] > 0
+                       or (not is_converted and self._found_changed(side, number, candidate))):
                     found.add(key)
                     break
         return found
+
+    def _found_changed(self, side: int, number: int, candidate: tuple) -> bool:
+        """3.4.1: candidate（side の側の書いたままの値）が、同じ語（_meridiem_words）のある相手の側の書き換えた文（side の側に同じ文が
+        ない文）にあるか。"""
+        other = 1 - side
+        same = self.__dict__.get("same_texts")
+        if same is None:
+            same = self.same_texts = tuple({row[0].text.strip() for row in self.rows[s]} for s in (0, 1))
+        return any(row not in self.bad[other] and bool(self.words[side][number] & self.words[other][row])
+                   and self.rows[other][row][0].text.strip() not in same[side]
+                   for row in self.where[other].get(candidate, ()))
 
     def swaps(self, full: dict, swapped_at: tuple) -> list:
         """組の文で出していない「午前」と「午後」の入れ替え（(hunk の番号, 塊の中の順, risk) の並び）。変わった塊の文の、午前・午後の
@@ -6153,10 +6233,14 @@ _NEST_NOT_JOINT = (_NEST_FIXED_PRED + r"|は(?:[一-龥々、，,？?！!]|い[�
 # このつなぎのある文は、並べた節の文として見ない（_nest_roles）。並べた節の「の」は な のあとも取る（〜なのと、〜なことが）。
 # な のあとの「の」に を、に、が、は、も が続く形は、3.3.0 と同じく名詞化の語にしない。と のあとが _NEST_NOT_JOINT の形のときの
 # と と、「もちろんのこと、」「勿論のこと、」の読点とコンマは、つなぎに取らない。ほかにつなぎがなければ、その文は 3.3.0 と同じく
-# 見る。「もしくは」の も を助詞の も に取らないように、つなぎを助詞より先に見る
-_NEST_NOMINAL = _lazy_compile(r"(?:こと|(?<=[るたいうくすつぬむぶぐな])の)"
+# 見る。「もしくは」の も を助詞の も に取らないように、つなぎを助詞より先に見る。
+# 3.4.1: つなぎを取る「こと」は、すぐ前の字が述語の終わり（る・た・い・う・く・す・つ・ぬ・む・ぶ・ぐ・な・だ・き。〜すること、
+# 〜したこと、〜ないこと、〜読んだこと、〜大切なこと、〜すべきこと、良きこと）のときだけ。ほかの こと（先日のこと、そのこと、
+# ことと次第、XことY）は 3.3.0 と同じく を・に・が・は・も だけを取り、つなぎに取らない（issue #76）
+_NEST_NOMINAL = _lazy_compile(r"(?:(?<=[るたいうくすつぬむぶぐなだき])こと|(?<=[るたいうくすつぬむぶぐな])の)"
                               r"(?:(と(?!" + _NEST_NOT_JOINT + r")|や|(?<!もちろんのこと)(?<!勿論のこと)[、，,]"
                               r"|及び|および|並びに|ならびに|または|又は|もしくは)|(?<!なの)(?:を|に|が|は|も))"
+                              r"|こと(?:を|に|が|は|も)"
                               r"|(?<=[るたいうくすつぬむぶぐ])よう(?:に|、)?(?!だ|で|な|す|見|思)")
 _NEST_PARTICLE = _lazy_compile(r"(?:が|は|に(?!つ|よ|関|対|と|お|向|応|伴|基|な|も))")
 
@@ -10484,6 +10568,7 @@ _ADD_WORDING_LIMITER = _lazy_compile(
     r"(?:(?P<only>に限り|にかぎり|に限って|にかぎって|に限定して|に限定し|(?<!できる)だけ|のみ|(?<![ただ])ばかり"
     r"|(?<=[" + _ADD_K + r"ァ-ヴー0-9０-９])(?:限り|かぎり))"
     r"|(?P<except>を除き|をのぞき|を除いて|をのぞいて|を除けば|をのぞけば|以外)"
+    r"|(?P<incl>(?:を|も)?含め(?:て)?)"
     r"|(?P<broad>に限らず|にかぎらず)|(?P<emph>(?<!から)こそ)|(?P<even>(?<![お押抑])さえ|すら)|(?P<etc>など)"
     r"|(?P<cond>であれば|(?<!なぜ)(?<!何故)ならば|(?<!なぜ)(?<!何故)(?<!言う)(?<!換える)なら)"
     r"|(?P<degree>(?<![先後今])(?<!さき)(?<!のち)(?<!なる)(?<!この)(?<!いま)ほど|くらい|ぐらい))$")
@@ -10494,7 +10579,7 @@ _ADD_WORDING_INCLUSIVE = _lazy_compile(r"^[\s、，,:：*＊）)」』】\]]*(?:
                                        r"|においても|についても|に対しても|に関しても|にとっても|にも|でも|も|まで)[\s、，,:：*＊）)」』】\]]*$")
 
 _ADD_WORDING_LIMITER_KIND = {"only": "のみ", "except": "以外", "broad": "に限らず", "emph": "こそ", "even": "さえ", "etc": "など", "cond": "なら",
-                             "degree": "ほど"}
+                             "degree": "ほど", "incl": "含め"}
 
 # 原文と推敲後の句を数える前に、漢字で書いた補助動詞・形式名詞・謙譲の形を、句の型の形にそろえる（ご利用頂けます、頂いた、
 # ご利用出来ます、出来れば、送信される事は、発生致しません、移行の為、ご確認下さい、試して見る。SKILL.md がひらがなに直す形）。
@@ -10516,6 +10601,17 @@ _ADD_WORDING_CLASS = r"[" + _ADD_K + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ.
 # 「と」「や」「・」「及び」でつないだ語は、つないだまま1つの語にする（B は → A と B は を、同じ前の語にしない）。
 
 _ADD_WORDING_WORD = _lazy_compile(r"(?:" + _ADD_WORDING_CLASS + r"[ 　]*(?:と|や|・|及び|および|並びに)[ 　]*)*" + _ADD_WORDING_CLASS + r"$")
+
+# 3.4.1: 句の前の語の頭（人を指すひらがなの語と、名詞＋さま・さん・たち）。3.2.2 の取り方の語だけに使う（3.2.1 の取り方は変えない）。
+_ADD_WORDING_HEAD = r"(?:" + _ADD_WORDING_CLASS + r"(?:さま|さん|たち)?|みなさま|みなさん|みんな)"
+_ADD_WORDING_WORD_341 = _lazy_compile(r"(?:" + _ADD_WORDING_CLASS + r"[ 　]*(?:と|や|・|及び|および|並びに)[ 　]*)*" + _ADD_WORDING_HEAD + r"$")
+# 3.4.1: 句の前の語に付いた修飾（空白でつないだ英数字の語、「〜の」）と、1つの語を挟んだ主題（〜は、〜も、〜が）。
+_ADD_WORDING_LATIN = _lazy_compile(r"(?:[A-Za-z0-9][A-Za-z0-9._\-]*[ 　]+)+$")
+_ADD_WORDING_MOD = _lazy_compile(r"(?P<q>(?:[A-Za-z0-9][A-Za-z0-9._\-]*[ 　]+)*" + _ADD_WORDING_CLASS + r")の(?:お|ご)?$")
+_ADD_WORDING_TOPIC = _lazy_compile(r"(?:につきましては|につきましても|に関しましては|に関しましても|におきましては|においては|においても"
+                                   r"|については|についても|に関しては|に関しても|としては|では|でも|には|にも|は|も|が)$")
+# 3.4.1: 句のすぐ前の、いつでも・だれでも当てはまるとする語（条件を外した保証）。必ず・常に は念押し、例外なく は範囲の語の候補で見る。
+_ADD_WORDING_ALWAYS = _lazy_compile(r"(?:いつでも|いつまでも|どなたでも|どなた様でも|どなたさまでも|誰でも|だれでも|どこでも|どこからでも|無条件で|無条件に)$")
 
 _ADD_GUARANTEE_FAM = {"ことはない": r"ことは(?:ありません|ございません|ない)",
                  "費用はかからない": r"(?:費用|料金|料(?=は|が|を|も)|負担|手数料)(?:は|が|も)?[^。]{0,8}?(?:かから|かかりません|発生し(?:ない|ません)|いただき?ません|不要|なし|ゼロ|[0０〇]円)|無料|無償|[0０〇]円",
@@ -10646,9 +10742,119 @@ def _addition_promise_clauses(text: str) -> list:
     return found
 
 
+# 保証と再発防止の誓いの句の、読点の後ろの中身（3.4.1。issue #75）。句の言い方（_addition_promise_wordings）は句の語のあとの最初の
+# 「、」で切るので、「再発しないよう、」の後ろの誓いの中身と、ます・ません で言い切った保証の「、」の後ろに足した範囲は比べていなかった。
+# 句がこの形の「、」で切れるときだけ、その「、」から文の終わりまでの内容語を取り、原文の本文にない語（どの2字も、原文の本文から
+# かなと記号を除いた並びにあるのでなければ、ない語）があれば、同じ言い方の句でも原文にない中身として残す。
+_ADD_SCOPE_PREVENT_END = _lazy_compile(r"(?:ない|ぬ)よう(?:に)?$")
+_ADD_SCOPE_GUARANTEE_END = _lazy_compile(r"(?:ます|ません)$")
+_ADD_SCOPE_WORD = _lazy_compile(r"[" + _ADD_K + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ]{2,}")
+_ADD_SCOPE_DROP = _lazy_compile(r"[^" + _ADD_K + r"ァ-ヴーA-Za-z0-9０-９Ａ-Ｚａ-ｚ]+")
+
+# 前の句を指して言い直す語（新プランも同じです → 同様です）は、中身の語に数えない。
+_ADD_SCOPE_STOP = ("同様", "同一", "同等", "同上", "上記", "前述", "以上", "以下")
+# 3.4.1: 読点の後ろの中身の語を比べる前に、算用数字を漢数字に、ダブル を 二重 にそろえる（2重 → 二重、ダブルチェック → 二重チェック）
+_ADD_SCOPE_DIGITS = str.maketrans("0123456789０１２３４５６７８９", "〇一二三四五六七八九〇一二三四五六七八九")
+
+
+def _addition_scope_norm(text: str) -> str:
+    """3.4.1: 読点の後ろの中身の語のそろえ方。同じ意味の書き換え（_addition_same_words）と、数字とダブルのそろえ方。"""
+    return _addition_same_words(text).translate(_ADD_SCOPE_DIGITS).replace("ダブル", "二重")
+
+
+def _addition_promise_tail(text: str, pos: int, key: str, sub: str) -> str:
+    """保証か再発防止の誓いの句（pos、key）が「〜よう、」（誓い）か「〜ます、」「〜ません、」（保証）で切れるとき、その「、」の後ろから
+    文の終わりの「。」の前まで。ほかの形は空（3.4.1）。"""
+    end = pos + len(key)
+    comma, period = text.find('、', end), text.find('。', end)
+    if comma < 0 or 0 <= period < comma:
+        return ''
+    rx = _ADD_SCOPE_PREVENT_END if sub == 'prevention' else _ADD_SCOPE_GUARANTEE_END
+    if not rx.search(text[pos:comma]):
+        return ''
+    return text[comma + 1: period if period >= 0 else len(text)]
+
+
 def _addition_wording_strip(before: str) -> str:
     """句の前の字の並びから、すぐ前の空白・読点・記号と、助詞を1つ外す（_addition_promise_wording。3.2.1 の外し方）。"""
     return _ADD_WORDING_TRAIL.sub('', _ADD_WORDING_PARTICLE.sub('', _ADD_WORDING_TRAIL.sub('', before)))
+
+
+def _addition_head_norm(word: str) -> str:
+    """3.4.1: 人を指す語の書き分けをそろえる（皆様・皆さま・みな様 → みなさま、皆さん → みなさん、お客様 → お客さま）。"""
+    return re.sub(r"様$", "さま", re.sub(r"^(?:皆|みな)(?=様|さま|さん)", "みな", word))
+
+
+# 3.4.1: 保証の相手（句の前の語と修飾、主題）と、誓いの読点の後ろの中身の語を比べる前にそろえる、推敲でよくある同じ意味の書き換え。
+# 敬語を上げる推敲（当社の製品 → 弊社の製品、御社 → 貴社）と、カタカナと漢字の言い換え（旧版 → 旧バージョン、チェック → 確認、
+# ユーザー → 利用者）を、相手や中身の入れ替えと読まないため。
+_ADD_SAME_WORDS = tuple((_lazy_compile(pattern), repl) for pattern, repl in (
+    (r"(?:弊|小|自)社|(?:我|わ)が社", "当社"),
+    (r"弊(?=店|行|院|校|館|局|園|室|部|課)", "当"),
+    (r"貴(?=社|店|行|院|校|館|局|園)", "御"),
+    (r"(?:バ|ヴァ)ージョン", "版"),
+    (r"有償", "有料"),
+    (r"無償", "無料"),
+    (r"チェック", "確認"),
+    (r"ユーザー?|顧客|カスタマー|お客(?:様|さま|さん)?", "利用者"),
+))
+_ADD_SAME_NOW = frozenset(("今", "いま", "現在", "現行", "現状"))
+# 3.4.1: 今使っている人を指す修飾（既存のお客様、ご利用中のお客様、ご契約のお客様）。ご・お を外したあとの語を1つにそろえる
+_ADD_SAME_CURRENT = frozenset(("既存", "利用", "利用中", "契約", "契約中", "加入", "加入中"))
+# 3.4.1: 人を指す語（お持ちの方は → お持ちの皆様は）
+_ADD_SAME_PERSON = frozenset(("方", "方々", "かた", "みなさま", "みなさん", "各位", "皆", "みんな"))
+
+
+def _addition_same_words(text: str) -> str:
+    """3.4.1: 同じ意味の書き換え（_ADD_SAME_WORDS）をそろえた文。"""
+    for rx, repl in _ADD_SAME_WORDS:
+        text = rx.sub(repl, text)
+    return text
+
+
+def _addition_target_norm(word: str) -> str:
+    """3.4.1: 保証の相手の語をそろえる。皆様の書き分け（_addition_head_norm）と同じ意味の書き換え（_addition_same_words）のあと、
+    語の頭のご・お（漢字かカタカナの前）と語の終わりの様・さま・さん・殿を外し（みなさま、みなさん は残す）、今・現行・現状を現在に、
+    既存・利用中・契約中 などを既存に、方・みなさま・各位 などを人にする。句の前の語の取り方は「お」を含まないので、お客様 は「客」に
+    なる。これも利用者にする。"""
+    word = _addition_same_words(_addition_head_norm(word))
+    if word not in ("みなさま", "みなさん"):
+        word = re.sub(r"(?:様|さま|さん|殿)$", "", re.sub(r"^[ごお](?=[一-龥々ァ-ヴ])", "", word)) or word
+    if word == "客":
+        return "利用者"
+    if word in _ADD_SAME_PERSON:
+        return "人"
+    if word in _ADD_SAME_CURRENT:
+        return "既存"
+    return "現在" if word in _ADD_SAME_NOW else word
+
+
+def _addition_wording_qualifiers(head: str) -> tuple:
+    """3.4.1: 句の前の語（3.2.2 の取り方）の前の字 head から、語の修飾と、1つの語を挟んだ主題の語を取る。"""
+    quals = []
+    for _ in range(2):
+        m = _ADD_WORDING_LATIN.search(head)
+        if m:
+            quals.append(m.group(0).strip())
+            head = head[:m.start()]
+        else:
+            m = _ADD_WORDING_MOD.search(head)
+            if m:
+                q = _addition_target_norm(m.group('q'))
+                # 修飾の「利用者の」「契約者の」「加入者の」は、ご利用の・ご契約の と同じ 既存 にそろえる（主題の語は変えない）
+                quals.append("既存" if q in ("利用者", "契約者", "加入者") else q)
+                head = head[:m.start()]
+        rest = _ADD_WORDING_TRAIL.sub('', head)
+        t = _ADD_WORDING_TOPIC.search(rest)
+        if not t or not t.start():
+            break
+        rest = _ADD_WORDING_TRAIL.sub('', rest[:t.start()])
+        w = _ADD_WORDING_WORD_341.search(rest)
+        if not w:
+            break
+        quals.append(_addition_target_norm(w.group(0)))
+        head = rest[:w.start()]
+    return tuple(quals), len(head)
 
 
 def _addition_promise_wording(text: str, pos: int, key: str, name: str) -> tuple[str, str]:
@@ -10657,6 +10863,10 @@ def _addition_promise_wording(text: str, pos: int, key: str, name: str) -> tuple
 
 
 def _addition_promise_wordings(text: str, pos: int, key: str, name: str) -> tuple[tuple[str, str], tuple[str, str], bool]:
+    return _addition_promise_wordings_full(text, pos, key, name)[:3]
+
+
+def _addition_promise_wordings_full(text: str, pos: int, key: str, name: str) -> tuple:
     """保証と再発防止の誓いの句の言い方（3.2.1）。(句の前の語, 句の頭（pos）から句の語（key）のあとの最初の「。」か「、」の前まで)。
     句の語のあとの形も比べるので、「〜いただけるかを確認しています」「〜いただけますと幸いです」「発生いたしませんでした」
     「〜ことは一切できません」は、「〜いただけます」「発生いたしません」「〜ことは一切ございません」と別の言い方になる。
@@ -10672,11 +10882,13 @@ def _addition_promise_wordings(text: str, pos: int, key: str, name: str) -> tupl
     if name == 'ことはない':
         before = text[:pos]
         same = (before[max(before.rfind('、'), before.rfind('。')) + 1:].strip(), wording)
-        return same, same, True
+        return same, same, True, ((), ''), False
     # 句の前の200字だけを見る（つないだ語が長く続く1文で、正規表現の時間が延びないため）。助詞を外したあとに範囲や条件を決める語が
     # あれば、その種類を残して外し、その前の助詞をもう一度外す（品質だけは、旧プランでのみ、旧プランでさえも。3.2.2）。
     # この語がないときの外し方は 3.2.1 と同じ1回だけ。
     raw = text[max(0, pos - 200):pos]
+    tail = _ADD_WORDING_TRAIL.sub('', raw)
+    always = bool(_ADD_WORDING_ALWAYS.search(tail))
     before = _addition_wording_strip(raw)
     first = _ADD_WORDING_WORD.search(before)
     old = (first.group(0) if first else '', wording)
@@ -10695,9 +10907,17 @@ def _addition_promise_wordings(text: str, pos: int, key: str, name: str) -> tupl
         raw = before[:limiter.start()]
         before = _addition_wording_strip(raw)
     mark = ''.join(reversed(kinds))
-    word = _ADD_WORDING_WORD.search(before)
-    # 語が取れないとき（一覧にない言い方のあと。旧プランを含めて）は、語を空にする（範囲や条件を決める語の種類は残す）。
-    return ((word.group(0) if word else '') + mark, wording), old, bool(word)
+    word = _ADD_WORDING_WORD_341.search(before)
+    quals, reach = _addition_wording_qualifiers(before[:word.start()]) if word else ((), len(before))
+    reach += max(0, pos - 200)
+    # 3.4.1: 相手を比べる手がかりの文。句の前の語の修飾と主題を取り終えた所（reach）の前の、最後の読点か句点か改行のあとから
+    # 句の頭まで（末尾の読点と空白は外す）。相手の修飾が相手の句の修飾になくても、この文にあれば食い違いに数えない
+    # （旧プランをご利用中のお客様も → 旧プランのお客様も、旧プランをご利用中のお客様は、移行後も → 旧プランのお客様は、移行後も）
+    context = re.sub(r"[、\s]+$", "", text[:pos])
+    lead = context[:min(reach, len(context))]
+    context = _addition_same_words(_addition_head_norm(context[max(lead.rfind('。'), lead.rfind('\n'), lead.rfind('、')) + 1:]))
+    # 語が取れないとき（一覧にない言い方のあと。旧プランを選べば）は、語を空にする（範囲や条件を決める語の種類は残す）。
+    return ((_addition_target_norm(word.group(0)) if word else '') + mark, wording), old, bool(word), (quals, context), always
 
 
 def _addition_kana_forms_321(text: str) -> str:
@@ -10884,12 +11104,58 @@ class _AdditionDocument:
         self.prevent = any(not _ADD_PREVENT_UNSETTLED.match(self.raw, m.end()) for m in _ADD_PREVENT_ANY.finditer(self.raw))
         self.states, self.kept, self.heads, self.matches = {}, {}, {}, {}
         self._old_bigrams = None
+        self._scope_grams = None
         self._wordings = None
+        self._targets = []
+        self._target_memo = {}
         self._kana = {}
         self.counts = [Counter(w[0] for b in bodies for w in self.state_words(b.text)) for bodies in self.bodies]
         self.by_kind = {}
         for risk in risks:
             self.by_kind.setdefault(risk['kind'], []).append(risk)
+
+    def scope_grams(self, side: int = 0) -> set[str]:
+        """その側の本文を句の型の形にそろえ（_addition_scope_norm）、かなと記号を除いた並びの2字の組の集まり（3.4.1）。
+        _addition_promise_tail の中身の語が、もう片方の側にあるかを見る。側ごとに1度だけ作る。"""
+        if self._scope_grams is None:
+            self._scope_grams = []
+            for bodies in self.bodies:
+                text = _ADD_SCOPE_DROP.sub('', _addition_scope_norm(self.kana_map("".join(b.text for b in bodies))[0]))
+                self._scope_grams.append({text[k:k + 2] for k in range(len(text) - 1)})
+        return self._scope_grams[side]
+
+    @staticmethod
+    def scope_known(word: str, grams: set) -> bool:
+        """語の2字の組がどれも grams にあるか。語の終わりの1字の接尾（者・様・側・面・用）は外して見てもよい（担当 → 担当者）。"""
+        if all(word[k:k + 2] in grams for k in range(len(word) - 1)):
+            return True
+        return len(word) >= 3 and word[-1] in "者様側面用" and _AdditionDocument.scope_known(word[:-1], grams)
+
+    def scope_words(self, sub: str, text: str, pos: int, key: str) -> list[str]:
+        """文 text の句の、読点の後ろの中身（_addition_promise_tail）の語（3.4.1。前を指す語 _ADD_SCOPE_STOP は数えない）。"""
+        tail = _addition_promise_tail(text, pos, key, sub)
+        if not tail:
+            return []
+        return [w for w in _ADD_SCOPE_WORD.findall(_addition_scope_norm(self.kana_map(tail)[0])) if w not in _ADD_SCOPE_STOP]
+
+    def scope_dropped(self, sub: str) -> int:
+        """原文の同じ種類の句の、読点の後ろの中身の語のうち、推敲後の本文にない語の数（替えて消えた語。3.4.1）。"""
+        memo = self.__dict__.setdefault("_scope_dropped", {})
+        if sub not in memo:
+            grams = self.scope_grams(1)
+            memo[sub] = sum(1 for body in self.bodies[0] for s0, _, k0, p0, _ in self.find('promise', body.text) if s0 == sub
+                            for w in self.scope_words(s0, body.text, p0, k0) if not self.scope_known(w, grams))
+        return memo[sub]
+
+    def scope_added(self, sub: str, text: str, pos: int, key: str) -> list[str]:
+        """推敲後の文 text の句の、読点の後ろの中身の語のうち、原文の本文にない語（3.4.1）。語を足したとき、つまり原文にない語の数が、
+        原文の同じ種類の句の中身から推敲後の本文に残らなかった語の数より多いときだけ返す。語を替えただけの推敲（アラートの閾値 →
+        警告のしきい値、マニュアルを改訂します → 手順書を改めます）には返さない。"""
+        grams = self.scope_grams(0)
+        novel = [w for w in self.scope_words(sub, text, pos, key) if not self.scope_known(w, grams)]
+        if not novel:
+            return novel
+        return novel if len(novel) > self.scope_dropped(sub) else []
 
     def old_bigrams(self) -> set[str]:
         """原文の本文（old_text）の2字の組の集まり（_addition_novelty で、語ごとに原文全体を探さないため。初めて要るときに作る）。"""
@@ -10914,14 +11180,18 @@ class _AdditionDocument:
         if self._wordings is None:
             self._wordings = []
             for number, bodies in enumerate(self.bodies):
-                new, old, loose = Counter(), Counter(), Counter()
+                new, old, loose, targets = Counter(), Counter(), Counter(), {}
                 for body in bodies:
-                    for sub, name, wording, wording_321, has_word in self.wording_units(number, body.text):
+                    for sub, name, wording, wording_321, has_word, quals, always in self.wording_units(number, body.text):
+                        for k in ((0, sub, name, wording), (1, sub, name, wording_321)):
+                            table = targets.setdefault(k, {})
+                            table[(quals, always)] = table.get((quals, always), 0) + 1
                         new[(sub, name, wording)] += 1
                         old[(sub, name, wording_321)] += 1
                         if not has_word:
                             loose[(sub, name, wording_321)] += 1
                 self._wordings.append((new, old, loose))
+                self._targets.append(targets)
         return self._wordings[side]
 
     def wording_units(self, number: int, text: str) -> list:
@@ -10947,7 +11217,7 @@ class _AdditionDocument:
                 if sub not in ('guarantee', 'prevention') or (number == 0 and _addition_in_quote(source, pos)):
                     continue
                 start, end = (pos, pos + len(key)) if source_map is None else (source_map[pos], source_map[pos + len(key)])
-                units.setdefault((sub, name, start), (sub, name) + _addition_promise_wordings(kana, start, kana[start:end], name))
+                units.setdefault((sub, name, start), (sub, name) + _addition_promise_wordings_full(kana, start, kana[start:end], name))
         return list(units.values())
 
     def wording_kept(self, sub: str, name: str, text: str, pos: int, key: str) -> bool:
@@ -10957,14 +11227,60 @@ class _AdditionDocument:
         どちらかで取れないときは、3.2.1 の取り方の言い方で比べる（一覧にない言い方との言い換えを、3.2.1 と同じく同じ言い方にする）。"""
         kana, mapping = self.kana_map(text)
         start, end = mapping[pos], mapping[pos + len(key)]
-        wording, wording_321, has_word = _addition_promise_wordings(kana, start, kana[start:end], name)
+        wording, wording_321, has_word, quals, always = _addition_promise_wordings_full(kana, start, kana[start:end], name)
         new0, old0, loose0 = self.wording_tables(0)
         new1, old1, _ = self.wording_tables(1)
         unit, unit_321 = (sub, name, wording), (sub, name, wording_321)
         kept_321 = bool(old0[unit_321]) and old1[unit_321] <= old0[unit_321]
-        if not has_word:
-            return kept_321
-        return (bool(new0[unit]) and new1[unit] <= new0[unit]) or (kept_321 and bool(loose0[unit_321]))
+        if has_word and bool(new0[unit]) and new1[unit] <= new0[unit] and self.target_kept((0,) + unit, quals, always):
+            return True
+        return kept_321 and (not has_word or bool(loose0[unit_321])) and self.target_kept((1,) + unit_321, quals, always)
+
+    def target_kept(self, unit_321: tuple, quals: tuple, always: bool) -> bool:
+        """3.4.1: 同じ言い方の原文の句のうち、保証の相手が推敲後の句と食い違わない句が、推敲後の同じ句の数以上あるか。
+        quals は (相手の修飾と主題の語, 手がかりの文)、always は句のすぐ前に いつでも などがあるか。相手の語は、片方の句にないか、
+        片方の語がもう片方の語のどれかを含むか、相手の句の手がかりの文にあれば食い違わない。推敲後の句にだけ いつでも などがあると
+        食い違う（条件を外して強めた保証）。"""
+        def inside(word: str, other: str) -> bool:
+            """other が word を含むか。word の前に打ち消しや時の接頭（非・未・元・前・無・不・脱・反）を付けただけの other は含むとみなさない
+            （会員 → 非会員）。"""
+            if word not in other:
+                return False
+            prefix = other[:len(other) - len(word)] if other.endswith(word) else ""
+            return not (prefix and prefix[-1] in "非未元前無不脱反")
+
+        def in_context(word: str, context: str) -> bool:
+            at = context.find(word)
+            while at >= 0:
+                if not (at and context[at - 1] in "非未元前無不脱反"):
+                    return True
+                at = context.find(word, at + 1)
+            return False
+
+        def fits(word: str, words: Sequence[str], context: str) -> bool:
+            return any(inside(word, other) or inside(other, word) for other in words) or in_context(word, context)
+
+        def agree(after: tuple, orig: tuple) -> bool:
+            ((qa, ha), aa), ((qo, ho), ao) = after, orig
+            if aa and not ao:
+                return False
+            return not qa or not qo or all(fits(w, qo, ho) for w in qa) or all(fits(w, qa, ha) for w in qo)
+
+        self.wording_tables(0)
+        mine = (quals, always)
+        origs, afters = self._targets[0].get(unit_321, {}), self._targets[1].get(unit_321, {})
+        need = max(afters.get(mine, 0), 1)
+        # 同じ相手と条件の句が原文に同じ数以上あれば、ほかの句と比べない（変えていない句はここで済む）
+        if origs.get(mine, 0) >= need:
+            return True
+        memo = (unit_321, mine)
+        if memo not in self._target_memo:
+            # 相手の違う句が多い文書（64種より多い）は、比べずに 3.4.0 と同じく残した句にする（文書の長さの2乗の時間にしない）
+            if len(origs) > 64:
+                self._target_memo[memo] = True
+            else:
+                self._target_memo[memo] = sum(n for t, n in origs.items() if agree(mine, t)) >= need
+        return self._target_memo[memo]
 
     def find(self, name: str, text: str) -> list:
         key = (name, text)
@@ -11133,6 +11449,9 @@ def _addition_promise_risk(doc: _AdditionDocument, group: _AdditionGroup, i: int
             if doc.has_head(head) or (head and i is not None and re.search(
                     re.escape(head) + '(?![' + _ADD_K + 'ァ-ヴー])', old_text)):
                 continue
+        # 同じ言い方の句でも、「再発しないよう、」の後ろの誓いの中身や、言い切った保証の「、」の後ろに原文にない語を足したら残さない（3.4.1）。
+        if in_original and doc.scope_added(sub, body.text, pos, key):
+            in_original = False
         # 一つの原文の述語は、同じ行為を言える約束の句を一つだけ打ち消す（読みます → 破棄します は打ち消さない）。
         can_cancel = sub == 'promise' or (sub == 'guarantee' and name in ('ことはない', '変えない') and i is not None)
         if can_cancel:
@@ -11762,9 +12081,9 @@ def _triangle_token(text: str, start: int, end: int, line_start: int, line: str,
     if found is None:
         rating = len(set(match.group(1) for match in _TRIANGLE_RATING.finditer(line))) >= 2
         found = facts[line_start] = (line_start + len(line) - len(line.lstrip()),
-                                     rating or block_arrows or _TRIANGLE_ARROWS.search(line) is not None)
+                                     rating or _TRIANGLE_ARROWS.search(line) is not None)
     first, skip_line = found
-    if skip_line:
+    if skip_line or block_arrows:
         return digits, digits, at
     if start <= first and (value[1] == " " or _TRIANGLE_VALUE_LINE.fullmatch(text, end, line_start + len(line)) is None):
         return digits, digits, at
@@ -11929,7 +12248,11 @@ def _plain_decreases(sides: _Sides, pair: tuple) -> bool:
 # 伏せた番号（090-****-5678、****-****-1234、***-4567、090-■■■■-5678）の「-」は符号に読まない（_masked_minus）。伏せ字の字
 # （＊●〇○×■□）が2字以上並んだあと（1字の「×」は掛け算の記号かもしれない）と、半角の「*」が並んだあと。「*」は強調の記号にも
 # なるので、「-」と数のすぐ前の半角の「*」の並びは、次の順に決める。
-# - 並びのすぐ前が数字かハイフン（090-**-1234）なら、番号の中の伏せ字
+# - 並びのすぐ前がハイフン（090-**-1234）なら、番号の中の伏せ字
+# - 同じ行の前にある同じ数の並び（強調の始まり）を閉じる並び（売上は**前年比**-3%、**項目1**-3%）なら、伏せ字にしない（3.4.1。
+#   _emphasis_closers）。並びのすぐ前が数字でも閉じと読むので、強調の記号と一部を伏せた番号が同じ行にあると（**電話 090-12**-5678）、
+#   伏せ字を強調の閉じと読んで「-」を符号に読む（限界。3.4.0 は伏せ字と読んでいた）
+# - 並びのすぐ前が数字（090-12**-5678）なら、番号の中の伏せ字
 # - 同じ行のあとに同じ数の「*」の並びがあり、そのすぐあとが数字でも「-」と数字でもなければ、強調の中の負の数として符号を
 #   今までどおり読む（**-3%**、**-15%（前年比）**、*-2℃前後*、***-0.5***）
 # - どちらでもなければ伏せ字（〒***-0001、新住所は〒***-0022 は、2つ目の並びのすぐあとが「-」と数字なので閉じと取らない）
@@ -11950,9 +12273,39 @@ def _masked_minus(text: str, start: int, end: int, line_start: int, runs: dict) 
         return False
     if set(chars) - {"*"}:
         return len(chars) >= 2
-    if run > line_start and (text[run - 1].isdigit() or text[run - 1] in _MASK_HYPHENS):
+    if run > line_start and text[run - 1] in _MASK_HYPHENS:
+        return True
+    if run in _emphasis_closers(text, line_start, runs):
+        # 3.4.1: 同じ行の前の同じ数の「*」の並び（強調の始まり）を閉じる並び（売上は**前年比**-3%）は伏せ字にしない
+        return False
+    if run > line_start and text[run - 1].isdigit():
         return True
     return _closing_star_runs(text, line_start, runs).get(len(chars), -1) < end
+
+
+def _emphasis_closers(text: str, line_start: int, runs: dict) -> frozenset:
+    """line_start から始まる行の半角の「*」の並びのうち、同じ行の前にある同じ数の並び（強調の始まり）を閉じるものの始まりの位置。
+    始まりになれるのは、すぐあとが空白でも行末でもなく、数字でも「-」と数字でもない並び（〒***-0001 の伏せ字は始まりにしない）。
+    閉じになれるのは、すぐ前が空白でない並び。並びの長さごとに左から1度だけたどり、runs に行ごとに覚える。"""
+    key = ("closers", line_start)
+    found = runs.get(key)
+    if found is None:
+        line_end = text.find("\n", line_start)
+        line_end = len(text) if line_end < 0 else line_end
+        opened = set()
+        closers = set()
+        for match in _MASK_STAR_RUN.finditer(text, line_start, line_end):
+            length, start, finish = len(match.group(0)), match.start(), match.end()
+            if start > line_start and text[start - 1] == "\\":
+                continue  # 「\*」で書いた字の「*」（口座は**\*\*\*\*-5678**）は強調の印にしない
+            if length in opened and start > line_start and not text[start - 1].isspace():
+                opened.discard(length)
+                closers.add(start)
+            elif (finish < line_end and not text[finish].isspace()
+                  and _MASK_NUMBER_NEXT.match(text, finish) is None):
+                opened.add(length)
+        found = runs[key] = frozenset(closers)
+    return found
 
 
 def _closing_star_runs(text: str, line_start: int, runs: dict) -> dict:
